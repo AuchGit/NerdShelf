@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NerdShelf",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "identifier": "io.github.auchgit.nerdshelf",
   "build": {
     "frontendDist": "../dist",
@@ -14,7 +14,7 @@
       "endpoints": [
         "https://github.com/AuchGit/NerdShelf/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5aklDMlczUUJhYTMzbU1SRDRObzlHcmo1aC9pb0U0R3k3bkNvaUsrOHVJa0FBQkFBQUFBQUFBQUFBQUlBQUFBQVFSaVROV1NsdVg1WFArWkNYbUQxcTl5Tm1jeUlESmIrQWEwZE1IdWxpdXZaR3d0eG9CYmx1b0x6YWY1N1laTFVSMXd4ZEhvcC94NmFLTmxzY3JWV2FDQTQzeG1xMW9Vci81VUVOb2lGR0NtUjBKN2s0TmRMZXFKTXNiWUJoT2l1YTM4SVlaNmZPRjQ9Cg==",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk1NDRGRDhCNTM0NjAyODUKUldTRkFrWlRpLzFFbFJVK2diRmU5WWxGeXJ1THgzTndhSER5dEJDMERZd0hNSnBTd1p5QVpLcEsK",
       "windows": {
         "installMode": "passive"
       }
