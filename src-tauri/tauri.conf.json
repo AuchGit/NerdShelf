@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NerdShelf",
-  "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "version": "0.1.1",
+  "identifier": "io.github.auchgit.nerdshelf",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
