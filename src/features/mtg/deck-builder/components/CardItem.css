@@ -1,0 +1,149 @@
+.card-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+
+.card-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 12px var(--accent-glow);
+}
+
+/* ── Image ── */
+.card-img-wrap {
+  position: relative;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+.card-img-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.card-img.loaded { opacity: 1; }
+
+.card-img-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  color: var(--text-lo);
+  text-align: center;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-hover));
+}
+
+.deck-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--accent);
+  color: #000;
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+}
+
+.card-hover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(180, 130, 10, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.18s;
+  backdrop-filter: blur(1px);
+}
+
+.card-hover-overlay span {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  border: 1px solid var(--accent);
+}
+
+.card-item:hover .card-hover-overlay { opacity: 1; }
+
+/* ── Meta ── */
+.card-meta {
+  padding: 0.4rem 0.5rem;
+}
+
+.card-meta-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.2rem;
+  margin-bottom: 0.1rem;
+}
+
+.card-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-hi);
+  line-height: 1.2;
+}
+
+.card-cost {
+  display: flex;
+  gap: 1px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.card-type {
+  font-size: 0.62rem;
+  color: var(--text-lo);
+  font-style: italic;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

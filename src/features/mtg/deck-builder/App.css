@@ -1,0 +1,138 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+/* ── Header ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  height: 50px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-mid);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.header-logo {
+  color: var(--accent);
+  font-size: 1.15rem;
+  animation: pulse-logo 3s ease-in-out infinite;
+}
+
+@keyframes pulse-logo {
+  0%, 100% { opacity: 1; text-shadow: 0 0 6px var(--accent); }
+  50%       { opacity: 0.6; text-shadow: none; }
+}
+
+.header-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent-hi);
+  letter-spacing: 1px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+
+
+.header-sub {
+  font-size: 0.75rem;
+  color: var(--text-lo);
+  font-style: italic;
+  font-family: 'Crimson Pro', serif;
+}
+
+/* ── Main ── */
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Preview Panel — always visible ── */
+.preview-section {
+  width: 285px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Centre Panel (Search + Grid) ── */
+.search-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border-mid);
+  min-width: 0;
+}
+
+/* ── Right Panel (Deck) ── */
+.deck-section {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .preview-section { width: 250px; }
+}
+
+@media (max-width: 900px) {
+  .preview-section { width: 220px; }
+  .deck-section    { width: 270px; }
+}
+
+@media (max-width: 700px) {
+  .app-main { flex-direction: column; }
+
+  .preview-section {
+    width: 100%;
+    height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-mid);
+  }
+
+  .deck-section {
+    width: 100%;
+    height: 40vh;
+    border-top: 1px solid var(--border-mid);
+  }
+
+  .search-section { height: 60vh; }
+}

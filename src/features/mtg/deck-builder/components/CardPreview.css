@@ -1,0 +1,310 @@
+.card-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) transparent;
+  background: var(--bg-panel);
+  position: relative;
+}
+
+.card-preview.is-pinned {
+  border-right: 1px solid var(--accent);
+}
+
+.card-preview.is-stale {
+  opacity: 0.82;
+}
+
+/* ── Empty state ── */
+.cp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem 1.5rem;
+  gap: 1.2rem;
+  color: var(--text-lo);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.cp-empty-symbol {
+  font-size: 2.8rem;
+  color: var(--border-hi);
+  animation: pulse-logo 3s ease-in-out infinite;
+  line-height: 1;
+}
+
+@keyframes pulse-logo {
+  0%, 100% { opacity: 1; text-shadow: 0 0 12px var(--accent); color: var(--border-hi); }
+  50%       { opacity: 0.4; text-shadow: none; }
+}
+
+.cp-empty-title {
+  font-family: 'Cinzel', serif;
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+  color: var(--text-lo);
+}
+
+.cp-empty-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.cp-hint-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.85rem;
+  color: var(--text-lo);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+}
+
+.cp-hint-key {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  color: var(--accent-hi);
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 0.15rem 0.45rem;
+  flex-shrink: 0;
+}
+
+.cp-empty-card-outline {
+  width: 85%;
+  aspect-ratio: 63 / 88;
+  border: 1px dashed var(--border-mid);
+  border-radius: 10px;
+  opacity: 0.35;
+  margin-top: 0.5rem;
+}
+
+/* ── Top bar ── */
+.cp-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 36px;
+  gap: 0.4rem;
+}
+
+.cp-rarity {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.cp-stale-label {
+  font-size: 0.65rem;
+  color: var(--text-lo);
+  font-style: italic;
+  font-family: 'Crimson Pro', serif;
+  flex: 1;
+  text-align: center;
+}
+
+.cp-pin-btn {
+  font-size: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  color: var(--text-lo);
+  border-radius: 12px;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cp-pin-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cp-pin-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ── Image ── */
+.cp-image-wrap {
+  flex-shrink: 0;
+  padding: 0.65rem 0.65rem 0.45rem;
+}
+
+.cp-image {
+  width: 100%;
+  border-radius: 9px;
+  display: block;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+}
+
+.cp-image-fallback {
+  aspect-ratio: 63 / 88;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-hover));
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 0.82rem;
+  color: var(--text-lo);
+  text-align: center;
+  padding: 1rem;
+}
+
+/* ── Info block ── */
+.cp-info {
+  padding: 0.15rem 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cp-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.cp-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-hi);
+  line-height: 1.25;
+  flex: 1;
+}
+
+.cp-cost {
+  display: flex;
+  gap: 1px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cp-type {
+  font-size: 0.78rem;
+  color: var(--accent-hi);
+  font-style: italic;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.32rem;
+}
+
+.cp-set {
+  font-size: 0.7rem;
+  color: var(--text-lo);
+}
+
+.cp-set-code {
+  opacity: 0.7;
+}
+
+/* ── Oracle text ── */
+.cp-oracle {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.85rem;
+  color: var(--text-mid);
+  line-height: 1.52;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-deep);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.cp-oracle p {
+  margin: 0;
+  display: inline;
+}
+
+.cp-oracle p + p {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+/* ── Flavor text ── */
+.cp-flavor {
+  font-family: 'Crimson Pro', serif;
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--text-lo);
+  line-height: 1.45;
+  padding-top: 0.2rem;
+}
+
+/* ── Stats row ── */
+.cp-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  margin-top: 0.1rem;
+}
+
+.cp-stat-chip {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--bg-card);
+  border: 1px solid var(--border-mid);
+  border-radius: 10px;
+  padding: 0.18rem 0.55rem;
+  color: var(--text-mid);
+}
+
+.cp-pt {
+  color: var(--accent-hi);
+  border-color: var(--accent);
+}
+
+/* ── Legalities ── */
+.cp-legalities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  margin-top: 0.1rem;
+}
+
+.cp-legal-chip {
+  font-size: 0.67rem;
+  border-radius: 8px;
+  padding: 0.12rem 0.48rem;
+  font-family: 'Crimson Pro', serif;
+  letter-spacing: 0.3px;
+}
+
+.cp-legal-chip.legal {
+  background: rgba(40, 120, 40, 0.2);
+  border: 1px solid rgba(40, 180, 40, 0.35);
+  color: #6dd46d;
+}
+
+.cp-legal-chip.banned {
+  background: rgba(120, 30, 30, 0.2);
+  border: 1px solid rgba(180, 40, 40, 0.3);
+  color: #c06060;
+}

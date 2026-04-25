@@ -1,0 +1,2787 @@
+{
+  "Air Bubble": {
+    "level": 2,
+    "school": "C",
+    "source": "AAG"
+  },
+  "Create Spelljamming Helm": {
+    "level": 5,
+    "school": "T",
+    "source": "AAG"
+  },
+  "Distort Value": {
+    "level": 1,
+    "school": "I",
+    "source": "AI"
+  },
+  "Fast Friends": {
+    "level": 3,
+    "school": "E",
+    "source": "AI"
+  },
+  "Gift of Gab": {
+    "level": 2,
+    "school": "E",
+    "source": "AI"
+  },
+  "Incite Greed": {
+    "level": 3,
+    "school": "E",
+    "source": "AI"
+  },
+  "Jim's Glowing Coin": {
+    "level": 2,
+    "school": "E",
+    "source": "AI"
+  },
+  "Jim's Magic Missile": {
+    "level": 1,
+    "school": "V",
+    "source": "AI"
+  },
+  "Motivational Speech": {
+    "level": 3,
+    "school": "E",
+    "source": "AI"
+  },
+  "Linked Glyphs": {
+    "level": 3,
+    "school": "A",
+    "source": "AitFR-AVT"
+  },
+  "Antagonize": {
+    "level": 3,
+    "school": "E",
+    "source": "BMT"
+  },
+  "Spirit of Death": {
+    "level": 4,
+    "school": "N",
+    "source": "BMT"
+  },
+  "Spray of Cards": {
+    "level": 2,
+    "school": "C",
+    "source": "BMT"
+  },
+  "Homunculus Servant": {
+    "level": 2,
+    "school": "C",
+    "source": "EFA"
+  },
+  "Dark Star": {
+    "level": 8,
+    "school": "V",
+    "source": "EGW"
+  },
+  "Fortune's Favor": {
+    "level": 2,
+    "school": "D",
+    "source": "EGW"
+  },
+  "Gift of Alacrity": {
+    "level": 1,
+    "school": "D",
+    "source": "EGW"
+  },
+  "Gravity Fissure": {
+    "level": 6,
+    "school": "V",
+    "source": "EGW"
+  },
+  "Gravity Sinkhole": {
+    "level": 4,
+    "school": "V",
+    "source": "EGW"
+  },
+  "Immovable Object": {
+    "level": 2,
+    "school": "T",
+    "source": "EGW"
+  },
+  "Magnify Gravity": {
+    "level": 1,
+    "school": "T",
+    "source": "EGW"
+  },
+  "Pulse Wave": {
+    "level": 3,
+    "school": "V",
+    "source": "EGW"
+  },
+  "Ravenous Void": {
+    "level": 9,
+    "school": "V",
+    "source": "EGW"
+  },
+  "Reality Break": {
+    "level": 8,
+    "school": "C",
+    "source": "EGW"
+  },
+  "Sapping Sting": {
+    "level": 0,
+    "school": "N",
+    "source": "EGW"
+  },
+  "Temporal Shunt": {
+    "level": 5,
+    "school": "T",
+    "source": "EGW"
+  },
+  "Tether Essence": {
+    "level": 7,
+    "school": "N",
+    "source": "EGW"
+  },
+  "Time Ravage": {
+    "level": 9,
+    "school": "N",
+    "source": "EGW"
+  },
+  "Wristpocket": {
+    "level": 2,
+    "school": "C",
+    "source": "EGW"
+  },
+  "Alustriel's Mooncloak": {
+    "level": 5,
+    "school": "A",
+    "source": "FRHoF"
+  },
+  "Backlash": {
+    "level": 4,
+    "school": "A",
+    "source": "FRHoF"
+  },
+  "Blade of Disaster": {
+    "level": 9,
+    "school": "C",
+    "source": "FRHoF"
+  },
+  "Cacophonic Shield": {
+    "level": 3,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Conjure Constructs": {
+    "level": 3,
+    "school": "C",
+    "source": "FRHoF"
+  },
+  "Death Armor": {
+    "level": 2,
+    "school": "N",
+    "source": "FRHoF"
+  },
+  "Deryan's Helpful Homunculi": {
+    "level": 2,
+    "school": "C",
+    "source": "FRHoF"
+  },
+  "Dirge": {
+    "level": 6,
+    "school": "E",
+    "source": "FRHoF"
+  },
+  "Doomtide": {
+    "level": 4,
+    "school": "C",
+    "source": "FRHoF"
+  },
+  "Elminster's Effulgent Spheres": {
+    "level": 6,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Elminster's Elusion": {
+    "level": 2,
+    "school": "A",
+    "source": "FRHoF"
+  },
+  "Holy Star of Mystra": {
+    "level": 8,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Laeral's Silver Lance": {
+    "level": 3,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Simbul's Synostodweomer": {
+    "level": 7,
+    "school": "T",
+    "source": "FRHoF"
+  },
+  "Songal's Elemental Suffusion": {
+    "level": 5,
+    "school": "T",
+    "source": "FRHoF"
+  },
+  "Spellfire Flare": {
+    "level": 1,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Spellfire Storm": {
+    "level": 4,
+    "school": "V",
+    "source": "FRHoF"
+  },
+  "Syluné's Viper": {
+    "level": 3,
+    "school": "C",
+    "source": "FRHoF"
+  },
+  "Wardaway": {
+    "level": 1,
+    "school": "A",
+    "source": "FRHoF"
+  },
+  "Ashardalon's Stride": {
+    "level": 3,
+    "school": "T",
+    "source": "FTD"
+  },
+  "Draconic Transformation": {
+    "level": 7,
+    "school": "T",
+    "source": "FTD"
+  },
+  "Fizban's Platinum Shield": {
+    "level": 6,
+    "school": "A",
+    "source": "FTD"
+  },
+  "Nathair's Mischief": {
+    "level": 2,
+    "school": "I",
+    "source": "FTD"
+  },
+  "Raulothim's Psychic Lance": {
+    "level": 4,
+    "school": "E",
+    "source": "FTD"
+  },
+  "Rime's Binding Ice": {
+    "level": 2,
+    "school": "V",
+    "source": "FTD"
+  },
+  "Summon Draconic Spirit": {
+    "level": 5,
+    "school": "C",
+    "source": "FTD"
+  },
+  "Encode Thoughts": {
+    "level": 0,
+    "school": "E",
+    "source": "GGR"
+  },
+  "Create Magen": {
+    "level": 7,
+    "school": "T",
+    "source": "IDRotF"
+  },
+  "Frost Fingers": {
+    "level": 1,
+    "school": "V",
+    "source": "IDRotF"
+  },
+  "Flock of Familiars": {
+    "level": 2,
+    "school": "C",
+    "source": "LLK"
+  },
+  "Galder's Speedy Courier": {
+    "level": 4,
+    "school": "C",
+    "source": "LLK"
+  },
+  "Galder's Tower": {
+    "level": 3,
+    "school": "C",
+    "source": "LLK"
+  },
+  "Acid Splash": {
+    "level": 0,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Aid": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Alarm": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Alter Self": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Animal Friendship": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Animal Messenger": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Animal Shapes": {
+    "level": 8,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Animate Dead": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Animate Objects": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Antilife Shell": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Antimagic Field": {
+    "level": 8,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Antipathy/Sympathy": {
+    "level": 8,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Arcane Eye": {
+    "level": 4,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Arcane Gate": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Arcane Lock": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Armor of Agathys": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Arms of Hadar": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Astral Projection": {
+    "level": 9,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Augury": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Aura of Life": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Aura of Purity": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Aura of Vitality": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Awaken": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Bane": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Banishing Smite": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Banishment": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Barkskin": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Beacon of Hope": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Beast Sense": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Bestow Curse": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Bigby's Hand": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Blade Barrier": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Blade Ward": {
+    "level": 0,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Bless": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Blight": {
+    "level": 4,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Blinding Smite": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Blindness/Deafness": {
+    "level": 2,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Blink": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Blur": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Branding Smite": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Burning Hands": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Call Lightning": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Calm Emotions": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Chain Lightning": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Charm Person": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Chill Touch": {
+    "level": 0,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Chromatic Orb": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Circle of Death": {
+    "level": 6,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Circle of Power": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Clairvoyance": {
+    "level": 3,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Clone": {
+    "level": 8,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Cloud of Daggers": {
+    "level": 2,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Cloudkill": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Color Spray": {
+    "level": 1,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Command": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Commune": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Commune with Nature": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Compelled Duel": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Comprehend Languages": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Compulsion": {
+    "level": 4,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Cone of Cold": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Confusion": {
+    "level": 4,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Conjure Animals": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Barrage": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Celestial": {
+    "level": 7,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Elemental": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Fey": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Minor Elementals": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Volley": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Conjure Woodland Beings": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Contact Other Plane": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Contagion": {
+    "level": 5,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Contingency": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Continual Flame": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Control Water": {
+    "level": 4,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Control Weather": {
+    "level": 8,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Cordon of Arrows": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Counterspell": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Create Food and Water": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Create or Destroy Water": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Create Undead": {
+    "level": 6,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Creation": {
+    "level": 5,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Crown of Madness": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Crusader's Mantle": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Cure Wounds": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Dancing Lights": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Darkness": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Darkvision": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Daylight": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Death Ward": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Delayed Blast Fireball": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Demiplane": {
+    "level": 8,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Destructive Wave": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Detect Evil and Good": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Detect Magic": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Detect Poison and Disease": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Detect Thoughts": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Dimension Door": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Disguise Self": {
+    "level": 1,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Disintegrate": {
+    "level": 6,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Dispel Evil and Good": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Dispel Magic": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Dissonant Whispers": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Divination": {
+    "level": 4,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Divine Favor": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Divine Word": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Dominate Beast": {
+    "level": 4,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Dominate Monster": {
+    "level": 8,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Dominate Person": {
+    "level": 5,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Drawmij's Instant Summons": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Dream": {
+    "level": 5,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Druidcraft": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Earthquake": {
+    "level": 8,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Eldritch Blast": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Elemental Weapon": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Enhance Ability": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Enlarge/Reduce": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Ensnaring Strike": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Entangle": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Enthrall": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Etherealness": {
+    "level": 7,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Evard's Black Tentacles": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Expeditious Retreat": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Eyebite": {
+    "level": 6,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Fabricate": {
+    "level": 4,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Faerie Fire": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "False Life": {
+    "level": 1,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Fear": {
+    "level": 3,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Feather Fall": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Feeblemind": {
+    "level": 8,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Feign Death": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Find Familiar": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Find Steed": {
+    "level": 2,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Find the Path": {
+    "level": 6,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Find Traps": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Finger of Death": {
+    "level": 7,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Fire Bolt": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Fire Shield": {
+    "level": 4,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Fire Storm": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Fireball": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Flame Blade": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Flame Strike": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Flaming Sphere": {
+    "level": 2,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Flesh to Stone": {
+    "level": 6,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Fly": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Fog Cloud": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Forbiddance": {
+    "level": 6,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Forcecage": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Foresight": {
+    "level": 9,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Freedom of Movement": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Friends": {
+    "level": 0,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Gaseous Form": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Gate": {
+    "level": 9,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Geas": {
+    "level": 5,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Gentle Repose": {
+    "level": 2,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Giant Insect": {
+    "level": 4,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Glibness": {
+    "level": 8,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Globe of Invulnerability": {
+    "level": 6,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Glyph of Warding": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Goodberry": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Grasping Vine": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Grease": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Greater Invisibility": {
+    "level": 4,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Greater Restoration": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Guardian of Faith": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Guards and Wards": {
+    "level": 6,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Guidance": {
+    "level": 0,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Guiding Bolt": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Gust of Wind": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Hail of Thorns": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Hallow": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Hallucinatory Terrain": {
+    "level": 4,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Harm": {
+    "level": 6,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Haste": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Heal": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Healing Word": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Heat Metal": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Hellish Rebuke": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Heroes' Feast": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Heroism": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Hex": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Hold Monster": {
+    "level": 5,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Hold Person": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Holy Aura": {
+    "level": 8,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Hunger of Hadar": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Hunter's Mark": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Hypnotic Pattern": {
+    "level": 3,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Ice Storm": {
+    "level": 4,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Identify": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Illusory Script": {
+    "level": 1,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Imprisonment": {
+    "level": 9,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Incendiary Cloud": {
+    "level": 8,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Inflict Wounds": {
+    "level": 1,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Insect Plague": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Invisibility": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Jump": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Knock": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Legend Lore": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Leomund's Secret Chest": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Leomund's Tiny Hut": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Lesser Restoration": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Levitate": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Light": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Lightning Arrow": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Lightning Bolt": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Locate Animals or Plants": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Locate Creature": {
+    "level": 4,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Locate Object": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Longstrider": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Mage Armor": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Mage Hand": {
+    "level": 0,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Magic Circle": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Magic Jar": {
+    "level": 6,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Magic Missile": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Magic Mouth": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Magic Weapon": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Major Image": {
+    "level": 3,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Mass Cure Wounds": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mass Heal": {
+    "level": 9,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mass Healing Word": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mass Suggestion": {
+    "level": 6,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Maze": {
+    "level": 8,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Meld into Stone": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Melf's Acid Arrow": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mending": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Message": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Meteor Swarm": {
+    "level": 9,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mind Blank": {
+    "level": 8,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Minor Illusion": {
+    "level": 0,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Mirage Arcane": {
+    "level": 7,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Mirror Image": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Mislead": {
+    "level": 5,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Misty Step": {
+    "level": 2,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Modify Memory": {
+    "level": 5,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Moonbeam": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Mordenkainen's Faithful Hound": {
+    "level": 4,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Mordenkainen's Magnificent Mansion": {
+    "level": 7,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Mordenkainen's Private Sanctum": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Mordenkainen's Sword": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Move Earth": {
+    "level": 6,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Nondetection": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Nystul's Magic Aura": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Otiluke's Freezing Sphere": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Otiluke's Resilient Sphere": {
+    "level": 4,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Otto's Irresistible Dance": {
+    "level": 6,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Pass without Trace": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Passwall": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Phantasmal Force": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Phantasmal Killer": {
+    "level": 4,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Phantom Steed": {
+    "level": 3,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Planar Ally": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Planar Binding": {
+    "level": 5,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Plane Shift": {
+    "level": 7,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Plant Growth": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Poison Spray": {
+    "level": 0,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Polymorph": {
+    "level": 4,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Power Word Heal": {
+    "level": 9,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Power Word Kill": {
+    "level": 9,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Power Word Stun": {
+    "level": 8,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Prayer of Healing": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Prestidigitation": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Prismatic Spray": {
+    "level": 7,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Prismatic Wall": {
+    "level": 9,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Produce Flame": {
+    "level": 0,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Programmed Illusion": {
+    "level": 6,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Project Image": {
+    "level": 7,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Protection from Energy": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Protection from Evil and Good": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Protection from Poison": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Purify Food and Drink": {
+    "level": 1,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Raise Dead": {
+    "level": 5,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Rary's Telepathic Bond": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Ray of Enfeeblement": {
+    "level": 2,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Ray of Frost": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Ray of Sickness": {
+    "level": 1,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Regenerate": {
+    "level": 7,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Reincarnate": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Remove Curse": {
+    "level": 3,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Resistance": {
+    "level": 0,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Resurrection": {
+    "level": 7,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Reverse Gravity": {
+    "level": 7,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Revivify": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Rope Trick": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Sacred Flame": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Sanctuary": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Scorching Ray": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Scrying": {
+    "level": 5,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Searing Smite": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "See Invisibility": {
+    "level": 2,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Seeming": {
+    "level": 5,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Sending": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Sequester": {
+    "level": 7,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Shapechange": {
+    "level": 9,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Shatter": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Shield": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Shield of Faith": {
+    "level": 1,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Shillelagh": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Shocking Grasp": {
+    "level": 0,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Silence": {
+    "level": 2,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Silent Image": {
+    "level": 1,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Simulacrum": {
+    "level": 7,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Sleep": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Sleet Storm": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Slow": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Spare the Dying": {
+    "level": 0,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Speak with Animals": {
+    "level": 1,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Speak with Dead": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Speak with Plants": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Spider Climb": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Spike Growth": {
+    "level": 2,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Spirit Guardians": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Spiritual Weapon": {
+    "level": 2,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Staggering Smite": {
+    "level": 4,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Stinking Cloud": {
+    "level": 3,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Stone Shape": {
+    "level": 4,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Stoneskin": {
+    "level": 4,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Storm of Vengeance": {
+    "level": 9,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Suggestion": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Sunbeam": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Sunburst": {
+    "level": 8,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Swift Quiver": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Symbol": {
+    "level": 7,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Tasha's Hideous Laughter": {
+    "level": 1,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Telekinesis": {
+    "level": 5,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Telepathy": {
+    "level": 8,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Teleport": {
+    "level": 7,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Teleportation Circle": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Tenser's Floating Disk": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Thaumaturgy": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Thorn Whip": {
+    "level": 0,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Thunderous Smite": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Thunderwave": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Time Stop": {
+    "level": 9,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Tongues": {
+    "level": 3,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Transport via Plants": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Tree Stride": {
+    "level": 5,
+    "school": "C",
+    "source": "PHB"
+  },
+  "True Polymorph": {
+    "level": 9,
+    "school": "T",
+    "source": "PHB"
+  },
+  "True Resurrection": {
+    "level": 9,
+    "school": "N",
+    "source": "PHB"
+  },
+  "True Seeing": {
+    "level": 6,
+    "school": "D",
+    "source": "PHB"
+  },
+  "True Strike": {
+    "level": 0,
+    "school": "D",
+    "source": "PHB"
+  },
+  "Tsunami": {
+    "level": 8,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Unseen Servant": {
+    "level": 1,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Vampiric Touch": {
+    "level": 3,
+    "school": "N",
+    "source": "PHB"
+  },
+  "Vicious Mockery": {
+    "level": 0,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Wall of Fire": {
+    "level": 4,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Wall of Force": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Wall of Ice": {
+    "level": 6,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Wall of Stone": {
+    "level": 5,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Wall of Thorns": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Warding Bond": {
+    "level": 2,
+    "school": "A",
+    "source": "PHB"
+  },
+  "Water Breathing": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Water Walk": {
+    "level": 3,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Web": {
+    "level": 2,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Weird": {
+    "level": 9,
+    "school": "I",
+    "source": "PHB"
+  },
+  "Wind Walk": {
+    "level": 6,
+    "school": "T",
+    "source": "PHB"
+  },
+  "Wind Wall": {
+    "level": 3,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Wish": {
+    "level": 9,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Witch Bolt": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Word of Recall": {
+    "level": 6,
+    "school": "C",
+    "source": "PHB"
+  },
+  "Wrathful Smite": {
+    "level": 1,
+    "school": "V",
+    "source": "PHB"
+  },
+  "Zone of Truth": {
+    "level": 2,
+    "school": "E",
+    "source": "PHB"
+  },
+  "Gate Seal": {
+    "level": 4,
+    "school": "A",
+    "source": "SatO"
+  },
+  "Warp Sense": {
+    "level": 2,
+    "school": "D",
+    "source": "SatO"
+  },
+  "Borrowed Knowledge": {
+    "level": 2,
+    "school": "D",
+    "source": "SCC"
+  },
+  "Kinetic Jaunt": {
+    "level": 2,
+    "school": "T",
+    "source": "SCC"
+  },
+  "Silvery Barbs": {
+    "level": 1,
+    "school": "E",
+    "source": "SCC"
+  },
+  "Vortex Warp": {
+    "level": 2,
+    "school": "C",
+    "source": "SCC"
+  },
+  "Wither and Bloom": {
+    "level": 2,
+    "school": "N",
+    "source": "SCC"
+  },
+  "Booming Blade": {
+    "level": 0,
+    "school": "V",
+    "source": "TCE"
+  },
+  "Dream of the Blue Veil": {
+    "level": 7,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Green-Flame Blade": {
+    "level": 0,
+    "school": "V",
+    "source": "TCE"
+  },
+  "Intellect Fortress": {
+    "level": 3,
+    "school": "A",
+    "source": "TCE"
+  },
+  "Lightning Lure": {
+    "level": 0,
+    "school": "V",
+    "source": "TCE"
+  },
+  "Mind Sliver": {
+    "level": 0,
+    "school": "E",
+    "source": "TCE"
+  },
+  "Spirit Shroud": {
+    "level": 3,
+    "school": "N",
+    "source": "TCE"
+  },
+  "Summon Aberration": {
+    "level": 4,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Beast": {
+    "level": 2,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Celestial": {
+    "level": 5,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Construct": {
+    "level": 4,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Elemental": {
+    "level": 4,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Fey": {
+    "level": 3,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Fiend": {
+    "level": 6,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Shadowspawn": {
+    "level": 3,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Summon Undead": {
+    "level": 3,
+    "school": "N",
+    "source": "TCE"
+  },
+  "Sword Burst": {
+    "level": 0,
+    "school": "C",
+    "source": "TCE"
+  },
+  "Tasha's Caustic Brew": {
+    "level": 1,
+    "school": "V",
+    "source": "TCE"
+  },
+  "Tasha's Mind Whip": {
+    "level": 2,
+    "school": "E",
+    "source": "TCE"
+  },
+  "Tasha's Otherworldly Guise": {
+    "level": 6,
+    "school": "T",
+    "source": "TCE"
+  },
+  "Abi-Dalzim's Horrid Wilting": {
+    "level": 8,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Absorb Elements": {
+    "level": 1,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Aganazzar's Scorcher": {
+    "level": 2,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Beast Bond": {
+    "level": 1,
+    "school": "D",
+    "source": "XGE"
+  },
+  "Bones of the Earth": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Catapult": {
+    "level": 1,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Catnap": {
+    "level": 3,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Cause Fear": {
+    "level": 1,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Ceremony": {
+    "level": 1,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Chaos Bolt": {
+    "level": 1,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Charm Monster": {
+    "level": 4,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Control Flames": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Control Winds": {
+    "level": 5,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Create Bonfire": {
+    "level": 0,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Create Homunculus": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Crown of Stars": {
+    "level": 7,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Danse Macabre": {
+    "level": 5,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Dawn": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Dragon's Breath": {
+    "level": 2,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Druid Grove": {
+    "level": 6,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Dust Devil": {
+    "level": 2,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Earth Tremor": {
+    "level": 1,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Earthbind": {
+    "level": 2,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Elemental Bane": {
+    "level": 4,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Enemies Abound": {
+    "level": 3,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Enervation": {
+    "level": 5,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Erupting Earth": {
+    "level": 3,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Far Step": {
+    "level": 5,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Find Greater Steed": {
+    "level": 4,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Flame Arrows": {
+    "level": 3,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Frostbite": {
+    "level": 0,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Guardian of Nature": {
+    "level": 4,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Gust": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Healing Spirit": {
+    "level": 2,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Holy Weapon": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Ice Knife": {
+    "level": 1,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Illusory Dragon": {
+    "level": 8,
+    "school": "I",
+    "source": "XGE"
+  },
+  "Immolation": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Infernal Calling": {
+    "level": 5,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Infestation": {
+    "level": 0,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Investiture of Flame": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Investiture of Ice": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Investiture of Stone": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Investiture of Wind": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Invulnerability": {
+    "level": 9,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Life Transference": {
+    "level": 3,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Maddening Darkness": {
+    "level": 8,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Maelstrom": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Magic Stone": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Mass Polymorph": {
+    "level": 9,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Maximilian's Earthen Grasp": {
+    "level": 2,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Melf's Minute Meteors": {
+    "level": 3,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Mental Prison": {
+    "level": 6,
+    "school": "I",
+    "source": "XGE"
+  },
+  "Mighty Fortress": {
+    "level": 8,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Mind Spike": {
+    "level": 2,
+    "school": "D",
+    "source": "XGE"
+  },
+  "Mold Earth": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Negative Energy Flood": {
+    "level": 5,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Power Word Pain": {
+    "level": 7,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Primal Savagery": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Primordial Ward": {
+    "level": 6,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Psychic Scream": {
+    "level": 9,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Pyrotechnics": {
+    "level": 2,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Scatter": {
+    "level": 6,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Shadow Blade": {
+    "level": 2,
+    "school": "I",
+    "source": "XGE"
+  },
+  "Shadow of Moil": {
+    "level": 4,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Shape Water": {
+    "level": 0,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Sickening Radiance": {
+    "level": 4,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Skill Empowerment": {
+    "level": 5,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Skywrite": {
+    "level": 2,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Snare": {
+    "level": 1,
+    "school": "A",
+    "source": "XGE"
+  },
+  "Snilloc's Snowball Swarm": {
+    "level": 2,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Soul Cage": {
+    "level": 6,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Steel Wind Strike": {
+    "level": 5,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Storm Sphere": {
+    "level": 4,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Summon Greater Demon": {
+    "level": 4,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Summon Lesser Demons": {
+    "level": 3,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Synaptic Static": {
+    "level": 5,
+    "school": "E",
+    "source": "XGE"
+  },
+  "Temple of the Gods": {
+    "level": 7,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Tenser's Transformation": {
+    "level": 6,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Thunder Step": {
+    "level": 3,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Thunderclap": {
+    "level": 0,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Tidal Wave": {
+    "level": 3,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Tiny Servant": {
+    "level": 3,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Toll the Dead": {
+    "level": 0,
+    "school": "N",
+    "source": "XGE"
+  },
+  "Transmute Rock": {
+    "level": 5,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Vitriolic Sphere": {
+    "level": 4,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Wall of Light": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Wall of Sand": {
+    "level": 3,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Wall of Water": {
+    "level": 3,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Warding Wind": {
+    "level": 2,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Watery Sphere": {
+    "level": 4,
+    "school": "C",
+    "source": "XGE"
+  },
+  "Whirlwind": {
+    "level": 7,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Word of Radiance": {
+    "level": 0,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Wrath of Nature": {
+    "level": 5,
+    "school": "V",
+    "source": "XGE"
+  },
+  "Zephyr Strike": {
+    "level": 1,
+    "school": "T",
+    "source": "XGE"
+  },
+  "Arcane Vigor": {
+    "level": 2,
+    "school": "A",
+    "source": "XPHB"
+  },
+  "Befuddlement": {
+    "level": 8,
+    "school": "E",
+    "source": "XPHB"
+  },
+  "Divine Smite": {
+    "level": 1,
+    "school": "V",
+    "source": "XPHB"
+  },
+  "Elementalism": {
+    "level": 0,
+    "school": "T",
+    "source": "XPHB"
+  },
+  "Fount of Moonlight": {
+    "level": 4,
+    "school": "V",
+    "source": "XPHB"
+  },
+  "Jallarzi's Storm of Radiance": {
+    "level": 5,
+    "school": "V",
+    "source": "XPHB"
+  },
+  "Power Word Fortify": {
+    "level": 7,
+    "school": "E",
+    "source": "XPHB"
+  },
+  "Shining Smite": {
+    "level": 2,
+    "school": "T",
+    "source": "XPHB"
+  },
+  "Sorcerous Burst": {
+    "level": 0,
+    "school": "V",
+    "source": "XPHB"
+  },
+  "Starry Wisp": {
+    "level": 0,
+    "school": "V",
+    "source": "XPHB"
+  },
+  "Summon Dragon": {
+    "level": 5,
+    "school": "C",
+    "source": "XPHB"
+  },
+  "Tasha's Bubbling Cauldron": {
+    "level": 6,
+    "school": "C",
+    "source": "XPHB"
+  },
+  "Yolande's Regal Presence": {
+    "level": 5,
+    "school": "E",
+    "source": "XPHB"
+  }
+}

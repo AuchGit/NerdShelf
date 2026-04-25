@@ -1,0 +1,29 @@
+.mana-sym {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 700;
+  border: 1.5px solid;
+  line-height: 1;
+  font-family: 'Cinzel', serif;
+  flex-shrink: 0;
+}
+
+.mana-sym--sm {
+  width: 17px;
+  height: 17px;
+  font-size: 0.6rem;
+}
+
+.mana-sym--xs {
+  width: 14px;
+  height: 14px;
+  font-size: 0.52rem;
+}
+
+.mana-sym--md {
+  width: 22px;
+  height: 22px;
+  font-size: 0.72rem;
+}
