@@ -34,6 +34,17 @@ let CF_DESC     = null   // class-feature-desc-index.json — "Name||Class" → 
 let FEATS_DATA  = null   // feats.json — 5etools feat entries (für Beschreibungen)
 let OPTFEAT_DATA = null  // optionalfeatures.json — Eldritch Invocations entries
 
+// Subclass spellcasting map: subclassName → { progression, ability }
+// Built from 5etools class files; only populated for subclasses that grant casting (EK, AT, …)
+let SUBCLASS_SPELL_MAP = null
+
+// ASI levels per class: className → number[]  (e.g. Fighter → [4,6,8,12,14,16,19])
+let CLASS_ASI_LEVELS = null
+
+// Class feature lists from 5etools:
+// Map<className, { classFeatures, subclassFeatures, subclassShortNames }>
+let CLASS_FEATURES_MAP = null
+
 // Live spell data map: spellName(lowercase) → { level, school, entries, ... }
 let LIVE_SPELL_MAP = null
 
@@ -100,6 +111,65 @@ async function ensureIndexes() {
       fetch('/data/5e/feats.json').then(r => r.json()).catch(() => ({ feat: [] })),
       fetch('/data/5e/optionalfeatures.json').then(r => r.json()).catch(() => ({ optionalfeature: [] })),
     ])
+
+  // Build SUBCLASS_SPELL_MAP from 5etools class files so subclasses that grant
+  // spellcasting (Eldritch Knight, Arcane Trickster, …) get the correct progression.
+  const classFileNames = ['artificer','barbarian','bard','cleric','druid','fighter','monk','paladin','ranger','rogue','sorcerer','warlock','wizard']
+  const classDataFiles = await Promise.all(
+    classFileNames.map(n => fetch(`/data/5e/class/class-${n}.json`).then(r => r.json()).catch(() => ({})))
+  )
+  SUBCLASS_SPELL_MAP  = new Map()
+  CLASS_ASI_LEVELS    = new Map()
+  CLASS_FEATURES_MAP  = new Map()
+  for (const data of classDataFiles) {
+    // Subclass spellcasting
+    for (const sub of (data.subclass || [])) {
+      if (sub.casterProgression && sub.name && !SUBCLASS_SPELL_MAP.has(sub.name)) {
+        SUBCLASS_SPELL_MAP.set(sub.name, {
+          progression: normFoundryProg(sub.casterProgression),
+          ability:     sub.spellcastingAbility || '',
+        })
+      }
+    }
+
+    for (const cls of (data.class || [])) {
+      // ASI levels
+      const asiLevels = (data.classFeature || [])
+        .filter(f => f.className === cls.name && f.name === 'Ability Score Improvement')
+        .map(f => f.level)
+        .sort((a, b) => a - b)
+      if (asiLevels.length) CLASS_ASI_LEVELS.set(cls.name, asiLevels)
+
+      // Subclass lookup maps: fullName → shortName, and identity feature names to skip
+      const subclassShortNames   = new Map()   // fullName → shortName
+      const subclassIdentityNames = new Set()  // feature names that are just "you chose this subclass"
+      for (const sub of (data.subclass || [])) {
+        const sn = sub.shortName || sub.name
+        subclassShortNames.set(sub.name, sn)
+        // A subclass "identity" feature has the same name as the subclass itself.
+        // We skip it (it's redundant with the Subclass item). Only skip if the
+        // feature belongs to that same subclass (prevents skipping "War Magic" in EK).
+        subclassIdentityNames.add(sub.name + '||' + sn)   // "War Magic||War", "Eldritch Knight||Eldritch Knight"
+      }
+
+      // Class features: skip ASI and class-feature-variants
+      const classFeatures = (data.classFeature || [])
+        .filter(f => f.className === cls.name && !f.isClassFeatureVariant)
+        .filter(f => !f.name.startsWith('Ability Score Improvement'))
+        .sort((a, b) => a.level - b.level)
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB' }))
+
+      // Subclass features: skip ASI, variants, and identity entries
+      const subclassFeatures = (data.subclassFeature || [])
+        .filter(f => !f.isClassFeatureVariant)
+        .filter(f => !f.name.startsWith('Ability Score Improvement'))
+        .filter(f => !subclassIdentityNames.has(f.name + '||' + f.subclassShortName))
+        .sort((a, b) => a.level - b.level)
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', subclassShortName: f.subclassShortName }))
+
+      CLASS_FEATURES_MAP.set(cls.name, { classFeatures, subclassFeatures, subclassShortNames })
+    }
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -338,12 +408,17 @@ function lookupFeatDesc(name, source, featIndex) {
 
 /**
  * Looks up Foundry img/description for an item.
+ * Falls back to a source-agnostic scan so items without source (e.g. Backpack)
+ * still get their containerCapacity and are correctly typed as 'container'.
  */
 function lookupItemFoundry(name, source, itemFndry) {
   if (!name) return {}
   const exact = itemFndry[`${name}||${source || ''}`]
   if (exact) return exact
-  return itemFndry[name] || {}
+  if (itemFndry[name]) return itemFndry[name]
+  const prefix = `${name}||`
+  const fuzzyKey = Object.keys(itemFndry).find(k => k.startsWith(prefix))
+  return fuzzyKey ? itemFndry[fuzzyKey] : {}
 }
 
 /**
@@ -1086,6 +1161,14 @@ function makeClassItem(cls, character) {
       title:         adv.title,
       value:         {},
     }))),
+    // AbilityScoreImprovement — one entry per ASI level (Fighter: 4,6,8,12,14,16,19 etc.)
+    ...((CLASS_ASI_LEVELS?.get(cls.classId) || []).map(lvl => ({
+      _id:           makeId(`adv_asi_${classKey}_${lvl}`),
+      type:          'AbilityScoreImprovement',
+      configuration: { cap: 2, fixed: {}, locked: [], points: 2 },
+      value:         { type: 'feat', feat: {} },
+      level:         lvl,
+    }))),
   ]
 
   return {
@@ -1128,6 +1211,23 @@ function makeClassItem(cls, character) {
 // SUBCLASS ITEM BUILDER
 // ───────────────────────────────────────────────────────────────────────
 
+// Convert 5etools casterProgression ('1/3', '1/2') to Foundry's string values.
+function normFoundryProg(prog) {
+  if (!prog) return 'none'
+  if (prog === '1/3') return 'third'
+  if (prog === '1/2') return 'half'
+  return prog
+}
+
+// Returns the spellcasting object for a subclass item.
+// Subclasses that grant spellcasting (EK = 'third/int', AT = 'third/int') are
+// looked up from SUBCLASS_SPELL_MAP; all others default to progression:'none'.
+function buildSubclassSpellcasting(subclassName) {
+  const entry = SUBCLASS_SPELL_MAP?.get(subclassName)
+  if (entry) return { progression: entry.progression, ability: entry.ability }
+  return { progression: 'none' }
+}
+
 function makeSubclassItem(cls, character) {
   const edition      = character.meta?.edition || '5e'
   const subclassName = cls.subclassId.split('__')[0]
@@ -1158,7 +1258,7 @@ function makeSubclassItem(cls, character) {
       identifier:      subclassName.toLowerCase().replace(/\s+/g, '-'),
       source:          makeSource(cls.source || 'PHB', edition),
       classIdentifier: cls.classId.toLowerCase().replace(/\s+/g, '-'),
-      spellcasting:    { progression: 'none' },
+      spellcasting:    buildSubclassSpellcasting(subclassName),
       advancement,
     },
     effects: [],
@@ -1180,8 +1280,10 @@ function makeRaceItem(character) {
   const raceName   = character.species?.raceId?.split('__')[0] || ''
   const subrace    = character.species?.subraceId?.split('__')[0] || ''
   const raceSource = character.species?.source || 'PHB'
+  // DDB format: if subrace already contains the base race name (e.g. "High Elf" ⊃ "Elf"),
+  // use the subrace alone; otherwise prepend subrace ("Variant" + "Human" → "Variant Human").
   const displayName = subrace
-    ? `${raceName} (${subrace})`
+    ? (subrace.toLowerCase().includes(raceName.toLowerCase()) ? subrace : `${subrace} ${raceName}`)
     : raceName
 
   // Beschreibung aus races.json bauen
@@ -1913,55 +2015,63 @@ export async function exportToFoundry(character) {
     .filter(cls => cls.subclassId)
     .map(cls => makeSubclassItem(cls, character))
 
-  // 3. Klassen-Features — uses both shared patches AND per-class full item docs
+  // 3. Klassen-Features
+  // Source of truth: CLASS_FEATURES_MAP (5etools) — all features per class/subclass.
+  // CLASS_INDEX patches provide rich data (activities, effects, img) where available;
+  // features not in the patch index still get a basic item with description from CF_DESC.
   const classFeatureItems = []
-  const seenFeatures = new Set()   // deduplicate by "className|featureName|level"
+  const seenFeatures = new Set()
 
   for (const cls of (character.classes || [])) {
-    const subName = cls.subclassId?.split('__')[0] || null
+    const subName     = cls.subclassId?.split('__')[0] || null
+    const clsFeatData = CLASS_FEATURES_MAP?.get(cls.classId)
 
-    // ── A: Per-class full item docs (have img + description + effects/activities)
-    //   Stored in CLASS_INDEX.classes[classId].classFeature / .subclassFeature
-    const perClassFeatures = [
+    // Resolve character's subclass fullName → 5etools shortName (e.g. 'War Magic' → 'War')
+    const subShortName = subName && clsFeatData
+      ? (clsFeatData.subclassShortNames.get(subName) || subName)
+      : subName
+
+    // Build patch map from CLASS_INDEX: featureName → patch (activities, effects, img …)
+    const patchMap = new Map()
+    const perClassPatches = [
       ...(CLASS_INDEX.classes[cls.classId]?.classFeature    || []),
       ...(CLASS_INDEX.classes[cls.classId]?.subclassFeature || []),
     ]
-
-    // ── B: Shared patches (_shared.classFeature — may add AEs to features
-    //   that are already covered by A, but can also be standalone patches)
     const sharedPatches = (CLASS_INDEX._shared?.classFeature || [])
-
-    // Merge: per-class docs first, then fill in from shared if not already present
-    const allPatches = [...perClassFeatures]
+    const allPatches = [...perClassPatches]
     for (const sp of sharedPatches) {
       if (!sp?.name) continue
-      if (!allPatches.some(f => f.className === cls.classId && f.name === sp.name)) {
+      if (!allPatches.some(p => p.className === cls.classId && p.name === sp.name)) {
         allPatches.push(sp)
       }
     }
+    for (const p of allPatches) { if (p?.name) patchMap.set(p.name, p) }
 
-    for (const f of allPatches) {
-      if (!f?.name) continue
-      // Filter: must belong to this class
-      const fClass = f.className || f.classIdentifier || cls.classId
-      if (fClass !== cls.classId) continue
-      // Filter: must not exceed character's level in this class
-      if ((f.level ?? 0) > cls.level) continue
-      // Filter: subclass features only if character has this subclass
-      const fSub = f.subclassShortName || f.subclassIdentifier || null
-      if (fSub && fSub !== subName) continue
+    // All features for this class up to the character's level
+    const allFeatures = [
+      ...(clsFeatData?.classFeatures || []),
+      ...(clsFeatData?.subclassFeatures || []).filter(f => f.subclassShortName === subShortName),
+    ]
 
-      // Include if: has any meaningful content (effects, activities, description,
-      // img, entryData like proficiency grants, or at minimum a name)
-      const hasContent = !!f.name
+    for (const feat of allFeatures) {
+      if (feat.level > cls.level) continue
 
-      if (!hasContent) continue
-
-      const dedupKey = `${cls.classId}|${f.name}|${f.level ?? 0}`
+      const dedupKey = `${cls.classId}|${feat.name}|${feat.level}`
       if (seenFeatures.has(dedupKey)) continue
       seenFeatures.add(dedupKey)
 
-      classFeatureItems.push(makeClassFeatureItem(f, cls, character))
+      const patch = patchMap.get(feat.name) || {}
+      classFeatureItems.push(makeClassFeatureItem({
+        name:              feat.name,
+        level:             feat.level,
+        source:            feat.source,
+        className:         cls.classId,
+        subclassShortName: feat.subclassShortName || null,
+        img:               patch.img        || null,
+        effects:           patch.effects    || [],
+        activities:        patch.activities || [],
+        system:            patch.system     || {},
+      }, cls, character))
     }
   }
 
@@ -2045,12 +2155,12 @@ export async function exportToFoundry(character) {
     }, edition)),
   ]
 
-  // ── Put loot items into the first Backpack container ──
+  // ── Put all non-container inventory items into the first Backpack ──
   const backpackItem = inventoryItems.find(i => i.type === 'container')
   if (backpackItem) {
     const backpackId = backpackItem._id
     for (const item of inventoryItems) {
-      if (item.type === 'loot' && !item.system.container) {
+      if (item.type !== 'container' && !item.system.container) {
         item.system.container = backpackId
       }
     }
@@ -2201,7 +2311,7 @@ export async function exportToFoundry(character) {
         exhaustion:   0,
         hp: {
           value:   currentHp,
-          max:     maxHp,
+          max:     null,
           temp:    tempHp,
           tempmax: 0,
           bonuses: { level: '', overall: '' },
