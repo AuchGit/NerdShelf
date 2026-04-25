@@ -308,6 +308,111 @@ const ITEM_TYPE_ICONS = {
 // Which casters get mode="prepared" (can swap spells on long rest) vs "always"
 const PREPARED_CASTERS = new Set(['Cleric', 'Druid', 'Wizard', 'Paladin', 'Artificer'])
 
+// ─────────────────────────────────────────────────────────────────────────
+// Recharge / Uses table for class features and feats.
+// Keyed by "Name||Parent" where Parent is the className for class features
+// or the source book for feats. Falls back to a name-only lookup so feats
+// that aren't class-bound still match.
+//
+// `max` accepts an int-string ('1', '2'), a Foundry scale-value formula
+// (e.g. '@scale.fighter.action-surges' which the dnd5e system tracks
+// per-class-level), or any roll-formula expression.
+// `period`: 'sr' (short rest), 'lr' (long rest), 'day', 'turn', 'round'.
+// `type` defaults to 'recoverAll' when omitted.
+// ─────────────────────────────────────────────────────────────────────────
+// Per-class-level formula expressions for features whose max scales by level.
+// We use Math.floor / ternary expressions instead of @scale.* references —
+// scale-values only exist on SRD compendium class items, not on ones we
+// generate here, so any @scale.<class>.<id> reference resolves to nothing
+// and Foundry shows a "missing data" warning on the item.
+const FEATURE_USES = {
+  // Fighter
+  'Second Wind||Fighter':           { max: '1', period: 'sr' },
+  // Action Surge: 1 use at L2, 2 uses at L17
+  'Action Surge||Fighter':          { max: '@classes.fighter.levels < 17 ? 1 : 2', period: 'sr' },
+  // Indomitable: 1@L9, 2@L13, 3@L17
+  'Indomitable||Fighter':           { max: '@classes.fighter.levels < 13 ? 1 : (@classes.fighter.levels < 17 ? 2 : 3)', period: 'lr' },
+
+  // Wizard
+  'Arcane Recovery||Wizard':        { max: '1', period: 'lr' },
+
+  // Cleric — Channel Divinity: 1@L2, 2@L6, 3@L18
+  'Channel Divinity||Cleric':       { max: '@classes.cleric.levels < 6 ? 1 : (@classes.cleric.levels < 18 ? 2 : 3)', period: 'sr' },
+  'Divine Intervention||Cleric':    { max: '1', period: 'lr' },
+
+  // Paladin
+  'Channel Divinity||Paladin':      { max: '1', period: 'sr' },
+  'Lay on Hands||Paladin':          { max: '@classes.paladin.levels * 5', period: 'lr' },
+  'Divine Sense||Paladin':          { max: '1 + @abilities.cha.mod',      period: 'lr' },
+  'Cleansing Touch||Paladin':       { max: '@abilities.cha.mod',          period: 'lr' },
+
+  // Bard
+  'Bardic Inspiration||Bard':       { max: '@abilities.cha.mod', period: 'sr' },
+
+  // Druid — Wild Shape: 2/sr (PHB) until L20 unlimited
+  'Wild Shape||Druid':              { max: '2', period: 'sr' },
+
+  // Monk — Ki points equal to monk level
+  'Ki||Monk':                       { max: '@classes.monk.levels', period: 'sr' },
+  'Wholeness of Body||Monk':        { max: '1', period: 'lr' },
+
+  // Sorcerer
+  'Font of Magic||Sorcerer':        { max: '@classes.sorcerer.levels', period: 'lr' },
+  'Sorcery Points||Sorcerer':       { max: '@classes.sorcerer.levels', period: 'lr' },
+
+  // Warlock
+  'Mystic Arcanum||Warlock':        { max: '1', period: 'lr' },
+
+  // Barbarian — Rage: 2@L1, 3@L3, 4@L6, 5@L12, 6@L17, unlimited@L20
+  'Rage||Barbarian':                { max: '@classes.barbarian.levels < 3 ? 2 : (@classes.barbarian.levels < 6 ? 3 : (@classes.barbarian.levels < 12 ? 4 : (@classes.barbarian.levels < 17 ? 5 : 6)))', period: 'lr' },
+
+  // Ranger
+  'Favored Foe||Ranger':            { max: '@prof', period: 'lr' },
+
+  // Rogue
+  'Stroke of Luck||Rogue':          { max: '1', period: 'sr' },
+
+  // Common feats (key includes source so reprints don't collide)
+  'Lucky||PHB':                     { max: '3', period: 'lr' },
+  'Healer||PHB':                    { max: '1', period: 'sr' },
+  'Magic Initiate||PHB':            { max: '1', period: 'lr' },
+  'Fey Touched||TCE':               { max: '1', period: 'lr' },
+  'Shadow Touched||TCE':            { max: '1', period: 'lr' },
+  'Telekinetic||TCE':               { max: '@prof', period: 'lr' },
+  'Telepathic||TCE':                { max: '1', period: 'lr' },
+  'Chef||TCE':                      { max: '@prof', period: 'lr' },
+}
+
+/**
+ * Build a Foundry `uses` block from FEATURE_USES.
+ * `parent` is the class name (for class features) or the source (for feats).
+ * Returns the empty default if the feature isn't tracked.
+ *
+ * Caller-supplied uses (custom features with a user-defined recharge) take
+ * priority — pass them via `prefer`.
+ */
+function buildUsesBlock(name, parent, prefer) {
+  if (prefer && (prefer.max || prefer.period)) {
+    return {
+      spent: prefer.spent ?? 0,
+      max:   String(prefer.max ?? ''),
+      recovery: prefer.period
+        ? [{ period: prefer.period, type: prefer.type || 'recoverAll' }]
+        : [],
+    }
+  }
+  if (!name) return { spent: 0, max: '', recovery: [] }
+  const entry = FEATURE_USES[`${name}||${parent}`] || FEATURE_USES[name]
+  if (!entry) return { spent: 0, max: '', recovery: [] }
+  return {
+    spent: 0,
+    max:   String(entry.max ?? ''),
+    recovery: entry.period
+      ? [{ period: entry.period, type: entry.type || 'recoverAll' }]
+      : [],
+  }
+}
+
 // Pseudo-spell names that MUST NOT be exported as real Spell items.
 // These are list headers (expanded-spell-list choices) that accidentally
 // end up in levelChoices due to UI quirks. Foundry rejects the whole
@@ -468,6 +573,41 @@ function lookupOptionalFeatureDesc(name, source) {
   return ''
 }
 
+/**
+ * Single entry point for resolving a feat/feature/racial-trait description.
+ * Sources, in priority order:
+ *   1. `prefer` — caller-supplied description (user-edited custom feat, etc.)
+ *   2. Class-feature index, when `className` is given ("Name||Class")
+ *   3. Feat index (FEAT_INDEX → feats.json runtime fallback)
+ *   4. Optional-feature index (Eldritch Invocations, Maneuvers, …)
+ *   5. 5etools `entries` array, rendered to HTML
+ * Logs a warning when nothing turns up so we can spot data gaps.
+ */
+function resolveFeatureDescription({ name, source, className, entries, prefer, kind = 'feature' } = {}) {
+  if (typeof prefer === 'string' && prefer.trim()) return prefer
+  if (!name) return ''
+
+  if (className) {
+    const cf = lookupClassFeatureDesc(name, className)
+    if (cf) return cf
+  }
+
+  const feat = lookupFullFeatDesc(name, source)
+  if (feat) return feat
+
+  const opt = lookupOptionalFeatureDesc(name, source)
+  if (opt) return opt
+
+  if (Array.isArray(entries) && entries.length) {
+    const html = entriesToHtml(entries)
+    if (html) return html
+  }
+
+  const ctx = [source && `src=${source}`, className && `cls=${className}`].filter(Boolean).join(', ')
+  console.warn(`[Export] No description found for ${kind} "${name}"${ctx ? ` (${ctx})` : ''}`)
+  return ''
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // ID-GENERATOR
 // Deterministischer 16-Zeichen Foundry-Style ID aus einem Seed-String.
@@ -554,6 +694,50 @@ function parseRange(rangeStr) {
   const m = rangeStr.match(/(\d+)\s*(ft|feet|foot|mile)/i)
   if (m) return { value: m[1], units: m[2].toLowerCase().startsWith('mile') ? 'mile' : 'ft' }
   return { value: null, units: 'spec' }
+}
+
+// Foundry's allowed enums — anything outside these breaks import validation.
+const VALID_DURATION_UNITS = new Set(['inst', 'round', 'minute', 'hour', 'day', 'perm', 'spec', 'turn'])
+const VALID_RANGE_UNITS    = new Set(['', 'self', 'touch', 'spec', 'any', 'ft', 'mi', 'mile'])
+
+/**
+ * Defensive sanitizer for activity/system `duration`. Foundry refuses to import
+ * an actor when duration.value is a non-numeric, non-formula string like
+ * "Instantaneous". We normalize:
+ *   - if value is an alphabetic string, re-parse via parseDuration() so unit
+ *     names ("Instantaneous", "Until dispelled") become null + the right units
+ *   - if units is not in the allowed enum, snap to 'inst'
+ * Other flags (concentration, override, special) pass through untouched.
+ */
+function sanitizeDuration(d) {
+  if (d == null || typeof d !== 'object') {
+    return { ...parseDuration(d), concentration: false, override: false }
+  }
+  let { value, units, ...rest } = d
+  // Alphabetic value (e.g. "Instantaneous") is a unit-name, not a magnitude.
+  // Re-route through parseDuration and adopt its units regardless of incoming.
+  if (typeof value === 'string' && value && !/^[\d.+\-@]/.test(value.trim())) {
+    const reparsed = parseDuration(value)
+    value = reparsed.value
+    units = reparsed.units
+  }
+  if (!VALID_DURATION_UNITS.has(units)) units = 'inst'
+  return { value: value ?? null, units, ...rest }
+}
+
+/** Same idea as sanitizeDuration, applied to range. */
+function sanitizeRange(r) {
+  if (r == null || typeof r !== 'object') {
+    return { ...parseRange(r), special: '', override: false }
+  }
+  let { value, units, ...rest } = r
+  if (typeof value === 'string' && value && !/^[\d.+\-@]/.test(value.trim())) {
+    const reparsed = parseRange(value)
+    value = reparsed.value
+    units = reparsed.units
+  }
+  if (!VALID_RANGE_UNITS.has(units)) units = ''
+  return { value: value ?? null, units, ...rest }
 }
 
 /**
@@ -701,12 +885,12 @@ function buildSpellActivity(actId, patch, meta, effectIdMap) {
       scaling:   { allowed: false, max: '' },
     },
     description: { chatFlavor: '' },
-    duration: {
+    duration: sanitizeDuration({
       value:         actDur.value,
       units:         actDur.units,
       concentration: meta?.concentration ?? false,
       override:      false,
-    },
+    }),
     // Effekt-Referenzen: foundryId → tatsächliche _id auflösen
     effects: (patch.effects || []).map(e => {
       const rid = effectIdMap[e.foundryId]
@@ -715,12 +899,12 @@ function buildSpellActivity(actId, patch, meta, effectIdMap) {
       if (e.onSave !== undefined) entry.onSave = e.onSave
       return entry
     }).filter(Boolean),
-    range: {
+    range: sanitizeRange({
       value:    actRange.value ?? '',
       units:    actRange.units,
       special:  '',
       override: false,
-    },
+    }),
     target: {
       template: { contiguous: false, units: 'ft' },
       affects:  { choice: false },
@@ -806,6 +990,9 @@ function makeCustomSpellItem(spell, character) {
   const actId = makeId(`act_custom_${spell.name}`)
   const isCantrip = levelNum === 0
 
+  const dur   = parseDuration(spell.duration)
+  const range = parseRange(spell.range)
+
   return {
     _id:    makeId(`cspell_${spell.name}`),
     name:   spell.name,
@@ -816,14 +1003,14 @@ function makeCustomSpellItem(spell, character) {
       identifier:   spell.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       source:       { book: spell.source || 'Custom', custom: spell.source || 'Custom' },
       activation:   { type: 'action', value: 1, condition: '' },
-      duration:     { value: spell.duration || 'Instantaneous' },
+      duration:     sanitizeDuration(dur),
       level:        levelNum,
       materials:    { value: '', consumed: false, cost: 0, supply: 0 },
       preparation:  { mode: isCantrip ? 'prepared' : 'always', prepared: true },
       properties:   buildSpellProperties(
         {}, spell.concentration || false, spell.ritual || false
       ),
-      range:        parseRange(spell.range),
+      range:        sanitizeRange(range),
       school:       schoolKey,
       // Custom spells are not bound to a class — leave sourceClass empty so
       // Foundry doesn't try to link them to a non-existent class identifier.
@@ -835,9 +1022,9 @@ function makeCustomSpellItem(spell, character) {
           activation: { type: 'action', value: 1, condition: '', override: false },
           consumption: { spellSlot: !isCantrip, targets: [], scaling: { allowed: false, max: '' } },
           description: {},
-          duration: { value: spell.duration || '', units: '', concentration: spell.concentration || false, override: false },
+          duration: sanitizeDuration({ value: dur.value, units: dur.units, concentration: spell.concentration || false, override: false }),
           effects: [],
-          range: { ...parseRange(spell.range), special: '', override: false },
+          range: sanitizeRange({ value: range.value, units: range.units, special: '', override: false }),
           target: { template: { contiguous: false, units: 'ft' }, affects: { choice: false }, override: false, prompt: true },
           uses: { spent: 0, recovery: [] },
           roll: { prompt: false, visible: false },
@@ -957,19 +1144,19 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
         scaling:   { allowed: false, max: '' },
       },
       description: {},
-      duration: {
+      duration: sanitizeDuration({
         value:         dur.value,
         units:         dur.units,
         concentration: meta.concentration ?? false,
         override:      false,
-      },
+      }),
       effects: [],
-      range: {
+      range: sanitizeRange({
         value:   range.value ?? '',
         units:   range.units,
         special: '',
         override: false,
-      },
+      }),
       target: {
         template: { contiguous: false, units: 'ft' },
         affects:  { choice: false },
@@ -995,7 +1182,7 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
     identifier:   name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
     source:       makeSource(sourceBook, edition),
     activation:   { type: actType, value: 1, condition: '' },
-    duration:     dur,
+    duration:     sanitizeDuration(dur),
     level:        levelNum,
     materials:    { value: matText, consumed: matConsumed, cost: matCost, supply: 0 },
     preparation:  {
@@ -1003,7 +1190,7 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
       prepared: !isInnate,
     },
     properties,
-    range,
+    range:        sanitizeRange(range),
     school:      schoolKey,
     sourceClass: effectiveSourceClass,
     target: {
@@ -1435,7 +1622,12 @@ function makeRacialTraitItems(character) {
     // Überspringe rein informationale Einträge (Age, Size, Alignment, Languages)
     if (/^(Age|Size|Alignment|Languages?)$/i.test(traitName)) continue
 
-    const descHtml = entriesToHtml(entry.entries || [])
+    const descHtml = resolveFeatureDescription({
+      name:    traitName,
+      source:  raceSource,
+      entries: entry.entries,
+      kind:    'racial trait',
+    })
 
     // Suche Foundry patch für ActiveEffects
     const patch = raceFeatPatches.find(rf => rf.name === traitName)
@@ -1481,7 +1673,7 @@ function makeRacialTraitItems(character) {
         type:          { value: 'race', subtype: '' },
         advancement:   [],
         activities:    {},
-        uses:          { spent: 0, recovery: [] },
+        uses:          buildUsesBlock(traitName, raceName),
         crewed:        false,
         enchant:       {},
       },
@@ -1593,7 +1785,14 @@ function makeClassFeatureItem(featData, cls, character) {
     img:  featData.img || lookupIcon(featData.name, ICON_CLASS_FEATURES, ICON_GENERAL) || 'icons/svg/aura.svg',
     system: {
       description:   {
-        value: featData.system?.description?.value || lookupClassFeatureDesc(featData.name, cls.classId) || '',
+        value: resolveFeatureDescription({
+          name:    featData.name,
+          source:  featData.source || cls.source,
+          className: cls.classId,
+          entries: featData.entries,
+          prefer:  featData.system?.description?.value,
+          kind:    'class feature',
+        }),
         chat:  ''
       },
       identifier:    featData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
@@ -1604,7 +1803,7 @@ function makeClassFeatureItem(featData, cls, character) {
       type:          { value: featData.subclassShortName ? 'subclass' : 'class', subtype: '' },
       advancement:   [],
       activities,
-      uses:          { spent: 0, recovery: [] },
+      uses:          buildUsesBlock(featData.name, cls.classId, featData.system?.uses),
       crewed:        false,
       enchant:       {},
     },
@@ -1623,7 +1822,12 @@ function makeClassFeatureItem(featData, cls, character) {
 function makeFeatItem(feat, character) {
   const edition  = character.meta?.edition || '5e'
   const featImg  = lookupFeatImg(feat.featId, feat.source, FEAT_INDEX)
-  const featDesc = lookupFullFeatDesc(feat.featId, feat.source)
+  const featDesc = resolveFeatureDescription({
+    name:   feat.featId,
+    source: feat.source,
+    prefer: feat.description,
+    kind:   'feat',
+  })
   return {
     _id:  makeId(`feat_${feat.featId}`),
     name: feat.featId,
@@ -1639,7 +1843,7 @@ function makeFeatItem(feat, character) {
       type:          { value: 'feat', subtype: '' },
       advancement:   [],
       activities:    {},
-      uses:          { spent: 0, recovery: [] },
+      uses:          buildUsesBlock(feat.featId, feat.source || 'PHB', feat.uses),
       crewed:        false,
       enchant:       {},
     },
@@ -2155,12 +2359,16 @@ export async function exportToFoundry(character) {
     }, edition)),
   ]
 
-  // ── Put all non-container inventory items into the first Backpack ──
+  // ── Stow only loose loot/consumables/tools in the first Backpack ──
+  // Equippable items (weapons, armor/shields, containers themselves) stay
+  // outside so they show up directly on the character sheet rather than
+  // being buried inside the backpack UI.
+  const STOWABLE_TYPES = new Set(['loot', 'consumable', 'tool'])
   const backpackItem = inventoryItems.find(i => i.type === 'container')
   if (backpackItem) {
     const backpackId = backpackItem._id
     for (const item of inventoryItems) {
-      if (item.type !== 'container' && !item.system.container) {
+      if (STOWABLE_TYPES.has(item.type) && !item.system.container) {
         item.system.container = backpackId
       }
     }
@@ -2168,18 +2376,25 @@ export async function exportToFoundry(character) {
 
   // Custom Feats als Feat Items
   for (const feat of (character.custom?.feats || [])) {
+    const cFeatDesc = resolveFeatureDescription({
+      name:   feat.name,
+      source: feat.source,
+      prefer: feat.description,
+      kind:   'custom feat',
+    })
     featItems.push({
       _id:    makeId(`cfeat_${feat.name}`),
       name:   feat.name,
       type:   'feat',
       img:    'icons/svg/book.svg',
       system: {
-        description: { value: feat.description || '', chat: '' },
+        description: { value: cFeatDesc, chat: '' },
         source:      { book: feat.source || 'Custom', custom: feat.source || 'Custom' },
         type:        { value: 'feat', subtype: '' },
         properties:  [],
         requirements: '',
         activities:  {},
+        uses:        buildUsesBlock(feat.name, feat.source || 'Custom', feat.uses),
       },
       sort: 0,
       effects: [],
