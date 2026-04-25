@@ -14,6 +14,27 @@ import { copyDecklistToClipboard } from './services/deckExport';
 import './MtgDeckBuilder.css';
 import './App.css';
 
+// Standard MTG formats. value '' = no filter, value 'limited' is a label-only entry (no Scryfall filter).
+export const MTG_FORMATS = [
+  { value: '',            label: '(Kein Format)' },
+  { value: 'standard',    label: 'Standard'      },
+  { value: 'pioneer',     label: 'Pioneer'       },
+  { value: 'modern',      label: 'Modern'        },
+  { value: 'legacy',      label: 'Legacy'        },
+  { value: 'vintage',     label: 'Vintage'       },
+  { value: 'pauper',      label: 'Pauper'        },
+  { value: 'commander',   label: 'Commander'     },
+  { value: 'brawl',       label: 'Brawl'         },
+  { value: 'historic',    label: 'Historic'      },
+  { value: 'alchemy',     label: 'Alchemy'       },
+  { value: 'penny',       label: 'Penny'         },
+  { value: 'oathbreaker', label: 'Oathbreaker'   },
+  { value: 'limited',     label: 'Limited'       },
+];
+
+// Formats that should NOT trigger a Scryfall legal:<x> filter.
+const FORMATS_WITHOUT_FILTER = new Set(['', 'limited']);
+
 export default function MtgDeckBuilderApp() {
   const { deckId } = useParams();             // undefined for /mtg/deck/new
   const navigate = useNavigate();
@@ -56,9 +77,14 @@ export default function MtgDeckBuilderApp() {
   const [pinnedCard,   setPinnedCard]   = useState(null);
   const [lastSeenCard, setLastSeenCard] = useState(null);
 
+  // Effective format passed to Scryfall: explicit CardSearch override wins,
+  // otherwise the deck-level format (unless it's a non-filterable value like "limited").
+  const deckFormatForFilter = FORMATS_WITHOUT_FILTER.has(deckFormat) ? '' : deckFormat;
+  const effectiveFormat = format || deckFormatForFilter;
+
   const { cards, loading, error, hasMore, totalCards, loadMore } = useScryfall({
     query, searchMode, colors, colorMode, cardType, sortOrder, sortDir, showLands,
-    rarity, cmcMin, cmcMax, subtype, format, setCode,
+    rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
   });
 
   const previewCard = pinnedCard || hoveredCard;
@@ -89,7 +115,10 @@ export default function MtgDeckBuilderApp() {
       }
       skipDirtyRef.current = true;
       setDeckName(data.name || 'Unbenanntes Deck');
-      setDeckFormat(data.format || '');
+      // Normalize legacy free-text format values (e.g. "Modern") to dropdown slugs ("modern").
+      const rawFormat = (data.format || '').toLowerCase().trim();
+      const matchedFormat = MTG_FORMATS.find(f => f.value === rawFormat);
+      setDeckFormat(matchedFormat ? matchedFormat.value : '');
       setMainboard(data.data?.mainboard || {});
       setSideboard(data.data?.sideboard || {});
       setLoadingDeck(false);
@@ -334,23 +363,26 @@ export default function MtgDeckBuilderApp() {
                 onFocus={(e) => e.target.style.borderColor = 'var(--border-hi)'}
                 onBlur={(e) => e.target.style.borderColor = 'transparent'}
               />
-              <input
+              <select
                 value={deckFormat}
                 onChange={(e) => setDeckFormat(e.target.value)}
-                placeholder="Format (z.B. Modern)"
+                title="Deck-Format — filtert die Kartensuche auf legale Karten"
                 style={{
                   background: 'transparent',
-                  border: '1px solid transparent',
+                  border: '1px solid var(--border)',
                   padding: '4px 8px',
                   fontSize: 12,
                   color: 'var(--text-mid)',
                   fontFamily: 'inherit',
-                  width: 140,
+                  width: 160,
                   borderRadius: 6,
+                  cursor: 'pointer',
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--border-hi)'}
-                onBlur={(e) => e.target.style.borderColor = 'transparent'}
-              />
+              >
+                {MTG_FORMATS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
             </div>
             <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {(saveStatus || exportStatus) && (
@@ -404,6 +436,7 @@ export default function MtgDeckBuilderApp() {
 
             <section className="search-section">
               <CardSearch
+                deckFormatLabel={MTG_FORMATS.find(f => f.value === deckFormat)?.label || ''}
                 query={query}           setQuery={setQuery}
                 searchMode={searchMode} setSearchMode={setSearchMode}
                 colors={colors}         setColors={setColors}

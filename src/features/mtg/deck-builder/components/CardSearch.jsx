@@ -29,9 +29,11 @@ const RARITY_COLORS = {
   mythic:   '#e07828',
 };
 
+// Override-only list — empty means "use deck format (or none)".
 const FORMATS = [
   '', 'standard', 'pioneer', 'modern', 'legacy',
-  'vintage', 'commander', 'pauper', 'brawl',
+  'vintage', 'pauper', 'commander', 'brawl',
+  'historic', 'alchemy', 'penny', 'oathbreaker',
 ];
 
 const SORT_OPTIONS = [
@@ -67,6 +69,7 @@ export default function CardSearch({
   format,     setFormat,
   setCode,    setSetCode,
   totalCards, loading,
+  deckFormatLabel,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -260,9 +263,16 @@ export default function CardSearch({
               className="adv-select"
               value={format}
               onChange={e => setFormat(e.target.value)}
+              title="Override für die Suche. Leer = Deck-Format aus dem Header verwenden."
             >
               {FORMATS.map(f => (
-                <option key={f} value={f}>{f || 'Alle Formate'}</option>
+                <option key={f} value={f}>
+                  {f
+                    ? f
+                    : deckFormatLabel
+                      ? `Deck-Format (${deckFormatLabel})`
+                      : 'Alle Formate'}
+                </option>
               ))}
             </select>
           </div>

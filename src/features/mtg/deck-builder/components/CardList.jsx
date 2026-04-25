@@ -20,6 +20,7 @@ const COL_OPTS = [
 export default function CardList({
   cards, loading, error, hasMore, onLoadMore, onAddCard, deck,
   onHoverCard, onPinCard, pinnedCard,
+  viewMode, setViewMode,
 }) {
   const { settings, updateSetting } = useSettings();
 
@@ -30,11 +31,17 @@ export default function CardList({
 
   if (error) {
     return (
-      <div className="list-state">
-        <div className="list-state-icon">⚠</div>
-        <div className="list-state-title">Suche fehlgeschlagen</div>
-        <div className="list-state-msg">{error}</div>
-      </div>
+      <>
+        <div className="list-state">
+          <div className="list-state-icon">⚠</div>
+          <div className="list-state-title">Suche fehlgeschlagen</div>
+          <div className="list-state-msg">{error}</div>
+        </div>
+        <CardToolbar
+          settings={settings} updateSetting={updateSetting}
+          viewMode={viewMode} setViewMode={setViewMode}
+        />
+      </>
     );
   }
 
@@ -50,7 +57,10 @@ export default function CardList({
             <em>Probier: „lightning bolt", „draw a card", Farben wählen…</em>
           </div>
         </div>
-        <CardToolbar settings={settings} updateSetting={updateSetting} />
+        <CardToolbar
+          settings={settings} updateSetting={updateSetting}
+          viewMode={viewMode} setViewMode={setViewMode}
+        />
       </>
     );
   }
@@ -89,12 +99,15 @@ export default function CardList({
         <div className="list-end">— Ende der Ergebnisse —</div>
       )}
 
-      <CardToolbar settings={settings} updateSetting={updateSetting} />
+      <CardToolbar
+        settings={settings} updateSetting={updateSetting}
+        viewMode={viewMode} setViewMode={setViewMode}
+      />
     </div>
   );
 }
 
-function CardToolbar({ settings, updateSetting }) {
+export function CardToolbar({ settings, updateSetting, viewMode, setViewMode }) {
   return (
     <div className="card-toolbar">
       <div className="toolbar-group">
@@ -123,6 +136,27 @@ function CardToolbar({ settings, updateSetting }) {
           ))}
         </div>
       </div>
+
+      {setViewMode && (
+        <>
+          <div className="toolbar-divider" />
+          <div className="toolbar-group toolbar-group--right">
+            <span className="toolbar-label">Modus</span>
+            <div className="toolbar-pills">
+              <button
+                className={`toolbar-pill ${viewMode === 'edit' ? 'active' : ''}`}
+                onClick={() => setViewMode('edit')}
+                title="Suche & Karten hinzufügen"
+              >Edit</button>
+              <button
+                className={`toolbar-pill ${viewMode === 'view' ? 'active' : ''}`}
+                onClick={() => setViewMode('view')}
+                title="Decklist als Liste anzeigen"
+              >View</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
