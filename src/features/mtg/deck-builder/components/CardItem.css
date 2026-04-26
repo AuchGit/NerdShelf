@@ -15,6 +15,110 @@
   box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 12px var(--accent-glow);
 }
 
+.card-item.is-favorite {
+  border: 2px solid var(--color-warning);
+}
+.card-item.is-favorite:hover {
+  border-color: var(--color-warning);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5),
+              0 0 14px color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+/* ── Favorite star ── */
+.fav-star {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-mid);
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, transform 0.15s;
+  z-index: 2;
+}
+.fav-star:hover {
+  color: var(--color-warning);
+  background: rgba(0, 0, 0, 0.75);
+  transform: scale(1.1);
+}
+.fav-star.active {
+  color: var(--color-warning);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
+}
+
+/* ── Wide tile (split + double-faced): 2 cols wide, same row height ── */
+.card-tile-wide {
+  grid-column: span 2;
+}
+.card-tile-wide .card-img-wrap--split,
+.card-tile-wide .card-faces {
+  /* Combined width is 2 cards minus the meta padding/border, so the image
+     row uses an aspect-ratio of (2*63) / 88 to keep the same vertical extent
+     as a normal tile. */
+  aspect-ratio: 126 / 88;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+
+/* Split / Room / Aftermath / Fuse: Scryfall returns a portrait (63:88) image
+   where the two halves are stacked and printed sideways. Rotate -90° so
+   they sit upright next to each other inside the landscape (126:88) wrapper. */
+.card-img-wrap--split .card-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* Pre-rotation: width = wrapper-height (= 88/126 of wrapper width),
+     height auto via natural 63:88 aspect. After rotate(-90°) the image's
+     visual width and height both fit within the wrapper. translate(-50%,-50%)
+     centers it on the wrapper's center; rotate then pivots around that point. */
+  width: calc(100% * 88 / 126);
+  height: auto;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+.card-img-wrap--split .card-img-skeleton {
+  position: absolute;
+  inset: 0;
+}
+.card-img-wrap--split .card-img-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Double-faced: two portrait images side by side */
+.card-faces {
+  display: flex;
+  gap: 4px;
+}
+.card-faces .card-img-wrap {
+  flex: 1 1 50%;
+  aspect-ratio: auto;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.card-faces .card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* ── Image ── */
 .card-img-wrap {
   position: relative;

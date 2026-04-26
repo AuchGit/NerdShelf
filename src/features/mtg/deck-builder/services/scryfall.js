@@ -122,6 +122,104 @@ export function getCardImage(card, size = 'normal') {
   );
 }
 
+/**
+ * Classifies a card's layout for rendering purposes.
+ * - 'split' for split / fuse / aftermath (one image, two halves printed sideways)
+ * - 'double_faced' for transform / modal_dfc / double_faced_token / reversible_card / meld
+ * - 'normal' otherwise
+ */
+export function getCardLayout(card) {
+  const l = card?.layout;
+  if (!l) return 'normal';
+  if (l === 'split' || l === 'fuse' || l === 'aftermath' || l === 'room') return 'split';
+  if (
+    l === 'transform' ||
+    l === 'modal_dfc' ||
+    l === 'double_faced_token' ||
+    l === 'reversible_card' ||
+    l === 'meld'
+  ) {
+    // Edge case: if card_faces don't have per-face images, treat as normal/split
+    const faces = card.card_faces || [];
+    const faceHasOwnImage = faces.some(f => f?.image_uris && Object.keys(f.image_uris).length > 0);
+    if (!faceHasOwnImage) return 'normal';
+    return 'double_faced';
+  }
+  return 'normal';
+}
+
+/**
+ * Returns the renderable faces of a card.
+ * - normal: 1 face with the top-level image
+ * - split: 1 face (the shared image), oracle texts of all halves combined
+ * - double_faced: 2 faces, each with its own image / oracle / mana cost / type
+ * Always returns at least one face.
+ */
+export function getCardFaces(card) {
+  const layout = getCardLayout(card);
+  const faces = card.card_faces || [];
+
+  if (layout === 'split') {
+    const image_uri =
+      card.image_uris?.normal ||
+      card.image_uris?.large ||
+      faces[0]?.image_uris?.normal ||
+      faces[0]?.image_uris?.large ||
+      null;
+    const image_uri_large =
+      card.image_uris?.large ||
+      card.image_uris?.normal ||
+      faces[0]?.image_uris?.large ||
+      faces[0]?.image_uris?.normal ||
+      null;
+    const combinedOracle = faces.length > 0
+      ? faces.map(f => `${f.name ? f.name + '\n' : ''}${f.oracle_text || ''}`).join('\n\n//\n\n')
+      : (card.oracle_text || '');
+    const combinedMana = faces.length > 0
+      ? faces.map(f => f.mana_cost || '').filter(Boolean).join(' // ')
+      : (card.mana_cost || '');
+    return [{
+      name: card.name,
+      image_uri,
+      image_uri_large,
+      oracle_text: combinedOracle,
+      mana_cost: combinedMana,
+      type_line: card.type_line || faces[0]?.type_line || '',
+      power: card.power ?? faces[0]?.power,
+      toughness: card.toughness ?? faces[0]?.toughness,
+      loyalty: card.loyalty ?? faces[0]?.loyalty,
+    }];
+  }
+
+  if (layout === 'double_faced') {
+    // Use first two faces only (meld has 3, ignore the third per spec)
+    return faces.slice(0, 2).map(f => ({
+      name: f.name,
+      image_uri: f.image_uris?.normal || f.image_uris?.large || null,
+      image_uri_large: f.image_uris?.large || f.image_uris?.normal || null,
+      oracle_text: f.oracle_text || '',
+      mana_cost: f.mana_cost || '',
+      type_line: f.type_line || '',
+      power: f.power,
+      toughness: f.toughness,
+      loyalty: f.loyalty,
+    }));
+  }
+
+  // normal
+  return [{
+    name: card.name,
+    image_uri: card.image_uris?.normal || card.image_uris?.large || null,
+    image_uri_large: card.image_uris?.large || card.image_uris?.normal || null,
+    oracle_text: card.oracle_text || '',
+    mana_cost: card.mana_cost || '',
+    type_line: card.type_line || '',
+    power: card.power,
+    toughness: card.toughness,
+    loyalty: card.loyalty,
+  }];
+}
+
 export function getManaCost(card) {
   return card.mana_cost ?? card.card_faces?.[0]?.mana_cost ?? '';
 }

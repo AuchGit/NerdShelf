@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const p=require\\('@babel/parser'\\); const fs=require\\('fs'\\); for \\(const f of ['src/features/mtg/deck-builder/MtgDeckBuilderApp.jsx','src/features/mtg/deck-builder/components/CardList.jsx','src/features/mtg/deck-builder/components/DeckListView.jsx']\\) { p.parse\\(fs.readFileSync\\(f,'utf8'\\), {sourceType:'module', plugins:['jsx']}\\); console.log\\('OK', f\\); }\")"
     ]
   }
 }

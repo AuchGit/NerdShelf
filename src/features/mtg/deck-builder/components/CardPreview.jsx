@@ -1,4 +1,5 @@
-import { getCardImage, getManaCost, parseManaCost } from '../services/scryfall';
+import { useEffect, useState } from 'react';
+import { parseManaCost, getCardLayout, getCardFaces } from '../services/scryfall';
 import ManaSymbol from './ManaSymbol';
 import './CardPreview.css';
 
@@ -49,21 +50,39 @@ function EmptyPreview() {
   );
 }
 
-export default function CardPreview({ card, isStale, pinned, onPin, onUnpin }) {
+export default function CardPreview({
+  card, isStale, pinned, onPin, onUnpin,
+  pinnedFaceIndex = null,
+}) {
+  const [currentFace, setCurrentFace] = useState(0);
+
+  // Reset / sync currentFace when the card changes or a face is explicitly pinned
+  useEffect(() => {
+    if (pinned && pinnedFaceIndex != null) {
+      setCurrentFace(pinnedFaceIndex);
+    } else {
+      setCurrentFace(0);
+    }
+  }, [card?.id, pinned, pinnedFaceIndex]);
+
   if (!card) return <EmptyPreview />;
 
-  const imageUrl  = getCardImage(card, 'large') || getCardImage(card, 'normal');
-  const manaCost  = getManaCost(card);
-  const manaSyms  = parseManaCost(manaCost);
+  const layout    = getCardLayout(card);
+  const faces     = getCardFaces(card);
+  const isDouble  = layout === 'double_faced';
+  const isSplit   = layout === 'split';
+  const face      = faces[currentFace] || faces[0];
 
-  const oracle    = card.oracle_text       ?? card.card_faces?.[0]?.oracle_text ?? '';
-  const flavor    = card.flavor_text       ?? card.card_faces?.[0]?.flavor_text ?? '';
-  const power     = card.power             ?? card.card_faces?.[0]?.power;
-  const toughness = card.toughness         ?? card.card_faces?.[0]?.toughness;
-  const loyalty   = card.loyalty           ?? card.card_faces?.[0]?.loyalty;
-  const defense   = card.defense           ?? card.card_faces?.[0]?.defense;
+  const imageUrl  = face?.image_uri_large || face?.image_uri;
+  const manaSyms  = parseManaCost(face?.mana_cost || '');
+  const oracle    = face?.oracle_text || '';
+  const flavor    = card.flavor_text ?? card.card_faces?.[currentFace]?.flavor_text ?? '';
+  const power     = face?.power;
+  const toughness = face?.toughness;
+  const loyalty   = face?.loyalty;
+  const defense   = card.defense ?? card.card_faces?.[currentFace]?.defense;
 
-  const rColor     = RARITY_COLOR[card.rarity] ?? '#808080';
+  const rColor      = RARITY_COLOR[card.rarity] ?? '#808080';
   const rarityLabel = card.rarity
     ? card.rarity.charAt(0).toUpperCase() + card.rarity.slice(1)
     : '';
@@ -84,23 +103,40 @@ export default function CardPreview({ card, isStale, pinned, onPin, onUnpin }) {
       </div>
 
       {/* Card image */}
-      <div className="cp-image-wrap">
+      <div className={`cp-image-wrap ${isSplit ? 'cp-image-wrap--split' : ''}`}>
         {imageUrl
-          ? <img src={imageUrl} alt={card.name} className="cp-image" />
+          ? <img src={imageUrl} alt={face?.name || card.name} className="cp-image" />
           : <div className="cp-image-fallback">{card.name}</div>
         }
+        {isDouble && (
+          <button
+            type="button"
+            className="cp-flip-btn"
+            onClick={() => setCurrentFace(f => (f === 0 ? 1 : 0))}
+            title="Andere Seite zeigen"
+            aria-label="Andere Seite zeigen"
+          >↻</button>
+        )}
       </div>
 
       {/* Card details */}
       <div className="cp-info">
         <div className="cp-name-row">
-          <span className="cp-name">{card.name}</span>
+          <span className="cp-name">
+            {isDouble ? face?.name : card.name}
+          </span>
           <span className="cp-cost">
             {manaSyms.map((s, i) => <ManaSymbol key={i} symbol={s} size="sm" />)}
           </span>
         </div>
 
-        <div className="cp-type">{card.type_line}</div>
+        {isDouble && (
+          <div className="cp-face-indicator">
+            Seite {currentFace + 1} von {faces.length}
+          </div>
+        )}
+
+        <div className="cp-type">{face?.type_line || card.type_line}</div>
 
         {card.set_name && (
           <div className="cp-set">
@@ -117,7 +153,7 @@ export default function CardPreview({ card, isStale, pinned, onPin, onUnpin }) {
 
         {/* Stats row */}
         <div className="cp-stats-row">
-          {card.cmc != null && (
+          {card.cmc != null && !isDouble && (
             <span className="cp-stat-chip">CMC {card.cmc}</span>
           )}
           {power != null && toughness != null && (

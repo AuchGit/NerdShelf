@@ -1,0 +1,58 @@
+.dlv-outer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dlv-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.85rem 0.85rem 0;
+}
+
+.dlv-section + .dlv-section {
+  margin-top: 1.5rem;
+}
+
+.dlv-section-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Cinzel', serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-hi);
+  letter-spacing: 0.5px;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-hi);
+  margin-bottom: 0.6rem;
+}
+
+.dlv-section-count {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.dlv-group {
+  margin-bottom: 1rem;
+}
+
+.dlv-group-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 0.25rem 0;
+  border-bottom: 1px dashed var(--border);
+  margin-bottom: 0.5rem;
+}
+
+.dlv-group-count {
+  color: var(--text-lo);
+  font-size: 0.7rem;
+}

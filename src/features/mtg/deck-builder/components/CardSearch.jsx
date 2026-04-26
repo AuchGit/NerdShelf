@@ -70,6 +70,7 @@ export default function CardSearch({
   setCode,    setSetCode,
   totalCards, loading,
   deckFormatLabel,
+  showFavoritesOnly = false, setShowFavoritesOnly,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -139,6 +140,16 @@ export default function CardSearch({
             title={showLands ? 'Nur Länder anzeigen' : 'Länder ausgeblendet'}
             onClick={() => setShowLands(prev => !prev)}
           >L</button>
+
+          {/* Favorites-only toggle */}
+          {setShowFavoritesOnly && (
+            <button
+              className={`fav-pip ${showFavoritesOnly ? 'active' : ''}`}
+              title={showFavoritesOnly ? 'Zeigt nur Favoriten' : 'Nur Favoriten anzeigen'}
+              onClick={() => setShowFavoritesOnly(prev => !prev)}
+              aria-pressed={showFavoritesOnly}
+            >★</button>
+          )}
         </div>
 
         {/* Color mode — only visible when colors are selected */}

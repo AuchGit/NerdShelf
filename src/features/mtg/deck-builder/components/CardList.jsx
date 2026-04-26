@@ -21,6 +21,7 @@ export default function CardList({
   cards, loading, error, hasMore, onLoadMore, onAddCard, deck,
   onHoverCard, onPinCard, pinnedCard,
   viewMode, setViewMode,
+  isFavorite, onToggleFavorite,
 }) {
   const { settings, updateSetting } = useSettings();
 
@@ -77,6 +78,8 @@ export default function CardList({
             onHover={onHoverCard}
             onHoverEnd={() => onHoverCard?.(null)}
             onPin={onPinCard}
+            isFavorite={isFavorite ? isFavorite(card.id) : false}
+            onToggleFavorite={onToggleFavorite}
           />
         ))}
       </div>

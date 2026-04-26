@@ -154,3 +154,7 @@
   background: var(--border-mid);
   flex-shrink: 0;
 }
+
+.toolbar-group--right {
+  margin-left: auto;
+}

@@ -4,12 +4,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
-import CardSearch  from './components/CardSearch';
-import CardList    from './components/CardList';
-import DeckPanel   from './components/DeckPanel';
-import CardPreview from './components/CardPreview';
+import CardSearch    from './components/CardSearch';
+import CardList      from './components/CardList';
+import DeckListView  from './components/DeckListView';
+import DeckPanel     from './components/DeckPanel';
+import CardPreview   from './components/CardPreview';
 import ImportDeckModal from './components/ImportDeckModal';
 import { useScryfall } from './hooks/useScryfall';
+import { useFavorites } from './hooks/useFavorites';
+import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
 import './MtgDeckBuilder.css';
 import './App.css';
@@ -74,18 +77,54 @@ export default function MtgDeckBuilderApp() {
 
   // ── Preview state ────────────────────────────────────
   const [hoveredCard,  setHoveredCard]  = useState(null);
-  const [pinnedCard,   setPinnedCard]   = useState(null);
+  // pinned holds { card, faceIndex } | null. faceIndex is the face that was
+  // right-clicked (0 by default; 0/1 for double-faced cards).
+  const [pinned,       setPinned]       = useState(null);
   const [lastSeenCard, setLastSeenCard] = useState(null);
+  const pinnedCard = pinned?.card ?? null;
+
+  // ── View/Edit toggle ────────────────────────────────
+  const [viewMode, setViewMode] = useState('edit');
+
+  // ── Favorites ───────────────────────────────────────
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const favs = useFavorites();
+  // Trigger fetch of full favorite cards when toggle is enabled
+  useEffect(() => {
+    if (showFavoritesOnly && favs.favoriteCards === null) {
+      favs.loadFavoriteCards();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFavoritesOnly, favs.favoriteCards]);
 
   // Effective format passed to Scryfall: explicit CardSearch override wins,
   // otherwise the deck-level format (unless it's a non-filterable value like "limited").
   const deckFormatForFilter = FORMATS_WITHOUT_FILTER.has(deckFormat) ? '' : deckFormat;
   const effectiveFormat = format || deckFormatForFilter;
 
-  const { cards, loading, error, hasMore, totalCards, loadMore } = useScryfall({
+  const scryfall = useScryfall({
     query, searchMode, colors, colorMode, cardType, sortOrder, sortDir, showLands,
     rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
   });
+
+  // When "favorites only" is active, replace Scryfall search results with a
+  // client-side filtered view of the user's favorite cards.
+  const showingFavs = showFavoritesOnly;
+  const favCardsBase = favs.favoriteCards || [];
+  const favoritesFiltered = showingFavs
+    ? filterFavorites(favCardsBase, {
+        query, searchMode, colors, colorMode, cardType, showLands,
+        rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
+        sortOrder, sortDir,
+      })
+    : null;
+
+  const cards      = showingFavs ? favoritesFiltered : scryfall.cards;
+  const loading    = showingFavs ? favs.loading      : scryfall.loading;
+  const error      = showingFavs ? favs.error        : scryfall.error;
+  const hasMore    = showingFavs ? false             : scryfall.hasMore;
+  const totalCards = showingFavs ? (favoritesFiltered?.length ?? 0) : scryfall.totalCards;
+  const loadMore   = scryfall.loadMore;
 
   const previewCard = pinnedCard || hoveredCard;
   useEffect(() => {
@@ -249,10 +288,21 @@ export default function MtgDeckBuilderApp() {
   }
 
   // ── Preview handlers ─────────────────────────────────
-  const handlePin = useCallback((card) => {
-    setPinnedCard(prev => (prev?.id === card?.id ? null : card));
+  // Pin semantics:
+  //   - no card pinned     → pin this card+face
+  //   - other card pinned  → switch to this card+face
+  //   - same card, other face → switch face
+  //   - same card+face     → unpin
+  const handlePin = useCallback((card, faceIndex = 0) => {
+    if (!card) return;
+    setPinned(prev => {
+      if (!prev) return { card, faceIndex };
+      if (prev.card.id !== card.id) return { card, faceIndex };
+      if (prev.faceIndex !== faceIndex) return { card, faceIndex };
+      return null;
+    });
   }, []);
-  const handleUnpin = useCallback(() => setPinnedCard(null), []);
+  const handleUnpin = useCallback(() => setPinned(null), []);
 
   // ── Save ─────────────────────────────────────────────
   async function handleSave() {
@@ -428,8 +478,9 @@ export default function MtgDeckBuilderApp() {
               <CardPreview
                 card={displayCard}
                 isStale={isStale}
-                pinned={!!pinnedCard}
-                onPin={() => handlePin(hoveredCard || pinnedCard)}
+                pinned={!!pinned}
+                pinnedFaceIndex={pinned?.faceIndex ?? null}
+                onPin={() => handlePin(hoveredCard || pinned?.card, 0)}
                 onUnpin={handleUnpin}
               />
             </aside>
@@ -437,6 +488,8 @@ export default function MtgDeckBuilderApp() {
             <section className="search-section">
               <CardSearch
                 deckFormatLabel={MTG_FORMATS.find(f => f.value === deckFormat)?.label || ''}
+                showFavoritesOnly={showFavoritesOnly}
+                setShowFavoritesOnly={setShowFavoritesOnly}
                 query={query}           setQuery={setQuery}
                 searchMode={searchMode} setSearchMode={setSearchMode}
                 colors={colors}         setColors={setColors}
@@ -454,18 +507,35 @@ export default function MtgDeckBuilderApp() {
                 totalCards={totalCards}
                 loading={loading}
               />
-              <CardList
-                cards={cards}
-                loading={loading}
-                error={error}
-                hasMore={hasMore}
-                onLoadMore={loadMore}
-                onAddCard={addToMain}
-                deck={combinedForCardList}
-                onHoverCard={setHoveredCard}
-                onPinCard={handlePin}
-                pinnedCard={pinnedCard}
-              />
+              {viewMode === 'edit' ? (
+                <CardList
+                  cards={cards || []}
+                  loading={loading}
+                  error={error}
+                  hasMore={hasMore}
+                  onLoadMore={loadMore}
+                  onAddCard={addToMain}
+                  deck={combinedForCardList}
+                  onHoverCard={setHoveredCard}
+                  onPinCard={handlePin}
+                  pinnedCard={pinnedCard}
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  isFavorite={favs.isFavorite}
+                  onToggleFavorite={favs.toggleFavorite}
+                />
+              ) : (
+                <DeckListView
+                  mainboard={mainboard}
+                  sideboard={sideboard}
+                  onHoverCard={setHoveredCard}
+                  onPinCard={handlePin}
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  isFavorite={favs.isFavorite}
+                  onToggleFavorite={favs.toggleFavorite}
+                />
+              )}
             </section>
 
             <aside className="deck-section">
