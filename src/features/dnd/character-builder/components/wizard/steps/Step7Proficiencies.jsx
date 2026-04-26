@@ -59,12 +59,12 @@ const EXPERTISE_L1 = {
 }
 
 const FEATURE_TYPE_LABEL = {
-  'MM':   { label: 'Metamagic',      emoji: '✨' },
-  'FS:F': { label: 'Fighting Style', emoji: '⚔️' },
-  'FS:R': { label: 'Fighting Style', emoji: '⚔️' },
-  'FS:P': { label: 'Fighting Style', emoji: '⚔️' },
-  'EI':   { label: 'Eldritch Invocation', emoji: '🔮' },
-  'MV:B': { label: 'Maneuver',       emoji: '🛡️' },
+  'MM':   { label: 'Metamagic',      emoji: '✦' },
+  'FS:F': { label: 'Fighting Style', emoji: '⚔' },
+  'FS:R': { label: 'Fighting Style', emoji: '⚔' },
+  'FS:P': { label: 'Fighting Style', emoji: '⚔' },
+  'EI':   { label: 'Eldritch Invocation', emoji: '✦' },
+  'MV:B': { label: 'Maneuver',       emoji: '★' },
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -490,10 +490,10 @@ export default function Step7Proficiencies({ character, updateCharacter }) {
 
         // FIX 5: Group descriptors by source + sourceId for labelling
         const SOURCE_LABELS = {
-          race:       selectedRace?.name ? `🧝 Race: ${selectedRace.name}` : '🧝 Race',
-          subrace:    selectedSubrace?.name ? `🧝 Subrace: ${selectedSubrace.name}` : '🧝 Subrace',
-          background: `📜 Background: ${character.background?.backgroundId || 'Background'}`,
-          class:      `⚔️ Class: ${cls?.classId || 'Class'}`,
+          race:       selectedRace?.name ? `Race: ${selectedRace.name}` : 'Race',
+          subrace:    selectedSubrace?.name ? `Subrace: ${selectedSubrace.name}` : 'Subrace',
+          background: `Background: ${character.background?.backgroundId || 'Background'}`,
+          class:      `⚔ Class: ${cls?.classId || 'Class'}`,
         }
 
         // Build ordered groups: race → subrace → background → class → each feat
@@ -686,7 +686,7 @@ export default function Step7Proficiencies({ character, updateCharacter }) {
         return (
           <div style={S.section}>
             <div style={S.sectionTitle}>
-              🎯 Expertise
+              ◎ Expertise
             </div>
 
             {/* Class expertise */}
@@ -878,7 +878,7 @@ function GrantedSection({ bgSkills, bgTools, classArmor, classWeapons, classSave
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {bgTools.map((tool, i) => (
                   <span key={i} style={S.profChip}>
-                    🔧 {tool}
+                    {tool}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Background</span>
                   </span>
                 ))}
@@ -910,7 +910,7 @@ function GrantedSection({ bgSkills, bgTools, classArmor, classWeapons, classSave
                 ))}
                 {classTools.map(tool => (
                   <span key={tool} style={S.profChip}>
-                    🔧 {tool}
+                    {tool}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Class</span>
                   </span>
                 ))}
@@ -925,31 +925,31 @@ function GrantedSection({ bgSkills, bgTools, classArmor, classWeapons, classSave
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {fp.armor.map(a => (
                   <span key={a} style={S.profChip}>
-                    🛡️ {a} armor
+                    {a} armor
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Feat</span>
                   </span>
                 ))}
                 {fp.weapons.map(w => (
                   <span key={w} style={S.profChip}>
-                    ⚔️ {w}
+                    ⚔ {w}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Feat</span>
                   </span>
                 ))}
                 {fp.tools.map(t => (
                   <span key={t} style={S.profChip}>
-                    🔧 {t}
+                    {t}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Feat</span>
                   </span>
                 ))}
                 {fp.skills.map(sk => (
                   <span key={sk} style={S.profChip}>
-                    📖 {SKILL_LABELS[sk] || sk}
+                    {SKILL_LABELS[sk] || sk}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Feat</span>
                   </span>
                 ))}
                 {fp.languages.map(l => (
                   <span key={l} style={S.profChip}>
-                    🗣️ {l}
+                    {l}
                     <span style={{ ...S.sourceTag, marginLeft: 6 }}>Feat</span>
                   </span>
                 ))}

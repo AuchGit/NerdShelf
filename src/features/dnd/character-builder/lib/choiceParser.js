@@ -151,14 +151,14 @@ export function getVersionCoveredKeys(versions) {
 
 // Feat feature-type codes → human labels
 export const FEATURE_TYPE_LABEL = {
-  'MM':   { label:'Metamagic',             emoji:'✨' },
-  'FS:F': { label:'Fighting Style',        emoji:'⚔️' },
-  'FS:R': { label:'Fighting Style',        emoji:'⚔️' },
-  'FS:P': { label:'Fighting Style',        emoji:'⚔️' },
-  'EI':   { label:'Eldritch Invocation',   emoji:'🔮' },
-  'MV:B': { label:'Maneuver',              emoji:'🛡️' },
-  'AS:V3': { label:'Arcane Shot',          emoji:'🏹' },
-  'SG':   { label:"Sorcerer's Gift",       emoji:'🌟' },
+  'MM':   { label:'Metamagic',             emoji:'✦' },
+  'FS:F': { label:'Fighting Style',        emoji:'⚔' },
+  'FS:R': { label:'Fighting Style',        emoji:'⚔' },
+  'FS:P': { label:'Fighting Style',        emoji:'⚔' },
+  'EI':   { label:'Eldritch Invocation',   emoji:'✦' },
+  'MV:B': { label:'Maneuver',              emoji:'★' },
+  'AS:V3': { label:'Arcane Shot',          emoji:'➳' },
+  'SG':   { label:"Sorcerer's Gift",       emoji:'★' },
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

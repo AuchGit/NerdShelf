@@ -74,6 +74,21 @@ export default function LoginPage() {
     mode === 'login' ? handleLogin() : handleSignup();
   }
 
+  async function handlePasswordReset() {
+    const trimmed = email.trim();
+    if (!trimmed) { setError('Bitte erst deine Email oben eingeben.'); return; }
+    setLoading(true); setError(null); setSuccess(null);
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, {
+      redirectTo: window.location.origin,
+    });
+    setLoading(false);
+    if (resetErr) {
+      setError(resetErr.message || 'Reset-Email konnte nicht gesendet werden.');
+      return;
+    }
+    setSuccess('Reset-Email gesendet (falls die Adresse existiert). Schau in dein Postfach.');
+  }
+
   return (
     <div style={S.container}>
       <div style={S.card}>
@@ -114,6 +129,15 @@ export default function LoginPage() {
             ? 'Noch kein Account? → Registrieren'
             : 'Bereits registriert? → Anmelden'}
         </button>
+        {mode === 'login' && (
+          <button
+            style={S.switchBtn}
+            onClick={handlePasswordReset}
+            disabled={loading}
+          >
+            Passwort vergessen? → Reset-Email senden
+          </button>
+        )}
         {mode === 'signup' && (
           <p style={S.hint}>
             Nach der Registrierung musst du deine Email bestätigen und auf die Freischaltung durch einen Admin warten.

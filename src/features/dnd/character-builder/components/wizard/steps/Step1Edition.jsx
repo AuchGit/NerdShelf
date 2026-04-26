@@ -5,14 +5,14 @@ export default function Step1Edition({ character, updateCharacter }) {
       label: 'D&D 5e (2014)',
       subtitle: 'Player\'s Handbook 2014',
       description: 'Die klassische Edition. Rassische ASI-Boni, klassische Backgrounds ohne Feats.',
-      icon: '📜',
+      icon: '§',
     },
     {
       id: '5.5e',
       label: 'D&D 5.5e (2024)',
       subtitle: 'Player\'s Handbook 2024',
       description: 'Überarbeitete Regeln. Spezies statt Rassen, Backgrounds geben Feats + ASI, neue Klassendefinitionen.',
-      icon: '✨',
+      icon: '✦',
     },
   ]
 

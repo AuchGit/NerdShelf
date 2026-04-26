@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from 'react'
 
 const T = {
   de: {
-    appTitle: '⚔️ DnD Character Builder',
+    appTitle: '⚔ DnD Character Builder',
     logout: 'Abmelden', back: '← Zurück', loading: 'Laden...', search: 'Suchen...',
     next: 'Weiter →', finish: '✓ Character erstellen', saving: 'Speichern...',
     open: 'Öffnen', select: 'Auswählen', selected: '✓ Gewählt',
@@ -57,12 +57,12 @@ const T = {
     skills: 'Skills', tools: 'Tools', givesFeat: 'Gibt Feat',
 
     abilityScores: 'Ability Scores',
-    standardArray: '📊 Standard Array', standardArrayDesc: '15,14,13,12,10,8 verteilen',
-    pointBuy: '🪙 Point Buy', pointBuyDesc: '27 Punkte verteilen',
-    roll3d6: '🎲 3d6', roll3d6Desc: '3 Würfel pro Score',
-    roll4d6: '🎲 4d6 Drop Lowest', roll4d6Desc: 'Bestes aus 4 Würfeln',
-    manual: '✏️ Manuell', manualDesc: 'Frei eingeben',
-    rollBtn: '🎲 Würfeln!', rollResults: 'Ergebnisse',
+    standardArray: 'Standard Array', standardArrayDesc: '15,14,13,12,10,8 verteilen',
+    pointBuy: 'Point Buy', pointBuyDesc: '27 Punkte verteilen',
+    roll3d6: '⚅ 3d6', roll3d6Desc: '3 Würfel pro Score',
+    roll4d6: '⚅ 4d6 Drop Lowest', roll4d6Desc: 'Bestes aus 4 Würfeln',
+    manual: '✎ Manuell', manualDesc: 'Frei eingeben',
+    rollBtn: '⚅ Würfeln!', rollResults: 'Ergebnisse',
     pointsLeft: 'Punkte übrig', availableValues: 'Verfügbare Werte', allAssigned: '✓ Alle verteilt',
     speciesASIMethod: 'Wie werden Spezies-ASI-Boni angewendet?',
     asiFixed: 'Standard (feste Rassen-Boni)',
@@ -75,7 +75,7 @@ const T = {
     hpMethod: 'HP-Methode (für Level-Ups)',
     hpMethodNote: 'Level 1 HP ist immer Maximum. Wähle wie HP bei zukünftigen Level-Ups berechnet werden.',
     hpAverage: '⌀ Durchschnitt',
-    hpRoll: '🎲 Würfeln',
+    hpRoll: '⚅ Würfeln',
     hpLevel1Preview: 'Level 1 HP (immer Max)',
 
     // ── Zauber (Step 7) ──
@@ -106,7 +106,7 @@ const T = {
     errSave: 'Fehler beim Speichern. Bitte versuche es erneut.',
   },
   en: {
-    appTitle: '⚔️ DnD Character Builder',
+    appTitle: '⚔ DnD Character Builder',
     logout: 'Sign Out', back: '← Back', loading: 'Loading...', search: 'Search...',
     next: 'Next →', finish: '✓ Create Character', saving: 'Saving...',
     open: 'Open', select: 'Select', selected: '✓ Selected',
@@ -161,12 +161,12 @@ const T = {
     skills: 'Skills', tools: 'Tools', givesFeat: 'Grants Feat',
 
     abilityScores: 'Ability Scores',
-    standardArray: '📊 Standard Array', standardArrayDesc: 'Assign 15,14,13,12,10,8',
-    pointBuy: '🪙 Point Buy', pointBuyDesc: 'Spend 27 points',
-    roll3d6: '🎲 3d6', roll3d6Desc: '3 dice per score',
-    roll4d6: '🎲 4d6 Drop Lowest', roll4d6Desc: 'Best of 4 dice',
-    manual: '✏️ Manual', manualDesc: 'Enter freely',
-    rollBtn: '🎲 Roll!', rollResults: 'Results',
+    standardArray: 'Standard Array', standardArrayDesc: 'Assign 15,14,13,12,10,8',
+    pointBuy: 'Point Buy', pointBuyDesc: 'Spend 27 points',
+    roll3d6: '⚅ 3d6', roll3d6Desc: '3 dice per score',
+    roll4d6: '⚅ 4d6 Drop Lowest', roll4d6Desc: 'Best of 4 dice',
+    manual: '✎ Manual', manualDesc: 'Enter freely',
+    rollBtn: '⚅ Roll!', rollResults: 'Results',
     pointsLeft: 'Points left', availableValues: 'Available Values', allAssigned: '✓ All assigned',
     speciesASIMethod: 'How to apply species ASI bonuses?',
     asiFixed: 'Standard (fixed racial bonuses)',
@@ -179,7 +179,7 @@ const T = {
     hpMethod: 'HP Method (for Level-Ups)',
     hpMethodNote: 'Level 1 HP is always maximum. Choose how HP is calculated on future level-ups.',
     hpAverage: '⌀ Average',
-    hpRoll: '🎲 Roll',
+    hpRoll: '⚅ Roll',
     hpLevel1Preview: 'Level 1 HP (always max)',
 
     // ── Spells (Step 7) ──

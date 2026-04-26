@@ -561,7 +561,7 @@ export default function Step3Race({ character, updateCharacter }) {
                   )}
                   {subFixed.length > 0 && (
                     <div style={{ color: 'var(--accent-purple)', fontSize: 12, marginTop: 2 }}>
-                      🔮 Zauber: {subFixed.join(', ')}
+                      ✦ Zauber: {subFixed.join(', ')}
                     </div>
                   )}
                   {hasSpellChoices(sub.additionalSpells) && (
@@ -583,7 +583,7 @@ export default function Step3Race({ character, updateCharacter }) {
                   )}
                   {getRaceFeatChoiceCount(null, sub) > 0 && (
                     <div style={{ color: 'var(--accent)', fontSize: 11, marginTop: 2 }}>
-                      🎖 Feat-Wahl vorhanden
+                      ★ Feat-Wahl vorhanden
                     </div>
                   )}
                   {sub.traitTags?.length > 0 && (

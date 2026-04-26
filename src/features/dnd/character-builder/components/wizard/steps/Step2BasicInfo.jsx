@@ -33,14 +33,14 @@ export default function Step2BasicInfo({ character, updateCharacter }) {
             </div>
           ) : (
             <div style={styles.portraitEmpty} onClick={() => fileRef.current?.click()}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>🧙</div>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>+</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Bild hochladen</div>
               <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>PNG/JPG max. 2MB</div>
             </div>
           )}
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePortraitUpload} />
           {!character.appearance.portrait && (
-            <button style={styles.uploadBtn} onClick={() => fileRef.current?.click()}>📷 Bild wählen</button>
+            <button style={styles.uploadBtn} onClick={() => fileRef.current?.click()}>+ Bild wählen</button>
           )}
         </div>
 

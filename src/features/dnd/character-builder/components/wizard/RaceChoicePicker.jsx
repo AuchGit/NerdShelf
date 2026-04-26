@@ -81,12 +81,12 @@ const SCHOOL_COLORS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ABILITY_INFO = {
-  STR: { name: 'Stärke',       icon: '💪', color: 'var(--accent)' },
-  DEX: { name: 'Geschickl.',   icon: '🏃', color: 'var(--accent-green)' },
-  CON: { name: 'Konstitution', icon: '❤️', color: 'var(--accent-red)' },
-  INT: { name: 'Intelligenz',  icon: '🧠', color: 'var(--accent-blue)' },
-  WIS: { name: 'Weisheit',     icon: '🦉', color: 'var(--accent-purple)' },
-  CHA: { name: 'Charisma',     icon: '✨', color: 'var(--accent)' },
+  STR: { name: 'Stärke',       icon: '▲', color: 'var(--accent)' },
+  DEX: { name: 'Geschickl.',   icon: '◈', color: 'var(--accent-green)' },
+  CON: { name: 'Konstitution', icon: '♥', color: 'var(--accent-red)' },
+  INT: { name: 'Intelligenz',  icon: '◑', color: 'var(--accent-blue)' },
+  WIS: { name: 'Weisheit',     icon: '◐', color: 'var(--accent-purple)' },
+  CHA: { name: 'Charisma',     icon: '✦', color: 'var(--accent)' },
 }
 
 
@@ -387,15 +387,15 @@ function SpellDetailFull({ spell }) {
       <div style={rc.detailDivider} />
       <div style={rc.detailRows}>
         {spell.castingTime && <DetailRow icon="⚡" label="Aktion"  value={spell.castingTime} />}
-        {spell.range       && <DetailRow icon="📏" label="Reichw." value={spell.range} />}
+        {spell.range       && <DetailRow icon="↔" label="Reichw." value={spell.range} />}
         {spell.duration    && <DetailRow icon="⏱" label="Dauer"   value={spell.duration} />}
-        {compStr           && <DetailRow icon="🧩" label="Komp."  value={compStr} />}
-        {spell.source      && <DetailRow icon="📖" label="Quelle" value={spell.source} />}
+        {compStr           && <DetailRow icon="◇" label="Komp."  value={compStr} />}
+        {spell.source      && <DetailRow icon="§" label="Quelle" value={spell.source} />}
       </div>
       {(spell.concentration || spell.ritual) && (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4, marginBottom: 6 }}>
           {spell.concentration && <span style={rc.concBadge}>⚡ Konz.</span>}
-          {spell.ritual        && <span style={rc.ritBadge}>🔄 Ritual</span>}
+          {spell.ritual        && <span style={rc.ritBadge}>↻ Ritual</span>}
         </div>
       )}
       {spell.entries?.length > 0 && (
@@ -410,11 +410,11 @@ function SpellDetailFull({ spell }) {
 // Fallback when full spell data hasn't loaded yet — shows what we already know
 function SpellDetailBasic({ item }) {
   const sectionMeta = {
-    known:    { label: 'Bekannter Zauber',   icon: '📖' },
-    innate:   { label: 'Angeborener Zauber', icon: '🌟' },
-    expanded: { label: 'Erweiterter Zauber', icon: '📚' },
+    known:    { label: 'Bekannter Zauber',   icon: '§' },
+    innate:   { label: 'Angeborener Zauber', icon: '★' },
+    expanded: { label: 'Erweiterter Zauber', icon: '§§' },
   }
-  const meta = sectionMeta[item.section] || { label: 'Zauber', icon: '✨' }
+  const meta = sectionMeta[item.section] || { label: 'Zauber', icon: '✦' }
   return (
     <div style={rc.detail}>
       <div style={rc.detailName}>{item.name}</div>
@@ -424,11 +424,11 @@ function SpellDetailBasic({ item }) {
       </div>
       <div style={rc.detailDivider} />
       <div style={rc.detailRows}>
-        {item.isCantrip  && <DetailRow icon="✨" label="Typ"     value="Cantrip (Stufe 0)" />}
-        {item.spellLevel > 0 && <DetailRow icon="⭐" label="Stufe"  value={`Stufe ${item.spellLevel}`} />}
+        {item.isCantrip  && <DetailRow icon="✦" label="Typ"     value="Cantrip (Stufe 0)" />}
+        {item.spellLevel > 0 && <DetailRow icon="★" label="Stufe"  value={`Stufe ${item.spellLevel}`} />}
         {item.charLevel  && <DetailRow icon="⚡" label="Erhält." value={`Ab Char-Stufe ${item.charLevel}`} />}
         {item.freq && item.freq !== 'at will' && (
-          <DetailRow icon="🔄" label="Nutzung" value={item.freq} />
+          <DetailRow icon="↻" label="Nutzung" value={item.freq} />
         )}
       </div>
       <div style={rc.infoBadge}>
@@ -516,7 +516,7 @@ function DetailPanel({ item, allSpells, allFeats = [] }) {
   if (!item) {
     return (
       <div style={rc.detailEmpty}>
-        <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.25 }}>🔮</div>
+        <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.25 }}>✦</div>
         <div>Hover für<br />Details</div>
       </div>
     )
@@ -567,7 +567,7 @@ function DetailPanel({ item, allSpells, allFeats = [] }) {
         </div>
         {entry.fixedKnown.map(s => (
           <div key={s.name} style={{ color: 'var(--text-secondary)', fontSize: 12, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ color: 'var(--accent-purple)' }}>{s.isCantrip ? '✨' : '📖'}</span>
+            <span style={{ color: 'var(--accent-purple)' }}>{s.isCantrip ? '✦' : '§'}</span>
             <span>{s.name}</span>
             {s.isCantrip && <span style={rc.cantripBadge}>Cantrip</span>}
           </div>
@@ -646,9 +646,9 @@ function DetailPanel({ item, allSpells, allFeats = [] }) {
         <div style={rc.detailSubhead}>Aus Klassenliste</div>
         <div style={rc.detailDivider} />
         <div style={rc.detailRows}>
-          <DetailRow icon="🎯" label="Anzahl" value={`${f.count} Zauber`} />
-          <DetailRow icon="⭐" label="Level"  value={lvlStr} />
-          <DetailRow icon="🏫" label="Klasse" value={classStr} />
+          <DetailRow icon="◎" label="Anzahl" value={`${f.count} Zauber`} />
+          <DetailRow icon="★" label="Level"  value={lvlStr} />
+          <DetailRow icon="◇" label="Klasse" value={classStr} />
         </div>
       </div>
     )
@@ -666,14 +666,14 @@ function AbilitySection({ options, selected, onSelect, onHover }) {
   return (
     <div style={rc.section}>
       <div style={rc.sectionHeader}>
-        <span style={rc.sectionTitle}>🧙 Zauberfähigkeit</span>
+        <span style={rc.sectionTitle}>✦ Zauberfähigkeit</span>
         <span style={selected ? rc.doneBadge : rc.pendingBadge}>
           {selected ? '✓ Gewählt' : '1 wählen'}
         </span>
       </div>
       <div style={rc.abilityRow}>
         {options.map(ab => {
-          const info = ABILITY_INFO[ab] || { name: ab, icon: '⭐', color: 'var(--text-muted)' }
+          const info = ABILITY_INFO[ab] || { name: ab, icon: '★', color: 'var(--text-muted)' }
           const isSel = selected === ab
           return (
             <div
@@ -707,7 +707,7 @@ function EntryChoiceSection({ entries, selectedIdx, onSelect, onHover }) {
   return (
     <div style={rc.section}>
       <div style={rc.sectionHeader}>
-        <span style={rc.sectionTitle}>✨ Zauber wählen</span>
+        <span style={rc.sectionTitle}>✦ Zauber wählen</span>
         <span style={selectedIdx !== null && selectedIdx !== undefined ? rc.doneBadge : rc.pendingBadge}>
           {selectedIdx !== null && selectedIdx !== undefined ? '✓ Gewählt' : `1 von ${entries.length}`}
         </span>
@@ -729,7 +729,7 @@ function EntryChoiceSection({ entries, selectedIdx, onSelect, onHover }) {
               <div style={{ flex: 1 }}>
                 {entry.fixedKnown.map(s => (
                   <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ color: 'var(--accent-purple)', fontSize: 11 }}>{s.isCantrip ? '✨' : '📖'}</span>
+                    <span style={{ color: 'var(--accent-purple)', fontSize: 11 }}>{s.isCantrip ? '✦' : '§'}</span>
                     <span style={{ ...rc.spellName, color: isSel ? 'var(--accent)' : 'var(--text-secondary)' }}>
                       {s.name}
                     </span>
@@ -849,7 +849,7 @@ function PoolSpellSection({
     <div style={rc.poolSection}>
       <div style={rc.sectionHeader}>
         <span style={rc.sectionTitle}>
-          🎲 Wähle {pool.count}× {lvlLabel}{classLabel}
+          ⚅ Wähle {pool.count}× {lvlLabel}{classLabel}
           {sourceLabel ? <span style={{ color: 'var(--text-dim)', fontWeight: 'normal' }}> ({sourceLabel})</span> : null}
         </span>
         <span style={poolDone ? rc.doneBadge : rc.pendingBadge}>
@@ -889,7 +889,7 @@ function PoolSpellSection({
 function FeatDetailPanel({ feat }) {
   if (!feat) return (
     <div style={rc.detailEmpty}>
-      <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.25 }}>⭐</div>
+      <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.25 }}>★</div>
       <div>Hover für<br />Details</div>
     </div>
   )
@@ -999,7 +999,7 @@ function FullFeatPicker({
     <div style={rc.section}>
       <div style={rc.sectionHeader}>
         <span style={rc.sectionTitle}>
-          ⭐ Feat wählen
+          ★ Feat wählen
           {label ? <span style={{ color: 'var(--text-dim)', fontWeight: 'normal' }}> ({label})</span> : null}
         </span>
         <span style={isDone ? rc.doneBadge : rc.pendingBadge}>
@@ -1121,7 +1121,7 @@ function FeatChoiceSection({
     <div style={rc.section}>
       <div style={rc.sectionHeader}>
         <span style={rc.sectionTitle}>
-          ⭐ Feat wählen
+          ★ Feat wählen
           {label ? <span style={{ color: 'var(--text-dim)', fontWeight: 'normal' }}> ({label})</span> : null}
         </span>
         <span style={isDone ? rc.doneBadge : rc.pendingBadge}>
@@ -1234,7 +1234,7 @@ function ChoiceGroup({ parsed, sel, onUpdate, label, onHover, spellsActive = tru
       {!abilityOptions && entry0?.fixedAbility && (
         <div style={rc.section}>
           <div style={rc.sectionHeader}>
-            <span style={rc.sectionTitle}>🧙 Zauberfähigkeit</span>
+            <span style={rc.sectionTitle}>✦ Zauberfähigkeit</span>
             <span style={rc.autoBadge}>fixiert</span>
           </div>
           <div style={rc.fixedRow}>
@@ -1268,7 +1268,7 @@ function ChoiceGroup({ parsed, sel, onUpdate, label, onHover, spellsActive = tru
         <FixedSpellsSection
           items={fixedKnown.map(s => ({ ...s, section: 'known' }))}
           title="Bekannte Zauber"
-          icon="📖"
+          icon="§"
           onHover={onHover}
           isActive={spellsActive}
         />
@@ -1279,7 +1279,7 @@ function ChoiceGroup({ parsed, sel, onUpdate, label, onHover, spellsActive = tru
         <FixedSpellsSection
           items={innate.map(s => ({ ...s, section: 'innate' }))}
           title="Angeborene Zauber"
-          icon="🌟"
+          icon="★"
           onHover={onHover}
           isActive={spellsActive}
         />
@@ -1290,7 +1290,7 @@ function ChoiceGroup({ parsed, sel, onUpdate, label, onHover, spellsActive = tru
         <FixedSpellsSection
           items={expanded.map(s => ({ ...s, section: 'expanded' }))}
           title="Erweiterte Zauberliste"
-          icon="📚"
+          icon="§§"
           onHover={onHover}
           isActive={spellsActive}
         />
@@ -1467,7 +1467,7 @@ function VariantOptionSection({ count, options, selectedNames, onToggle, onHover
     <div style={rc.section}>
       <div style={rc.sectionHeader}>
         <span style={rc.sectionTitle}>
-          🔮 Variant Feature
+          ✦ Variant Feature
           {label ? <span style={{ color: 'var(--text-dim)', fontWeight: 'normal' }}> ({label})</span> : null}
         </span>
         <span style={isDone ? rc.doneBadge : rc.pendingBadge}>
@@ -1909,7 +1909,7 @@ export default function RaceChoicePicker({
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div style={rc.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={rc.headerIcon}>🎲</span>
+          <span style={rc.headerIcon}>⚅</span>
           <span style={rc.headerTitle}>Rassen-Eigenschaften</span>
         </div>
         {totalTotal > 0 && (

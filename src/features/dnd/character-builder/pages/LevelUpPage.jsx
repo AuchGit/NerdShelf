@@ -484,7 +484,7 @@ function StepHP({ info, draft, setDraft, subFeats }) {
           </div>
         )) : <div style={{color:'var(--text-dim)',fontSize:13}}>Keine neuen Features.</div>}
         {info.unlocksNewSpellLevel && <div style={{background:'var(--bg-hover)',border:'1px solid var(--accent-purple)',borderRadius:8,padding:'8px 14px',marginTop:8}}>
-          <span style={{color:'var(--accent-purple)',fontWeight:'bold',fontSize:13}}>✨ Neues Spell Level: Level {info.maxSpellLevel}!</span></div>}
+          <span style={{color:'var(--accent-purple)',fontWeight:'bold',fontSize:13}}>✦ Neues Spell Level: Level {info.maxSpellLevel}!</span></div>}
         <FeatureTable cd={draft.classData} hl={info.nextLevel} />
       </div>
       <div style={S.card}>

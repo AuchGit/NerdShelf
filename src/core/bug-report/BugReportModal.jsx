@@ -68,12 +68,12 @@ export default function BugReportModal({ open, onClose }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="🐛 Bug melden"
+      title="Bug melden"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Abbrechen</Button>
           <Button onClick={handleSubmit} disabled={sending}>
-            {sending ? 'Wird gesendet…' : '📤 Senden'}
+            {sending ? 'Wird gesendet…' : '➤ Senden'}
           </Button>
         </>
       }

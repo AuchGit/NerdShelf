@@ -109,7 +109,7 @@ function CharacterCard({ character, onOpen, onDelete }) {
             width: '100%', height: '100%', objectFit: 'cover',
           }} />
         ) : (
-          <div style={{ fontSize: 56, opacity: 0.4 }}>🧙</div>
+          <div style={{ fontSize: 56, opacity: 0.4 }}>⚔</div>
         )}
         {edition && (
           <div style={{

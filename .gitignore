@@ -14,7 +14,20 @@ dist-ssr
 
 # Tauri build artifacts
 src-tauri/target/
-src-tauri/gen/
+
+# Tauri-generated platform sources: keep the tracked source files (so customised
+# AndroidManifest.xml / build.gradle.kts persist for CI), ignore build outputs.
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/.idea/
+src-tauri/gen/android/build/
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/app/.cxx/
+src-tauri/gen/android/app/release/
+src-tauri/gen/android/app/keystore.properties
+src-tauri/gen/android/app/*.keystore
+src-tauri/gen/android/app/*.jks
+src-tauri/gen/apple/
 
 # Signing keys — NIE ins Repo!
 nerdshelf.key

@@ -193,7 +193,7 @@ export default function CharacterEditPage({ session }) {
     <div style={S.page}>
       <div style={S.header}>
         <button style={S.backBtn} onClick={() => navigate(`/character/${id}`)}>← Zurück zum Sheet</button>
-        <h1 style={S.headerTitle}>✏️ {character.info.name} bearbeiten</h1>
+        <h1 style={S.headerTitle}>✎ {character.info.name} bearbeiten</h1>
         <HeaderButtons session={session} />
       </div>
       <StepIndicator steps={stepLabels} currentStep={currentStep}

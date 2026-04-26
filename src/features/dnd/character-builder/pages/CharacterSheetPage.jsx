@@ -301,7 +301,7 @@ export default function CharacterSheetPage({ session }) {
               <div style={S.exportMenu}>
                 <button style={S.exportMenuItem}
                   onClick={async () => { await downloadFoundryJSON(character); setShowExportMenu(false) }}>
-                  🎲 FoundryVTT (.json)
+                  ⤓ FoundryVTT (.json)
                 </button>
               </div>
             )}
@@ -311,11 +311,11 @@ export default function CharacterSheetPage({ session }) {
           </button>
           <button style={{ ...S.headerBtn, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
             onClick={() => setShowCustomEdit(true)}>
-            ✨ Custom
+            ✦ Custom
           </button>
           {totalLevel === 1 && (
             <button style={S.headerBtn} onClick={() => navigate(`/character/${id}/edit`)}>
-              ✏️ Bearbeiten
+              ✎ Bearbeiten
             </button>
           )}
           {(character.levelHistory || []).length > 0 && (
@@ -371,13 +371,13 @@ export default function CharacterSheetPage({ session }) {
 
       {/* ═══ COMBAT STATS BAR ═══ */}
       <div style={S.combatBar}>
-        <CombatStat label="AC" value={ac} color="#60a5fa" icon="🛡️" hint="AC" />
+        <CombatStat label="AC" value={ac} color="#60a5fa" icon="◊" hint="AC" />
         <CombatStat label="Initiative" value={modStr(initiative)} color="#a78bfa" icon="⚡" />
-        <CombatStat label="Movement" value={`${speed} ft.`} color="#34d399" icon="🏃" />
-        <CombatStat label="HP" value={`${hp.current} / ${hp.max}`} color="#f87171" icon="❤️"
+        <CombatStat label="Movement" value={`${speed} ft.`} color="#34d399" icon="→" />
+        <CombatStat label="HP" value={`${hp.current} / ${hp.max}`} color="#f87171" icon="♥"
           sub={hp.temporary ? `+${hp.temporary} temp` : null} />
-        <CombatStat label="Proficiency" value={modStr(profBonus)} color="#e2b96f" icon="🎯" hint="Prof. Bonus" />
-        <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="#8899aa" icon="👁️" />
+        <CombatStat label="Proficiency" value={modStr(profBonus)} color="#e2b96f" icon="◎" hint="Prof. Bonus" />
+        <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="#8899aa" icon="◉" />
       </div>
 
       {/* ═══ BODY ═══ */}
@@ -911,7 +911,7 @@ function FeaturesTab({ character, abilityScores }) {
               <div style={S.traitLine}>
                 <span style={S.traitLineLabel}>Origin-Feat:</span>
                 <span style={{ ...S.traitLineValue, color: 'var(--accent-purple)' }}>
-                  ⭐ {character.background.feat.name || character.background.feat}
+                  ★ {character.background.feat.name || character.background.feat}
                 </span>
               </div>
             )}
@@ -1001,7 +1001,7 @@ function FeaturesTab({ character, abilityScores }) {
                   ))}
                   {feat.spells.map((sp, j) => (
                     <span key={`sp${j}`} style={{ ...S.featBonusBadge, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>
-                      🔮 {sp}
+                      ✦ {sp}
                     </span>
                   ))}
                 </div>
@@ -1023,7 +1023,7 @@ function FeaturesTab({ character, abilityScores }) {
               <div key={feat._id} style={S.featCard}>
                 <div style={S.featCardHeader} onClick={() => setExpandedFeat(isExpanded ? null : `custom_${feat._id}`)}>
                   <div style={S.featCardName}>
-                    <span style={{ ...S.originTag, background: '#a78bfa33' }}>✨ CUSTOM</span>
+                    <span style={{ ...S.originTag, background: '#a78bfa33' }}>✦ CUSTOM</span>
                     {feat.name}
                     <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6, cursor: 'pointer' }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
@@ -1200,7 +1200,7 @@ function SpellsTab({ character, computed }) {
         <Section title={`Custom Spells (${character.custom.spells.length})`}>
           <div style={S.spellListGrid}>
             {character.custom.spells.map((spell, i) => (
-              <SpellPill key={i} level={spell.level || '✨'} name={spell.name} color="var(--accent-purple)" />
+              <SpellPill key={i} level={spell.level || '✦'} name={spell.name} color="var(--accent-purple)" />
             ))}
           </div>
           {character.custom.spells.some(s => s.grantedBy) && (
@@ -1264,10 +1264,10 @@ function InventoryTab({ character }) {
               <div key={i} style={S.itemRow}>
                 <div style={S.itemInfo}>
                   <span style={S.itemName}>{item.customName || item.name}</span>
-                  {item._isCustom && <span style={{ color: 'var(--accent-purple)', fontSize: 10 }}>✨</span>}
+                  {item._isCustom && <span style={{ color: 'var(--accent-purple)', fontSize: 10 }}>✦</span>}
                   {(item.isWeapon || item.isArmor || item.isShield) && (
                     <span style={S.itemType}>
-                      {item.isWeapon ? '⚔️' : item.isArmor ? '🛡️' : '🔰'}
+                      {item.isWeapon ? '⚔' : item.isArmor ? '◊' : '○'}
                     </span>
                   )}
                 </div>
@@ -1311,10 +1311,10 @@ function PersonalityTab({ character }) {
   ].filter(f => f.value)
 
   const personalityFields = [
-    { label: 'Personality Traits', value: p.traits, icon: '🎭' },
-    { label: 'Ideals', value: p.ideals, icon: '⚖️' },
-    { label: 'Bonds', value: p.bonds, icon: '🔗' },
-    { label: 'Weaknesses', value: p.flaws, icon: '💔' },
+    { label: 'Personality Traits', value: p.traits, icon: '◆' },
+    { label: 'Ideals', value: p.ideals, icon: '◇' },
+    { label: 'Bonds', value: p.bonds, icon: '∞' },
+    { label: 'Weaknesses', value: p.flaws, icon: '✗' },
   ]
 
   return (

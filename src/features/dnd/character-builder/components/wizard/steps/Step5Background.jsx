@@ -126,7 +126,7 @@ export default function Step5Background({ character, updateCharacter }) {
         <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 2 }}>
           {bg.source}
           {skills.length > 0 && ` • ${skills.join(', ')}`}
-          {tools.length > 0 && ` • 🔧 ${tools.join(', ')}`}
+          {tools.length > 0 && ` • Tools: ${tools.join(', ')}`}
         </div>
       </div>
     )

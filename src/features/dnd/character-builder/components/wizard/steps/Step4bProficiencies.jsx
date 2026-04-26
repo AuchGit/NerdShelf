@@ -333,7 +333,7 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
       {/* ── Spell-Note für Blessed/Druidic Warrior ── */}
       {needsSpellNote && (
         <div style={styles.spellNoteBox}>
-          <span style={{ fontSize: 16, marginRight: 8 }}>🔮</span>
+          <span style={{ fontSize: 16, marginRight: 8 }}>✦</span>
           <span style={{ color: 'var(--accent-purple)', fontSize: 13 }}>
             <strong>{needsSpellNote.id}</strong> gewährt dir {needsSpellNote.spellCount} {needsSpellNote.needsSpells}-Cantrips.
             Du wählst diese im <strong>Spells-Schritt</strong> aus (unter „Cantrips aus Fighting Style").

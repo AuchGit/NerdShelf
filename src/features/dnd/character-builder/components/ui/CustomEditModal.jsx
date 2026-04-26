@@ -134,12 +134,12 @@ export default function CustomEditModal({ onClose, character, updateCharacter })
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.header}>
-          <span style={S.title}>✨ Custom hinzufügen / bearbeiten</span>
+          <span style={S.title}>✦ Custom hinzufügen / bearbeiten</span>
           <button style={S.closeBtn} onClick={onClose}>✕</button>
         </div>
 
         <div style={S.tabs}>
-          {[['spells', '🔮 Zauber'], ['feats', '⭐ Feats'], ['items', '🎒 Items'], ['asi', '💪 ASI']].map(([id, label]) => (
+          {[['spells', '✦ Zauber'], ['feats', '★ Feats'], ['items', 'Items'], ['asi', 'ASI']].map(([id, label]) => (
             <button key={id} style={{ ...S.tab, ...(tab === id ? S.tabActive : {}) }} onClick={() => setTab(id)}>
               {label}
               {id !== 'asi' && (custom[id] || []).length > 0 && <span style={S.badge}>{(custom[id] || []).length}</span>}
@@ -191,7 +191,7 @@ export default function CustomEditModal({ onClose, character, updateCharacter })
                     <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setExpanded(isExp ? null : e._id)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 13 }}>{e.name}</span>
-                        {e._fromData && <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>📖</span>}
+                        {e._fromData && <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>§</span>}
                         <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{isExp ? '▲' : '▼'}</span>
                       </div>
                       <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
@@ -200,7 +200,7 @@ export default function CustomEditModal({ onClose, character, updateCharacter })
                         {tab === 'items' && `${e.rarity || ''}${e.equipped ? ' · Angelegt' : ''}`}
                       </div>
                     </div>
-                    <button style={S.editBtn} onClick={() => { setEditing({ ...e }); setMode('homebrew') }}>✏️</button>
+                    <button style={S.editBtn} onClick={() => { setEditing({ ...e }); setMode('homebrew') }}>✎</button>
                     <button style={S.delBtn} onClick={() => removeEntry(e._id)}>✕</button>
 
                     {/* Expanded description + choices */}
@@ -272,13 +272,13 @@ export default function CustomEditModal({ onClose, character, updateCharacter })
               })}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button style={{ ...S.addBtn, flex: 1 }} onClick={() => { loadData(tab); setMode('data'); setSearch('') }}>
-                  📖 Aus Daten
+                  Aus Daten
                 </button>
                 <button style={{ ...S.addBtn, flex: 1 }} onClick={() => {
                   setEditing(tab === 'spells' ? emptySpell() : tab === 'feats' ? emptyFeat() : emptyItem())
                   setMode('homebrew')
                 }}>
-                  ✏️ Homebrew
+                  ✎ Homebrew
                 </button>
               </div>
             </>
@@ -289,7 +289,7 @@ export default function CustomEditModal({ onClose, character, updateCharacter })
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ color: 'var(--accent)', fontWeight: 'bold', fontSize: 14 }}>
-                  📖 {tab === 'spells' ? 'Zauber' : tab === 'feats' ? 'Feats' : 'Items'}
+                  {tab === 'spells' ? 'Zauber' : tab === 'feats' ? 'Feats' : 'Items'}
                 </div>
                 <button style={S.backBtn} onClick={() => setMode('list')}>← Zurück</button>
               </div>

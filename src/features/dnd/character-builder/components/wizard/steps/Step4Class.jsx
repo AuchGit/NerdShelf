@@ -123,7 +123,7 @@ export default function Step4Class({ character, updateCharacter }) {
           )}
           {/* FIX: badge for L1 subclass requirement, derived dynamically */}
           {isL1Subclass(cls) && (
-            <span style={{ color: 'var(--accent)', fontSize: 11 }}>⭐ Lv1-Subkl.</span>
+            <span style={{ color: 'var(--accent)', fontSize: 11 }}>★ Lv1-Subkl.</span>
           )}
         </div>
       </div>
@@ -160,7 +160,7 @@ export default function Step4Class({ character, updateCharacter }) {
         {isSelectedClass && needsL1Subclass && (
           <div style={subclassBanner}>
             <span style={{ color: 'var(--accent)', fontSize: 13 }}>
-              ⭐ {cls.name}s wählen ihre {cls.subclassTitle} bereits bei Level 1!
+              ★ {cls.name}s wählen ihre {cls.subclassTitle} bereits bei Level 1!
             </span>
             {selectedSubclassId
               ? <span style={{ color: 'var(--accent-green)', fontSize: 13, marginLeft: 12 }}>
@@ -256,7 +256,7 @@ export default function Step4Class({ character, updateCharacter }) {
           {needsL1Subclass && (
             <div style={{ color: 'var(--accent)', fontSize: 12, marginBottom: 10, padding: '6px 10px',
                           background: 'var(--bg-card)', border: '1px solid #f59e0b33', borderRadius: 6 }}>
-              ⭐ Diese Klasse wählt {selectedSubclassId ? 'bereits ✓' : 'sofort'} bei Level 1 eine {cls.subclassTitle}.
+              ★ Diese Klasse wählt {selectedSubclassId ? 'bereits ✓' : 'sofort'} bei Level 1 eine {cls.subclassTitle}.
             </div>
           )}
           {(!cls.subclasses || cls.subclasses.length === 0) ? (
@@ -329,7 +329,7 @@ export default function Step4Class({ character, updateCharacter }) {
           background: 'var(--bg-card)', border: '2px solid #f59e0b', borderRadius: 10,
           padding: '12px 16px', marginTop: 16, display: 'flex', alignItems: 'center', gap: 12,
         }}>
-          <span style={{ fontSize: 20 }}>⚠️</span>
+          <span style={{ fontSize: 20 }}>⚠</span>
           <div>
             <div style={{ color: 'var(--accent)', fontWeight: 'bold', fontSize: 14 }}>
               Subclass Required

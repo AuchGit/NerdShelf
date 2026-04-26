@@ -119,10 +119,42 @@ export default function Sidebar({ onOpenSettings, onOpenBugReport, variant = 'fu
           flexDirection: compact ? 'column' : 'row',
         }}>
           <IconButton onClick={onOpenSettings} title="Einstellungen" style={{ flex: 1 }}>⚙</IconButton>
-          <IconButton onClick={onOpenBugReport} title="Bug melden" style={{ flex: 1 }}>🐛</IconButton>
-          <IconButton onClick={signOut} title="Abmelden" style={{ flex: 1 }}>⎋</IconButton>
+          <IconButton onClick={onOpenBugReport} title="Bug melden" style={{ flex: 1 }}>⚐</IconButton>
+          <DangerIconButton onClick={signOut} title="Abmelden" style={{ flex: 1 }}>⎋</DangerIconButton>
         </div>
       </div>
     </aside>
+  );
+}
+
+function DangerIconButton({ style, children, ...rest }) {
+  return (
+    <button
+      style={{
+        height: 32,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'transparent',
+        color: 'var(--color-danger, #cc3333)',
+        border: '1px solid transparent',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer',
+        transition: 'background var(--transition), color var(--transition)',
+        fontSize: 16,
+        ...style,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--color-danger, #cc3333)';
+        e.currentTarget.style.color = '#fff';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'var(--color-danger, #cc3333)';
+      }}
+      {...rest}
+    >
+      {children}
+    </button>
   );
 }

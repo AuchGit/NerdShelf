@@ -10,8 +10,8 @@ export default function GlobalToolbar({ session }) {
   return (
     <>
       <div style={S.bar}>
-        <button style={S.btn} onClick={() => setShowSettings(true)} title="Einstellungen">⚙️</button>
-        <button style={S.btn} onClick={() => setShowBugReport(true)} title="Bug melden">🐛</button>
+        <button style={S.btn} onClick={() => setShowSettings(true)} title="Einstellungen">⚙</button>
+        <button style={S.btn} onClick={() => setShowBugReport(true)} title="Bug melden">⚐</button>
       </div>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} session={session} />}

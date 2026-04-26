@@ -504,9 +504,9 @@ export default function Step9Equipment({ character, updateCharacter }) {
                               return (
                                 <div key={i} style={{ ...S.itemPill, padding: '5px 9px', display: 'flex', flexDirection: 'column', gap: 2, ...(isPack ? { minWidth: 180 } : {}) }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    {item.isWeapon && <span style={{ fontSize: 10 }}>⚔️</span>}
-                                    {item.isArmor && <span style={{ fontSize: 10 }}>🛡️</span>}
-                                    {isPack && <span style={{ fontSize: 10 }}>🎒</span>}
+                                    {item.isWeapon && <span style={{ fontSize: 10 }}>⚔</span>}
+                                    {item.isArmor && <span style={{ fontSize: 10 }}>◊</span>}
+                                    {isPack && <span style={{ fontSize: 10 }}>▤</span>}
                                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                       {item.quantity > 1 ? `${item.quantity}× ` : ''}{item.displayName || item.name}
                                     </span>
@@ -524,7 +524,7 @@ export default function Step9Equipment({ character, updateCharacter }) {
                         )}
                         {goldGP > 0 && (
                           <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                            💰 {goldGP} GP
+                            {goldGP} GP
                           </span>
                         )}
                         {isSel && <span style={{ color: 'var(--accent-green)', fontSize: 12, fontWeight: 'bold' }}>✓</span>}
@@ -556,7 +556,6 @@ export default function Step9Equipment({ character, updateCharacter }) {
 
         {/* Gold */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '8px 12px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-          <span style={{ color: 'var(--accent)', fontSize: 16 }}>💰</span>
           <span style={{ color: 'var(--accent)', fontWeight: 'bold', fontSize: 15 }}>
             {character.inventory.currency?.gp || 0} GP
           </span>
@@ -662,7 +661,7 @@ function InventoryRow({ item, onToggleEquip, onRemove, onQuantityChange }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ color: rarityColor, fontWeight: 'bold', fontSize: 13 }}>
-            {item.isWeapon && '⚔️ '}{item.isArmor && '🛡️ '}
+            {item.isWeapon && '⚔ '}{item.isArmor && '◊ '}
             {item.name}
           </span>
           {isMagic && <span style={{ fontSize: 10, color: rarityColor, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 3 }}>{item.rarity}</span>}

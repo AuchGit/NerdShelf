@@ -98,7 +98,7 @@ export default function CardPreview({
           onClick={pinned ? onUnpin : onPin}
           title={pinned ? 'Unpin' : 'Pinnen (Rechtsklick)'}
         >
-          {pinned ? '📌 Gepinnt' : '📌 Pinnen'}
+          {pinned ? '◆ Gepinnt' : '◇ Pinnen'}
         </button>
       </div>
 

@@ -381,16 +381,16 @@ function SpellDetail({ spell }) {
 
       <div style={ss.detailRows}>
         {spell.castingTime && <DetailRow icon="⚡" label="Aktion"   value={spell.castingTime} />}
-        {spell.range       && <DetailRow icon="📏" label="Reichw."  value={spell.range} />}
+        {spell.range       && <DetailRow icon="↔" label="Reichw."  value={spell.range} />}
         {spell.duration    && <DetailRow icon="⏱" label="Dauer"    value={spell.duration} />}
-        {compStr           && <DetailRow icon="🧩" label="Komp."   value={compStr} />}
-        {spell.source      && <DetailRow icon="📖" label="Quelle"  value={spell.source} />}
+        {compStr           && <DetailRow icon="◇" label="Komp."   value={compStr} />}
+        {spell.source      && <DetailRow icon="§" label="Quelle"  value={spell.source} />}
       </div>
 
       {(spell.concentration || spell.ritual) && (
         <div style={ss.detailBadges}>
           {spell.concentration && <span style={ss.concBadgeLg}>⚡ Konz.</span>}
-          {spell.ritual        && <span style={ss.ritBadgeLg}>🔄 Ritual</span>}
+          {spell.ritual        && <span style={ss.ritBadgeLg}>↻ Ritual</span>}
         </div>
       )}
 
@@ -616,7 +616,7 @@ export function UniversalSpellList({
             ? <SpellDetail spell={displayed} />
             : (
               <div style={ss.detailPlaceholder}>
-                <div style={{ fontSize: 24, marginBottom: 6, opacity: 0.4 }}>✨</div>
+                <div style={{ fontSize: 24, marginBottom: 6, opacity: 0.4 }}>✦</div>
                 <div>Klick oder Hover<br />für Details</div>
               </div>
             )
