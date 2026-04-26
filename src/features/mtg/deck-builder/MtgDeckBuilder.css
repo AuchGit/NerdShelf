@@ -69,10 +69,5 @@
 .mtg-deck-builder ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 4px; }
 .mtg-deck-builder ::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); }
 
-@media (max-width: 1100px) {
-  .mtg-deck-builder .preview-section { width: 250px; }
-}
-@media (max-width: 900px) {
-  .mtg-deck-builder .preview-section { width: 220px; }
-  .mtg-deck-builder .deck-section    { width: 270px; }
-}
+/* Inline-panel widths are JS-driven now via the rail collapse logic in
+   MtgDeckBuilderApp; no CSS breakpoints needed here. */

@@ -9,7 +9,9 @@ import CardList      from './components/CardList';
 import DeckListView  from './components/DeckListView';
 import DeckPanel     from './components/DeckPanel';
 import CardPreview   from './components/CardPreview';
+import CollapsibleRail from './components/CollapsibleRail';
 import ImportDeckModal from './components/ImportDeckModal';
+import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
 import { filterFavorites } from './services/favoritesFilter';
@@ -363,6 +365,42 @@ export default function MtgDeckBuilderApp() {
     setTimeout(() => setExportStatus(null), 2000);
   }
 
+  // ── Responsive layout mode ───────────────────────────
+  const { mtgMode } = useWindowWidth();
+  const previewAsRail = mtgMode !== 'full';
+  const deckAsRail    = mtgMode === 'both-rails';
+
+  const previewPanel = (
+    <CardPreview
+      card={displayCard}
+      isStale={isStale}
+      pinned={!!pinned}
+      pinnedFaceIndex={pinned?.faceIndex ?? null}
+      onPin={() => handlePin(hoveredCard || pinned?.card, 0)}
+      onUnpin={handleUnpin}
+    />
+  );
+
+  const deckPanelEl = (
+    <DeckPanel
+      mainboard={mainboard}
+      sideboard={sideboard}
+      onUpdateMainCount={updateMainCount}
+      onRemoveMain={removeMain}
+      onClearDeck={clearDeck}
+      onUpdateSideCount={updateSideCount}
+      onRemoveSide={removeSide}
+      onMoveToSideboard={moveToSideboard}
+      onMoveToMainboard={moveToMainboard}
+      onHoverCard={setHoveredCard}
+      onPinCard={handlePin}
+      onExportDeck={handleExport}
+    />
+  );
+
+  const mainCount = Object.values(mainboard).reduce((s, e) => s + (e.count || 0), 0);
+  const sideCount = Object.values(sideboard).reduce((s, e) => s + (e.count || 0), 0);
+
   // ── Render ───────────────────────────────────────────
   if (loadingDeck) {
     return (
@@ -474,16 +512,13 @@ export default function MtgDeckBuilderApp() {
           </header>
 
           <main className="app-main">
-            <aside className="preview-section">
-              <CardPreview
-                card={displayCard}
-                isStale={isStale}
-                pinned={!!pinned}
-                pinnedFaceIndex={pinned?.faceIndex ?? null}
-                onPin={() => handlePin(hoveredCard || pinned?.card, 0)}
-                onUnpin={handleUnpin}
-              />
-            </aside>
+            {previewAsRail ? (
+              <CollapsibleRail side="left" label="Vorschau" expandedWidth={285}>
+                {previewPanel}
+              </CollapsibleRail>
+            ) : (
+              <aside className="preview-section">{previewPanel}</aside>
+            )}
 
             <section className="search-section">
               <CardSearch
@@ -538,22 +573,17 @@ export default function MtgDeckBuilderApp() {
               )}
             </section>
 
-            <aside className="deck-section">
-              <DeckPanel
-                mainboard={mainboard}
-                sideboard={sideboard}
-                onUpdateMainCount={updateMainCount}
-                onRemoveMain={removeMain}
-                onClearDeck={clearDeck}
-                onUpdateSideCount={updateSideCount}
-                onRemoveSide={removeSide}
-                onMoveToSideboard={moveToSideboard}
-                onMoveToMainboard={moveToMainboard}
-                onHoverCard={setHoveredCard}
-                onPinCard={handlePin}
-                onExportDeck={handleExport}
-              />
-            </aside>
+            {deckAsRail ? (
+              <CollapsibleRail
+                side="right"
+                label={`Deck · ${mainCount}${sideCount ? ` + ${sideCount}` : ''}`}
+                expandedWidth={320}
+              >
+                {deckPanelEl}
+              </CollapsibleRail>
+            ) : (
+              <aside className="deck-section">{deckPanelEl}</aside>
+            )}
           </main>
         </div>
 

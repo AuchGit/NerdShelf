@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NerdShelf",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "identifier": "io.github.auchgit.nerdshelf",
   "build": {
     "frontendDist": "../dist",
@@ -24,8 +24,10 @@
     "windows": [
       {
         "title": "NerdShelf",
-        "width": 800,
-        "height": 600,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 560,
         "resizable": true,
         "fullscreen": false
       }
