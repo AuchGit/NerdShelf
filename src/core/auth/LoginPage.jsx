@@ -5,6 +5,7 @@ import { supabase } from '../supabase/client';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [playerName, setPlayerName] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,17 +35,37 @@ export default function LoginPage() {
   }
 
   async function handleSignup() {
+    const trimmedPlayer = playerName.trim();
+    if (trimmedPlayer.length < 2) { setError('Bitte einen Player-Namen mit mindestens 2 Zeichen eingeben.'); return; }
+    if (trimmedPlayer.length > 50) { setError('Player-Name darf maximal 50 Zeichen haben.'); return; }
     if (!email.trim()) { setError('Bitte Email eingeben.'); return; }
     if (password.length < 6) { setError('Passwort muss mindestens 6 Zeichen haben.'); return; }
     setLoading(true); setError(null); setSuccess(null);
-    const { error: signupErr } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
+    const { data: signupData, error: signupErr } = await supabase.auth.signUp({ email, password });
     if (signupErr) {
+      setLoading(false);
       setError(signupErr.message?.includes('already registered')
         ? 'Diese Email ist bereits registriert.'
         : signupErr.message);
       return;
     }
+    const newUserId = signupData?.user?.id;
+    if (newUserId) {
+      // Try update first (row may exist via DB trigger); fall back to insert.
+      const { data: upd, error: updErr } = await supabase
+        .from('profiles')
+        .update({ player_name: trimmedPlayer })
+        .eq('id', newUserId)
+        .select()
+        .maybeSingle();
+      if (updErr || !upd) {
+        const { error: insErr } = await supabase
+          .from('profiles')
+          .insert({ id: newUserId, player_name: trimmedPlayer });
+        if (insErr) console.warn('[signup] could not save player_name:', insErr.message);
+      }
+    }
+    setLoading(false);
     setSuccess('Account erstellt! Bitte bestätige deine Email und warte auf die Freischaltung durch einen Admin.');
     setMode('login');
   }
@@ -60,6 +81,12 @@ export default function LoginPage() {
         <p style={S.subtitle}>
           {mode === 'login' ? 'Melde dich an um weiterzumachen' : 'Neuen Account erstellen'}
         </p>
+        {mode === 'signup' && (
+          <input
+            style={S.input} type="text" placeholder="Player-Name" maxLength={50}
+            value={playerName} onChange={e => setPlayerName(e.target.value)}
+          />
+        )}
         <input
           style={S.input} type="email" placeholder="Email"
           value={email} onChange={e => setEmail(e.target.value)}

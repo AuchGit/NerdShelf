@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../../../../core/auth/AuthContext'
 import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
@@ -143,10 +144,27 @@ function isSpellStepComplete(character) {
 export default function CharacterCreatePage({ session }) {
   const navigate = useNavigate()
   const { t } = useLanguage()
+  const { playerName } = useAuth()
   const [currentStep, setCurrentStep] = useState(0)
   const [character,   setCharacter]   = useState(createEmptyCharacter())
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState(null)
+
+  // Prefill info.player from user's profile playerName once (only if still empty).
+  // Stays editable — we never overwrite after the first set.
+  const prefilledPlayerRef = useRef(false)
+  useEffect(() => {
+    if (prefilledPlayerRef.current) return
+    if (!playerName) return
+    if (character.info.player) { prefilledPlayerRef.current = true; return }
+    prefilledPlayerRef.current = true
+    setCharacter(prev => {
+      if (prev.info.player) return prev
+      const next = structuredClone(prev)
+      next.info.player = playerName
+      return next
+    })
+  }, [playerName, character.info.player])
 
   function updateCharacter(path, value) {
     setCharacter(prev => {
