@@ -101,6 +101,11 @@ jobs:
           workspaces: './src-tauri -> target'
           key: android
 
+      - name: Install cargo-tauri (Rust CLI — required by Gradle rust task)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli@^2.0
+
       - name: Install frontend dependencies
         run: npm ci
 
@@ -142,13 +147,11 @@ jobs:
           echo "out_dir=$OUT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Sign APKs with Tauri updater key
+        id: sign
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Install the Tauri signer CLI
-          npm install -g @tauri-apps/cli
-
           OUT_DIR="${{ steps.apks.outputs.out_dir }}"
           STAGE_DIR="android-release"
           mkdir -p "$STAGE_DIR"
@@ -161,7 +164,7 @@ jobs:
             ["x86_64"]="x86_64"
           )
 
-          # Copy + sign each per-ABI release APK
+          # Copy + sign each per-ABI release APK using cargo-tauri (already installed)
           for ABI in "${!ABI_MAP[@]}"; do
             ARCH="${ABI_MAP[$ABI]}"
             SRC=$(find "$OUT_DIR/${ABI}/release" -name "*.apk" 2>/dev/null | head -n1 || true)
@@ -172,7 +175,7 @@ jobs:
             DST="$STAGE_DIR/NerdShelf_${{ github.ref_name }}_android-${ARCH}.apk"
             cp "$SRC" "$DST"
             echo "Signing $DST"
-            npx @tauri-apps/cli signer sign \
+            cargo tauri signer sign \
               --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
               --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
               "$DST"
@@ -180,7 +183,6 @@ jobs:
 
           ls -la "$STAGE_DIR"
           echo "stage_dir=$STAGE_DIR" >> "$GITHUB_OUTPUT"
-        id: sign
 
       - name: Upload APKs to release
         uses: softprops/action-gh-release@v2
