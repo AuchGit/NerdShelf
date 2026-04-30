@@ -8,6 +8,7 @@ export async function searchCards({
   query, searchMode, colors, colorMode = 'any', cardType, sortOrder = 'name', sortDir = 'asc',
   showLands = false,
   rarity, cmcMin, cmcMax, subtype, format, setCode,
+  commanderIdentity,
   nextPageUrl,
 }) {
   let url;
@@ -27,8 +28,16 @@ export async function searchCards({
       }
     }
 
+    // ── Commander color-identity override ─────────────────
+    // When set, replaces the user's colors/colorMode entirely. Empty array
+    // means colourless commander → restrict to colourless cards.
+    if (commanderIdentity) {
+      const ci = commanderIdentity.length ? commanderIdentity.join('').toLowerCase() : 'c';
+      parts.push(`id<=${ci}`);
+    }
+
     // ── Colors ──────────────────────────────────────────
-    if (colors && colors.length > 0) {
+    if (!commanderIdentity && colors && colors.length > 0) {
       const colorStr = colors.join('');
       if (colorMode === 'exact') {
         // Exactly these colors, no more

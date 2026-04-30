@@ -32,10 +32,20 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      loadProfile(u?.id);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user ?? null;
+      // Only clear the user on an explicit sign-out. TOKEN_REFRESHED, USER_UPDATED,
+      // network blips etc. occasionally fire with a momentarily-null session and
+      // would otherwise unmount the whole app via AuthGate (losing in-flight UI
+      // state like search filters, wizard progress etc.).
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        return;
+      }
+      if (!nextUser) return;
+      setUser(prev => (prev?.id === nextUser.id ? prev : nextUser));
+      loadProfile(nextUser.id);
     });
 
     return () => {

@@ -60,7 +60,17 @@ export default function CardItem({
   };
 
   const [imgLoaded, setImgLoaded] = useState(false);
+  // Whether the loaded split-card image is naturally landscape (Scryfall returns
+  // most modern split layouts pre-rotated to landscape — only legacy printings
+  // come through as portrait that needs the -90° rotation).
+  const [splitIsLandscape, setSplitIsLandscape] = useState(false);
   const normalImageUrl = layout === 'normal' ? faces[0]?.image_uri : null;
+
+  const handleSplitLoad = (e) => {
+    setImgLoaded(true);
+    const t = e.currentTarget;
+    setSplitIsLandscape(t.naturalWidth >= t.naturalHeight);
+  };
 
   return (
     <div
@@ -105,7 +115,7 @@ export default function CardItem({
       )}
 
       {layout === 'split' && (
-        <div className="card-img-wrap card-img-wrap--split">
+        <div className={`card-img-wrap card-img-wrap--split ${splitIsLandscape ? 'is-landscape' : 'is-portrait'}`}>
           {!imgLoaded && <div className="card-img-skeleton" />}
           {faces[0]?.image_uri ? (
             <img
@@ -113,7 +123,7 @@ export default function CardItem({
               alt={card.name}
               className={`card-img ${imgLoaded ? 'loaded' : ''}`}
               loading="lazy"
-              onLoad={() => setImgLoaded(true)}
+              onLoad={handleSplitLoad}
             />
           ) : (
             <div className="card-img-fallback">

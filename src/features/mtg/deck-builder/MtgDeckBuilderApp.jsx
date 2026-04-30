@@ -11,6 +11,8 @@ import DeckPanel     from './components/DeckPanel';
 import CardPreview   from './components/CardPreview';
 import CollapsibleRail from './components/CollapsibleRail';
 import ImportDeckModal from './components/ImportDeckModal';
+import CoverPickerModal from './components/CoverPickerModal';
+import CommanderPickerModal from './components/CommanderPickerModal';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
@@ -50,6 +52,12 @@ export default function MtgDeckBuilderApp() {
   const [deckFormat, setDeckFormat] = useState('');
   const [mainboard, setMainboard] = useState({});
   const [sideboard, setSideboard] = useState({});
+  const [coverCardId, setCoverCardId] = useState(null);
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+  const [commander, setCommander] = useState(null);   // full Scryfall card object | null
+  const [showCommanderPicker, setShowCommanderPicker] = useState(false);
+
+  const isCommanderFormat = deckFormat === 'commander';
   const [loadingDeck, setLoadingDeck] = useState(!!deckId);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -162,6 +170,8 @@ export default function MtgDeckBuilderApp() {
       setDeckFormat(matchedFormat ? matchedFormat.value : '');
       setMainboard(data.data?.mainboard || {});
       setSideboard(data.data?.sideboard || {});
+      setCoverCardId(data.data?.coverCardId || null);
+      setCommander(data.data?.commander || null);
       setLoadingDeck(false);
       // allow dirty tracking to resume after next tick
       setTimeout(() => { skipDirtyRef.current = false; }, 0);
@@ -173,7 +183,7 @@ export default function MtgDeckBuilderApp() {
   useEffect(() => {
     if (skipDirtyRef.current) return;
     setDirty(true);
-  }, [mainboard, sideboard, deckName, deckFormat]);
+  }, [mainboard, sideboard, deckName, deckFormat, coverCardId, commander]);
 
   // ── Mainboard mutations ──────────────────────────────
   const addToMain = useCallback((card) => {
@@ -315,7 +325,7 @@ export default function MtgDeckBuilderApp() {
       user_id: user.id,
       name: deckName.trim() || 'Unbenanntes Deck',
       format: deckFormat || null,
-      data: { mainboard, sideboard },
+      data: { mainboard, sideboard, coverCardId, commander },
       updated_at: new Date().toISOString(),
     };
 
@@ -471,6 +481,19 @@ export default function MtgDeckBuilderApp() {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
+              <button
+                onClick={() => setShowCoverPicker(true)}
+                title="Cover-Karte für die Dashboard-Anzeige wählen"
+                style={{
+                  background: coverCardId ? 'var(--accent)' : 'transparent',
+                  border: `1px solid ${coverCardId ? 'var(--accent)' : 'var(--border)'}`,
+                  color: coverCardId ? 'var(--bg-deep, #000)' : 'var(--text-mid)',
+                  padding: '4px 10px', borderRadius: 6,
+                  fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                {coverCardId ? '✦ Cover' : 'Cover…'}
+              </button>
             </div>
             <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {(saveStatus || exportStatus) && (
@@ -591,6 +614,14 @@ export default function MtgDeckBuilderApp() {
           open={showImport}
           onClose={() => setShowImport(false)}
           onImport={handleImport}
+        />
+        <CoverPickerModal
+          open={showCoverPicker}
+          onClose={() => setShowCoverPicker(false)}
+          mainboard={mainboard}
+          sideboard={sideboard}
+          currentCoverId={coverCardId}
+          onPick={(id) => setCoverCardId(id)}
         />
       </div>
     </SettingsProvider>
