@@ -12,7 +12,6 @@ import CardPreview   from './components/CardPreview';
 import CollapsibleRail from './components/CollapsibleRail';
 import ImportDeckModal from './components/ImportDeckModal';
 import CoverPickerModal from './components/CoverPickerModal';
-import CommanderPickerModal from './components/CommanderPickerModal';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
@@ -55,9 +54,12 @@ export default function MtgDeckBuilderApp() {
   const [coverCardId, setCoverCardId] = useState(null);
   const [showCoverPicker, setShowCoverPicker] = useState(false);
   const [commander, setCommander] = useState(null);   // full Scryfall card object | null
-  const [showCommanderPicker, setShowCommanderPicker] = useState(false);
 
   const isCommanderFormat = deckFormat === 'commander';
+  // While in commander format with no commander chosen yet, the search
+  // results are restricted to commander-eligible cards and the next added
+  // card becomes the commander instead of going to the mainboard.
+  const commanderPickMode = isCommanderFormat && !commander;
   const [loadingDeck, setLoadingDeck] = useState(!!deckId);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -84,6 +86,8 @@ export default function MtgDeckBuilderApp() {
   const [subtype, setSubtype] = useState('');
   const [format,  setFormat]  = useState('');
   const [setCode, setSetCode] = useState('');
+  const [priceMin, setPriceMin] = useState('');
+  const [priceMax, setPriceMax] = useState('');
 
   // ── Preview state ────────────────────────────────────
   const [hoveredCard,  setHoveredCard]  = useState(null);
@@ -112,9 +116,18 @@ export default function MtgDeckBuilderApp() {
   const deckFormatForFilter = FORMATS_WITHOUT_FILTER.has(deckFormat) ? '' : deckFormat;
   const effectiveFormat = format || deckFormatForFilter;
 
+  // When a commander is set in commander format, force the search to that
+  // commander's color identity (overrides the colour picker).
+  const commanderIdentity = (isCommanderFormat && commander)
+    ? (commander.color_identity || [])
+    : null;
+
   const scryfall = useScryfall({
     query, searchMode, colors, colorMode, cardType, sortOrder, sortDir, showLands,
     rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
+    priceMin, priceMax,
+    commanderIdentity,
+    commanderPick: commanderPickMode,
   });
 
   // When "favorites only" is active, replace Scryfall search results with a
@@ -125,7 +138,10 @@ export default function MtgDeckBuilderApp() {
     ? filterFavorites(favCardsBase, {
         query, searchMode, colors, colorMode, cardType, showLands,
         rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
+        priceMin, priceMax,
         sortOrder, sortDir,
+        commanderPick: commanderPickMode,
+        commanderIdentity,
       })
     : null;
 
@@ -185,10 +201,37 @@ export default function MtgDeckBuilderApp() {
     setDirty(true);
   }, [mainboard, sideboard, deckName, deckFormat, coverCardId, commander]);
 
+  // ── Singleton helper ─────────────────────────────────
+  // In Commander, every non-basic-land card is capped at 1 copy.
+  function isBasicLand(card) {
+    const t = (card?.type_line || '').toLowerCase();
+    return t.includes('basic') && t.includes('land');
+  }
+
+  // ── Commander handler (defined before addToMain because addToMain
+  // references it when in commander-pick mode) ────────────────────────
+  const setCommanderCard = useCallback((card) => {
+    setCommander(card);
+    if (card && !coverCardId) setCoverCardId(card.id);
+    if (!card && coverCardId && commander && coverCardId === commander.id) {
+      setCoverCardId(null);
+    }
+  }, [coverCardId, commander]);
+
   // ── Mainboard mutations ──────────────────────────────
   const addToMain = useCallback((card) => {
+    // Commander pick mode: clicking a card sets it as the Commander
+    // instead of adding to the mainboard.
+    if (commanderPickMode) {
+      setCommanderCard(card);
+      return;
+    }
     setMainboard(prev => {
       const existing = prev[card.id];
+      // Commander singleton rule: non-basic-lands stay capped at 1
+      if (isCommanderFormat && existing && !isBasicLand(card)) {
+        return prev;
+      }
       return {
         ...prev,
         [card.id]: existing
@@ -196,12 +239,16 @@ export default function MtgDeckBuilderApp() {
           : { card, count: 1 },
       };
     });
-  }, []);
+  }, [isCommanderFormat, commanderPickMode, setCommanderCard]);
 
   const updateMainCount = useCallback((cardId, delta) => {
     setMainboard(prev => {
       const entry = prev[cardId];
       if (!entry) return prev;
+      // Commander singleton: don't allow +1 on a non-basic-land already at 1
+      if (isCommanderFormat && delta > 0 && entry.count >= 1 && !isBasicLand(entry.card)) {
+        return prev;
+      }
       const next = entry.count + delta;
       if (next <= 0) {
         const { [cardId]: _removed, ...rest } = prev;
@@ -209,7 +256,7 @@ export default function MtgDeckBuilderApp() {
       }
       return { ...prev, [cardId]: { ...entry, count: next } };
     });
-  }, []);
+  }, [isCommanderFormat]);
 
   const removeMain = useCallback((cardId) => {
     setMainboard(prev => {
@@ -217,6 +264,25 @@ export default function MtgDeckBuilderApp() {
       return rest;
     });
   }, []);
+
+  // ── Add directly to sideboard (from search results) ─────
+  const addToSide = useCallback((card) => {
+    setSideboard(prev => {
+      const existing = prev[card.id];
+      const mainHas = mainboard[card.id];
+      // Commander singleton: total non-basic-land copies across both zones ≤ 1
+      if (isCommanderFormat && !isBasicLand(card)) {
+        if (existing) return prev;
+        if (mainHas) return prev;
+      }
+      return {
+        ...prev,
+        [card.id]: existing
+          ? { ...existing, count: existing.count + 1 }
+          : { card, count: 1 },
+      };
+    });
+  }, [isCommanderFormat, mainboard]);
 
   // ── Sideboard mutations ──────────────────────────────
   const updateSideCount = useCallback((cardId, delta) => {
@@ -265,6 +331,9 @@ export default function MtgDeckBuilderApp() {
     setSideboard(prev => {
       const entry = prev[cardId];
       if (!entry) return prev;
+      // Commander singleton: don't transfer if already in main and not a basic land
+      const mainAlready = mainboard[cardId];
+      if (isCommanderFormat && mainAlready && !isBasicLand(entry.card)) return prev;
       const newSide = entry.count - 1;
       const nextSide = { ...prev };
       if (newSide <= 0) delete nextSide[cardId];
@@ -280,7 +349,7 @@ export default function MtgDeckBuilderApp() {
       });
       return nextSide;
     });
-  }, []);
+  }, [isCommanderFormat, mainboard]);
 
   const clearDeck = useCallback(() => {
     setMainboard({});
@@ -375,6 +444,8 @@ export default function MtgDeckBuilderApp() {
     setTimeout(() => setExportStatus(null), 2000);
   }
 
+  // (setCommanderCard moved above addToMain to avoid TDZ in its dep array)
+
   // ── Responsive layout mode ───────────────────────────
   const { mtgMode } = useWindowWidth();
   const previewAsRail = mtgMode !== 'full';
@@ -395,6 +466,7 @@ export default function MtgDeckBuilderApp() {
     <DeckPanel
       mainboard={mainboard}
       sideboard={sideboard}
+      commander={commander}
       onUpdateMainCount={updateMainCount}
       onRemoveMain={removeMain}
       onClearDeck={clearDeck}
@@ -494,6 +566,27 @@ export default function MtgDeckBuilderApp() {
               >
                 {coverCardId ? '✦ Cover' : 'Cover…'}
               </button>
+              {isCommanderFormat && commander && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Commander "${commander.name}" entfernen? Du kannst dann einen neuen aus der Suche wählen.`)) {
+                      setCommanderCard(null);
+                    }
+                  }}
+                  title="Commander entfernen / wechseln"
+                  style={{
+                    background: 'var(--accent)',
+                    border: '1px solid var(--accent)',
+                    color: 'var(--bg-deep, #000)',
+                    padding: '4px 10px', borderRadius: 6,
+                    fontSize: 12, cursor: 'pointer',
+                    maxWidth: 220,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  ♛ {commander.name}
+                </button>
+              )}
             </div>
             <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {(saveStatus || exportStatus) && (
@@ -562,6 +655,8 @@ export default function MtgDeckBuilderApp() {
                 subtype={subtype}       setSubtype={setSubtype}
                 format={format}         setFormat={setFormat}
                 setCode={setCode}       setSetCode={setSetCode}
+                priceMin={priceMin}     setPriceMin={setPriceMin}
+                priceMax={priceMax}     setPriceMax={setPriceMax}
                 totalCards={totalCards}
                 loading={loading}
               />
@@ -573,6 +668,7 @@ export default function MtgDeckBuilderApp() {
                   hasMore={hasMore}
                   onLoadMore={loadMore}
                   onAddCard={addToMain}
+                  onAddSideCard={addToSide}
                   deck={combinedForCardList}
                   onHoverCard={setHoveredCard}
                   onPinCard={handlePin}

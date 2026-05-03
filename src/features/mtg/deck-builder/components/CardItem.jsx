@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   getManaCost, parseManaCost, getCardLayout, getCardFaces,
+  getCardPriceEur, formatEur,
 } from '../services/scryfall';
 import ManaSymbol from './ManaSymbol';
 import './CardItem.css';
@@ -32,7 +33,7 @@ function FaceImage({ face, alt, onClick, className = '' }) {
 }
 
 export default function CardItem({
-  card, onAdd, deckCount, onHover, onHoverEnd, onPin,
+  card, onAdd, onAddSide, deckCount, onHover, onHoverEnd, onPin,
   isFavorite = false, onToggleFavorite,
 }) {
   const layout = getCardLayout(card);
@@ -58,6 +59,43 @@ export default function CardItem({
     e.stopPropagation();
     onToggleFavorite?.(card);
   };
+
+  const handleSideClick = (e) => {
+    e.stopPropagation();
+    onAddSide?.(card);
+  };
+
+  const handleAddClick = (e) => {
+    e.stopPropagation();
+    onAdd?.(card);
+  };
+
+  const priceEur = getCardPriceEur(card);
+  const priceLabel = priceEur != null ? formatEur(priceEur) : null;
+
+  // Hover overlay shared across all card layouts: stacked "+ Hinzufügen" / "+ SB"
+  const hoverOverlay = (
+    <div className="card-hover-overlay">
+      <button
+        type="button"
+        className="card-hover-btn"
+        onClick={handleAddClick}
+        title="Ins Mainboard hinzufügen"
+      >
+        + Hinzufügen
+      </button>
+      {onAddSide && (
+        <button
+          type="button"
+          className="card-hover-btn"
+          onClick={handleSideClick}
+          title="Direkt ins Sideboard"
+        >
+          + Sideboard
+        </button>
+      )}
+    </div>
+  );
 
   const [imgLoaded, setImgLoaded] = useState(false);
   // Whether the loaded split-card image is naturally landscape (Scryfall returns
@@ -108,9 +146,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          <div className="card-hover-overlay">
-            <span>+ Hinzufügen</span>
-          </div>
+          {hoverOverlay}
         </div>
       )}
 
@@ -141,9 +177,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          <div className="card-hover-overlay">
-            <span>+ Hinzufügen</span>
-          </div>
+          {hoverOverlay}
         </div>
       )}
 
@@ -170,9 +204,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          <div className="card-hover-overlay">
-            <span>+ Hinzufügen</span>
-          </div>
+          {hoverOverlay}
         </div>
       )}
 
@@ -183,7 +215,29 @@ export default function CardItem({
             {manaSyms.map((s, i) => <ManaSymbol key={i} symbol={s} size="xs" />)}
           </span>
         </div>
-        <span className="card-type">{card.type_line}</span>
+        <div
+          style={{
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+            gap: 6,
+          }}
+        >
+          <span className="card-type">{card.type_line}</span>
+          {priceLabel && (
+            <span
+              title="Cardmarket Trend (EUR via Scryfall)"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'var(--text-mid, #888)',
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {priceLabel}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

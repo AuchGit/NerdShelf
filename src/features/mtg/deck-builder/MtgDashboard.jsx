@@ -96,6 +96,22 @@ function DeckCard({ deck, onOpen, onDelete }) {
   const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
+  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side
+  const eurOf = (card) => {
+    const raw = card?.prices?.eur ?? card?.prices?.eur_foil;
+    const n = raw == null ? null : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const sumEur = (entries) =>
+    Object.values(entries || {}).reduce((s, e) => {
+      const p = eurOf(e?.card);
+      return p != null ? s + p * (e.count || 0) : s;
+    }, 0);
+  const totalEur =
+    sumEur(data.mainboard) +
+    sumEur(data.sideboard) +
+    (data.commander ? (eurOf(data.commander) || 0) : 0);
+
   // Aggregate colors
   const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
   for (const { card, count } of Object.values(data.mainboard || {})) {
@@ -109,12 +125,13 @@ function DeckCard({ deck, onOpen, onDelete }) {
   if (colorCounts.C > 0) colorEntries.push(['C', colorCounts.C]);
   const totalColored = colorEntries.reduce((s, [, v]) => s + v, 0);
 
-  // Cover artwork: look up the chosen card in main/side, prefer art_crop image
+  // Cover artwork: look up the chosen card in commander / main / side, prefer art_crop image
   const coverId = data.coverCardId;
   let coverArt = null;
   if (coverId) {
-    const entry = (data.mainboard?.[coverId] || data.sideboard?.[coverId]);
-    const cardObj = entry?.card;
+    const cmd = data.commander && data.commander.id === coverId ? data.commander : null;
+    const entry = data.mainboard?.[coverId] || data.sideboard?.[coverId];
+    const cardObj = cmd || entry?.card;
     if (cardObj) {
       coverArt =
         cardObj.image_uris?.art_crop ||
@@ -202,6 +219,7 @@ function DeckCard({ deck, onOpen, onDelete }) {
         display: 'flex', gap: 'var(--space-4)', color: 'var(--color-text-muted)',
         fontSize: 'var(--fs-sm)',
         textShadow: coverArt ? TEXT_SHADOW : undefined,
+        alignItems: 'center', flexWrap: 'wrap',
       }}>
         <div>
           <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-semibold)' }}>
@@ -215,6 +233,19 @@ function DeckCard({ deck, onOpen, onDelete }) {
               {sideCount}
             </span>
             {' '}Sideboard
+          </div>
+        )}
+        {totalEur > 0 && (
+          <div
+            title="Cardmarket Trend (EUR via Scryfall)"
+            style={{
+              marginLeft: 'auto',
+              color: 'var(--color-accent, #d4a017)',
+              fontWeight: 'var(--fw-semibold)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            ≈ {totalEur.toFixed(2)} €
           </div>
         )}
       </div>

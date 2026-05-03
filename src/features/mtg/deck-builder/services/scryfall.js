@@ -8,6 +8,8 @@ export async function searchCards({
   query, searchMode, colors, colorMode = 'any', cardType, sortOrder = 'name', sortDir = 'asc',
   showLands = false,
   rarity, cmcMin, cmcMax, subtype, format, setCode,
+  priceMin, priceMax,
+  commanderIdentity, commanderPick,
   nextPageUrl,
 }) {
   let url;
@@ -27,8 +29,23 @@ export async function searchCards({
       }
     }
 
+    // ── Commander pick mode ───────────────────────────────
+    // Restrict results to cards eligible to be a commander (legendary
+    // creatures, partner pairs, "can be your commander" planeswalkers, etc.).
+    if (commanderPick) {
+      parts.push('is:commander');
+    }
+
+    // ── Commander color-identity override ─────────────────
+    // Replaces the user's colors/colorMode entirely. Empty array means
+    // colourless commander → restrict to colourless cards.
+    if (commanderIdentity && !commanderPick) {
+      const ci = commanderIdentity.length ? commanderIdentity.join('').toLowerCase() : 'c';
+      parts.push(`id<=${ci}`);
+    }
+
     // ── Colors ──────────────────────────────────────────
-    if (colors && colors.length > 0) {
+    if (!commanderIdentity && !commanderPick && colors && colors.length > 0) {
       const colorStr = colors.join('');
       if (colorMode === 'exact') {
         // Exactly these colors, no more
@@ -68,6 +85,12 @@ export async function searchCards({
     if (min !== null) parts.push(`cmc>=${min}`);
     if (max !== null) parts.push(`cmc<=${max}`);
 
+    // ── Price range (Cardmarket EUR via Scryfall) ─────────
+    const pMin = priceMin !== '' && priceMin != null ? Number(priceMin) : null;
+    const pMax = priceMax !== '' && priceMax != null ? Number(priceMax) : null;
+    if (pMin !== null && !Number.isNaN(pMin)) parts.push(`eur>=${pMin}`);
+    if (pMax !== null && !Number.isNaN(pMax)) parts.push(`eur<=${pMax}`);
+
     // ── Format legality ────────────────────────────────────
     if (format) {
       parts.push(`f:${format}`);
@@ -95,6 +118,7 @@ export async function searchCards({
     const ORDER_MAP = {
       name: 'name', color: 'color', cmc: 'cmc',
       type: 'type', rarity: 'rarity', set: 'set', released: 'released',
+      eur: 'eur',
     };
     const order = ORDER_MAP[sortOrder] ?? 'name';
     const dir   = sortDir === 'desc' ? 'desc' : 'asc';
@@ -227,6 +251,23 @@ export function getManaCost(card) {
 export function parseManaCost(manaCost) {
   if (!manaCost) return [];
   return [...manaCost.matchAll(/\{([^}]+)\}/g)].map(m => m[1]);
+}
+
+/** Cardmarket EUR trend price for a card (from Scryfall daily snapshot).
+ *  Falls back to foil EUR price for foil-only printings. Returns a number
+ *  in EUR or null if no price is known. */
+export function getCardPriceEur(card) {
+  if (!card || !card.prices) return null;
+  const raw = card.prices.eur ?? card.prices.eur_foil ?? null;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Format a EUR price for display ("1.23 €", "—" if unknown). */
+export function formatEur(value, { fallback = '—', digits = 2 } = {}) {
+  if (value == null || Number.isNaN(value)) return fallback;
+  return `${value.toFixed(digits)} €`;
 }
 
 export function getTypeGroup(card) {

@@ -1,5 +1,5 @@
 // src/features/mtg/deck-builder/components/DeckCard.jsx
-import { getCardImage, getManaCost, parseManaCost } from '../services/scryfall';
+import { getCardImage, getManaCost, parseManaCost, getCardPriceEur, formatEur } from '../services/scryfall';
 import ManaSymbol from './ManaSymbol';
 import './DeckCard.css';
 
@@ -14,6 +14,12 @@ export default function DeckCard({
   const manaCost = getManaCost(card);
   const manaSyms = parseManaCost(manaCost);
   const imageUrl = getCardImage(card);
+  const priceEur = getCardPriceEur(card);
+  const priceLine = priceEur != null
+    ? (count > 1
+        ? `${formatEur(priceEur)} · ∑ ${formatEur(priceEur * count)}`
+        : formatEur(priceEur))
+    : null;
 
   const handleContextMenu = (e) => {
     if (!onPin) return;
@@ -42,6 +48,19 @@ export default function DeckCard({
             {manaSyms.map((s, i) => <ManaSymbol key={i} symbol={s} size="xs" />)}
           </span>
         </div>
+        {priceLine && (
+          <div
+            title="Cardmarket Trend (EUR via Scryfall)"
+            style={{
+              fontSize: 10,
+              color: 'var(--text-mid, #888)',
+              marginTop: 2,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {priceLine}
+          </div>
+        )}
       </div>
 
       <div className="dc-controls">

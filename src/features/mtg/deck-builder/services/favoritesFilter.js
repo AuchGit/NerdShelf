@@ -2,13 +2,38 @@
  * Apply the same filter semantics as the Scryfall search, but client-side
  * over a card array (the user's favorites).
  */
+/** Whether a card is eligible to be a commander (mirror of Scryfall `is:commander`). */
+function isCommanderEligible(card) {
+  const tl = (card.type_line || '').toLowerCase();
+  if (tl.includes('legendary') && tl.includes('creature')) return true;
+  if (tl.includes('background')) return true;
+  // Planeswalker exception: oracle text mentions "can be your commander"
+  const oracle = (
+    card.oracle_text ||
+    card.card_faces?.map(f => f.oracle_text || '').join('\n') ||
+    ''
+  ).toLowerCase();
+  if (oracle.includes('can be your commander')) return true;
+  return false;
+}
+
+/** True if `cardCI` (uppercase letters) is a subset of `allowed` (uppercase letters). */
+function colorIdentitySubset(cardCI, allowed) {
+  for (const c of cardCI) if (!allowed.includes(c)) return false;
+  return true;
+}
+
 export function filterFavorites(cards, params) {
   const {
     query, searchMode, colors = [], colorMode = 'any',
     cardType, showLands = false,
     rarity, cmcMin, cmcMax, subtype, format, setCode,
+    priceMin, priceMax,
     sortOrder = 'name', sortDir = 'asc',
+    commanderPick = false, commanderIdentity = null,
   } = params;
+  const pMin = priceMin !== '' && priceMin != null ? Number(priceMin) : null;
+  const pMax = priceMax !== '' && priceMax != null ? Number(priceMax) : null;
 
   const q = (query || '').trim().toLowerCase();
   const min = cmcMin !== '' && cmcMin != null ? Number(cmcMin) : null;
@@ -18,6 +43,15 @@ export function filterFavorites(cards, params) {
   const ct  = (cardType || '').toLowerCase();
 
   const result = cards.filter(card => {
+    // Commander pick mode → only commander-eligible cards
+    if (commanderPick && !isCommanderEligible(card)) return false;
+
+    // Commander color identity → card's CI must be subset
+    if (commanderIdentity) {
+      const cardCI = card.color_identity || [];
+      if (!colorIdentitySubset(cardCI, commanderIdentity)) return false;
+    }
+
     // Text query
     if (q) {
       if (searchMode === 'oracle') {
@@ -39,8 +73,8 @@ export function filterFavorites(cards, params) {
       if (anyFilter && isLand) return false;
     }
 
-    // Colors
-    if (colors.length > 0) {
+    // Colors (skipped when commander identity governs colours)
+    if (!commanderIdentity && colors.length > 0) {
       const cardColors = card.colors || card.color_identity || [];
       if (colorMode === 'exact') {
         if (cardColors.length !== colors.length) return false;
@@ -69,6 +103,15 @@ export function filterFavorites(cards, params) {
     // Format legality
     if (format && card.legalities?.[format] !== 'legal') return false;
 
+    // Price (Cardmarket EUR via Scryfall)
+    if (pMin !== null || pMax !== null) {
+      const raw = card.prices?.eur ?? card.prices?.eur_foil;
+      const price = raw == null ? null : Number(raw);
+      if (price == null || Number.isNaN(price)) return false;
+      if (pMin !== null && price < pMin) return false;
+      if (pMax !== null && price > pMax) return false;
+    }
+
     // Set
     if (sc && (card.set || '').toLowerCase() !== sc) return false;
 
@@ -80,6 +123,12 @@ export function filterFavorites(cards, params) {
     let v;
     switch (sortOrder) {
       case 'cmc':      v = (a.cmc ?? 0) - (b.cmc ?? 0); break;
+      case 'eur': {
+        const ap = Number(a.prices?.eur ?? a.prices?.eur_foil ?? Infinity);
+        const bp = Number(b.prices?.eur ?? b.prices?.eur_foil ?? Infinity);
+        v = (Number.isFinite(ap) ? ap : Infinity) - (Number.isFinite(bp) ? bp : Infinity);
+        break;
+      }
       case 'rarity': {
         const order = { common: 0, uncommon: 1, rare: 2, mythic: 3, special: 4, bonus: 5 };
         v = (order[a.rarity] ?? 99) - (order[b.rarity] ?? 99); break;

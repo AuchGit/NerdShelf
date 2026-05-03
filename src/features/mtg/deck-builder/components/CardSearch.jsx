@@ -44,6 +44,7 @@ const SORT_OPTIONS = [
   { value: 'rarity',   label: 'Rarität' },
   { value: 'set',      label: 'Set'     },
   { value: 'released', label: 'Datum'   },
+  { value: 'eur',      label: 'Preis'   },
 ];
 
 // colorMode options: any=at least one, all=includes all, exact=exactly these
@@ -68,6 +69,8 @@ export default function CardSearch({
   subtype,    setSubtype,
   format,     setFormat,
   setCode,    setSetCode,
+  priceMin,   setPriceMin,
+  priceMax,   setPriceMax,
   totalCards, loading,
   deckFormatLabel,
   showFavoritesOnly = false, setShowFavoritesOnly,
@@ -81,13 +84,14 @@ export default function CardSearch({
     setRarity(prev => prev === id ? '' : id);
 
   const hasBasicFilters    = query || colors.length > 0 || cardType || showLands;
-  const hasAdvancedFilters = rarity || cmcMin || cmcMax || subtype || format || setCode;
+  const hasAdvancedFilters = rarity || cmcMin || cmcMax || subtype || format || setCode || priceMin || priceMax;
   const hasFilters         = hasBasicFilters || hasAdvancedFilters;
 
   const handleClear = () => {
     setQuery(''); setColors([]); setCardType(''); setShowLands(false);
     setRarity(''); setCmcMin(''); setCmcMax('');
     setSubtype(''); setFormat(''); setSetCode('');
+    setPriceMin?.(''); setPriceMax?.('');
   };
 
   return (
@@ -286,6 +290,29 @@ export default function CardSearch({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="adv-row">
+            <span className="adv-label">Preis (€)</span>
+            <div className="cmc-group">
+              <input
+                type="number"
+                className="cmc-input"
+                placeholder="Min"
+                min={0} step={0.01}
+                value={priceMin ?? ''}
+                onChange={e => setPriceMin?.(e.target.value)}
+              />
+              <span className="cmc-dash">–</span>
+              <input
+                type="number"
+                className="cmc-input"
+                placeholder="Max"
+                min={0} step={0.01}
+                value={priceMax ?? ''}
+                onChange={e => setPriceMax?.(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="adv-row">

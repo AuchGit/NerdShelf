@@ -1,7 +1,9 @@
 // src/features/mtg/deck-builder/components/DeckPanel.jsx
 import { useState } from 'react';
 import DeckCard from './DeckCard';
-import { getTypeGroup } from '../services/scryfall';
+import ManaSymbol from './ManaSymbol';
+import { getTypeGroup, getCardImage, getManaCost, parseManaCost, getCardPriceEur, formatEur } from '../services/scryfall';
+import './DeckCard.css';
 import './DeckPanel.css';
 
 const GROUP_ORDER = [
@@ -145,6 +147,7 @@ function getManaStats(deck) {
 export default function DeckPanel({
   mainboard,
   sideboard,
+  commander,           // optional: full Scryfall card object | null
   onUpdateMainCount,
   onRemoveMain,
   onClearDeck,
@@ -164,6 +167,17 @@ export default function DeckPanel({
   const sideEntries = Object.values(sideboard);
   const mainTotal   = mainEntries.reduce((s, e) => s + e.count, 0);
   const sideTotal   = sideEntries.reduce((s, e) => s + e.count, 0);
+
+  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side
+  const sumEur = (entries) =>
+    entries.reduce((s, e) => {
+      const p = getCardPriceEur(e.card);
+      return p != null ? s + p * e.count : s;
+    }, 0);
+  const mainEur      = sumEur(mainEntries);
+  const sideEur      = sumEur(sideEntries);
+  const commanderEur = commander ? (getCardPriceEur(commander) ?? 0) : 0;
+  const totalEur     = mainEur + sideEur + commanderEur;
 
   const activeDeck = tab === 'main' ? mainboard : sideboard;
   const organized  = organizeDeck(activeDeck, sortMode);
@@ -188,6 +202,20 @@ export default function DeckPanel({
         <div className="dp-title">
           <span className="dp-icon">⚔</span>
           <span>Deck</span>
+          {totalEur > 0 && (
+            <span
+              title={`Cardmarket Trend (EUR) — Mainboard ${formatEur(mainEur)}${sideEur ? ` · Sideboard ${formatEur(sideEur)}` : ''}${commander ? ` · Commander ${formatEur(commanderEur)}` : ''}`}
+              style={{
+                marginLeft: 8,
+                fontSize: 11,
+                color: 'var(--accent, #d4a017)',
+                fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              ≈ {formatEur(totalEur)}
+            </span>
+          )}
         </div>
         <div className="dp-header-right">
           {onExportDeck && (mainTotal > 0 || sideTotal > 0) && (
@@ -272,18 +300,27 @@ export default function DeckPanel({
       )}
 
       {/* List */}
+      {tab === 'main' && commander && (
+        <CommanderRow
+          card={commander}
+          onHover={onHoverCard}
+          onPin={onPinCard}
+        />
+      )}
       {(tab === 'main' ? mainTotal : sideTotal) === 0 ? (
-        <div className="dp-empty">
-          <div className="dp-empty-icon">⊕</div>
-          <div>{tab === 'main'
-            ? 'Klicke Karten in der Suche, um sie hinzuzufügen'
-            : 'Leeres Sideboard'}</div>
-          {tab === 'side' && (
-            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
-              Über das ↕ Symbol bei einer Main-Karte verschieben
-            </div>
-          )}
-        </div>
+        (tab === 'main' && commander) ? null : (
+          <div className="dp-empty">
+            <div className="dp-empty-icon">⊕</div>
+            <div>{tab === 'main'
+              ? 'Klicke Karten in der Suche, um sie hinzuzufügen'
+              : 'Leeres Sideboard'}</div>
+            {tab === 'side' && (
+              <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
+                Über das ↕ Symbol bei einer Main-Karte verschieben
+              </div>
+            )}
+          </div>
+        )
       ) : (
         <div className="dp-list">
           {organized.map((group, gi) => (
@@ -326,6 +363,68 @@ export default function DeckPanel({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Commander row — pinned at the very top of the mainboard list. Reuses the
+ * .deck-card visual style for consistency, but replaces the count controls
+ * with a "♛ Commander" badge. Right-click pins the card to the preview.
+ */
+function CommanderRow({ card, onHover, onPin }) {
+  const manaCost = getManaCost(card);
+  const manaSyms = parseManaCost(manaCost);
+  const imageUrl = getCardImage(card);
+
+  const handleContextMenu = (e) => {
+    if (!onPin) return;
+    e.preventDefault();
+    onPin(card);
+  };
+
+  return (
+    <div
+      className="deck-card"
+      style={{
+        marginBottom: 6,
+        borderLeft: '3px solid var(--accent, #d4a017)',
+        background: 'color-mix(in srgb, var(--accent, #d4a017) 8%, transparent)',
+      }}
+      onMouseEnter={() => onHover?.(card)}
+      onMouseLeave={() => onHover?.(null)}
+      onContextMenu={handleContextMenu}
+      title="Commander · Rechtsklick: in Vorschau pinnen"
+    >
+      <div className="dc-thumb">
+        {imageUrl
+          ? <img src={imageUrl} alt={card.name} loading="lazy" />
+          : <div className="dc-thumb-fallback">?</div>}
+      </div>
+
+      <div className="dc-info">
+        <div className="dc-name">{card.name}</div>
+        <div className="dc-sub">
+          <span className="dc-type">{card.type_line?.split('—')[0].trim()}</span>
+          <span className="dc-mana">
+            {manaSyms.map((s, i) => <ManaSymbol key={i} symbol={s} size="xs" />)}
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="dc-controls"
+        style={{
+          color: 'var(--accent, #d4a017)',
+          fontWeight: 700,
+          fontSize: 11,
+          letterSpacing: 0.5,
+          padding: '0 6px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        ♛ COMMANDER
+      </div>
     </div>
   );
 }
