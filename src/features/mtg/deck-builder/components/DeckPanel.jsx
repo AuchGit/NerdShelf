@@ -3,6 +3,7 @@ import { useState } from 'react';
 import DeckCard from './DeckCard';
 import ManaSymbol from './ManaSymbol';
 import { getTypeGroup, getCardImage, getManaCost, parseManaCost, getCardPriceEur, formatEur } from '../services/scryfall';
+import { useMtgPriceSettings } from '../services/priceThresholds';
 import './DeckCard.css';
 import './DeckPanel.css';
 
@@ -158,10 +159,12 @@ export default function DeckPanel({
   onHoverCard,
   onPinCard,
   onExportDeck,
+  onAnalyzeDeck,
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [tab, setTab] = useState('main');
   const [sortMode, setSortMode] = useState('type');
+  const priceSettings = useMtgPriceSettings();
 
   const mainEntries = Object.values(mainboard);
   const sideEntries = Object.values(sideboard);
@@ -178,6 +181,11 @@ export default function DeckPanel({
   const sideEur      = sumEur(sideEntries);
   const commanderEur = commander ? (getCardPriceEur(commander) ?? 0) : 0;
   const totalEur     = mainEur + sideEur + commanderEur;
+
+  const deckOverThreshold =
+    priceSettings.deckEnabled
+    && priceSettings.deckThresholdEur > 0
+    && totalEur > priceSettings.deckThresholdEur;
 
   const activeDeck = tab === 'main' ? mainboard : sideboard;
   const organized  = organizeDeck(activeDeck, sortMode);
@@ -208,7 +216,7 @@ export default function DeckPanel({
               style={{
                 marginLeft: 8,
                 fontSize: 11,
-                color: 'var(--accent, #d4a017)',
+                color: deckOverThreshold ? 'var(--color-danger, #e06a5a)' : 'var(--accent, #d4a017)',
                 fontWeight: 600,
                 fontVariantNumeric: 'tabular-nums',
               }}
@@ -216,8 +224,29 @@ export default function DeckPanel({
               ≈ {formatEur(totalEur)}
             </span>
           )}
+          {deckOverThreshold && (
+            <span
+              title={`Über deinem Limit von ${formatEur(priceSettings.deckThresholdEur)} (Einstellungen → MTG)`}
+              style={{
+                marginLeft: 6,
+                fontSize: 10,
+                color: 'var(--color-danger, #e06a5a)',
+                fontWeight: 700,
+                letterSpacing: 0.5,
+              }}
+            >
+              ⚠ Limit überschritten
+            </span>
+          )}
         </div>
         <div className="dp-header-right">
+          {onAnalyzeDeck && (mainTotal > 0) && (
+            <button
+              className="dp-clear-btn dp-export-btn"
+              onClick={onAnalyzeDeck}
+              title="Mana-Basis-Vorschlag und Konsistenz-Simulation"
+            >Analyse</button>
+          )}
           {onExportDeck && (mainTotal > 0 || sideTotal > 0) && (
             <button
               className="dp-clear-btn dp-export-btn"

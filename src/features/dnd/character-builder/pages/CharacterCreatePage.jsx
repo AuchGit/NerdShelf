@@ -97,7 +97,7 @@ const EXPERTISE_L1 = { Rogue: 2 }   // mirror from Step7Proficiencies
 
 function isProficienciesComplete(character) {
   const cls = character.classes[0]
-  if (!cls) return true
+  if (!cls) return false
 
   // Skill choices — read from character.choices (single source of truth)
   const choices = extractSkillChoices(cls.startingProficiencies)
@@ -123,7 +123,7 @@ function isProficienciesComplete(character) {
 // ── Spells step completion (unchanged) ────────────────────────────────────────
 function isSpellStepComplete(character) {
   const cls = character.classes[0]
-  if (!cls) return true
+  if (!cls) return false
   if (!isSpellcaster(cls.classId)) return true
   const info = getSpellcastingInfo(cls.classId, cls.level, 0)
   if (!info) return true
@@ -209,8 +209,21 @@ export default function CharacterCreatePage({ session }) {
       case STEP.ABILITIES:     return !!character.abilityScores.method
       case STEP.PROFICIENCIES: return isProficienciesComplete(character)
       case STEP.SPELLS:        return isSpellStepComplete(character)
-      case STEP.EQUIPMENT:     return true  // Equipment is optional — always completable
-      case STEP.REVIEW:        return true
+      case STEP.EQUIPMENT:
+        // Equipment is optional, but must not show as "done" before the user
+        // actually reaches it — otherwise the step indicator marks it complete
+        // (and clickable) from the start, jumping the user past everything.
+        if (!character.meta.edition)              return false
+        if (character.info.name.trim().length < 2) return false
+        if (!character.species.raceId)            return false
+        if (!character.background.backgroundId)   return false
+        if (!isStep4Complete(character))          return false
+        if (!isClassOptsComplete(character))      return false
+        if (!character.abilityScores.method)      return false
+        if (!isProficienciesComplete(character))  return false
+        if (!isSpellStepComplete(character))      return false
+        return true
+      case STEP.REVIEW:        return false   // never auto-complete
       default:                 return false
     }
   }

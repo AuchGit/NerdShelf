@@ -4,12 +4,18 @@ import { Modal, Button, Input } from '../../shared/ui';
 import { useTheme } from '../../core/theme/ThemeProvider';
 import { useAuth } from '../../core/auth/AuthContext';
 import { supabase } from '../../core/supabase/client';
+import {
+  getMtgPriceSettings,
+  setMtgPriceSettings,
+  useMtgPriceSettings,
+} from '../../features/mtg/deck-builder/services/priceThresholds';
 
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'account', label: 'Account' },
   { id: 'theme',   label: 'Theme' },
   { id: 'dnd',     label: 'DnD' },
+  { id: 'mtg',     label: 'MTG' },
   { id: 'tools',   label: 'Tools' },
 ];
 
@@ -88,6 +94,7 @@ export default function SettingsModal({ open, onClose }) {
       {tab === 'account' && <AccountSettings />}
       {tab === 'theme'   && <ThemeSettings />}
       {tab === 'dnd'     && <DndSettings />}
+      {tab === 'mtg'     && <MtgSettings />}
       {tab === 'tools'   && <ToolsSettings />}
     </Modal>
   );
@@ -368,6 +375,78 @@ function DndSettings() {
             Diese Einstellung ist nur in der Desktop-App verfügbar.
           </div>
         )}
+      </Field>
+    </div>
+  );
+}
+
+function MtgSettings() {
+  const settings = useMtgPriceSettings();
+
+  function update(patch) {
+    setMtgPriceSettings(patch);
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      <Field label="Warnung bei einzelnen Karten">
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)',
+        }}>
+          <input
+            type="checkbox"
+            checked={!!settings.cardEnabled}
+            onChange={e => update({ cardEnabled: e.target.checked })}
+          />
+          Aktivieren
+        </label>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginTop: 'var(--space-2)' }}>
+          <Input
+            type="number"
+            min={0}
+            step={0.5}
+            value={settings.cardThresholdEur}
+            onChange={e => update({ cardThresholdEur: Math.max(0, Number(e.target.value) || 0) })}
+            disabled={!settings.cardEnabled}
+            style={{ width: 120 }}
+          />
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>EUR</span>
+        </div>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Karten über diesem Cardmarket-Trend-Preis bekommen ein Warn-Label im
+          Deckbuilder.
+        </div>
+      </Field>
+
+      <Field label="Warnung bei gesamten Decks">
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)',
+        }}>
+          <input
+            type="checkbox"
+            checked={!!settings.deckEnabled}
+            onChange={e => update({ deckEnabled: e.target.checked })}
+          />
+          Aktivieren
+        </label>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginTop: 'var(--space-2)' }}>
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            value={settings.deckThresholdEur}
+            onChange={e => update({ deckThresholdEur: Math.max(0, Number(e.target.value) || 0) })}
+            disabled={!settings.deckEnabled}
+            style={{ width: 120 }}
+          />
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>EUR</span>
+        </div>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Decks über diesem Gesamtpreis bekommen ein Warn-Label im Dashboard
+          und Deckbuilder.
+        </div>
       </Field>
     </div>
   );

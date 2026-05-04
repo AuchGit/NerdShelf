@@ -12,6 +12,7 @@ import CardPreview   from './components/CardPreview';
 import CollapsibleRail from './components/CollapsibleRail';
 import ImportDeckModal from './components/ImportDeckModal';
 import CoverPickerModal from './components/CoverPickerModal';
+import DeckAnalyzerModal from './components/DeckAnalyzerModal';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
@@ -65,6 +66,7 @@ export default function MtgDeckBuilderApp() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showAnalyzer, setShowAnalyzer] = useState(false);
   const [exportStatus, setExportStatus] = useState(null);
 
   // track if deck has been dirty since last save
@@ -477,6 +479,7 @@ export default function MtgDeckBuilderApp() {
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
       onExportDeck={handleExport}
+      onAnalyzeDeck={() => setShowAnalyzer(true)}
     />
   );
 
@@ -718,6 +721,14 @@ export default function MtgDeckBuilderApp() {
           sideboard={sideboard}
           currentCoverId={coverCardId}
           onPick={(id) => setCoverCardId(id)}
+        />
+        <DeckAnalyzerModal
+          open={showAnalyzer}
+          onClose={() => setShowAnalyzer(false)}
+          mainboard={mainboard}
+          commander={commander}
+          deckFormat={deckFormat}
+          onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
         />
       </div>
     </SettingsProvider>

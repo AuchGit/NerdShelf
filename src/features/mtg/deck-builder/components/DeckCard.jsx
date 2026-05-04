@@ -1,5 +1,6 @@
 // src/features/mtg/deck-builder/components/DeckCard.jsx
 import { getCardImage, getManaCost, parseManaCost, getCardPriceEur, formatEur } from '../services/scryfall';
+import { useMtgPriceSettings } from '../services/priceThresholds';
 import ManaSymbol from './ManaSymbol';
 import './DeckCard.css';
 
@@ -20,6 +21,12 @@ export default function DeckCard({
         ? `${formatEur(priceEur)} · ∑ ${formatEur(priceEur * count)}`
         : formatEur(priceEur))
     : null;
+  const priceSettings = useMtgPriceSettings();
+  const overCardThreshold =
+    priceSettings.cardEnabled
+    && priceSettings.cardThresholdEur > 0
+    && priceEur != null
+    && priceEur > priceSettings.cardThresholdEur;
 
   const handleContextMenu = (e) => {
     if (!onPin) return;
@@ -34,6 +41,10 @@ export default function DeckCard({
       onMouseLeave={() => onHover?.(null)}
       onContextMenu={handleContextMenu}
       title={onPin ? 'Rechtsklick: in Vorschau pinnen' : undefined}
+      style={overCardThreshold ? {
+        borderLeft: '3px solid var(--color-danger, #e06a5a)',
+        background: 'color-mix(in srgb, var(--color-danger, #e06a5a) 6%, transparent)',
+      } : undefined}
     >
       <div className="dc-thumb">
         {imageUrl && <img src={imageUrl} alt={card.name} loading="lazy" />}
@@ -50,15 +61,18 @@ export default function DeckCard({
         </div>
         {priceLine && (
           <div
-            title="Cardmarket Trend (EUR via Scryfall)"
+            title={overCardThreshold
+              ? `Über deinem Karten-Limit von ${formatEur(priceSettings.cardThresholdEur)}`
+              : 'Cardmarket Trend (EUR via Scryfall)'}
             style={{
               fontSize: 10,
-              color: 'var(--text-mid, #888)',
+              color: overCardThreshold ? 'var(--color-danger, #e06a5a)' : 'var(--text-mid, #888)',
+              fontWeight: overCardThreshold ? 700 : 400,
               marginTop: 2,
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {priceLine}
+            {overCardThreshold && '⚠ '}{priceLine}
           </div>
         )}
       </div>

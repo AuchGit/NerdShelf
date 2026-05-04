@@ -11,6 +11,10 @@ const cache = {}
 const PREFERRED_55E_SOURCES = ['XPHB', 'XDMG', 'XMM']
 
 async function fetchData(edition, path) {
+  if (!edition || !SOURCES[edition]) {
+    console.warn(`[dataLoader] skip fetch — unknown edition "${edition}" (path: ${path})`)
+    return null
+  }
   const key = `${edition}:${path}`
   if (cache[key]) return cache[key]
   const url = `${SOURCES[edition]}/${path}`

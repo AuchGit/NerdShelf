@@ -5,6 +5,7 @@ import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { Panel } from '../../../shared/ui';
 import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
+import { useMtgPriceSettings } from './services/priceThresholds';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -55,6 +56,26 @@ export default function MtgDashboard() {
     else loadDecks();
   }
 
+  async function handleDuplicate(deck) {
+    if (!user) return;
+    const baseName = deck.name || 'Unbenanntes Deck';
+    const newName = `${baseName} (Kopie)`;
+    const { id: _ignore, created_at: _c, updated_at: _u, ...rest } = deck;
+    const payload = {
+      ...rest,
+      user_id: user.id,
+      name: newName,
+      updated_at: new Date().toISOString(),
+    };
+    const { error: err } = await supabase
+      .from('mtg_decks')
+      .insert(payload)
+      .select()
+      .single();
+    if (err) alert(`Duplizieren fehlgeschlagen: ${err.message}`);
+    else loadDecks();
+  }
+
   return (
     <>
       {error && (
@@ -84,6 +105,7 @@ export default function MtgDashboard() {
             deck={deck}
             onOpen={() => navigate(`/mtg/deck/${deck.id}`)}
             onDelete={() => handleDelete(deck.id, deck.name)}
+            onDuplicate={() => handleDuplicate(deck)}
           />
         )}
       />
@@ -91,8 +113,9 @@ export default function MtgDashboard() {
   );
 }
 
-function DeckCard({ deck, onOpen, onDelete }) {
+function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
   const data = deck.data || {};
+  const priceSettings = useMtgPriceSettings();
   const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
@@ -111,6 +134,11 @@ function DeckCard({ deck, onOpen, onDelete }) {
     sumEur(data.mainboard) +
     sumEur(data.sideboard) +
     (data.commander ? (eurOf(data.commander) || 0) : 0);
+
+  const overDeckThreshold =
+    priceSettings.deckEnabled
+    && priceSettings.deckThresholdEur > 0
+    && totalEur > priceSettings.deckThresholdEur;
 
   // Aggregate colors
   const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
@@ -151,10 +179,15 @@ function DeckCard({ deck, onOpen, onDelete }) {
         overflow: 'hidden',
         isolation: 'isolate',
         transition: 'transform var(--transition), border-color var(--transition)',
+        borderColor: overDeckThreshold ? 'var(--color-danger, #e06a5a)' : undefined,
       }}
       onClick={onOpen}
-      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-accent)'}
-      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border)'}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = overDeckThreshold
+        ? 'var(--color-danger, #e06a5a)'
+        : 'var(--color-accent)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = overDeckThreshold
+        ? 'var(--color-danger, #e06a5a)'
+        : 'var(--color-border)'}
     >
       {coverArt && (
         <>
@@ -202,17 +235,32 @@ function DeckCard({ deck, onOpen, onDelete }) {
             </div>
           )}
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          style={{
-            background: 'transparent', border: 'none',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            padding: 4, borderRadius: 4, fontSize: 16,
-          }}
-          title="Deck löschen"
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
-        >✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {onDuplicate && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+              style={{
+                background: 'transparent', border: 'none',
+                color: 'var(--color-text-dim)', cursor: 'pointer',
+                padding: 4, borderRadius: 4, fontSize: 14,
+              }}
+              title="Deck duplizieren"
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+            >⎘</button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            style={{
+              background: 'transparent', border: 'none',
+              color: 'var(--color-text-dim)', cursor: 'pointer',
+              padding: 4, borderRadius: 4, fontSize: 16,
+            }}
+            title="Deck löschen"
+            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+          >✕</button>
+        </div>
       </div>
 
       <div style={{
@@ -237,15 +285,20 @@ function DeckCard({ deck, onOpen, onDelete }) {
         )}
         {totalEur > 0 && (
           <div
-            title="Cardmarket Trend (EUR via Scryfall)"
+            title={overDeckThreshold
+              ? `Über deinem Limit von ${priceSettings.deckThresholdEur.toFixed(2)} €`
+              : 'Cardmarket Trend (EUR via Scryfall)'}
             style={{
               marginLeft: 'auto',
-              color: 'var(--color-accent, #d4a017)',
+              color: overDeckThreshold
+                ? 'var(--color-danger, #e06a5a)'
+                : 'var(--color-accent, #d4a017)',
               fontWeight: 'var(--fw-semibold)',
               fontVariantNumeric: 'tabular-nums',
+              textShadow: coverArt ? TEXT_SHADOW : undefined,
             }}
           >
-            ≈ {totalEur.toFixed(2)} €
+            {overDeckThreshold && '⚠ '}≈ {totalEur.toFixed(2)} €
           </div>
         )}
       </div>
