@@ -432,6 +432,41 @@
 }
 .adv-select:focus { border-color: var(--accent); }
 
+/* ── Mobile / touch ──────────────────────────────────────────────────────
+   Tap ergonomics: pips opacity:0.45 unhovered is invisible feedback on
+   touch (no :hover). On coarse pointers, lift the inactive opacity so
+   they're discoverable, and grow the hit target slightly. */
+@media (hover: none) and (pointer: coarse) {
+  .color-pip,
+  .land-pip,
+  .fav-pip,
+  .rarity-pip {
+    width: 34px;
+    height: 34px;
+    opacity: 0.7;
+    font-size: 0.78rem;
+  }
+  .mode-btn,
+  .color-mode-btn { padding: 0.55rem 0.85rem; font-size: 0.82rem; }
+  .reset-btn { padding: 0.45rem 0.95rem; font-size: 0.78rem; }
+  .search-input {
+    font-size: 16px;                  /* iOS no-zoom */
+    padding-block: 0.6rem;
+  }
+  .cmc-input,
+  .adv-input,
+  .adv-select,
+  .type-select,
+  .sort-select { font-size: 16px; padding-block: 0.45rem; }
+}
+
+@media (max-width: 480px) {
+  .filter-row { gap: 0.4rem; padding: 0.5rem 0.65rem 0; }
+  .adv-label { width: auto; flex: 1 0 100%; }       /* labels stack */
+  .adv-row { flex-wrap: wrap; }
+  .reset-btn { margin-left: 0; }                    /* don't push off-row */
+}
+
 /* ── Status bar ── */
 .search-status {
   padding: 0.32rem 0.85rem 0.42rem;

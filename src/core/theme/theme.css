@@ -112,3 +112,61 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Mobile / touch responsive layer (PWA on phones).
+
+   Two gates are used:
+     • (max-width: 768px) — narrow viewports. Tauri opens at 1280×800 and
+       only crosses 768 if the user resizes very small (which already swaps
+       the sidebar to a hamburger via useWindowWidth). Default Tauri UI is
+       therefore unchanged.
+     • (hover: none) and (pointer: coarse) — touch input devices only.
+       Desktop Tauri reports pointer: fine, so these rules never fire there.
+
+   The visual identity (colors, typography family, radii) is preserved —
+   only spacing, sizing, and tap ergonomics change.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Touch ergonomics: minimum 16px font on focusable controls suppresses iOS
+   Safari's auto-zoom on input focus, and gives a comfortable tap font on
+   Android. Larger padding makes hit targets ≥40px. Tap-highlight is removed
+   in favour of explicit :active styling. */
+@media (hover: none) and (pointer: coarse) {
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    font-size: var(--fs-lg);            /* 16px (was 14px) */
+    line-height: var(--lh-normal);
+  }
+
+  input, select, textarea {
+    font-size: 16px;                    /* iOS no-zoom threshold */
+    padding: var(--space-3) var(--space-3);
+    min-height: 44px;
+  }
+
+  button {
+    min-height: 40px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Slightly larger scrollbars are useless on touch — hide the desktop
+     thumbs (native overlay scrollers take over). */
+  ::-webkit-scrollbar { width: 0; height: 0; }
+}
+
+/* Narrow viewport: layout density. Affects PWA on phones; on Tauri only
+   fires if the desktop window is shrunk to <769px wide (an existing edge
+   case already handled by the hamburger overlay). */
+@media (max-width: 768px) {
+  body { font-size: var(--fs-lg); }     /* 16px */
+
+  /* Prevent any rogue child from forcing horizontal scroll. */
+  html, body { overflow-x: hidden; }
+
+  /* Modal/dialog content shouldn't be wider than the viewport. */
+  [role='dialog'], .modal, .modal-content {
+    max-width: 100vw;
+  }
+}

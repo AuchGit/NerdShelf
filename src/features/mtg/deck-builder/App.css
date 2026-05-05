@@ -111,3 +111,24 @@
 /* Responsive layout (preview/deck rails) is JS-driven via useWindowWidth +
    CollapsibleRail. The Tauri window has minWidth=720, so the previous
    <700px stacking fallback is no longer needed. */
+
+/* PWA / phone (≤480px): the deck-builder header has a left-side hamburger
+   from Layout.jsx pinned at top:12, left:12. Push the brand right so it
+   doesn't collide, and shrink padding so the title fits. The deck/preview
+   rails remain JS-driven via mtgMode='both-rails'. */
+@media (max-width: 768px) {
+  .mtg-deck-builder .app-header {
+    padding: 0 0.6rem 0 56px;            /* clear the hamburger button */
+    height: 52px;
+  }
+  .mtg-deck-builder .header-title {
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+  }
+  .mtg-deck-builder .header-right {
+    gap: 0.4rem;
+  }
+  .mtg-deck-builder .header-sub {
+    display: none;                       /* italic subtitle steals space */
+  }
+}

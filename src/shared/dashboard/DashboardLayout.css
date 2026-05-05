@@ -1,0 +1,30 @@
+/* DashboardLayout responsive layer. Inline styles in the .jsx handle the
+   desktop look; these rules only override on narrow viewports / touch.
+   They never fire on a default-size Tauri window. */
+
+@media (max-width: 768px) {
+  .nshelf-dashboard {
+    padding: var(--space-3) !important;
+  }
+  .nshelf-dashboard-toolbar {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .nshelf-dashboard-toolbar > h1 {
+    font-size: var(--fs-xl) !important;
+  }
+  .nshelf-dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: var(--space-3) !important;
+  }
+  .nshelf-dashboard-section-title {
+    font-size: var(--fs-md) !important;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .nshelf-dashboard-section-header {
+    padding: var(--space-3) !important;
+    min-height: 44px;
+  }
+}

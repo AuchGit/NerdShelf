@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Button, Panel } from '../ui';
+import './DashboardLayout.css';
 
 const FALLBACK_CATEGORY = 'Sonstige';
 
@@ -88,8 +89,8 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div style={S.container}>
-      <div style={S.toolbar}>
+    <div className="nshelf-dashboard" style={S.container}>
+      <div className="nshelf-dashboard-toolbar" style={S.toolbar}>
         <h1 style={S.title}>{title}</h1>
         {onNew && <Button onClick={onNew}>{newButtonLabel}</Button>}
       </div>
@@ -113,15 +114,16 @@ export default function DashboardLayout({
               <section key={category} style={S.section}>
                 <button
                   type="button"
+                  className="nshelf-dashboard-section-header"
                   style={S.sectionHeader}
                   onClick={() => toggle(category)}
                 >
                   <span style={S.chevron}>{isCollapsed ? '▸' : '▾'}</span>
-                  <span style={S.sectionTitle}>{category}</span>
+                  <span className="nshelf-dashboard-section-title" style={S.sectionTitle}>{category}</span>
                   <span style={S.sectionCount}>{catItems.length}</span>
                 </button>
                 {!isCollapsed && (
-                  <div style={S.grid}>
+                  <div className="nshelf-dashboard-grid" style={S.grid}>
                     {catItems.map(renderItem)}
                   </div>
                 )}
