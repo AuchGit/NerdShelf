@@ -1202,10 +1202,16 @@ export function suggestLands(mainboard, options = {}) {
       weight: analysis.colorShare[a] + analysis.colorShare[b],
     }));
     const totalW = weighted.reduce((s, p) => s + p.weight, 0) || 1;
+    // Per-pair share is now CONTINUOUS — no integer apportionment. The
+    // last pair takes the residual fractional share so the cumulative
+    // sum equals dualCount exactly.
     let used = 0;
     weighted.forEach(({ pair, weight }, k) => {
       const isLast = k === weighted.length - 1;
-      const n = isLast ? dualCount - used : Math.round(dualCount * (weight / totalW));
+      const n = isLast
+        ? Math.max(0, dualCount - used)
+        : dualCount * (weight / totalW);
+      used += n;
       if (n <= 0) return;
 
       const [a, b] = pair;
@@ -1294,23 +1300,14 @@ export function suggestLands(mainboard, options = {}) {
         weight: Math.max(...biased.map(m => m.baseScore + m.bias)),
       }];
 
-      // Apportion slots across groups via running-rounding (smooth in weight).
-      const minGroupW = Math.min(...groups.map(g => g.weight));
-      const shiftedGroups = groups.map(g => ({
-        ...g,
-        sw: Math.max(0.05, (g.weight - minGroupW) + 0.05),
-      }));
-      const totalGW = shiftedGroups.reduce((s, g) => s + g.sw, 0) || 1;
-      let runningGroupShare = 0;
-      let groupAllocated = 0;
-      for (let i = 0; i < shiftedGroups.length; i++) {
-        const g = shiftedGroups[i];
-        const isLast = i === shiftedGroups.length - 1;
-        runningGroupShare += (g.sw / totalGW) * n;
-        const target = isLast ? n : Math.round(runningGroupShare);
-        g.slots = Math.max(0, target - groupAllocated);
-        groupAllocated += g.slots;
-      }
+      // Groups are now ONLY aggregation boundaries for color identity —
+      // not allocation containers. With one group per pair (since the
+      // tier flattening in the prior pass) the pair's full continuous
+      // share `n` flows directly into `g.slots`. No running-rounding,
+      // no per-group integer pre-allocation. The only discrete operation
+      // is the final floor + largest-remainder inside the softmax
+      // allocator (`runSlotAllocation`).
+      const shiftedGroups = groups.map(g => ({ ...g, slots: n }));
 
       // ── Continuous-transition allocator (stepwise) ────────
       // Allocations are no longer computed directly at the target bp.
@@ -1473,7 +1470,13 @@ export function suggestLands(mainboard, options = {}) {
           }
 
           // Distribute leftover slots by largest remainder, name asc tie.
-          let remaining = g.slots - totalAllocated;
+          // `g.slots` is fractional now — round to the nearest integer so
+          // each pair's discrete output is well-defined while still
+          // letting the *fractional* expected counts drive WHICH names
+          // win the leftover slots (the only discrete operation in the
+          // pipeline).
+          const targetIntSlots = Math.round(g.slots);
+          let remaining = targetIntSlots - totalAllocated;
           const sortedByRemainder = allocations.slice().sort((a, b) =>
             b.remainder - a.remainder
             || a.member.cand.name.localeCompare(b.member.cand.name)
@@ -1519,108 +1522,277 @@ export function suggestLands(mainboard, options = {}) {
         return copy;
       }
 
-      // Single-step transition with dynamic threshold + momentum bonus.
+      // ── Precomputed swap-list traversal ────────────────────
       //
-      //   threshold(bp)   = 0.015 + 0.035·(1 − bp)
-      //                     (~0.044 at bp=0.15, ~0.017 at bp=0.95)
-      //   momentumBonus   = ±0.02 when the candidate's tier moves in the
-      //                     same direction as the current budget step
-      //                     (upgrade if Δbp > 0, downgrade if Δbp < 0)
-      //   stacking discount: threshold ×0.7 if the candidate already
-      //                     exists in the allocation (smooth 1→2 stacks)
-      function singleStepUpdate(alloc, bpVal, prevBpVal) {
-        const direction = bpVal > prevBpVal ? 1
-                        : bpVal < prevBpVal ? -1
-                        : 0;
-        const threshold = 0.015 + 0.035 * (1 - bpVal);
-        const updated = cloneAlloc(alloc);
+      // System invariants:
+      //   1. baseline is computed ONCE at FIXED_BP = 0.95.
+      //   2. ALL candidate scores in the swap-list construction use
+      //      FIXED_BP — the budget slider does NOT shape "what is good".
+      //   3. The swap list is sorted ONCE and never recomputed.
+      //   4. The slider chooses how far along the list we walk via a
+      //      target deck cost.
+      //
+      // Each adjacent budget state therefore differs by at most one
+      // slot (Hamming distance = 1) — the next swap in the list — and
+      // total cost moves smoothly and monotonically.
+      const FIXED_BP = 0.95;
+      const targetBp = budgetPressureValue;
+
+      // λ — slider-derived score weighting. Higher when the user wants
+      // early-game/greedy fixing (less willing to lose score for price).
+      const lambda = 3.0
+                   + sliders.earlyGame * 4.0
+                   + sliders.greed     * 2.0;
+
+      // Step 1: baseline allocation at FIXED_BP (optimal quality).
+      let alloc = runSlotAllocation(FIXED_BP);
+
+      // Helpers — all operate on the baseline state captured below.
+      function computeAllocCost(currentAlloc) {
+        let total = 0;
+        for (const g of shiftedGroups) {
+          const ga = currentAlloc.get(g.key);
+          if (!ga) continue;
+          for (const m of g.members) {
+            const cnt = ga.get(m.cand.name) || 0;
+            total += cnt * (m.cand.priceEur ?? 0);
+          }
+        }
+        return total;
+      }
+      function computeMinAllocCost(currentAlloc) {
+        let total = 0;
+        for (const g of shiftedGroups) {
+          const ga = currentAlloc.get(g.key);
+          if (!ga) continue;
+          let occupiedSlots = 0;
+          for (const cnt of ga.values()) occupiedSlots += cnt;
+          if (occupiedSlots <= 0) continue;
+          const cheapest = Math.min(
+            ...g.members.map(m => m.cand.priceEur ?? 0)
+          );
+          total += occupiedSlots * cheapest;
+        }
+        return total;
+      }
+
+      // Hard cap on per-swap quality loss. Anything worse never enters
+      // the list (construction-time skip) AND breaks traversal as a
+      // defence-in-depth safety net.
+      const SCORE_LOSS_LIMIT = 1.5;
+
+      // Step 2: build the precomputed swap list at FIXED_BP.
+      // Augmented with DYNAMIC price-quality clustering — tier indices
+      // emerge from real prices + intrinsic scores per group, never
+      // hardcoded.
+      function buildSwapList(currentAlloc) {
+        const swaps = [];
         for (const g of shiftedGroups) {
           if (g.slots <= 0) continue;
-          const groupAlloc = updated.get(g.key);
+          const groupAlloc = currentAlloc.get(g.key);
           if (!groupAlloc || groupAlloc.size === 0) continue;
           const gctx = groupCtx.get(g.key);
-          const premiumCount = premiumCountIn(groupAlloc, g.members);
 
-          // Find weakest filled (score if we remove one copy).
-          let weakestM = null;
-          let weakestScore = Infinity;
+          // ── Dynamic price-quality profiling ─────────────
+          // Each member is scored at FIXED_BP with NEUTRAL context
+          // (alreadyPicked=0, premium=0) so the clustering reflects
+          // intrinsic value, not current state.
+          const profile = g.members.map(m => {
+            const priceEur = m.cand.priceEur ?? 0;
+            const neutralScore = candidateScore(
+              m, FIXED_BP, 0, false, 0, g.slots, gctx
+            );
+            return { m, priceEur, neutralScore };
+          });
+          const minNS = Math.min(...profile.map(x => x.neutralScore));
+          const maxNS = Math.max(...profile.map(x => x.neutralScore));
+          const nsRange = Math.max(0.001, maxNS - minNS);
+          const maxPriceInPool = Math.max(...profile.map(x => x.priceEur));
+          const logMaxPrice = Math.log(maxPriceInPool + 1) || 1;
+          for (const p of profile) {
+            p.priceNorm = Math.log(p.priceEur + 1) / logMaxPrice;
+            p.scoreNorm = (p.neutralScore - minNS) / nsRange;
+            p.efficiency = p.scoreNorm / (p.priceNorm + 1e-3);
+          }
+
+          // ── Cluster by price gaps + efficiency drops ─────
+          // Sorted ascending by price; new cluster starts on
+          //   priceJump > 30%   OR   efficiency drop > 20%.
+          // No hardcoded tier ladder.
+          const sortedProfile = profile.slice().sort((a, b) =>
+            a.priceEur - b.priceEur
+            || a.m.cand.name.localeCompare(b.m.cand.name)
+          );
+          const tierIndexByName = new Map();
+          const efficiencyByName = new Map();
+          let dynamicTier = 0;
+          let prevPrice = null;
+          let prevEff = null;
+          for (const p of sortedProfile) {
+            if (prevPrice !== null) {
+              const priceJump = (p.priceEur - prevPrice) / Math.max(0.01, prevPrice);
+              const effDrop = (prevEff !== null && prevEff > 0)
+                ? (prevEff - p.efficiency) / prevEff : 0;
+              if (priceJump > 0.30 || effDrop > 0.20) dynamicTier += 1;
+            }
+            tierIndexByName.set(p.m.cand.name, dynamicTier);
+            efficiencyByName.set(p.m.cand.name, p.efficiency);
+            prevPrice = p.priceEur;
+            prevEff = p.efficiency;
+          }
+
+          // Baseline state at FIXED_BP — used for per-swap scoring.
+          let totalPremium = 0;
+          const dynamicTierCounts = new Map();
           for (const m of g.members) {
             const cnt = groupAlloc.get(m.cand.name) || 0;
             if (cnt <= 0) continue;
-            const adjPremium = (m.tier === 3) ? premiumCount - 1 : premiumCount;
-            const sc = candidateScore(
-              m, bpVal, cnt - 1, false, adjPremium, g.slots, gctx
-            );
-            if (
-              sc < weakestScore
-              || (sc === weakestScore && weakestM
-                  && m.cand.name.localeCompare(weakestM.cand.name) > 0)
-            ) {
-              weakestM = m;
-              weakestScore = sc;
-            }
+            const ti = tierIndexByName.get(m.cand.name);
+            dynamicTierCounts.set(ti, (dynamicTierCounts.get(ti) || 0) + cnt);
+            if (m.tier === 3) totalPremium += cnt;
           }
-          if (!weakestM) continue;
 
-          // Find best alternative (different name, cap allows).
-          // Apply budget-momentum bonus: when bp is rising, slightly
-          // favour swaps to a higher tier; when falling, favour lower.
-          const adjPremiumIfSwap = (weakestM.tier === 3)
-            ? premiumCount - 1 : premiumCount;
-          let bestAltM = null;
-          let bestAltScore = -Infinity;
-          for (const m of g.members) {
-            if (m.cand.name === weakestM.cand.name) continue;
-            if (remainingCapAt(m.cand.name, updated) <= 0) continue;
-            const cnt = groupAlloc.get(m.cand.name) || 0;
-            const baseSc = candidateScore(
-              m, bpVal, cnt, false, adjPremiumIfSwap, g.slots, gctx
+          for (const fromM of g.members) {
+            const fromCnt = groupAlloc.get(fromM.cand.name) || 0;
+            if (fromCnt <= 0) continue;
+            const fromPrice = fromM.cand.priceEur ?? 0;
+            const fromTierIdx = tierIndexByName.get(fromM.cand.name);
+            const initialFromTierCount = dynamicTierCounts.get(fromTierIdx) || 0;
+            const fromEfficiency = efficiencyByName.get(fromM.cand.name) ?? 0;
+            const premiumAfterRemove = fromM.tier === 3
+              ? totalPremium - 1 : totalPremium;
+            const scoreFrom = candidateScore(
+              fromM, FIXED_BP, fromCnt - 1, false,
+              premiumAfterRemove, g.slots, gctx
             );
-            const tierDelta = (m.tier ?? 0) - (weakestM.tier ?? 0);
-            const momentumBonus =
-              direction !== 0 && Math.sign(tierDelta) === direction
-                ? 0.02 : 0;
-            const sc = baseSc + momentumBonus;
-            if (
-              sc > bestAltScore
-              || (sc === bestAltScore && bestAltM
-                  && m.cand.name.localeCompare(bestAltM.cand.name) < 0)
-            ) {
-              bestAltM = m;
-              bestAltScore = sc;
+
+            for (const toM of g.members) {
+              if (toM.cand.name === fromM.cand.name) continue;
+              const toPrice = toM.cand.priceEur ?? 0;
+              const priceGain = fromPrice - toPrice;
+              if (priceGain <= 0) continue;       // never PAY MORE for a downgrade
+
+              const toCntBaseline = groupAlloc.get(toM.cand.name) || 0;
+              const premiumAfterSwap = toM.tier === 3
+                ? premiumAfterRemove + 1 : premiumAfterRemove;
+              const scoreTo = candidateScore(
+                toM, FIXED_BP, toCntBaseline, false,
+                premiumAfterSwap, g.slots, gctx
+              );
+              const scoreLoss = scoreFrom - scoreTo;
+              if (scoreLoss > SCORE_LOSS_LIMIT) continue;     // soft stop, build-time
+
+              const baseValue = priceGain - lambda * scoreLoss;
+
+              // ── Tier-smoothness factor ──────────────────
+              // Penalises skipping intermediate clusters. Adjacent or
+              // same-cluster swaps are unaffected.
+              const toTierIdx = tierIndexByName.get(toM.cand.name);
+              const tierDistance = fromTierIdx - toTierIdx;
+              const tierSmoothFactor =
+                1 / (1 + Math.max(0, tierDistance - 1) * 0.5);
+
+              // ── Skip-strong-efficiency penalty (optional) ─
+              // If a candidate sits in a cluster between fromM and toM
+              // and offers efficiency close to fromM's, applying this
+              // direct swap would skip a good intermediate option.
+              let skipPenalty = 1;
+              if (tierDistance > 1) {
+                for (const p of profile) {
+                  const ti = tierIndexByName.get(p.m.cand.name);
+                  if (ti <= toTierIdx || ti >= fromTierIdx) continue;
+                  if (p.efficiency > fromEfficiency * 0.9) {
+                    skipPenalty = 0.8;
+                    break;
+                  }
+                }
+              }
+
+              // ── Construction-time duplicate-flooding factor ─
+              // Uses BASELINE count of toM only (no fake future
+              // prediction). The runtime equivalent is reapplied during
+              // prefix traversal.
+              const dimFactor = 1 / (1 + toCntBaseline * 0.30);
+
+              // One entry per copy of fromM that could be replaced.
+              for (let copyIdx = 0; copyIdx < fromCnt; copyIdx++) {
+                // ── Smooth tier-decay collapse factor ─────
+                // Replaces the binary 0.7 last-copy penalty with a
+                // continuous decay: the more copies of fromM's dynamic
+                // tier survive after this swap, the closer to 1.0.
+                const remainingTierCopies = initialFromTierCount - copyIdx;
+                const tierFactor =
+                  0.85 + 0.15 * (remainingTierCopies / Math.max(1, initialFromTierCount));
+
+                const swapValue =
+                  baseValue * tierSmoothFactor * skipPenalty * dimFactor * tierFactor;
+
+                swaps.push({
+                  groupKey: g.key,
+                  fromName: fromM.cand.name,
+                  toName: toM.cand.name,
+                  fromMember: fromM,
+                  toMember: toM,
+                  copyIdx,
+                  priceGain,
+                  scoreLoss,
+                  swapValue,
+                });
+              }
             }
-          }
-          if (!bestAltM) continue;
-
-          // Stacking discount — slightly easier to add a copy of a card
-          // that's already part of the allocation, so 1→2 transitions
-          // happen smoothly.
-          const alreadyHas = (groupAlloc.get(bestAltM.cand.name) || 0) > 0;
-          const effectiveThreshold = alreadyHas ? threshold * 0.7 : threshold;
-
-          if (bestAltScore > weakestScore + effectiveThreshold) {
-            const wname = weakestM.cand.name;
-            const aname = bestAltM.cand.name;
-            const wnext = (groupAlloc.get(wname) || 0) - 1;
-            if (wnext <= 0) groupAlloc.delete(wname);
-            else groupAlloc.set(wname, wnext);
-            groupAlloc.set(aname, (groupAlloc.get(aname) || 0) + 1);
           }
         }
-        return updated;
+
+        swaps.sort((a, b) =>
+          b.swapValue - a.swapValue
+          || a.fromName.localeCompare(b.fromName)
+          || a.toName.localeCompare(b.toName)
+          || a.copyIdx - b.copyIdx
+        );
+        return swaps;
       }
 
-      // Walk bp from 0 → target in 0.05 steps. Each step carries the
-      // previous bp so `singleStepUpdate` can compute the budget
-      // direction for the momentum bonus.
-      const targetBp = budgetPressureValue;
-      let alloc = runSlotAllocation(0);
-      const steps = Math.max(3, Math.ceil(Math.abs(targetBp) / 0.05));
-      let prevBp = 0;
-      for (let i = 1; i <= steps; i++) {
-        const bp_i = (targetBp * i) / steps;
-        alloc = singleStepUpdate(alloc, bp_i, prevBp);
-        prevBp = bp_i;
+      // Step 3: budget mapping — decide how far along the list to walk.
+      if (targetBp < FIXED_BP) {
+        const swapList = buildSwapList(alloc);
+        const baselineCost = computeAllocCost(alloc);
+        const minCost      = computeMinAllocCost(alloc);
+        // targetCost = lerp(baselineCost, minCost, 1 − targetBp)
+        // bp = 0.95 → targetCost = baselineCost   (no swaps needed)
+        // bp = 0.00 → targetCost = minCost        (all worthwhile swaps)
+        const targetCost = baselineCost
+                         + (minCost - baselineCost) * (1 - targetBp);
+
+        // Step 4: apply prefix until the cost target is reached.
+        let currentCost = baselineCost;
+        for (const swap of swapList) {
+          if (currentCost <= targetCost) break;
+          // Soft stop — defence-in-depth against any unusually large
+          // score-loss entry that survived construction.
+          if (swap.scoreLoss > SCORE_LOSS_LIMIT) break;
+
+          const ga = alloc.get(swap.groupKey);
+          if (!ga) continue;
+          const fromCnt = ga.get(swap.fromName) || 0;
+          if (fromCnt <= 0) continue;                        // already converted
+          if (remainingCapAt(swap.toName, alloc) <= 0) continue;
+
+          // Runtime duplicate penalty — recomputes dimFactor against
+          // the LIVE count of toName at apply time. This is the
+          // "no-fake-future-prediction" companion: the construction-
+          // time factor used baseline counts only; runtime now reflects
+          // any earlier swaps in this same prefix walk.
+          const currentCntB = ga.get(swap.toName) || 0;
+          const runtimeFactor = 1 / (1 + currentCntB * 0.30);
+          const effectiveValue = swap.swapValue * runtimeFactor;
+          if (effectiveValue <= 0) continue;                 // not worth it now
+
+          // One-slot guarantee: each entry replaces exactly one copy.
+          if (fromCnt - 1 <= 0) ga.delete(swap.fromName);
+          else ga.set(swap.fromName, fromCnt - 1);
+          ga.set(swap.toName, (ga.get(swap.toName) || 0) + 1);
+          currentCost -= swap.priceGain;
+        }
       }
 
       // Commit the final allocation to breakdown / dualAllocByName /
@@ -1644,8 +1816,9 @@ export function suggestLands(mainboard, options = {}) {
 
       // Overflow safety net — if caps blocked allocation in some groups,
       // dump remaining slots into uncapped pair-specific candidates by
-      // best score (deterministic by name).
-      let remaining = n - allocatedTotal;
+      // best score (deterministic by name). `n` is fractional now, so
+      // round once for the integer comparison.
+      let remaining = Math.round(n) - allocatedTotal;
       if (remaining > 0) {
         const fallback = biased
           .filter(b => b.cand._kind === 'pair')
@@ -1662,7 +1835,8 @@ export function suggestLands(mainboard, options = {}) {
         }
       }
 
-      used += n;
+      // (`used` is incremented at the top of the loop now — the share
+      // is continuous and tracked before the pair body runs.)
     });
   } else if (constraintKey === 'basics') {
     // Extreme constraint: no duals/fixers — fold the dual budget back
