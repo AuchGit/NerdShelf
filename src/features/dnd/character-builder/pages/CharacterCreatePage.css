@@ -5,4 +5,17 @@
   .dnd-create-review-grid {
     grid-template-columns: 1fr !important;
   }
+  /* Wizard page chrome eats 64px of horizontal padding on desktop;
+     reclaim that on phones so 360px viewports breathe. */
+  .dnd-create-content {
+    padding: 14px 12px !important;
+  }
+  .dnd-create-header,
+  .dnd-create-footer {
+    padding: 10px 12px !important;
+  }
+  .dnd-create-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
 }

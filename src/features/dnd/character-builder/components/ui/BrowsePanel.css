@@ -1,0 +1,46 @@
+/* BrowsePanel mobile responsive layer.
+   Inline styles in the .jsx remain canonical for desktop; rules here only
+   fire at ≤768px and override the inline grid/height with !important.
+   Desktop (incl. default Tauri 1280×800) is untouched. */
+
+@media (max-width: 768px) {
+  /* Container: stack list above details. Drop the fixed-height clamp so
+     the page itself scrolls instead of two nested scroll containers. */
+  .dnd-browse-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+
+  /* Left (list) — capped scroll area so the user can quickly skim/search
+     the list, then scroll the page to see details below. */
+  .dnd-browse-left {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    max-height: 42vh;
+    width: 100% !important;
+  }
+
+  /* Right (detail panel) — full width, natural height, no internal scroll. */
+  .dnd-browse-right {
+    width: 100% !important;
+    overflow: visible !important;
+  }
+  .dnd-browse-detail-scroll {
+    overflow: visible !important;
+    padding: 14px !important;
+  }
+  .dnd-browse-detail-footer {
+    /* Sticky select button so it remains reachable while scrolling details. */
+    position: sticky;
+    bottom: 0;
+    padding: 10px 12px !important;
+  }
+
+  /* Inner filter selects can squeeze too tight on 360px — let them wrap. */
+  .dnd-browse-filter-row {
+    flex-wrap: wrap;
+  }
+}

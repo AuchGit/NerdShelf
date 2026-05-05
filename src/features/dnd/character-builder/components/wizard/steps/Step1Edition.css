@@ -1,0 +1,13 @@
+/* Step1Edition mobile responsive layer. Desktop unchanged. */
+
+@media (max-width: 768px) {
+  .dnd-edition-grid {
+    grid-template-columns: 1fr !important;   /* stack the two cards */
+    gap: 12px !important;
+  }
+  .dnd-edition-card {
+    padding: 18px !important;                /* 28→18 frees ~20px horizontal */
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}

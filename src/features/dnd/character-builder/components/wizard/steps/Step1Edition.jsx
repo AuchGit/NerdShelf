@@ -1,3 +1,5 @@
+import './Step1Edition.css'
+
 export default function Step1Edition({ character, updateCharacter }) {
   const editions = [
     {
@@ -24,12 +26,13 @@ export default function Step1Edition({ character, updateCharacter }) {
         Du kannst die Edition später nicht mehr ändern.
       </p>
 
-      <div style={styles.grid}>
+      <div className="dnd-edition-grid" style={styles.grid}>
         {editions.map(edition => {
           const isSelected = character.meta.edition === edition.id
           return (
             <div
               key={edition.id}
+              className="dnd-edition-card"
               style={{
                 ...styles.card,
                 ...(isSelected ? styles.cardSelected : {}),

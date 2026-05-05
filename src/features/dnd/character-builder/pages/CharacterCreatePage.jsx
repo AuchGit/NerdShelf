@@ -316,7 +316,7 @@ export default function CharacterCreatePage({ session }) {
     <div style={styles.page}>
 
       {/* ── Header ── */}
-      <div style={styles.header}>
+      <div className="dnd-create-header" style={styles.header}>
         <button style={styles.backBtn} onClick={() => navigate('/')}>{t('back')}</button>
         <h1 style={styles.headerTitle}>{t('appTitle')}</h1>
         <HeaderButtons session={session} />
@@ -331,12 +331,12 @@ export default function CharacterCreatePage({ session }) {
       />
 
       {/* ── Active step ── */}
-      <div style={styles.content}>
+      <div className="dnd-create-content" style={styles.content}>
         {stepComponents[currentStep]}
       </div>
 
       {/* ── Navigation footer ── */}
-      <div style={styles.footer}>
+      <div className="dnd-create-footer" style={styles.footer}>
         <button
           style={{ ...styles.navBtn, opacity: currentStep === 0 ? 0.3 : 1 }}
           disabled={currentStep === 0}

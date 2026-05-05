@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useLanguage } from '../../lib/i18n'
+import './BrowsePanel.css'
 
 export default function BrowsePanel({
   items,
@@ -42,9 +43,9 @@ export default function BrowsePanel({
 
   return (
     <div style={styles.outer}>
-      <div style={styles.container}>
+      <div className="dnd-browse-container" style={styles.container}>
         {/* Linke Spalte */}
-        <div style={styles.left}>
+        <div className="dnd-browse-left" style={styles.left}>
           <div style={styles.leftTop}>
             <input
               style={styles.search}
@@ -54,7 +55,7 @@ export default function BrowsePanel({
               autoFocus
             />
             {filters.length > 0 && (
-              <div style={styles.filterRow}>
+              <div className="dnd-browse-filter-row" style={styles.filterRow}>
                 {filters.map(f => (
                   <select
                     key={f.key}
@@ -97,13 +98,13 @@ export default function BrowsePanel({
         </div>
 
         {/* Rechte Spalte */}
-        <div style={styles.right}>
+        <div className="dnd-browse-right" style={styles.right}>
           {selectedDetail ? (
             <>
-              <div style={styles.detailScroll}>
+              <div className="dnd-browse-detail-scroll" style={styles.detailScroll}>
                 {renderDetail(selectedDetail)}
               </div>
-              <div style={styles.detailFooter}>
+              <div className="dnd-browse-detail-footer" style={styles.detailFooter}>
                 <button
                   style={{
                     ...styles.selectBtn,
