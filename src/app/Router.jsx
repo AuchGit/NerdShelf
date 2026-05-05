@@ -35,7 +35,7 @@ function RootRedirect() {
 
 export default function Router() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <RouteTracker />
       <Routes>
         <Route element={<Layout />}>

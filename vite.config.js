@@ -9,10 +9,16 @@ const DEV_PORT = 5283
 // Tauri's `beforeBuildCommand` runs `npm run build` (no mode), so the desktop
 // build is byte-identical to before — no service worker, no manifest injection.
 // https://vite.dev/config/
+// PWA is deployed to GitHub Pages at https://<user>.github.io/NerdShelf/, so
+// asset URLs must be prefixed with the repo name. Override via PWA_BASE if
+// hosting elsewhere (e.g. PWA_BASE=/ for a custom apex domain or Netlify).
+const PWA_BASE = process.env.PWA_BASE ?? '/NerdShelf/'
+
 export default defineConfig(async ({ mode }) => {
   const plugins = [react()]
+  const isPwa = mode === 'pwa'
 
-  if (mode === 'pwa') {
+  if (isPwa) {
     const { VitePWA } = await import('vite-plugin-pwa')
     plugins.push(
       VitePWA({
@@ -24,9 +30,11 @@ export default defineConfig(async ({ mode }) => {
           // Don't precache the bulky JSON datasets in /public/data — let them
           // be runtime-cached on first access instead.
           globIgnores: ['**/data/**'],
+          // SPA fallback so deep links resolve to index.html offline.
+          navigateFallback: `${PWA_BASE}index.html`,
           runtimeCaching: [
             {
-              urlPattern: ({ url }) => url.pathname.startsWith('/data/'),
+              urlPattern: ({ url }) => url.pathname.includes('/data/'),
               handler: 'StaleWhileRevalidate',
               options: { cacheName: 'nerdshelf-data' },
             },
@@ -50,13 +58,13 @@ export default defineConfig(async ({ mode }) => {
           theme_color: '#1a1a1a',
           background_color: '#1a1a1a',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: PWA_BASE,
+          scope: PWA_BASE,
           icons: [
-            { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-            { src: '/icons/icon-128.png', sizes: '128x128', type: 'image/png' },
-            { src: '/icons/icon-256.png', sizes: '256x256', type: 'image/png' },
-            { src: '/icons/icon-310.png', sizes: '310x310', type: 'image/png' },
+            { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: 'icons/icon-128.png', sizes: '128x128', type: 'image/png' },
+            { src: 'icons/icon-256.png', sizes: '256x256', type: 'image/png' },
+            { src: 'icons/icon-310.png', sizes: '310x310', type: 'image/png' },
           ],
         },
       })
@@ -64,6 +72,9 @@ export default defineConfig(async ({ mode }) => {
   }
 
   return {
+    // Tauri loads from `tauri://localhost`, so it MUST stay at '/'. PWA on
+    // GitHub Pages needs the repo subpath prefix.
+    base: isPwa ? PWA_BASE : '/',
     plugins,
     server: {
       port: DEV_PORT,
