@@ -1,0 +1,71 @@
+/* CharacterSheetPage mobile responsive layer.
+   These rules ONLY fire at ≤768px; desktop (incl. default Tauri 1280×800)
+   sees zero CSS from this file. Inline styles in the .jsx remain canonical
+   for desktop. */
+
+@media (max-width: 768px) {
+  /* Body: stack sidebar above main instead of side-by-side. Allow normal
+     page scrolling instead of internal sidebar/main double-scroll. */
+  .dnd-sheet-body {
+    flex-direction: column !important;
+    overflow: visible !important;
+  }
+  .dnd-sheet-sidebar {
+    width: 100% !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 10px 12px !important;
+  }
+  .dnd-sheet-main {
+    overflow: visible !important;
+  }
+  /* The portrait at 150×150 dominates the small-screen accordion stack — shrink. */
+  .dnd-sheet-sidebar .dnd-sheet-portrait {
+    width: 96px !important;
+    height: 96px !important;
+  }
+  /* Tab body padding eats horizontal space on phones. */
+  .dnd-sheet-tab-body {
+    padding: 14px 12px !important;
+  }
+}
+
+/* ─── Mobile-only collapsible SideSection ──────────────────────────────
+   Rendered as <details> only on mobile (see CharacterSheetPage.jsx).
+   Desktop uses the original <div> path and never sees these styles. */
+.dnd-side-acc {
+  margin-bottom: 10px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: 8px;
+  background: var(--bg-elevated, transparent);
+  overflow: hidden;
+}
+.dnd-side-acc > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 14px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.dnd-side-acc > summary::-webkit-details-marker { display: none; }
+.dnd-side-acc > summary::after {
+  content: '▾';
+  color: var(--text-muted);
+  font-size: 12px;
+  transition: transform 150ms ease;
+}
+.dnd-side-acc[open] > summary::after { transform: rotate(180deg); }
+.dnd-side-acc-body {
+  padding: 4px 14px 14px;
+}

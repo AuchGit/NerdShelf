@@ -6,6 +6,7 @@ import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
 import HeaderButtons from '../components/ui/HeaderButtons'
+import './CharacterCreatePage.css'
 import StepIndicator        from '../components/wizard/StepIndicator'
 import Step1Edition         from '../components/wizard/steps/Step1Edition'
 import Step2BasicInfo       from '../components/wizard/steps/Step2BasicInfo'
@@ -413,7 +414,7 @@ function ReviewStep({ character, t }) {
   return (
     <div style={{ maxWidth: 700, margin: '0 auto' }}>
       <h2 style={{ color: 'var(--accent)', marginBottom: 20 }}>{t('reviewTitle')}</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div className="dnd-create-review-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {items.map(([label, value]) => (
           <div
             key={label}

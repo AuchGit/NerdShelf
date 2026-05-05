@@ -11,6 +11,8 @@ import EntryRenderer from '../components/ui/EntryRenderer'
 import HeaderButtons from '../components/ui/HeaderButtons'
 import CustomEditModal from '../components/ui/CustomEditModal'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
+import useWindowWidth from '../../../../shared/hooks/useWindowWidth'
+import './CharacterSheetPage.css'
 
 // ── Hilfsfunktionen ─────────────────────────────────────────
 
@@ -381,13 +383,13 @@ export default function CharacterSheetPage({ session }) {
       </div>
 
       {/* ═══ BODY ═══ */}
-      <div style={S.body}>
+      <div className="dnd-sheet-body" style={S.body}>
         {/* ── SIDEBAR ── */}
-        <div style={S.sidebar}>
+        <div className="dnd-sheet-sidebar" style={S.sidebar}>
           {/* Portrait */}
           {portrait && (
             <div style={S.sidePortrait}>
-              <img src={portrait} style={S.sidePortraitImg} alt="Portrait" />
+              <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait" />
             </div>
           )}
 
@@ -500,7 +502,7 @@ export default function CharacterSheetPage({ session }) {
         </div>
 
         {/* ── MAIN CONTENT ── */}
-        <div style={S.main}>
+        <div className="dnd-sheet-main" style={S.main}>
           {/* Tab-Navigation */}
           <div style={S.tabs}>
             {TABS.map(tab => (
@@ -533,7 +535,7 @@ function OverviewTab({ character, computed, modifiers, profBonus, abilityScores,
   const totalLevel = getTotalLevel(character)
 
   return (
-    <div style={S.tabBody}>
+    <div className='dnd-sheet-tab-body' style={S.tabBody}>
       {/* ── Charakter-Identität ── */}
       <Section title="Base Information">
         <div style={S.identityGrid}>
@@ -804,7 +806,7 @@ function FeaturesTab({ character, abilityScores }) {
   const cls = character.classes[0]
 
   return (
-    <div style={S.tabBody}>
+    <div className='dnd-sheet-tab-body' style={S.tabBody}>
       {/* ── Spezies / Rasse ── */}
       <Section title="Species">
         <div style={S.featureCard}>
@@ -1068,7 +1070,7 @@ function SpellsTab({ character, computed }) {
 
   if (!hasSpellcasting && !hasAnySpells) {
     return (
-      <div style={S.tabBody}>
+      <div className='dnd-sheet-tab-body' style={S.tabBody}>
         <div style={S.emptyState}>
           <div style={S.emptyTitle}>No Spellcasting</div>
           <div style={S.emptyDesc}>
@@ -1080,7 +1082,7 @@ function SpellsTab({ character, computed }) {
   }
 
   return (
-    <div style={S.tabBody}>
+    <div className='dnd-sheet-tab-body' style={S.tabBody}>
       {/* ── Spellcasting Stats ── */}
       {computed?.spellcasting && Object.keys(computed.spellcasting).length > 0 && (
         <Section title="Spellcasting Overview">
@@ -1231,7 +1233,7 @@ function InventoryTab({ character }) {
     + (currency.sp || 0) * 0.1 + (currency.cp || 0) * 0.01
 
   return (
-    <div style={S.tabBody}>
+    <div className='dnd-sheet-tab-body' style={S.tabBody}>
       <Section title="Currency">
         <div style={S.currencyRow}>
           {[
@@ -1318,7 +1320,7 @@ function PersonalityTab({ character }) {
   ]
 
   return (
-    <div style={S.tabBody}>
+    <div className='dnd-sheet-tab-body' style={S.tabBody}>
       {/* ── Aussehen ── */}
       <Section title="Appearance">
         <div style={S.appearanceSection}>
@@ -1406,11 +1408,23 @@ function Section({ title, children }) {
 }
 
 function SideSection({ title, children }) {
+  // On mobile (≤768px) render as a native <details> accordion (default
+  // closed, tap to expand). On desktop / Tauri the original <div> renders
+  // unchanged so the sheet is pixel-identical to before.
+  const { mode } = useWindowWidth()
+  if (mode !== 'hidden') {
+    return (
+      <div style={S.sideSection}>
+        <div style={S.sideSectionTitle}>{title}</div>
+        {children}
+      </div>
+    )
+  }
   return (
-    <div style={S.sideSection}>
-      <div style={S.sideSectionTitle}>{title}</div>
-      {children}
-    </div>
+    <details className="dnd-side-acc">
+      <summary>{title}</summary>
+      <div className="dnd-side-acc-body">{children}</div>
+    </details>
   )
 }
 
