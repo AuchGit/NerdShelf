@@ -16,6 +16,7 @@ import DeckAnalyzerModal from './components/DeckAnalyzerModal';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
+import { useMtgInventory } from './hooks/useMtgInventory';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
 import './MtgDeckBuilder.css';
@@ -105,6 +106,20 @@ export default function MtgDeckBuilderApp() {
   // ── Favorites ───────────────────────────────────────
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const favs = useFavorites();
+
+  // ── Inventory (shared across NerdShelf domains) ────────
+  // The shared inventory hook is scoped to domain='mtg'; wh40k's hook uses
+  // its own scope, so the two collections are isolated.
+  const inv = useMtgInventory();
+  const [showOwnedOnly, setShowOwnedOnly] = useState(false);
+  const incOwnedCard = useCallback(
+    (card) => inv.adjustQuantity(card.id, +1, card.name || ''),
+    [inv]
+  );
+  const decOwnedCard = useCallback(
+    (card) => inv.adjustQuantity(card.id, -1, card.name || ''),
+    [inv]
+  );
   // Trigger fetch of full favorite cards when toggle is enabled
   useEffect(() => {
     if (showFavoritesOnly && favs.favoriteCards === null) {
@@ -147,11 +162,23 @@ export default function MtgDeckBuilderApp() {
       })
     : null;
 
-  const cards      = showingFavs ? favoritesFiltered : scryfall.cards;
+  // Owned-only is a final client-side filter applied on top of either the
+  // Scryfall results or the favorites view. It composes with both modes —
+  // toggling both "favorites" and "owned" yields owned + favorited cards.
+  // TODO(mtg-collection): a dedicated /mtg/collection page that fetches the
+  // full Scryfall data for every owned card (mirroring useFavorites's
+  // loadFavoriteCards) would let users browse their collection without an
+  // active Scryfall search.
+  const baseCards  = showingFavs ? favoritesFiltered : scryfall.cards;
+  const cards      = showOwnedOnly
+    ? (baseCards || []).filter(c => inv.isOwned(c.id))
+    : baseCards;
   const loading    = showingFavs ? favs.loading      : scryfall.loading;
   const error      = showingFavs ? favs.error        : scryfall.error;
-  const hasMore    = showingFavs ? false             : scryfall.hasMore;
-  const totalCards = showingFavs ? (favoritesFiltered?.length ?? 0) : scryfall.totalCards;
+  const hasMore    = showingFavs || showOwnedOnly ? false : scryfall.hasMore;
+  const totalCards = showOwnedOnly
+    ? (cards?.length ?? 0)
+    : (showingFavs ? (favoritesFiltered?.length ?? 0) : scryfall.totalCards);
   const loadMore   = scryfall.loadMore;
 
   const previewCard = pinnedCard || hoveredCard;
@@ -644,6 +671,8 @@ export default function MtgDeckBuilderApp() {
                 deckFormatLabel={MTG_FORMATS.find(f => f.value === deckFormat)?.label || ''}
                 showFavoritesOnly={showFavoritesOnly}
                 setShowFavoritesOnly={setShowFavoritesOnly}
+                showOwnedOnly={showOwnedOnly}
+                setShowOwnedOnly={setShowOwnedOnly}
                 query={query}           setQuery={setQuery}
                 searchMode={searchMode} setSearchMode={setSearchMode}
                 colors={colors}         setColors={setColors}
@@ -680,6 +709,9 @@ export default function MtgDeckBuilderApp() {
                   setViewMode={setViewMode}
                   isFavorite={favs.isFavorite}
                   onToggleFavorite={favs.toggleFavorite}
+                  getOwnedQty={inv.getQuantity}
+                  onIncOwned={incOwnedCard}
+                  onDecOwned={decOwnedCard}
                 />
               ) : (
                 <DeckListView

@@ -35,6 +35,7 @@ function FaceImage({ face, alt, onClick, className = '' }) {
 export default function CardItem({
   card, onAdd, onAddSide, deckCount, onHover, onHoverEnd, onPin,
   isFavorite = false, onToggleFavorite,
+  ownedQty = 0, onIncOwned, onDecOwned,
 }) {
   const layout = getCardLayout(card);
   const faces  = getCardFaces(card);
@@ -70,10 +71,22 @@ export default function CardItem({
     onAdd?.(card);
   };
 
+  const handleIncOwnedClick = (e) => {
+    e.stopPropagation();
+    onIncOwned?.(card);
+  };
+
+  const handleDecOwnedClick = (e) => {
+    e.stopPropagation();
+    onDecOwned?.(card);
+  };
+
   const priceEur = getCardPriceEur(card);
   const priceLabel = priceEur != null ? formatEur(priceEur) : null;
 
   // Hover overlay shared across all card layouts: stacked "+ Hinzufügen" / "+ SB"
+  // / "+ Sammlung" / "− Sammlung". Inventory buttons are gated on the handlers
+  // being supplied so non-builder views (favorites/etc.) stay click-clean.
   const hoverOverlay = (
     <div className="card-hover-overlay">
       <button
@@ -92,6 +105,26 @@ export default function CardItem({
           title="Direkt ins Sideboard"
         >
           + Sideboard
+        </button>
+      )}
+      {onIncOwned && (
+        <button
+          type="button"
+          className="card-hover-btn card-hover-btn--inv"
+          onClick={handleIncOwnedClick}
+          title="Eine Kopie zur Sammlung hinzufügen"
+        >
+          + Sammlung
+        </button>
+      )}
+      {onDecOwned && ownedQty > 0 && (
+        <button
+          type="button"
+          className="card-hover-btn card-hover-btn--inv"
+          onClick={handleDecOwnedClick}
+          title="Eine Kopie aus der Sammlung entfernen"
+        >
+          − Sammlung
         </button>
       )}
     </div>
@@ -135,6 +168,7 @@ export default function CardItem({
             </div>
           )}
           {deckCount > 0 && <span className="deck-badge">{deckCount}</span>}
+          {ownedQty > 0 && <span className="owned-badge" title={`${ownedQty} in deiner Sammlung`}>◉ {ownedQty}</span>}
           {onToggleFavorite && (
             <button
               type="button"
@@ -167,6 +201,7 @@ export default function CardItem({
             </div>
           )}
           {deckCount > 0 && <span className="deck-badge">{deckCount}</span>}
+          {ownedQty > 0 && <span className="owned-badge" title={`${ownedQty} in deiner Sammlung`}>◉ {ownedQty}</span>}
           {onToggleFavorite && (
             <button
               type="button"
@@ -194,6 +229,7 @@ export default function CardItem({
             onClick={handleFaceContext(1)}
           />
           {deckCount > 0 && <span className="deck-badge">{deckCount}</span>}
+          {ownedQty > 0 && <span className="owned-badge" title={`${ownedQty} in deiner Sammlung`}>◉ {ownedQty}</span>}
           {onToggleFavorite && (
             <button
               type="button"

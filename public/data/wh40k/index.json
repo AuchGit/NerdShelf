@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "current": {
+    "edition": "10e",
+    "version": "v1"
+  },
+  "versions": [
+    {
+      "edition": "10e",
+      "version": "v1",
+      "generatedAt": "2026-05-09T21:06:11.179Z"
+    }
+  ]
+}

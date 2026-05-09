@@ -496,3 +496,33 @@
 
 .status-count { font-size: 0.78rem; color: var(--text-lo); }
 .status-empty { font-size: 0.78rem; color: var(--r-color); opacity: 0.7; }
+
+/* Inventory pip — visual sibling of .fav-pip, additive (does not modify the
+   shared base rules above so the existing pips remain byte-identical). */
+.inv-pip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  font-family: 'Cinzel', serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.45;
+  transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
+  background: var(--bg-card);
+  padding: 0;
+  color: var(--color-success);
+  border-color: var(--color-success);
+  line-height: 1;
+}
+.color-group .inv-pip { margin-left: 0.25rem; }
+.inv-pip:hover  { opacity: 0.75; }
+.inv-pip.active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  box-shadow: 0 0 7px currentColor;
+}

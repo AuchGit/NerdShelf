@@ -1,0 +1,157 @@
+[
+  {
+    "id": "adeptus-custodes",
+    "name": "Adeptus Custodes",
+    "shortName": "Custodes",
+    "alignment": "imperium",
+    "color": "#c8a74a",
+    "icon": "✦",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS CUSTODES"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "aeldari",
+    "name": "Aeldari",
+    "shortName": "Aeldari",
+    "alignment": "xenos",
+    "color": "#4a8aa8",
+    "icon": "✧",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "AELDARI"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "astra-militarum",
+    "name": "Astra Militarum",
+    "shortName": "Guard",
+    "alignment": "imperium",
+    "color": "#6b8e23",
+    "icon": "⚔",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ASTRA MILITARUM"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "chaos-space-marines",
+    "name": "Chaos Space Marines",
+    "shortName": "CSM",
+    "alignment": "chaos",
+    "color": "#9c2a2a",
+    "icon": "☠",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "CHAOS",
+      "HERETIC ASTARTES"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "death-guard",
+    "name": "Death Guard",
+    "shortName": "Death Guard",
+    "alignment": "chaos",
+    "color": "#7a8c4a",
+    "icon": "✺",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "CHAOS",
+      "DEATH GUARD"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "necrons",
+    "name": "Necrons",
+    "shortName": "Necrons",
+    "alignment": "xenos",
+    "color": "#3a8a4a",
+    "icon": "◆",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "NECRONS"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "orks",
+    "name": "Orks",
+    "shortName": "Orks",
+    "alignment": "xenos",
+    "color": "#6b9c2a",
+    "icon": "▲",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "ORKS"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "space-marines",
+    "name": "Space Marines",
+    "shortName": "Space Marines",
+    "alignment": "imperium",
+    "color": "#4a6fa5",
+    "icon": "Ω",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "tau-empire",
+    "name": "T'au Empire",
+    "shortName": "T'au",
+    "alignment": "xenos",
+    "color": "#c87a3a",
+    "icon": "◉",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "T'AU EMPIRE"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "tyranids",
+    "name": "Tyranids",
+    "shortName": "Tyranids",
+    "alignment": "xenos",
+    "color": "#8a4a8a",
+    "icon": "◈",
+    "armyRuleIds": [],
+    "factionKeywords": [
+      "TYRANIDS"
+    ],
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

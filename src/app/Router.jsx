@@ -5,6 +5,7 @@ import Layout from './Layout';
 import DndCharacterApp from '../features/dnd/character-builder/DndCharacterApp';
 import MtgDashboard from '../features/mtg/deck-builder/MtgDashboard';
 import MtgDeckBuilderApp from '../features/mtg/deck-builder/MtgDeckBuilderApp';
+import Wh40kApp from '../features/wh40k/Wh40kApp';
 
 const LAST_ROUTE_KEY = 'nerdshelf:lastRoute';
 
@@ -44,6 +45,7 @@ export default function Router() {
           <Route path="/mtg" element={<MtgDashboard />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
           <Route path="/mtg/deck/:deckId" element={<MtgDeckBuilderApp />} />
+          <Route path="/wh40k/*" element={<Wh40kApp />} />
         </Route>
       </Routes>
     </BrowserRouter>

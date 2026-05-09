@@ -1,0 +1,156 @@
+[
+  {
+    "id": "unit-adeptus-custodes--custodian-guard--composition",
+    "unitId": "unit-adeptus-custodes--custodian-guard",
+    "text": "4 models",
+    "minModels": 4,
+    "maxModels": 4
+  },
+  {
+    "id": "unit-adeptus-custodes--shield-captain--composition",
+    "unitId": "unit-adeptus-custodes--shield-captain",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-aeldari--farseer--composition",
+    "unitId": "unit-aeldari--farseer",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-aeldari--guardian-defenders--composition",
+    "unitId": "unit-aeldari--guardian-defenders",
+    "text": "10 models",
+    "minModels": 10,
+    "maxModels": 10
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops--composition",
+    "unitId": "unit-astra-militarum--cadian-shock-troops",
+    "text": "10 models",
+    "minModels": 10,
+    "maxModels": 10
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank--composition",
+    "unitId": "unit-astra-militarum--leman-russ-battle-tank",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-chaos-space-marines--chaos-lord--composition",
+    "unitId": "unit-chaos-space-marines--chaos-lord",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--composition",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "text": "5 models",
+    "minModels": 5,
+    "maxModels": 5
+  },
+  {
+    "id": "unit-death-guard--plague-marines--composition",
+    "unitId": "unit-death-guard--plague-marines",
+    "text": "5 models",
+    "minModels": 5,
+    "maxModels": 5
+  },
+  {
+    "id": "unit-necrons--canoptek-doomstalker--composition",
+    "unitId": "unit-necrons--canoptek-doomstalker",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-necrons--necron-warriors--composition",
+    "unitId": "unit-necrons--necron-warriors",
+    "text": "10 models",
+    "minModels": 10,
+    "maxModels": 10
+  },
+  {
+    "id": "unit-necrons--overlord--composition",
+    "unitId": "unit-necrons--overlord",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-orks--boyz--composition",
+    "unitId": "unit-orks--boyz",
+    "text": "10 models",
+    "minModels": 10,
+    "maxModels": 10
+  },
+  {
+    "id": "unit-orks--warboss--composition",
+    "unitId": "unit-orks--warboss",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-space-marines--captain--composition",
+    "unitId": "unit-space-marines--captain",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad--composition",
+    "unitId": "unit-space-marines--intercessor-squad",
+    "text": "5 models",
+    "minModels": 5,
+    "maxModels": 5
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought--composition",
+    "unitId": "unit-space-marines--redemptor-dreadnought",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--composition",
+    "unitId": "unit-space-marines--terminator-squad",
+    "text": "5 models",
+    "minModels": 5,
+    "maxModels": 5
+  },
+  {
+    "id": "unit-tau-empire--crisis-battlesuits--composition",
+    "unitId": "unit-tau-empire--crisis-battlesuits",
+    "text": "3 models",
+    "minModels": 3,
+    "maxModels": 3
+  },
+  {
+    "id": "unit-tau-empire--strike-team--composition",
+    "unitId": "unit-tau-empire--strike-team",
+    "text": "5 models",
+    "minModels": 5,
+    "maxModels": 5
+  },
+  {
+    "id": "unit-tyranids--carnifex--composition",
+    "unitId": "unit-tyranids--carnifex",
+    "text": "1 models",
+    "minModels": 1,
+    "maxModels": 1
+  },
+  {
+    "id": "unit-tyranids--termagants--composition",
+    "unitId": "unit-tyranids--termagants",
+    "text": "10 models",
+    "minModels": 10,
+    "maxModels": 10
+  }
+]

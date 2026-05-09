@@ -74,6 +74,7 @@ export default function CardSearch({
   totalCards, loading,
   deckFormatLabel,
   showFavoritesOnly = false, setShowFavoritesOnly,
+  showOwnedOnly = false, setShowOwnedOnly,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -153,6 +154,18 @@ export default function CardSearch({
               onClick={() => setShowFavoritesOnly(prev => !prev)}
               aria-pressed={showFavoritesOnly}
             >★</button>
+          )}
+
+          {/* Inventory (owned-only) toggle — pairs with the green badge on
+              cards. Filters the current result set client-side; combinable
+              with the favorites toggle. */}
+          {setShowOwnedOnly && (
+            <button
+              className={`inv-pip ${showOwnedOnly ? 'active' : ''}`}
+              title={showOwnedOnly ? 'Zeigt nur Karten aus deiner Sammlung' : 'Nur Sammlung anzeigen'}
+              onClick={() => setShowOwnedOnly(prev => !prev)}
+              aria-pressed={showOwnedOnly}
+            >◉</button>
           )}
         </div>
 

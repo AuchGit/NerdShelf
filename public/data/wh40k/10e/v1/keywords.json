@@ -1,0 +1,206 @@
+[
+  {
+    "id": "kw-adeptus-astartes",
+    "name": "ADEPTUS ASTARTES",
+    "kind": "faction",
+    "factionId": "space-marines",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-adeptus-custodes",
+    "name": "ADEPTUS CUSTODES",
+    "kind": "faction",
+    "factionId": "adeptus-custodes",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-aeldari",
+    "name": "AELDARI",
+    "kind": "faction",
+    "factionId": "aeldari",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-astra-militarum",
+    "name": "ASTRA MILITARUM",
+    "kind": "faction",
+    "factionId": "astra-militarum",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-battleline",
+    "name": "BATTLELINE",
+    "kind": "role",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-battlesuit",
+    "name": "BATTLESUIT",
+    "kind": "unit-type",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-chaos",
+    "name": "CHAOS",
+    "kind": "faction",
+    "factionId": "chaos-space-marines",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-character",
+    "name": "CHARACTER",
+    "kind": "role",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-death-guard",
+    "name": "DEATH GUARD",
+    "kind": "faction",
+    "factionId": "death-guard",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-dreadnought",
+    "name": "DREADNOUGHT",
+    "kind": "unit-type",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-heretic-astartes",
+    "name": "HERETIC ASTARTES",
+    "kind": "faction",
+    "factionId": "chaos-space-marines",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-imperium",
+    "name": "IMPERIUM",
+    "kind": "faction",
+    "factionId": "space-marines",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-infantry",
+    "name": "INFANTRY",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-monster",
+    "name": "MONSTER",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-mounted",
+    "name": "MOUNTED",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-necrons",
+    "name": "NECRONS",
+    "kind": "faction",
+    "factionId": "necrons",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-orks",
+    "name": "ORKS",
+    "kind": "faction",
+    "factionId": "orks",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-psyker",
+    "name": "PSYKER",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-tank",
+    "name": "TANK",
+    "kind": "unit-type",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-tau-empire",
+    "name": "T'AU EMPIRE",
+    "kind": "faction",
+    "factionId": "tau-empire",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-terminator",
+    "name": "TERMINATOR",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-tyranids",
+    "name": "TYRANIDS",
+    "kind": "faction",
+    "factionId": "tyranids",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-vehicle",
+    "name": "VEHICLE",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "kw-walker",
+    "name": "WALKER",
+    "kind": "general",
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

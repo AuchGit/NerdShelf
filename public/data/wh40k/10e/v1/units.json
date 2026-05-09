@@ -1,0 +1,788 @@
+[
+  {
+    "id": "unit-adeptus-custodes--custodian-guard",
+    "factionId": "adeptus-custodes",
+    "name": "Custodian Guard",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "IMPERIUM",
+      "ADEPTUS CUSTODES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS CUSTODES"
+    ],
+    "points": [
+      {
+        "models": 4,
+        "cost": 215
+      }
+    ],
+    "modelProfileIds": [
+      "unit-adeptus-custodes--custodian-guard--profile-custodian-guard"
+    ],
+    "weaponProfileIds": [
+      "unit-adeptus-custodes--custodian-guard--weapon-guardian-spear"
+    ],
+    "abilityIds": [
+      "unit-adeptus-custodes--custodian-guard--ability-aegis-of-the-emperor"
+    ],
+    "compositionId": "unit-adeptus-custodes--custodian-guard--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-adeptus-custodes--shield-captain",
+    "factionId": "adeptus-custodes",
+    "name": "Shield-Captain",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "IMPERIUM",
+      "ADEPTUS CUSTODES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS CUSTODES"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 130
+      }
+    ],
+    "modelProfileIds": [
+      "unit-adeptus-custodes--shield-captain--profile-shield-captain"
+    ],
+    "weaponProfileIds": [
+      "unit-adeptus-custodes--shield-captain--weapon-guardian-spear"
+    ],
+    "abilityIds": [
+      "unit-adeptus-custodes--shield-captain--ability-leader"
+    ],
+    "compositionId": "unit-adeptus-custodes--shield-captain--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--farseer",
+    "factionId": "aeldari",
+    "name": "Farseer",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "PSYKER",
+      "AELDARI"
+    ],
+    "factionKeywords": [
+      "AELDARI"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 80
+      }
+    ],
+    "modelProfileIds": [
+      "unit-aeldari--farseer--profile-farseer"
+    ],
+    "weaponProfileIds": [
+      "unit-aeldari--farseer--weapon-witchblade"
+    ],
+    "abilityIds": [
+      "unit-aeldari--farseer--ability-doom"
+    ],
+    "compositionId": "unit-aeldari--farseer--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--guardian-defenders",
+    "factionId": "aeldari",
+    "name": "Guardian Defenders",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "AELDARI"
+    ],
+    "factionKeywords": [
+      "AELDARI"
+    ],
+    "points": [
+      {
+        "models": 10,
+        "cost": 100
+      }
+    ],
+    "modelProfileIds": [
+      "unit-aeldari--guardian-defenders--profile-guardian-defender"
+    ],
+    "weaponProfileIds": [
+      "unit-aeldari--guardian-defenders--weapon-shuriken-catapult"
+    ],
+    "abilityIds": [
+      "unit-aeldari--guardian-defenders--ability-battle-focus"
+    ],
+    "compositionId": "unit-aeldari--guardian-defenders--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops",
+    "factionId": "astra-militarum",
+    "name": "Cadian Shock Troops",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "IMPERIUM",
+      "ASTRA MILITARUM"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ASTRA MILITARUM"
+    ],
+    "points": [
+      {
+        "models": 10,
+        "cost": 65
+      }
+    ],
+    "modelProfileIds": [
+      "unit-astra-militarum--cadian-shock-troops--profile-sergeant",
+      "unit-astra-militarum--cadian-shock-troops--profile-shock-trooper"
+    ],
+    "weaponProfileIds": [
+      "unit-astra-militarum--cadian-shock-troops--weapon-lasgun"
+    ],
+    "abilityIds": [
+      "unit-astra-militarum--cadian-shock-troops--ability-voice-of-command"
+    ],
+    "compositionId": "unit-astra-militarum--cadian-shock-troops--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank",
+    "factionId": "astra-militarum",
+    "name": "Leman Russ Battle Tank",
+    "role": "vehicle",
+    "keywords": [
+      "VEHICLE",
+      "TANK",
+      "IMPERIUM",
+      "ASTRA MILITARUM"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ASTRA MILITARUM"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 175
+      }
+    ],
+    "modelProfileIds": [
+      "unit-astra-militarum--leman-russ-battle-tank--profile-leman-russ"
+    ],
+    "weaponProfileIds": [
+      "unit-astra-militarum--leman-russ-battle-tank--weapon-battle-cannon",
+      "unit-astra-militarum--leman-russ-battle-tank--weapon-heavy-bolter"
+    ],
+    "abilityIds": [
+      "unit-astra-militarum--leman-russ-battle-tank--ability-steel-behemoth"
+    ],
+    "compositionId": "unit-astra-militarum--leman-russ-battle-tank--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--chaos-lord",
+    "factionId": "chaos-space-marines",
+    "name": "Chaos Lord",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "CHAOS",
+      "HERETIC ASTARTES"
+    ],
+    "factionKeywords": [
+      "CHAOS",
+      "HERETIC ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 90
+      }
+    ],
+    "modelProfileIds": [
+      "unit-chaos-space-marines--chaos-lord--profile-chaos-lord"
+    ],
+    "weaponProfileIds": [
+      "unit-chaos-space-marines--chaos-lord--weapon-daemonic-axe"
+    ],
+    "abilityIds": [
+      "unit-chaos-space-marines--chaos-lord--ability-leader"
+    ],
+    "compositionId": "unit-chaos-space-marines--chaos-lord--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries",
+    "factionId": "chaos-space-marines",
+    "name": "Legionaries",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "CHAOS",
+      "HERETIC ASTARTES"
+    ],
+    "factionKeywords": [
+      "CHAOS",
+      "HERETIC ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 5,
+        "cost": 90
+      }
+    ],
+    "modelProfileIds": [
+      "unit-chaos-space-marines--legionaries--profile-aspiring-champion",
+      "unit-chaos-space-marines--legionaries--profile-legionary"
+    ],
+    "weaponProfileIds": [
+      "unit-chaos-space-marines--legionaries--weapon-astartes-chainsword",
+      "unit-chaos-space-marines--legionaries--weapon-bolt-pistol"
+    ],
+    "abilityIds": [
+      "unit-chaos-space-marines--legionaries--ability-profane-zeal"
+    ],
+    "compositionId": "unit-chaos-space-marines--legionaries--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-death-guard--plague-marines",
+    "factionId": "death-guard",
+    "name": "Plague Marines",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "CHAOS",
+      "DEATH GUARD"
+    ],
+    "factionKeywords": [
+      "CHAOS",
+      "DEATH GUARD"
+    ],
+    "points": [
+      {
+        "models": 5,
+        "cost": 90
+      }
+    ],
+    "modelProfileIds": [
+      "unit-death-guard--plague-marines--profile-plague-champion",
+      "unit-death-guard--plague-marines--profile-plague-marine"
+    ],
+    "weaponProfileIds": [
+      "unit-death-guard--plague-marines--weapon-boltgun"
+    ],
+    "abilityIds": [
+      "unit-death-guard--plague-marines--ability-disgustingly-resilient"
+    ],
+    "compositionId": "unit-death-guard--plague-marines--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--canoptek-doomstalker",
+    "factionId": "necrons",
+    "name": "Canoptek Doomstalker",
+    "role": "vehicle",
+    "keywords": [
+      "VEHICLE",
+      "WALKER",
+      "NECRONS"
+    ],
+    "factionKeywords": [
+      "NECRONS"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 140
+      }
+    ],
+    "modelProfileIds": [
+      "unit-necrons--canoptek-doomstalker--profile-canoptek-doomstalker"
+    ],
+    "weaponProfileIds": [
+      "unit-necrons--canoptek-doomstalker--weapon-doomsday-blaster"
+    ],
+    "abilityIds": [
+      "unit-necrons--canoptek-doomstalker--ability-living-metal"
+    ],
+    "compositionId": "unit-necrons--canoptek-doomstalker--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--necron-warriors",
+    "factionId": "necrons",
+    "name": "Necron Warriors",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "NECRONS"
+    ],
+    "factionKeywords": [
+      "NECRONS"
+    ],
+    "points": [
+      {
+        "models": 10,
+        "cost": 100
+      }
+    ],
+    "modelProfileIds": [
+      "unit-necrons--necron-warriors--profile-necron-warrior"
+    ],
+    "weaponProfileIds": [
+      "unit-necrons--necron-warriors--weapon-gauss-flayer"
+    ],
+    "abilityIds": [
+      "unit-necrons--necron-warriors--ability-reanimation-protocols"
+    ],
+    "compositionId": "unit-necrons--necron-warriors--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--overlord",
+    "factionId": "necrons",
+    "name": "Overlord",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "NECRONS"
+    ],
+    "factionKeywords": [
+      "NECRONS"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 85
+      }
+    ],
+    "modelProfileIds": [
+      "unit-necrons--overlord--profile-overlord"
+    ],
+    "weaponProfileIds": [
+      "unit-necrons--overlord--weapon-tachyon-arrow"
+    ],
+    "abilityIds": [
+      "unit-necrons--overlord--ability-leader"
+    ],
+    "compositionId": "unit-necrons--overlord--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz",
+    "factionId": "orks",
+    "name": "Boyz",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "ORKS"
+    ],
+    "factionKeywords": [
+      "ORKS"
+    ],
+    "points": [
+      {
+        "models": 10,
+        "cost": 90
+      }
+    ],
+    "modelProfileIds": [
+      "unit-orks--boyz--profile-boss-nob",
+      "unit-orks--boyz--profile-boy"
+    ],
+    "weaponProfileIds": [
+      "unit-orks--boyz--weapon-choppa",
+      "unit-orks--boyz--weapon-slugga"
+    ],
+    "abilityIds": [
+      "unit-orks--boyz--ability-mob-rule"
+    ],
+    "compositionId": "unit-orks--boyz--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--warboss",
+    "factionId": "orks",
+    "name": "Warboss",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "ORKS"
+    ],
+    "factionKeywords": [
+      "ORKS"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 75
+      }
+    ],
+    "modelProfileIds": [
+      "unit-orks--warboss--profile-warboss"
+    ],
+    "weaponProfileIds": [
+      "unit-orks--warboss--weapon-power-klaw"
+    ],
+    "abilityIds": [
+      "unit-orks--warboss--ability-waaagh"
+    ],
+    "compositionId": "unit-orks--warboss--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain",
+    "factionId": "space-marines",
+    "name": "Captain",
+    "role": "character",
+    "keywords": [
+      "INFANTRY",
+      "CHARACTER",
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 80
+      }
+    ],
+    "modelProfileIds": [
+      "unit-space-marines--captain--profile-captain"
+    ],
+    "weaponProfileIds": [
+      "unit-space-marines--captain--weapon-master-crafted-bolt-rifle",
+      "unit-space-marines--captain--weapon-power-fist"
+    ],
+    "abilityIds": [
+      "unit-space-marines--captain--ability-leader",
+      "unit-space-marines--captain--ability-rites-of-battle"
+    ],
+    "compositionId": "unit-space-marines--captain--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad",
+    "factionId": "space-marines",
+    "name": "Intercessor Squad",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 5,
+        "cost": 80
+      }
+    ],
+    "modelProfileIds": [
+      "unit-space-marines--intercessor-squad--profile-intercessor-sergeant",
+      "unit-space-marines--intercessor-squad--profile-intercessor"
+    ],
+    "weaponProfileIds": [
+      "unit-space-marines--intercessor-squad--weapon-bolt-rifle"
+    ],
+    "abilityIds": [
+      "unit-space-marines--intercessor-squad--ability-objective-secured"
+    ],
+    "compositionId": "unit-space-marines--intercessor-squad--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought",
+    "factionId": "space-marines",
+    "name": "Redemptor Dreadnought",
+    "role": "vehicle",
+    "keywords": [
+      "VEHICLE",
+      "WALKER",
+      "DREADNOUGHT",
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 210
+      }
+    ],
+    "modelProfileIds": [
+      "unit-space-marines--redemptor-dreadnought--profile-redemptor-dreadnought"
+    ],
+    "weaponProfileIds": [
+      "unit-space-marines--redemptor-dreadnought--weapon-macro-plasma-incinerator",
+      "unit-space-marines--redemptor-dreadnought--weapon-redemptor-fist"
+    ],
+    "abilityIds": [
+      "unit-space-marines--redemptor-dreadnought--ability-duty-and-honour"
+    ],
+    "compositionId": "unit-space-marines--redemptor-dreadnought--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad",
+    "factionId": "space-marines",
+    "name": "Terminator Squad",
+    "role": "infantry",
+    "keywords": [
+      "INFANTRY",
+      "TERMINATOR",
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "factionKeywords": [
+      "IMPERIUM",
+      "ADEPTUS ASTARTES"
+    ],
+    "points": [
+      {
+        "models": 5,
+        "cost": 170
+      }
+    ],
+    "modelProfileIds": [
+      "unit-space-marines--terminator-squad--profile-terminator-sergeant",
+      "unit-space-marines--terminator-squad--profile-terminator"
+    ],
+    "weaponProfileIds": [
+      "unit-space-marines--terminator-squad--weapon-storm-bolter",
+      "unit-space-marines--terminator-squad--weapon-power-fist"
+    ],
+    "abilityIds": [
+      "unit-space-marines--terminator-squad--ability-teleport-strike",
+      "unit-space-marines--terminator-squad--ability-deep-strike"
+    ],
+    "compositionId": "unit-space-marines--terminator-squad--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--crisis-battlesuits",
+    "factionId": "tau-empire",
+    "name": "Crisis Battlesuits",
+    "role": "infantry",
+    "keywords": [
+      "MOUNTED",
+      "BATTLESUIT",
+      "T'AU EMPIRE"
+    ],
+    "factionKeywords": [
+      "T'AU EMPIRE"
+    ],
+    "points": [
+      {
+        "models": 3,
+        "cost": 130
+      }
+    ],
+    "modelProfileIds": [
+      "unit-tau-empire--crisis-battlesuits--profile-crisis-battlesuit"
+    ],
+    "weaponProfileIds": [
+      "unit-tau-empire--crisis-battlesuits--weapon-burst-cannon"
+    ],
+    "abilityIds": [
+      "unit-tau-empire--crisis-battlesuits--ability-manta-strike"
+    ],
+    "compositionId": "unit-tau-empire--crisis-battlesuits--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--strike-team",
+    "factionId": "tau-empire",
+    "name": "Strike Team",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "T'AU EMPIRE"
+    ],
+    "factionKeywords": [
+      "T'AU EMPIRE"
+    ],
+    "points": [
+      {
+        "models": 5,
+        "cost": 75
+      }
+    ],
+    "modelProfileIds": [
+      "unit-tau-empire--strike-team--profile-shasui",
+      "unit-tau-empire--strike-team--profile-fire-warrior"
+    ],
+    "weaponProfileIds": [
+      "unit-tau-empire--strike-team--weapon-pulse-rifle"
+    ],
+    "abilityIds": [
+      "unit-tau-empire--strike-team--ability-for-the-greater-good"
+    ],
+    "compositionId": "unit-tau-empire--strike-team--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--carnifex",
+    "factionId": "tyranids",
+    "name": "Carnifex",
+    "role": "monster",
+    "keywords": [
+      "MONSTER",
+      "TYRANIDS"
+    ],
+    "factionKeywords": [
+      "TYRANIDS"
+    ],
+    "points": [
+      {
+        "models": 1,
+        "cost": 105
+      }
+    ],
+    "modelProfileIds": [
+      "unit-tyranids--carnifex--profile-carnifex"
+    ],
+    "weaponProfileIds": [
+      "unit-tyranids--carnifex--weapon-scything-talons"
+    ],
+    "abilityIds": [
+      "unit-tyranids--carnifex--ability-living-battering-ram"
+    ],
+    "compositionId": "unit-tyranids--carnifex--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--termagants",
+    "factionId": "tyranids",
+    "name": "Termagants",
+    "role": "battleline",
+    "keywords": [
+      "INFANTRY",
+      "BATTLELINE",
+      "TYRANIDS"
+    ],
+    "factionKeywords": [
+      "TYRANIDS"
+    ],
+    "points": [
+      {
+        "models": 10,
+        "cost": 60
+      }
+    ],
+    "modelProfileIds": [
+      "unit-tyranids--termagants--profile-termagant"
+    ],
+    "weaponProfileIds": [
+      "unit-tyranids--termagants--weapon-fleshborer"
+    ],
+    "abilityIds": [
+      "unit-tyranids--termagants--ability-endless-multitude"
+    ],
+    "compositionId": "unit-tyranids--termagants--composition",
+    "wargearOptionIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

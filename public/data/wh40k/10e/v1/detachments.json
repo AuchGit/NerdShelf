@@ -1,0 +1,254 @@
+[
+  {
+    "id": "det-adeptus-custodes--lions-of-the-emperor",
+    "factionId": "adeptus-custodes",
+    "name": "Lions of the Emperor",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--shield-host",
+    "factionId": "adeptus-custodes",
+    "name": "Shield Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-aeldari--battle-host",
+    "factionId": "aeldari",
+    "name": "Battle Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-aeldari--windrider-host",
+    "factionId": "aeldari",
+    "name": "Windrider Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-astra-militarum--bridgehead-strike",
+    "factionId": "astra-militarum",
+    "name": "Bridgehead Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-astra-militarum--combined-regiment",
+    "factionId": "astra-militarum",
+    "name": "Combined Regiment",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--pactbound-zealots",
+    "factionId": "chaos-space-marines",
+    "name": "Pactbound Zealots",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--renegade-raiders",
+    "factionId": "chaos-space-marines",
+    "name": "Renegade Raiders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-death-guard--plague-company",
+    "factionId": "death-guard",
+    "name": "Plague Company",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-necrons--awakened-dynasty",
+    "factionId": "necrons",
+    "name": "Awakened Dynasty",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-necrons--canoptek-court",
+    "factionId": "necrons",
+    "name": "Canoptek Court",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-orks--kult-of-speed",
+    "factionId": "orks",
+    "name": "Kult of Speed",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-orks--waaagh-tribe",
+    "factionId": "orks",
+    "name": "Waaagh! Tribe",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-space-marines--anvil-siege-force",
+    "factionId": "space-marines",
+    "name": "Anvil Siege Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-space-marines--firestorm-assault-force",
+    "factionId": "space-marines",
+    "name": "Firestorm Assault Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-space-marines--gladius-task-force",
+    "factionId": "space-marines",
+    "name": "Gladius Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-space-marines--ironstorm-spearhead",
+    "factionId": "space-marines",
+    "name": "Ironstorm Spearhead",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-tau-empire--kauyon",
+    "factionId": "tau-empire",
+    "name": "Kauyon",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-tau-empire--montka",
+    "factionId": "tau-empire",
+    "name": "Mont'ka",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-tyranids--assimilation-swarm",
+    "factionId": "tyranids",
+    "name": "Assimilation Swarm",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "det-tyranids--invasion-fleet",
+    "factionId": "tyranids",
+    "name": "Invasion Fleet",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

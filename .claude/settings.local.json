@@ -4,7 +4,16 @@
       "Bash(node -e ' *)",
       "Bash(node -e \"const p=require\\('@babel/parser'\\); const fs=require\\('fs'\\); for \\(const f of ['src/features/mtg/deck-builder/MtgDeckBuilderApp.jsx','src/features/mtg/deck-builder/components/CardList.jsx','src/features/mtg/deck-builder/components/DeckListView.jsx']\\) { p.parse\\(fs.readFileSync\\(f,'utf8'\\), {sourceType:'module', plugins:['jsx']}\\); console.log\\('OK', f\\); }\")",
       "Bash(rm -rf dist)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npx eslint *)",
+      "Bash(grep -E \"^[A-Z]:\\\\\\\\\\\\\\\\\")",
+      "Bash(npx vite *)",
+      "Bash(node scripts/wh40k-import/index.mjs seed)",
+      "Bash(node scripts/wh40k-import/test.mjs)",
+      "Bash(node scripts/wh40k-import test)",
+      "Bash(node -e \"let s=''; process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const m=JSON.parse\\(s\\); console.log\\('counts:', JSON.stringify\\(m.counts\\)\\); console.log\\('hashes:'\\); for\\(const [f,h] of Object.entries\\(m.fileHashes\\)\\) console.log\\(' ', h.slice\\(0,12\\), f\\);}\\)\")",
+      "Bash(node scripts/wh40k-import seed)",
+      "Bash(node -e \"let s=''; process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const m=JSON.parse\\(s\\); console.log\\('hashes after re-run:'\\); for\\(const [f,h] of Object.entries\\(m.fileHashes\\)\\) console.log\\(' ', h.slice\\(0,12\\), f\\);}\\)\")"
     ]
   }
 }

@@ -4,8 +4,9 @@ import { useAuth } from '../core/auth/AuthContext';
 import IconButton from '../shared/ui/IconButton';
 
 const NAV = [
-  { to: '/dnd', label: 'DnD', icon: '⚔' },
-  { to: '/mtg', label: 'MTG', icon: '✦' },
+  { to: '/dnd',   label: 'DnD',   icon: '⚔' },
+  { to: '/mtg',   label: 'MTG',   icon: '✦' },
+  { to: '/wh40k', label: 'WH40k', icon: 'Ω' },
 ];
 
 /**

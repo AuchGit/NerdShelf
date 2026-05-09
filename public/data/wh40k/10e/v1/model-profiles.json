@@ -1,0 +1,437 @@
+[
+  {
+    "id": "unit-adeptus-custodes--custodian-guard--profile-custodian-guard",
+    "unitId": "unit-adeptus-custodes--custodian-guard",
+    "name": "Custodian Guard",
+    "m": "5\"",
+    "t": "6",
+    "sv": "2+",
+    "w": "3",
+    "ld": "6+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-adeptus-custodes--shield-captain--profile-shield-captain",
+    "unitId": "unit-adeptus-custodes--shield-captain",
+    "name": "Shield-Captain",
+    "m": "5\"",
+    "t": "6",
+    "sv": "2+",
+    "w": "6",
+    "ld": "5+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--farseer--profile-farseer",
+    "unitId": "unit-aeldari--farseer",
+    "name": "Farseer",
+    "m": "7\"",
+    "t": "3",
+    "sv": "6+",
+    "w": "4",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--guardian-defenders--profile-guardian-defender",
+    "unitId": "unit-aeldari--guardian-defenders",
+    "name": "Guardian Defender",
+    "m": "7\"",
+    "t": "3",
+    "sv": "5+",
+    "w": "1",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops--profile-sergeant",
+    "unitId": "unit-astra-militarum--cadian-shock-troops",
+    "name": "Sergeant",
+    "m": "6\"",
+    "t": "3",
+    "sv": "5+",
+    "w": "1",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops--profile-shock-trooper",
+    "unitId": "unit-astra-militarum--cadian-shock-troops",
+    "name": "Shock Trooper",
+    "m": "6\"",
+    "t": "3",
+    "sv": "5+",
+    "w": "1",
+    "ld": "8+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank--profile-leman-russ",
+    "unitId": "unit-astra-militarum--leman-russ-battle-tank",
+    "name": "Leman Russ",
+    "m": "10\"",
+    "t": "11",
+    "sv": "2+",
+    "w": "13",
+    "ld": "7+",
+    "oc": "3",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--chaos-lord--profile-chaos-lord",
+    "unitId": "unit-chaos-space-marines--chaos-lord",
+    "name": "Chaos Lord",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "5",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--profile-aspiring-champion",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "name": "Aspiring Champion",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "2",
+    "ld": "6+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--profile-legionary",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "name": "Legionary",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "2",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-death-guard--plague-marines--profile-plague-champion",
+    "unitId": "unit-death-guard--plague-marines",
+    "name": "Plague Champion",
+    "m": "5\"",
+    "t": "5",
+    "sv": "3+",
+    "w": "2",
+    "ld": "6+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-death-guard--plague-marines--profile-plague-marine",
+    "unitId": "unit-death-guard--plague-marines",
+    "name": "Plague Marine",
+    "m": "5\"",
+    "t": "5",
+    "sv": "3+",
+    "w": "2",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--canoptek-doomstalker--profile-canoptek-doomstalker",
+    "unitId": "unit-necrons--canoptek-doomstalker",
+    "name": "Canoptek Doomstalker",
+    "m": "8\"",
+    "t": "9",
+    "sv": "3+",
+    "w": "9",
+    "ld": "8+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--necron-warriors--profile-necron-warrior",
+    "unitId": "unit-necrons--necron-warriors",
+    "name": "Necron Warrior",
+    "m": "5\"",
+    "t": "4",
+    "sv": "4+",
+    "w": "1",
+    "ld": "8+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--overlord--profile-overlord",
+    "unitId": "unit-necrons--overlord",
+    "name": "Overlord",
+    "m": "5\"",
+    "t": "5",
+    "sv": "3+",
+    "w": "5",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz--profile-boss-nob",
+    "unitId": "unit-orks--boyz",
+    "name": "Boss Nob",
+    "m": "6\"",
+    "t": "5",
+    "sv": "6+",
+    "w": "2",
+    "ld": "6+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz--profile-boy",
+    "unitId": "unit-orks--boyz",
+    "name": "Boy",
+    "m": "6\"",
+    "t": "5",
+    "sv": "6+",
+    "w": "1",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--warboss--profile-warboss",
+    "unitId": "unit-orks--warboss",
+    "name": "Warboss",
+    "m": "6\"",
+    "t": "6",
+    "sv": "4+",
+    "w": "6",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain--profile-captain",
+    "unitId": "unit-space-marines--captain",
+    "name": "Captain",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "5",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad--profile-intercessor",
+    "unitId": "unit-space-marines--intercessor-squad",
+    "name": "Intercessor",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "2",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad--profile-intercessor-sergeant",
+    "unitId": "unit-space-marines--intercessor-squad",
+    "name": "Intercessor Sergeant",
+    "m": "6\"",
+    "t": "4",
+    "sv": "3+",
+    "w": "2",
+    "ld": "6+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought--profile-redemptor-dreadnought",
+    "unitId": "unit-space-marines--redemptor-dreadnought",
+    "name": "Redemptor Dreadnought",
+    "m": "8\"",
+    "t": "10",
+    "sv": "2+",
+    "w": "12",
+    "ld": "6+",
+    "oc": "3",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--profile-terminator",
+    "unitId": "unit-space-marines--terminator-squad",
+    "name": "Terminator",
+    "m": "5\"",
+    "t": "5",
+    "sv": "2+",
+    "w": "3",
+    "ld": "7+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--profile-terminator-sergeant",
+    "unitId": "unit-space-marines--terminator-squad",
+    "name": "Terminator Sergeant",
+    "m": "5\"",
+    "t": "5",
+    "sv": "2+",
+    "w": "3",
+    "ld": "6+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--crisis-battlesuits--profile-crisis-battlesuit",
+    "unitId": "unit-tau-empire--crisis-battlesuits",
+    "name": "Crisis Battlesuit",
+    "m": "10\"",
+    "t": "5",
+    "sv": "3+",
+    "w": "5",
+    "ld": "7+",
+    "oc": "1",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--strike-team--profile-fire-warrior",
+    "unitId": "unit-tau-empire--strike-team",
+    "name": "Fire Warrior",
+    "m": "6\"",
+    "t": "3",
+    "sv": "4+",
+    "w": "1",
+    "ld": "8+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--strike-team--profile-shasui",
+    "unitId": "unit-tau-empire--strike-team",
+    "name": "Shas'ui",
+    "m": "6\"",
+    "t": "3",
+    "sv": "4+",
+    "w": "1",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--carnifex--profile-carnifex",
+    "unitId": "unit-tyranids--carnifex",
+    "name": "Carnifex",
+    "m": "8\"",
+    "t": "9",
+    "sv": "2+",
+    "w": "8",
+    "ld": "7+",
+    "oc": "3",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--termagants--profile-termagant",
+    "unitId": "unit-tyranids--termagants",
+    "name": "Termagant",
+    "m": "6\"",
+    "t": "3",
+    "sv": "5+",
+    "w": "1",
+    "ld": "7+",
+    "oc": "2",
+    "invSv": null,
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

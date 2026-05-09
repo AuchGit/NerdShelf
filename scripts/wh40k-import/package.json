@@ -1,0 +1,7 @@
+{
+  "name": "wh40k-import",
+  "private": true,
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": "./index.mjs"
+}

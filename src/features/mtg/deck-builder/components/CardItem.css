@@ -197,6 +197,28 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 
+/* Owned indicator (shared inventory). Sits in the bottom-left so it never
+   collides with the existing deck-badge (top-right) or favorite star. */
+.owned-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  background: var(--color-success, #2f9e44);
+  color: #fff;
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+
 .card-hover-overlay {
   position: absolute;
   inset: 0;
@@ -228,6 +250,16 @@
 }
 .card-hover-overlay .card-hover-btn:hover {
   background: rgba(0,0,0,0.8);
+}
+
+/* Inventory variant — green-tinted to differentiate from the primary
+   deck-add buttons. Inherits everything else from .card-hover-btn. */
+.card-hover-overlay .card-hover-btn--inv {
+  border-color: var(--color-success, #2f9e44);
+  color: #e8f7eb;
+}
+.card-hover-overlay .card-hover-btn--inv:hover {
+  background: color-mix(in srgb, var(--color-success, #2f9e44) 30%, rgba(0,0,0,0.65));
 }
 
 .card-item:hover .card-hover-overlay { opacity: 1; }

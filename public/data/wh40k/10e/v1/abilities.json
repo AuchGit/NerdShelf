@@ -1,0 +1,266 @@
+[
+  {
+    "id": "unit-adeptus-custodes--custodian-guard--ability-aegis-of-the-emperor",
+    "name": "Aegis of the Emperor",
+    "text": "Models in this unit have a 4+ invulnerable save.",
+    "scope": "unit",
+    "factionId": "adeptus-custodes",
+    "unitId": "unit-adeptus-custodes--custodian-guard",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-adeptus-custodes--shield-captain--ability-leader",
+    "name": "Leader",
+    "text": "Can attach to a Custodian Guard unit.",
+    "scope": "unit",
+    "factionId": "adeptus-custodes",
+    "unitId": "unit-adeptus-custodes--shield-captain",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--farseer--ability-doom",
+    "name": "Doom",
+    "text": "Re-roll wound rolls against a target enemy unit.",
+    "scope": "unit",
+    "factionId": "aeldari",
+    "unitId": "unit-aeldari--farseer",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--guardian-defenders--ability-battle-focus",
+    "name": "Battle Focus",
+    "text": "After shooting, this unit can make a Normal move.",
+    "scope": "unit",
+    "factionId": "aeldari",
+    "unitId": "unit-aeldari--guardian-defenders",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops--ability-voice-of-command",
+    "name": "Voice of Command",
+    "text": "Once per turn, this unit can issue an order.",
+    "scope": "unit",
+    "factionId": "astra-militarum",
+    "unitId": "unit-astra-militarum--cadian-shock-troops",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank--ability-steel-behemoth",
+    "name": "Steel Behemoth",
+    "text": "Can shoot even when within Engagement Range of enemies.",
+    "scope": "unit",
+    "factionId": "astra-militarum",
+    "unitId": "unit-astra-militarum--leman-russ-battle-tank",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--chaos-lord--ability-leader",
+    "name": "Leader",
+    "text": "Can lead Legionaries / Chosen / Terminators.",
+    "scope": "unit",
+    "factionId": "chaos-space-marines",
+    "unitId": "unit-chaos-space-marines--chaos-lord",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--ability-profane-zeal",
+    "name": "Profane Zeal",
+    "text": "Re-roll Battle-shock tests.",
+    "scope": "unit",
+    "factionId": "chaos-space-marines",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-death-guard--plague-marines--ability-disgustingly-resilient",
+    "name": "Disgustingly Resilient",
+    "text": "5+ Feel No Pain against damage of 1.",
+    "scope": "unit",
+    "factionId": "death-guard",
+    "unitId": "unit-death-guard--plague-marines",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--canoptek-doomstalker--ability-living-metal",
+    "name": "Living Metal",
+    "text": "At the end of the turn this model regains 1 lost wound.",
+    "scope": "unit",
+    "factionId": "necrons",
+    "unitId": "unit-necrons--canoptek-doomstalker",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--necron-warriors--ability-reanimation-protocols",
+    "name": "Reanimation Protocols",
+    "text": "Slain models may return to the unit.",
+    "scope": "unit",
+    "factionId": "necrons",
+    "unitId": "unit-necrons--necron-warriors",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--overlord--ability-leader",
+    "name": "Leader",
+    "text": "Can lead Necron Warriors / Lychguard.",
+    "scope": "unit",
+    "factionId": "necrons",
+    "unitId": "unit-necrons--overlord",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz--ability-mob-rule",
+    "name": "Mob Rule",
+    "text": "Test Battle-shock based on number of models, not wounds.",
+    "scope": "unit",
+    "factionId": "orks",
+    "unitId": "unit-orks--boyz",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--warboss--ability-waaagh",
+    "name": "Waaagh!",
+    "text": "Once per battle, declare a Waaagh! to buff your army.",
+    "scope": "unit",
+    "factionId": "orks",
+    "unitId": "unit-orks--warboss",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain--ability-leader",
+    "name": "Leader",
+    "text": "This unit can be attached to one of the listed Bodyguard units.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--captain",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain--ability-rites-of-battle",
+    "name": "Rites of Battle",
+    "text": "Once per battle round, the bearer's unit can re-roll a Hit roll, Wound roll, or saving throw.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--captain",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad--ability-objective-secured",
+    "name": "Objective Secured",
+    "text": "Battleline units count as 2 models when contesting objectives.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--intercessor-squad",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought--ability-duty-and-honour",
+    "name": "Duty and Honour",
+    "text": "Re-roll Hit rolls of 1 against units that have damaged this model.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--redemptor-dreadnought",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--ability-deep-strike",
+    "name": "Deep Strike",
+    "text": "Arrives from any battlefield edge, more than 9\" from enemy units.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--terminator-squad",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--ability-teleport-strike",
+    "name": "Teleport Strike",
+    "text": "During deployment, you can place this unit in Reserves.",
+    "scope": "unit",
+    "factionId": "space-marines",
+    "unitId": "unit-space-marines--terminator-squad",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--crisis-battlesuits--ability-manta-strike",
+    "name": "Manta Strike",
+    "text": "Can deploy from Reserves anywhere more than 9\" from enemies.",
+    "scope": "unit",
+    "factionId": "tau-empire",
+    "unitId": "unit-tau-empire--crisis-battlesuits",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--strike-team--ability-for-the-greater-good",
+    "name": "For the Greater Good",
+    "text": "When a friendly unit is targeted, this unit can fire Overwatch.",
+    "scope": "unit",
+    "factionId": "tau-empire",
+    "unitId": "unit-tau-empire--strike-team",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--carnifex--ability-living-battering-ram",
+    "name": "Living Battering Ram",
+    "text": "+1 to Hit on the turn it Charges.",
+    "scope": "unit",
+    "factionId": "tyranids",
+    "unitId": "unit-tyranids--carnifex",
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--termagants--ability-endless-multitude",
+    "name": "Endless Multitude",
+    "text": "Reinforce up to 10 destroyed models.",
+    "scope": "unit",
+    "factionId": "tyranids",
+    "unitId": "unit-tyranids--termagants",
+    "source": {
+      "primary": "seed"
+    }
+  }
+]

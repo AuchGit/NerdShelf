@@ -22,6 +22,7 @@ export default function CardList({
   onHoverCard, onPinCard, pinnedCard,
   viewMode, setViewMode,
   isFavorite, onToggleFavorite,
+  getOwnedQty, onIncOwned, onDecOwned,
 }) {
   const { settings, updateSetting } = useSettings();
 
@@ -81,6 +82,9 @@ export default function CardList({
             onPin={onPinCard}
             isFavorite={isFavorite ? isFavorite(card.id) : false}
             onToggleFavorite={onToggleFavorite}
+            ownedQty={getOwnedQty ? getOwnedQty(card.id) : 0}
+            onIncOwned={onIncOwned}
+            onDecOwned={onDecOwned}
           />
         ))}
       </div>

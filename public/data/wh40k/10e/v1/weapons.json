@@ -1,0 +1,478 @@
+[
+  {
+    "id": "unit-adeptus-custodes--custodian-guard--weapon-guardian-spear",
+    "unitId": "unit-adeptus-custodes--custodian-guard",
+    "name": "Guardian spear",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "2+",
+    "strength": "7",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-adeptus-custodes--shield-captain--weapon-guardian-spear",
+    "unitId": "unit-adeptus-custodes--shield-captain",
+    "name": "Guardian spear",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "6",
+    "bs": "",
+    "ws": "2+",
+    "strength": "7",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--farseer--weapon-witchblade",
+    "unitId": "unit-aeldari--farseer",
+    "name": "Witchblade",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "3",
+    "bs": "",
+    "ws": "2+",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "d3",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-aeldari--guardian-defenders--weapon-shuriken-catapult",
+    "unitId": "unit-aeldari--guardian-defenders",
+    "name": "Shuriken catapult",
+    "kind": "ranged",
+    "range": "12\"",
+    "attacks": "2",
+    "bs": "3+",
+    "ws": "",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--cadian-shock-troops--weapon-lasgun",
+    "unitId": "unit-astra-militarum--cadian-shock-troops",
+    "name": "Lasgun",
+    "kind": "ranged",
+    "range": "24\"",
+    "attacks": "1",
+    "bs": "4+",
+    "ws": "",
+    "strength": "3",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank--weapon-battle-cannon",
+    "unitId": "unit-astra-militarum--leman-russ-battle-tank",
+    "name": "Battle cannon",
+    "kind": "ranged",
+    "range": "72\"",
+    "attacks": "d6+3",
+    "bs": "4+",
+    "ws": "",
+    "strength": "10",
+    "ap": "-1",
+    "damage": "3",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-astra-militarum--leman-russ-battle-tank--weapon-heavy-bolter",
+    "unitId": "unit-astra-militarum--leman-russ-battle-tank",
+    "name": "Heavy bolter",
+    "kind": "ranged",
+    "range": "36\"",
+    "attacks": "3",
+    "bs": "4+",
+    "ws": "",
+    "strength": "5",
+    "ap": "-1",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--chaos-lord--weapon-daemonic-axe",
+    "unitId": "unit-chaos-space-marines--chaos-lord",
+    "name": "Daemonic axe",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "2+",
+    "strength": "6",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--weapon-astartes-chainsword",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "name": "Astartes chainsword",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "4",
+    "bs": "",
+    "ws": "3+",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-chaos-space-marines--legionaries--weapon-bolt-pistol",
+    "unitId": "unit-chaos-space-marines--legionaries",
+    "name": "Bolt pistol",
+    "kind": "ranged",
+    "range": "12\"",
+    "attacks": "1",
+    "bs": "3+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-death-guard--plague-marines--weapon-boltgun",
+    "unitId": "unit-death-guard--plague-marines",
+    "name": "Boltgun",
+    "kind": "ranged",
+    "range": "24\"",
+    "attacks": "2",
+    "bs": "3+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--canoptek-doomstalker--weapon-doomsday-blaster",
+    "unitId": "unit-necrons--canoptek-doomstalker",
+    "name": "Doomsday blaster",
+    "kind": "ranged",
+    "range": "48\"",
+    "attacks": "d3+3",
+    "bs": "4+",
+    "ws": "",
+    "strength": "10",
+    "ap": "-3",
+    "damage": "3",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--necron-warriors--weapon-gauss-flayer",
+    "unitId": "unit-necrons--necron-warriors",
+    "name": "Gauss flayer",
+    "kind": "ranged",
+    "range": "24\"",
+    "attacks": "1",
+    "bs": "4+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-necrons--overlord--weapon-tachyon-arrow",
+    "unitId": "unit-necrons--overlord",
+    "name": "Tachyon arrow",
+    "kind": "ranged",
+    "range": "120\"",
+    "attacks": "1",
+    "bs": "2+",
+    "ws": "",
+    "strength": "16",
+    "ap": "-4",
+    "damage": "d6+6",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz--weapon-choppa",
+    "unitId": "unit-orks--boyz",
+    "name": "Choppa",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "3",
+    "bs": "",
+    "ws": "3+",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--boyz--weapon-slugga",
+    "unitId": "unit-orks--boyz",
+    "name": "Slugga",
+    "kind": "ranged",
+    "range": "12\"",
+    "attacks": "1",
+    "bs": "5+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-orks--warboss--weapon-power-klaw",
+    "unitId": "unit-orks--warboss",
+    "name": "Power klaw",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "3+",
+    "strength": "10",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain--weapon-master-crafted-bolt-rifle",
+    "unitId": "unit-space-marines--captain",
+    "name": "Master-crafted bolt rifle",
+    "kind": "ranged",
+    "range": "30\"",
+    "attacks": "2",
+    "bs": "2+",
+    "ws": "",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--captain--weapon-power-fist",
+    "unitId": "unit-space-marines--captain",
+    "name": "Power fist",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "2+",
+    "strength": "8",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--intercessor-squad--weapon-bolt-rifle",
+    "unitId": "unit-space-marines--intercessor-squad",
+    "name": "Bolt rifle",
+    "kind": "ranged",
+    "range": "24\"",
+    "attacks": "2",
+    "bs": "3+",
+    "ws": "",
+    "strength": "4",
+    "ap": "-1",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought--weapon-macro-plasma-incinerator",
+    "unitId": "unit-space-marines--redemptor-dreadnought",
+    "name": "Macro plasma incinerator",
+    "kind": "ranged",
+    "range": "36\"",
+    "attacks": "d6+1",
+    "bs": "3+",
+    "ws": "",
+    "strength": "8",
+    "ap": "-3",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--redemptor-dreadnought--weapon-redemptor-fist",
+    "unitId": "unit-space-marines--redemptor-dreadnought",
+    "name": "Redemptor fist",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "3+",
+    "strength": "12",
+    "ap": "-2",
+    "damage": "3",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--weapon-power-fist",
+    "unitId": "unit-space-marines--terminator-squad",
+    "name": "Power fist",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "3",
+    "bs": "",
+    "ws": "3+",
+    "strength": "8",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-space-marines--terminator-squad--weapon-storm-bolter",
+    "unitId": "unit-space-marines--terminator-squad",
+    "name": "Storm bolter",
+    "kind": "ranged",
+    "range": "24\"",
+    "attacks": "2",
+    "bs": "3+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--crisis-battlesuits--weapon-burst-cannon",
+    "unitId": "unit-tau-empire--crisis-battlesuits",
+    "name": "Burst cannon",
+    "kind": "ranged",
+    "range": "18\"",
+    "attacks": "4",
+    "bs": "4+",
+    "ws": "",
+    "strength": "5",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tau-empire--strike-team--weapon-pulse-rifle",
+    "unitId": "unit-tau-empire--strike-team",
+    "name": "Pulse rifle",
+    "kind": "ranged",
+    "range": "30\"",
+    "attacks": "1",
+    "bs": "4+",
+    "ws": "",
+    "strength": "5",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--carnifex--weapon-scything-talons",
+    "unitId": "unit-tyranids--carnifex",
+    "name": "Scything talons",
+    "kind": "melee",
+    "range": "Melee",
+    "attacks": "5",
+    "bs": "",
+    "ws": "3+",
+    "strength": "9",
+    "ap": "-2",
+    "damage": "2",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  },
+  {
+    "id": "unit-tyranids--termagants--weapon-fleshborer",
+    "unitId": "unit-tyranids--termagants",
+    "name": "Fleshborer",
+    "kind": "ranged",
+    "range": "18\"",
+    "attacks": "1",
+    "bs": "4+",
+    "ws": "",
+    "strength": "4",
+    "ap": "0",
+    "damage": "1",
+    "abilities": [],
+    "source": {
+      "primary": "seed"
+    }
+  }
+]
