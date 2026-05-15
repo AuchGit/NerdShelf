@@ -20,6 +20,7 @@ const TABS = [
   { to: '/mtg/wishlist',  label: 'Wunschliste' },
   { to: '/mtg/inventory', label: 'Sammlung' },
   { to: '/mtg/favorites', label: 'Favoriten' },
+  { to: '/mtg/match',     label: 'Match HUD' },
 ];
 
 export default function MtgSubNav() {

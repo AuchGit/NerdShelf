@@ -11,6 +11,7 @@
 // language matches UnitDetail — same Panel, same section headers — so
 // the two surfaces feel like one design.
 
+import { useState } from 'react';
 import { Panel } from '../../../shared/ui';
 
 /* ─────────────────── public component ─────────────────── */
@@ -23,6 +24,12 @@ export default function DetachmentInfo({
   collapsed = false,
   onToggle,
   compact = false,   // mobile-style: tighter spacing, slightly smaller headings
+  // Optional Combat-Helper integration. Pass these from the session page
+  // to enable per-stratagem "Anwenden" buttons + usage indicators.
+  stratagemUsage,    // { [stratagemId]: { used, lastRound, totalUses, roundUses } }
+  currentRound,
+  cp,
+  onApplyStratagem,  // (strat) => void — deduct CP + log event
 }) {
   if (!detachment) {
     return (
@@ -82,18 +89,27 @@ export default function DetachmentInfo({
 
           {stratagems.length > 0 && (
             <Section title={`Stratagems (${stratagems.length})`} compact={compact}>
-              <div style={listStyle}>
+              <div style={gridStyle}>
                 {stratagems
                   .slice()
                   .sort((a, b) => (a.cpCost - b.cpCost) || a.name.localeCompare(b.name))
-                  .map(s => <StratagemCard key={s.id} strat={s} />)}
+                  .map(s => (
+                    <StratagemCard
+                      key={s.id}
+                      strat={s}
+                      usage={stratagemUsage?.[s.id]}
+                      currentRound={currentRound}
+                      cp={cp}
+                      onApply={onApplyStratagem}
+                    />
+                  ))}
               </div>
             </Section>
           )}
 
           {enhancements.length > 0 && (
             <Section title={`Enhancements (${enhancements.length})`} compact={compact}>
-              <div style={listStyle}>
+              <div style={gridStyle}>
                 {enhancements
                   .slice()
                   .sort((a, b) => (a.cost - b.cost) || a.name.localeCompare(b.name))
@@ -133,38 +149,108 @@ function RuleCard({ name, text }) {
   );
 }
 
-function StratagemCard({ strat }) {
+function StratagemCard({ strat, usage, currentRound, cp, onApply }) {
+  const [open, setOpen] = useState(false);
+
+  // "Used this round" — interpreted from roundUses[currentRound] so we
+  // can show a badge per round (10e stratagems are once-per-turn by
+  // default; the user can still re-apply if they spent CP a second time
+  // for niche cases — we don't enforce the limit).
+  const usedThisRound = currentRound && usage?.roundUses?.[currentRound] > 0;
+  const totalUses = usage?.totalUses || 0;
+
+  const canApply = !!onApply;
+  const enoughCp = cp == null || cp >= (strat.cpCost || 0);
+
   return (
-    <div style={stratCardStyle}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-        <div style={{ ...cardTitleStyle, flex: 1, minWidth: 0 }}>{strat.name}</div>
-        <span style={cpBadgeStyle} title={`${strat.cpCost} Kommandopunkt${strat.cpCost === 1 ? '' : 'e'}`}>
-          {strat.cpCost} CP
-        </span>
-      </div>
-      {(strat.phase || strat.target || strat.kind) && (
-        <div style={metaRowStyle}>
-          {strat.kind && <Chip>{stratKindLabel(strat.kind)}</Chip>}
-          {strat.phase && <Chip>{strat.phase}</Chip>}
-          {strat.target && <Chip>{strat.target}</Chip>}
+    <div
+      style={{
+        ...stratCardStyle,
+        borderColor: usedThisRound ? 'var(--color-success)' : 'var(--color-border)',
+        opacity: usedThisRound ? 0.85 : 1,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        style={{
+          background: 'transparent', border: 'none', padding: 0, margin: 0,
+          textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit',
+          display: 'flex', flexDirection: 'column', gap: 4, width: '100%',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+          <div style={{ ...cardTitleStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {strat.name}
+          </div>
+          <span style={cpBadgeStyle} title={`${strat.cpCost} Kommandopunkt${strat.cpCost === 1 ? '' : 'e'}`}>
+            {strat.cpCost} CP
+          </span>
+        </div>
+        {(strat.kind || strat.phase || usedThisRound || totalUses > 0) && (
+          <div style={metaRowStyle}>
+            {strat.kind && <Chip>{stratKindLabel(strat.kind)}</Chip>}
+            {strat.phase && <Chip>{strat.phase}</Chip>}
+            {usedThisRound && (
+              <span style={usedBadgeStyle}>✓ Verwendet R{currentRound}</span>
+            )}
+            {!usedThisRound && totalUses > 0 && (
+              <span style={historyBadgeStyle}>{totalUses}× total</span>
+            )}
+          </div>
+        )}
+        {open && (
+          <>
+            {strat.target && <div style={cardSubLabelStyle}>Ziel: <span style={cardTextStyle}>{strat.target}</span></div>}
+            {strat.effect && <div style={cardTextStyle}>{strat.effect}</div>}
+            {strat.restriction && <div style={{ ...cardTextStyle, color: 'var(--color-warning)' }}>{strat.restriction}</div>}
+          </>
+        )}
+      </button>
+      {canApply && open && (
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onApply(strat); }}
+            disabled={!enoughCp}
+            style={applyBtnStyle(!enoughCp)}
+            title={enoughCp
+              ? `Anwenden — kostet ${strat.cpCost} CP`
+              : `Nicht genug CP (${cp ?? 0}/${strat.cpCost})`}
+          >
+            {usedThisRound ? '+ erneut anwenden' : `Anwenden · ${strat.cpCost} CP`}
+          </button>
         </div>
       )}
-      {strat.effect && <div style={cardTextStyle}>{strat.effect}</div>}
-      {strat.restriction && <div style={{ ...cardTextStyle, color: 'var(--color-warning)' }}>{strat.restriction}</div>}
     </div>
   );
 }
 
 function EnhancementCard({ enh }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div style={enhCardStyle}>
+    <button
+      type="button"
+      onClick={() => setOpen(o => !o)}
+      aria-expanded={open}
+      style={{ ...enhCardStyle, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-accent)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border)'}
+    >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-        <div style={{ ...cardTitleStyle, flex: 1, minWidth: 0 }}>{enh.name}</div>
+        <div style={{ ...cardTitleStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {enh.name}
+        </div>
         <span style={costBadgeStyle}>{enh.cost} Pkt</span>
       </div>
-      {enh.text && <div style={cardTextStyle}>{enh.text}</div>}
-      {enh.restriction && <div style={{ ...cardTextStyle, color: 'var(--color-warning)' }}>{enh.restriction}</div>}
-    </div>
+      {open && (
+        <>
+          {enh.text && <div style={cardTextStyle}>{enh.text}</div>}
+          {enh.restriction && <div style={{ ...cardTextStyle, color: 'var(--color-warning)' }}>{enh.restriction}</div>}
+        </>
+      )}
+    </button>
   );
 }
 
@@ -210,6 +296,61 @@ const listStyle = {
   flexDirection: 'column',
   gap: 'var(--space-2)',
 };
+
+// Compact responsive grid: ~3 columns on desktop, 2 on tablet, 1 on phone.
+// Cards collapse to title+badges until clicked, so the army builder /
+// combat helper keep the rest of the page visible.
+const gridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+  gap: 'var(--space-2)',
+};
+
+const cardSubLabelStyle = {
+  fontSize: 'var(--fs-xs)',
+  fontWeight: 'var(--fw-semibold)',
+  color: 'var(--color-text-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+  marginTop: 4,
+};
+
+const usedBadgeStyle = {
+  padding: '1px 6px',
+  fontSize: 'var(--fs-xs)',
+  fontWeight: 'var(--fw-semibold)',
+  background: 'color-mix(in srgb, var(--color-success) 18%, transparent)',
+  color: 'var(--color-success)',
+  border: '1px solid color-mix(in srgb, var(--color-success) 30%, transparent)',
+  borderRadius: 999,
+  whiteSpace: 'nowrap',
+};
+
+const historyBadgeStyle = {
+  padding: '1px 6px',
+  fontSize: 'var(--fs-xs)',
+  color: 'var(--color-text-dim)',
+  background: 'transparent',
+  border: '1px dashed var(--color-border)',
+  borderRadius: 999,
+  whiteSpace: 'nowrap',
+};
+
+function applyBtnStyle(disabled) {
+  return {
+    flex: 1,
+    minHeight: 36,
+    padding: '6px 10px',
+    background: disabled ? 'transparent' : 'var(--color-accent)',
+    color: disabled ? 'var(--color-text-dim)' : 'var(--color-accent-contrast)',
+    border: `1px solid ${disabled ? 'var(--color-border)' : 'var(--color-accent)'}`,
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--fs-sm)',
+    fontWeight: 'var(--fw-semibold)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontFamily: 'inherit',
+  };
+}
 
 const ruleCardStyle = {
   padding: 'var(--space-2) var(--space-3)',

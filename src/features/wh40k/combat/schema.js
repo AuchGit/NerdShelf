@@ -93,13 +93,14 @@ function uid(prefix) {
  * roster into per-unit state so editing the army afterwards doesn't
  * silently mutate an in-progress game.
  */
-export function createSession({ army, unitsById, name }) {
+export function createSession({ army, unitsById, name, mission }) {
   const session = {
     schemaVersion: COMBAT_SCHEMA_VERSION,
     id: uid('cs'),
     name: name || army?.name || 'Unbenannte Schlacht',
     armyId: army?.id || null,
     armyName: army?.name || null,
+    armyShareToken: army?.shareToken || army?.share_token || null,
     factionId: army?.faction || army?.factionId || null,
     detachmentId: army?.detachment || army?.detachmentId || null,
     createdAt: new Date().toISOString(),
@@ -108,8 +109,14 @@ export function createSession({ army, unitsById, name }) {
     currentTurn: 'player',          // 'player' | 'opponent'
     currentPhase: 'command',
     cp: 1,                          // starting CP per 10e core rules
-    vp: 0,
+    vp: 0,                           // legacy flat counter (kept for compat)
     opponentVp: 0,
+    // Structured mission state (set via MissionSetup before the session
+    // is created; the in-session VP panel reads/writes through this).
+    mission: mission || null,
+    // Per-source VP tally so the user can see at a glance how points
+    // were earned (primary vs each secondary vs bonus).
+    scoring: mission ? createScoringRows(mission) : { rows: [], opponentRows: [] },
     units: {},
     roundLog: [emptyRound(1)],
     stratagemUsage: {},
@@ -122,6 +129,10 @@ export function createSession({ army, unitsById, name }) {
   for (const e of entries) {
     const u = unitsById[e.unitId];
     if (!u) continue;
+    // Snapshot the unit's lead-model wound count so the wound tracker can
+    // work without going back to the canonical data at every render.
+    // Look at the first model profile to pull the "W" stat.
+    const leadW = parseInt(String(u.stats?.[0]?.w || '1'), 10) || 1;
     for (let i = 0; i < (e.count || 1); i++) {
       const inst = uid('u');
       session.units[inst] = {
@@ -133,11 +144,20 @@ export function createSession({ army, unitsById, name }) {
         status: 'alive',
         startingModels: (u.modelCounts && u.modelCounts[0]) || 1,
         currentModels: (u.modelCounts && u.modelCounts[0]) || 1,
-        wounds: 0,
+        // Wound tracking on the *lead* model — useful for multi-wound
+        // single-model units (monsters, vehicles, characters). For
+        // multi-model squads the value rolls over: when leadWounds hits
+        // leadW, decrement currentModels and reset to 0. The UI handles
+        // both interactions through `applyWound`.
+        leadWoundsMax: leadW,
+        leadWoundsCurrent: 0,
         stratActive: [],
         attached: null,
         tags: [],
         reminders: [],
+        // Per-unit "once-per-battle" abilities the user has consumed
+        // (free-form keys — usually the slugged ability name).
+        oncePerBattleUsed: [],
         notes: '',
       };
     }
@@ -162,4 +182,42 @@ export function makeEvent(kind, text, extra = {}) {
     at: new Date().toISOString(),
     ...extra,
   };
+}
+
+/**
+ * Build initial scoring rows from a mission setup. Each row is one VP
+ * source the player can score points in (Primary + each Secondary). The
+ * opponent gets a mirror set so the user can track both sides in the
+ * companion. The values are user-driven — no auto-calc.
+ *
+ * Row shape: { id, kind:'primary'|'secondary'|'bonus', name, max, value }
+ */
+export function createScoringRows(mission) {
+  const rows = [];
+  const opponentRows = [];
+  if (mission?.primary) {
+    rows.push({
+      id: 'primary', kind: 'primary',
+      name: mission.primary.name || 'Primary',
+      max: mission.primary.maxScore ?? 50,
+      value: 0,
+    });
+    opponentRows.push({
+      id: 'primary', kind: 'primary',
+      name: mission.primary.name || 'Primary',
+      max: mission.primary.maxScore ?? 50,
+      value: 0,
+    });
+  }
+  for (const s of mission?.secondaries || []) {
+    rows.push({
+      id: `secondary-${s.id}`, kind: 'secondary',
+      name: s.name, max: s.maxScore ?? 15, value: 0,
+    });
+    opponentRows.push({
+      id: `secondary-${s.id}`, kind: 'secondary',
+      name: s.name, max: s.maxScore ?? 15, value: 0,
+    });
+  }
+  return { rows, opponentRows };
 }

@@ -7,6 +7,7 @@ import { Panel } from '../../../shared/ui';
 import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
 import MtgSubNav from './components/MtgSubNav';
+import { ShareTokenBadge } from '../../../shared/tokens';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -308,12 +309,15 @@ function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
       <ColorBar entries={colorEntries} total={totalColored} />
 
       <div style={{
+        display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
         fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)',
         borderTop: '1px solid var(--color-border)',
         paddingTop: 'var(--space-2)',
         textShadow: coverArt ? TEXT_SHADOW : undefined,
       }}>
-        Aktualisiert: {new Date(deck.updated_at).toLocaleDateString('de-DE')}
+        <span>Aktualisiert: {new Date(deck.updated_at).toLocaleDateString('de-DE')}</span>
+        <span style={{ flex: 1 }} />
+        {deck.share_token && <ShareTokenBadge token={deck.share_token} label="Deck-Token" compact />}
       </div>
     </Panel>
   );

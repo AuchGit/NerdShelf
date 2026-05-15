@@ -14,6 +14,7 @@ import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useWh40kData } from '../hooks/useWh40kData';
 import { listSessions, deleteSession, saveSession } from '../combat/persistence';
 import { createSession, PHASES } from '../combat/schema';
+import MissionSetup from '../combat/MissionSetup';
 
 export default function CombatDashboardPage() {
   const navigate = useNavigate();
@@ -41,19 +42,26 @@ export default function CombatDashboardPage() {
     return () => { cancelled = true; };
   }, [user]);
 
-  function startSession(army) {
+  function startSession({ army, mission }) {
     // The wh40k dataset is large (1700+ units). If the user clicks before
     // it has finished loading we still create the session, but with an
     // empty unit lookup — the units snapshot just stays empty until the
     // user adjusts manually. Better than swallowing the click silently.
     const unitsById = data?.unitsById || {};
+    const sessionName = army?.name
+      || (mission?.opponentName ? `vs ${mission.opponentName}` : null)
+      || (mission?.primary?.name ? `${mission.primary.name}` : null)
+      || 'Unbenannte Schlacht';
     const session = createSession({
       army: army ? {
         id: army.id, name: army.name,
         factionId: army.faction, detachmentId: army.detachment,
+        shareToken: army.share_token,
         data: army.data || { entries: {} },
       } : null,
       unitsById,
+      name: sessionName,
+      mission: mission || null,
     });
     saveSession(session);
     navigate(`/wh40k/combat/${session.id}`);
@@ -77,9 +85,9 @@ export default function CombatDashboardPage() {
           margin: '0 auto',
           padding: 'var(--space-4) clamp(var(--space-3), 3vw, var(--space-5)) 0',
         }}>
-          <ArmyPicker
+          <MissionSetup
             armies={armies}
-            onPick={(a) => { setShowNew(false); startSession(a); }}
+            onStart={(payload) => { setShowNew(false); startSession(payload); }}
             onCancel={() => setShowNew(false)}
           />
         </div>

@@ -1,0 +1,368 @@
+/* src/features/mtg/match-hud/MatchHud.css
+ *
+ * Styles for the Match HUD. All class names are namespaced `mh-` so they
+ * never collide with the surrounding NerdShelf shell.
+ *
+ * Layout philosophy:
+ *   - The live HUD page is *full-bleed*: it ignores the normal page padding
+ *     and stretches edge-to-edge on phones so every tap zone is enormous.
+ *   - On desktop the HUD remains useful but caps its width to keep tiles
+ *     readable rather than stretching them across a 27" monitor.
+ *   - Tiles use CSS custom properties (--mh-tile-bg, --mh-tile-fg) so the
+ *     React layer can swap colours without re-rendering whole subtrees.
+ */
+
+/* ── Full-bleed wrapper (overrides the global <main> padding) ────────── */
+.mh-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  /* Respect notches / status bars on iOS PWAs. */
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  z-index: 10;
+  overflow: hidden;
+}
+
+/* Sticky thin header bar — keeps the join code visible without stealing
+   the gameplay area. */
+.mh-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--fs-sm);
+}
+.mh-header-code {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  letter-spacing: 1.5px;
+  font-size: var(--fs-md);
+  padding: 2px 8px;
+  background: var(--color-bg-sunken);
+  border-radius: var(--radius-sm);
+}
+.mh-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+/* ── Grid of tiles ───────────────────────────────────────────────────── */
+.mh-grid {
+  flex: 1;
+  display: grid;
+  gap: 4px;                            /* hairline gap, not padding */
+  padding: 4px;
+  min-height: 0;
+  /* Default: 2 columns. Overridden inline by JS for player count. */
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+}
+.mh-grid.mh-grid-one     { grid-template-columns: 1fr; }
+.mh-grid.mh-grid-two-own { grid-template-columns: 1fr; grid-template-rows: 2fr 1fr; }
+
+/* ── Single player tile ──────────────────────────────────────────────── */
+.mh-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  background: var(--mh-tile-bg, #2a3040);
+  color: var(--mh-tile-fg, #fff);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  isolation: isolate;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 80ms ease-out;
+  min-height: 0;
+  /* Establish a size-based query container so every text element inside the
+     tile can scale relative to *this tile's* width / height rather than the
+     viewport. With this, 2-player layouts (huge tiles) automatically get
+     huge numbers, and 4-player grids shrink them proportionally — no
+     player-count-aware JavaScript needed. */
+  container-type: size;
+  container-name: tile;
+}
+.mh-tile-readonly { opacity: 0.96; }
+.mh-tile-own::after {
+  /* Subtle accent ring on your own tile so you don't tap the wrong half. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.18);
+}
+
+/* Top-of-tile player meta */
+.mh-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+  pointer-events: none;          /* taps belong to the life zones */
+}
+.mh-tile-meta-name {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.mh-tile-meta-deck {
+  opacity: 0.75;
+  font-size: var(--fs-xs);
+  margin-top: 1px;
+}
+.mh-tile-presence {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.45);
+}
+.mh-tile-presence.mh-presence-on { background: #4ade80; box-shadow: 0 0 0 2px rgba(74,222,128,0.25); }
+
+/* Centre: huge life number */
+.mh-tile-life-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  pointer-events: none;          /* taps belong to the absolute halves */
+  padding: 0 var(--space-2);
+  min-height: 0;
+}
+.mh-tile-life {
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  /* Scale with the tile, not the viewport. cqmin == min(cqw, cqh) so the
+     number always fits both directions. The floor/ceil keep tiny tiles
+     legible and stop huge solo tiles from running off the screen. */
+  font-size: clamp(72px, 48cqmin, 360px);
+  line-height: 0.95;
+  letter-spacing: -3px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.25);
+}
+.mh-tile-life-readonly { font-size: clamp(56px, 38cqmin, 260px); }
+
+/* Tap zones for life. Two huge absolute halves cover the whole tile. */
+.mh-tap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 100ms;
+}
+.mh-tap-left  { left: 0; }
+.mh-tap-right { right: 0; }
+.mh-tap:active {
+  background: rgba(255,255,255,0.08);
+}
+.mh-tap[disabled] {
+  cursor: default;
+}
+.mh-tap-hint {
+  position: absolute;
+  bottom: var(--space-2);
+  font-size: 28px;
+  font-weight: var(--fw-bold);
+  opacity: 0.35;
+  pointer-events: none;
+}
+.mh-tap-left .mh-tap-hint  { left: var(--space-3); }
+.mh-tap-right .mh-tap-hint { right: var(--space-3); }
+
+/* Tap-flash animation: triggered by toggling a className. */
+@keyframes mhFlash {
+  0%   { background: rgba(255,255,255,0.18); }
+  100% { background: rgba(255,255,255,0);    }
+}
+.mh-tap.mh-tap-flash {
+  animation: mhFlash 220ms ease-out;
+}
+
+/* Bottom: poison + small buttons. Padding scales with the tile so a
+   single-player full-screen tile gets breathing room while a 4-up grid
+   stays tight. */
+.mh-tile-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: clamp(6px, 2cqmin, 24px) clamp(8px, 3cqmin, 32px);
+  pointer-events: none;
+  position: relative;
+  z-index: 1;
+}
+.mh-poison {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 1.5cqmin, 16px);
+  pointer-events: auto;
+  padding: clamp(6px, 1.5cqmin, 14px) clamp(12px, 3cqmin, 28px);
+  background: rgba(0,0,0,0.28);
+  border-radius: 999px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.mh-poison-readonly { background: rgba(0,0,0,0.18); }
+.mh-poison-value {
+  /* Same scaling family as the life number, but a smaller share of the tile
+     so it never visually competes. */
+  min-width: clamp(48px, 12cqmin, 120px);
+  text-align: center;
+  font-size: clamp(28px, 14cqmin, 110px);
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+.mh-poison-icon {
+  font-size: clamp(20px, 10cqmin, 80px);
+  opacity: 0.85;
+  margin-right: clamp(4px, 1cqmin, 12px);
+}
+.mh-poison-btn {
+  width: clamp(44px, 10cqmin, 88px);
+  height: clamp(44px, 10cqmin, 88px);
+  border-radius: 50%;
+  background: rgba(255,255,255,0.14);
+  border: none;
+  color: inherit;
+  font-size: clamp(22px, 6cqmin, 48px);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mh-poison-btn:active { background: rgba(255,255,255,0.26); }
+.mh-poison-readonly .mh-poison-value { min-width: clamp(40px, 10cqmin, 100px); }
+.mh-poison-readonly .mh-poison-value,
+.mh-poison-readonly .mh-poison-icon {
+  font-size: clamp(22px, 11cqmin, 88px);
+}
+
+/* Other small floating actions on the tile (own row) */
+.mh-tile-actions {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+.mh-tile-mini-btn {
+  background: rgba(0,0,0,0.28);
+  border: none;
+  color: inherit;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-tile-mini-btn:active { background: rgba(0,0,0,0.45); }
+
+/* ── Colour picker chips ─────────────────────────────────────────────── */
+.mh-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mh-color-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-color-chip.is-active {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 2px var(--color-bg);
+}
+.mh-color-chip-custom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Lobby/dashboard cards (use existing Panel base) ─────────────────── */
+.mh-empty-block {
+  text-align: center;
+  padding: var(--space-7);
+  color: var(--color-text-muted);
+}
+
+/* Code entry field on the join screen — extra-large for thumb typing. */
+.mh-code-input {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  letter-spacing: 6px;
+  font-size: 28px;
+  text-align: center;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+/* Life template chips */
+.mh-life-options {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mh-life-option {
+  flex: 1 1 60px;
+  min-width: 60px;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-life-option.is-active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+}
+
+/* Responsive: only kick in extra mobile chrome on small screens. */
+@media (max-width: 768px) {
+  .mh-tile-life       { letter-spacing: -3px; }
+  .mh-tile-meta       { padding: var(--space-2); }
+  .mh-tile-foot       { padding: var(--space-2); }
+}
+
+/* Reduce motion preference — kill the flash animation. */
+@media (prefers-reduced-motion: reduce) {
+  .mh-tile, .mh-tap.mh-tap-flash { animation: none; transition: none; }
+}

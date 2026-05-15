@@ -23,6 +23,7 @@ import UnitGrid from './components/UnitGrid';
 import UnitDetail from './components/UnitDetail';
 import ArmyPanel from './components/ArmyPanel';
 import DetachmentInfo from './components/DetachmentInfo';
+import { newShareToken } from '../../shared/tokens';
 
 const EMPTY_ARMY = {
   name: 'Unbenannte Armee',
@@ -30,6 +31,7 @@ const EMPTY_ARMY = {
   detachmentId: '',
   notes: '',
   entries: {},
+  shareToken: null,
 };
 
 export default function Wh40kArmyBuilderApp() {
@@ -82,6 +84,7 @@ export default function Wh40kArmyBuilderApp() {
         detachmentId: row.detachment || '',
         notes: row.data?.notes || '',
         entries: row.data?.entries || {},
+        shareToken: row.share_token || null,
       });
       setLoadingArmy(false);
       setTimeout(() => { skipDirtyRef.current = false; }, 0);
@@ -175,12 +178,18 @@ export default function Wh40kArmyBuilderApp() {
     if (!user) return;
     setSaving(true);
     setSaveStatus(null);
+    // Mint a share token on first save; reuse the existing one otherwise.
+    const tokenForSave = army.shareToken || newShareToken();
+    if (!army.shareToken) {
+      setArmy(a => ({ ...a, shareToken: tokenForSave }));
+    }
     const payload = {
       user_id: user.id,
       name: army.name.trim() || 'Unbenannte Armee',
       faction: army.factionId || null,
       detachment: army.detachmentId || null,
       data: { entries: army.entries, notes: army.notes },
+      share_token: tokenForSave,
       updated_at: new Date().toISOString(),
     };
 

@@ -1,0 +1,156 @@
+// src/features/mtg/match-hud/components/PlayerTile.jsx
+//
+// One player's HUD tile. Two roles:
+//   - "own"      → the entire tile is a giant ± control. Left half = -1 life,
+//                  right half = +1 life. Poison has dedicated tiny ± buttons.
+//   - "readonly" → opponent view. Same colour scheme, no taps. Life still
+//                  large enough to read across a table.
+//
+// Visual elements:
+//   - Background = player colour (with high-contrast foreground via swatch)
+//   - Player name + (optional) deck name at top
+//   - Huge life number, centre
+//   - Poison + small ± at bottom
+//   - Presence dot, online/offline
+//
+// Tap feedback: the active half briefly flashes (controlled by a small
+// timeout + className toggle — no library).
+
+import { memo, useCallback, useRef, useState } from 'react';
+import { getColor } from '../services/playerColors';
+
+function PlayerTileBase({
+  player,
+  isOwn = false,
+  isOnline = false,
+  onLifeDelta,
+  onPoisonDelta,
+  onOpenSelf,
+}) {
+  const swatch = getColor(player.color);
+  const [flashSide, setFlashSide] = useState(null); // 'left' | 'right' | null
+  const flashTimerRef = useRef(null);
+
+  const triggerFlash = useCallback((side) => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setFlashSide(side);
+    flashTimerRef.current = setTimeout(() => setFlashSide(null), 220);
+  }, []);
+
+  const tapLeft = useCallback(() => {
+    if (!isOwn) return;
+    triggerFlash('left');
+    onLifeDelta?.(-1);
+  }, [isOwn, onLifeDelta, triggerFlash]);
+
+  const tapRight = useCallback(() => {
+    if (!isOwn) return;
+    triggerFlash('right');
+    onLifeDelta?.(+1);
+  }, [isOwn, onLifeDelta, triggerFlash]);
+
+  // Stop the tap zones from receiving double-clicks / text selection on
+  // accidental drags. Touch and mouse both come through onClick.
+  const noSelect = (e) => e.preventDefault();
+
+  return (
+    <div
+      className={`mh-tile ${isOwn ? 'mh-tile-own' : 'mh-tile-readonly'}`}
+      style={{ ['--mh-tile-bg']: swatch.bg, ['--mh-tile-fg']: swatch.text }}
+    >
+      <div className="mh-tile-meta">
+        <span
+          className={`mh-tile-presence ${isOnline ? 'mh-presence-on' : ''}`}
+          aria-label={isOnline ? 'online' : 'offline'}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="mh-tile-meta-name">{player.player_name || 'Spieler'}</div>
+          {player.deck_name && <div className="mh-tile-meta-deck">{player.deck_name}</div>}
+        </div>
+      </div>
+
+      {isOwn && onOpenSelf && (
+        <div className="mh-tile-actions">
+          <button
+            type="button"
+            className="mh-tile-mini-btn"
+            title="Optionen"
+            onClick={onOpenSelf}
+          >⚙</button>
+        </div>
+      )}
+
+      <div className="mh-tile-life-wrap">
+        <span className={`mh-tile-life ${isOwn ? '' : 'mh-tile-life-readonly'}`}>
+          {player.life}
+        </span>
+      </div>
+
+      {/* Tap zones. Cover the entire tile area beneath the meta/foot rows. */}
+      <button
+        type="button"
+        className={`mh-tap mh-tap-left ${flashSide === 'left' ? 'mh-tap-flash' : ''}`}
+        onClick={tapLeft}
+        onMouseDown={noSelect}
+        aria-label="Leben −1"
+        disabled={!isOwn}
+      >
+        {isOwn && <span className="mh-tap-hint">−</span>}
+      </button>
+      <button
+        type="button"
+        className={`mh-tap mh-tap-right ${flashSide === 'right' ? 'mh-tap-flash' : ''}`}
+        onClick={tapRight}
+        onMouseDown={noSelect}
+        aria-label="Leben +1"
+        disabled={!isOwn}
+      >
+        {isOwn && <span className="mh-tap-hint">+</span>}
+      </button>
+
+      <div className="mh-tile-foot">
+        <div className={`mh-poison ${isOwn ? '' : 'mh-poison-readonly'}`} title="Poison Counter">
+          {isOwn && (
+            <button
+              type="button"
+              className="mh-poison-btn"
+              onClick={() => onPoisonDelta?.(-1)}
+              aria-label="Poison −1"
+            >−</button>
+          )}
+          <span className="mh-poison-value">
+            <span aria-hidden="true" className="mh-poison-icon">☠</span>
+            {player.poison}
+          </span>
+          {isOwn && (
+            <button
+              type="button"
+              className="mh-poison-btn"
+              onClick={() => onPoisonDelta?.(+1)}
+              aria-label="Poison +1"
+            >+</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Memoised because in a 4-player match each tile re-renders only when *its*
+// player changes — the parent state changing for an opponent shouldn't
+// re-render the current player's tile.
+const PlayerTile = memo(PlayerTileBase, (a, b) => (
+  a.isOwn === b.isOwn
+  && a.isOnline === b.isOnline
+  && a.player.id === b.player.id
+  && a.player.life === b.player.life
+  && a.player.poison === b.player.poison
+  && a.player.color === b.player.color
+  && a.player.player_name === b.player.player_name
+  && a.player.deck_name === b.player.deck_name
+  && a.onLifeDelta === b.onLifeDelta
+  && a.onPoisonDelta === b.onPoisonDelta
+  && a.onOpenSelf === b.onOpenSelf
+));
+
+export default PlayerTile;

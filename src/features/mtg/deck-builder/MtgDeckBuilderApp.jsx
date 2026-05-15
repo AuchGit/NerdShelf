@@ -17,6 +17,7 @@ import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
 import { useMtgInventory } from './hooks/useMtgInventory';
+import { newShareToken } from '../../../shared/tokens';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
 import './MtgDeckBuilder.css';
@@ -54,6 +55,10 @@ export default function MtgDeckBuilderApp() {
   const [mainboard, setMainboard] = useState({});
   const [sideboard, setSideboard] = useState({});
   const [coverCardId, setCoverCardId] = useState(null);
+  // Per-deck share token (see src/shared/tokens). Persists across saves;
+  // we mint one only when the deck is created (or migrated from a row
+  // that pre-dates the share_token column).
+  const [shareToken, setShareToken] = useState(null);
   const [showCoverPicker, setShowCoverPicker] = useState(false);
   const [commander, setCommander] = useState(null);   // full Scryfall card object | null
 
@@ -217,6 +222,7 @@ export default function MtgDeckBuilderApp() {
       setSideboard(data.data?.sideboard || {});
       setCoverCardId(data.data?.coverCardId || null);
       setCommander(data.data?.commander || null);
+      setShareToken(data.share_token || null);
       setLoadingDeck(false);
       // allow dirty tracking to resume after next tick
       setTimeout(() => { skipDirtyRef.current = false; }, 0);
@@ -419,11 +425,17 @@ export default function MtgDeckBuilderApp() {
     if (!user) return;
     setSaving(true);
     setSaveStatus(null);
+    // Mint a token if this deck has never been saved (or migrated from a
+    // row that pre-dates the column). The token is permanent — once set,
+    // it stays put through every subsequent save.
+    const tokenForSave = shareToken || newShareToken();
+    if (!shareToken) setShareToken(tokenForSave);
     const payload = {
       user_id: user.id,
       name: deckName.trim() || 'Unbenanntes Deck',
       format: deckFormat || null,
       data: { mainboard, sideboard, coverCardId, commander },
+      share_token: tokenForSave,
       updated_at: new Date().toISOString(),
     };
 

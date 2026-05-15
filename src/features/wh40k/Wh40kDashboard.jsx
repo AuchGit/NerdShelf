@@ -12,6 +12,7 @@ import { Panel } from '../../shared/ui';
 import DashboardLayout from '../../shared/dashboard/DashboardLayout';
 import { useWh40kData } from './hooks/useWh40kData';
 import { totalArmyPoints } from './services/points';
+import { ShareTokenBadge } from '../../shared/tokens';
 
 export default function Wh40kDashboard() {
   const navigate = useNavigate();
@@ -210,13 +211,16 @@ function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate }) {
 
       <div
         style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
           fontSize: 'var(--fs-xs)',
           color: 'var(--color-text-dim)',
           borderTop: '1px solid var(--color-border)',
           paddingTop: 'var(--space-2)',
         }}
       >
-        Aktualisiert: {new Date(army.updated_at).toLocaleDateString('de-DE')}
+        <span>Aktualisiert: {new Date(army.updated_at).toLocaleDateString('de-DE')}</span>
+        <span style={{ flex: 1 }} />
+        {army.share_token && <ShareTokenBadge token={army.share_token} label="Armee-Token" compact />}
       </div>
     </Panel>
   );

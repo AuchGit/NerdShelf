@@ -31,6 +31,7 @@ import { loadSession } from '../combat/persistence';
 import { PHASES, UNIT_STATUSES, nextPhase } from '../combat/schema';
 import { useCombatSession } from '../combat/useCombatSession';
 import { buildContext, listRemindersForPhase, reminderCountsByPhase } from '../combat/reminders';
+import { detectOnceFlag } from '../combat/onceFlags';
 import DetachmentInfo from '../components/DetachmentInfo';
 
 /** Mobile threshold for content width (excluding sidebar). */
@@ -47,7 +48,7 @@ export default function CombatSessionPage() {
   const narrow = contentWidth < NARROW_MAX;
 
   // Tab state — only used in narrow mode
-  const [tab, setTab] = useState('reminders'); // reminders|detachment|notes|units
+  const [tab, setTab] = useState('reminders'); // reminders|scoring|detachment|notes|units
 
   // Hydrate session on mount / id change
   useEffect(() => {
@@ -118,6 +119,30 @@ export default function CombatSessionPage() {
     </Panel>
   );
 
+  const scoringPanel = (
+    <Panel padding={narrow ? 'sm' : 'md'} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      <h3 style={sectionTitleStyle}>Punkte (VP)</h3>
+      <ScoringTable
+        title="Du"
+        rows={session.scoring?.rows || []}
+        onAdjust={(rowId, delta) => api.scoreRow('player', rowId, delta)}
+        total={session.vp}
+      />
+      <ScoringTable
+        title={session.mission?.opponentName || 'Gegner'}
+        rows={session.scoring?.opponentRows || []}
+        onAdjust={(rowId, delta) => api.scoreRow('opponent', rowId, delta)}
+        total={session.opponentVp}
+        subtle
+      />
+      {session.mission?.primary && (
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', paddingTop: 'var(--space-2)', borderTop: '1px dashed var(--color-border)' }}>
+          <strong style={{ color: 'var(--color-text)' }}>Primary:</strong> {session.mission.primary.scoring}
+        </div>
+      )}
+    </Panel>
+  );
+
   const detachmentPanel = (
     <DetachmentInfo
       detachment={detachment}
@@ -125,6 +150,12 @@ export default function CombatSessionPage() {
       stratagems={detachmentStrats}
       enhancements={detachmentEnhs}
       compact={narrow}
+      stratagemUsage={session.stratagemUsage}
+      currentRound={session.currentRound}
+      cp={session.cp}
+      onApplyStratagem={(strat) =>
+        api.applyStratagem(strat.id, strat.cpCost || 0, strat.name)
+      }
     />
   );
 
@@ -153,10 +184,13 @@ export default function CombatSessionPage() {
           <UnitCard
             key={u.instanceId}
             unit={u}
+            unitCanon={data?.unitsById?.[u.unitId] || null}
             narrow={narrow}
             onModelDelta={(d) => api.adjustModels(u.instanceId, d)}
+            onWound={(d) => api.applyWound(u.instanceId, d)}
             onStatus={(s) => api.setUnitStatus(u.instanceId, s)}
             onNotes={(n) => api.setUnitNotes(u.instanceId, n)}
+            onToggleOnceFlag={(key) => api.toggleUnitOnceFlag(u.instanceId, key)}
           />
         ))
       )}
@@ -177,6 +211,9 @@ export default function CombatSessionPage() {
             {' · '}Einheiten {aliveCount}/{totalCount}
             {session.armyName ? <> · {session.armyName}</> : null}
             {detachment ? <> · {detachment.name}</> : null}
+            {session.mission?.gameSizeLabel ? <> · {session.mission.gameSizeLabel}</> : null}
+            {session.mission?.primary?.name ? <> · {session.mission.primary.name}</> : null}
+            {session.mission?.opponentName ? <> · vs {session.mission.opponentName}</> : null}
           </div>
         </div>
         <div style={countersGroupStyle(narrow)}>
@@ -224,6 +261,9 @@ export default function CombatSessionPage() {
               badge={phaseReminders.length}>
               Hinweise
             </TabBtn>
+            <TabBtn active={tab === 'scoring'} onClick={() => setTab('scoring')}>
+              VP
+            </TabBtn>
             {detachment && (
               <TabBtn active={tab === 'detachment'} onClick={() => setTab('detachment')}>
                 Detachment
@@ -239,6 +279,7 @@ export default function CombatSessionPage() {
           </div>
           <main style={narrowMainStyle}>
             {tab === 'reminders'  && remindersPanel}
+            {tab === 'scoring'    && scoringPanel}
             {tab === 'detachment' && detachmentPanel}
             {tab === 'notes'      && notesPanel}
             {tab === 'units'      && unitsPanel}
@@ -248,6 +289,7 @@ export default function CombatSessionPage() {
         <main style={wideMainStyle}>
           <section style={leftColStyle}>
             {remindersPanel}
+            {scoringPanel}
             {detachment && detachmentPanel}
             {notesPanel}
           </section>
@@ -261,6 +303,67 @@ export default function CombatSessionPage() {
 }
 
 /* ─────────────────── sub-views ─────────────────── */
+
+function ScoringTable({ title, rows, onAdjust, total, subtle }) {
+  if (!rows.length) {
+    return (
+      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
+        Keine Mission gewählt — VP-Tracking nutzt nur Gesamtsumme.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)',
+        opacity: subtle ? 0.85 : 1,
+      }}>
+        <strong style={{ fontSize: 'var(--fs-sm)' }}>{title}</strong>
+        <span style={{ flex: 1 }} />
+        <span style={{
+          fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums',
+          fontSize: 'var(--fs-lg)',
+          color: subtle ? 'var(--color-text-muted)' : 'var(--color-accent)',
+        }}>{total ?? 0}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {rows.map(r => (
+          <div
+            key={r.id}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 6px',
+              background: 'var(--color-bg-sunken)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <span style={{
+              flex: 1, minWidth: 0,
+              fontSize: 'var(--fs-xs)',
+              color: r.kind === 'primary' ? 'var(--color-accent)' : 'var(--color-text)',
+              fontWeight: r.kind === 'primary' ? 'var(--fw-semibold)' : 'var(--fw-medium)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {r.kind === 'primary' ? '◆' : '◇'} {r.name}
+            </span>
+            <button type="button" onClick={() => onAdjust(r.id, -1)}
+              style={miniBtnStyle} aria-label={`${r.name} −1`}
+              disabled={r.value <= 0}>−</button>
+            <span style={{
+              minWidth: 44, textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--fw-semibold)',
+              fontSize: 'var(--fs-sm)',
+            }}>{r.value || 0}<span style={{ color: 'var(--color-text-dim)' }}>/{r.max}</span></span>
+            <button type="button" onClick={() => onAdjust(r.id, +1)}
+              style={miniBtnStyle} aria-label={`${r.name} +1`}
+              disabled={r.value >= r.max}>+</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Counter({ label, value, onAdjust, max, subtle }) {
   return (
@@ -347,19 +450,64 @@ function ReminderRow({ reminder, unitName }) {
   );
 }
 
-function UnitCard({ unit, narrow, onModelDelta, onStatus, onNotes }) {
+/**
+ * Expanded unit card. Shows the live combat state at the top (status,
+ * model count, wound tracker, notes) and opens a drawer with the
+ * datasheet reference + once-per-battle toggles on tap. Designed for a
+ * phone-first tabletop workflow:
+ *
+ *   - Big ± buttons (40px) for wounds (top priority during a turn)
+ *   - One-tap status switch
+ *   - Drawer hides the datasheet detail until you need it
+ *   - Once-per-battle / once-per-game abilities auto-surface as toggles
+ */
+function UnitCard({
+  unit, unitCanon, narrow,
+  onModelDelta, onWound, onStatus, onNotes, onToggleOnceFlag,
+}) {
+  const [open, setOpen] = useState(false);
   const statusMeta = UNIT_STATUSES.find(s => s.id === unit.status) || UNIT_STATUSES[0];
+
+  // Derive ability list with once-flag detection. unitCanon contains the
+  // hydrated `abilities: [{name, text}]` projection from useWh40kData.
+  const onceAbilities = (unitCanon?.abilities || [])
+    .map(a => ({ ability: a, flag: detectOnceFlag(a) }))
+    .filter(x => x.flag);
+
+  // For multi-wound models, the wound bar takes priority. Squads with
+  // 1W models effectively just use the model counter.
+  const leadMax = unit.leadWoundsMax || 1;
+  const leadCur = unit.leadWoundsCurrent || 0;
+  const leadRemaining = Math.max(0, leadMax - leadCur);
+  const woundPct = leadMax > 0 ? (leadRemaining / leadMax) * 100 : 100;
+
+  const destroyed = unit.status === 'destroyed' || unit.currentModels <= 0;
+
   return (
-    <Panel padding="sm" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+    <Panel padding="sm" style={{
+      display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
+      opacity: destroyed ? 0.55 : 1,
+      borderColor: destroyed ? 'var(--color-border)' : undefined,
+    }}>
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          style={{
+            flex: 1, minWidth: 0, textAlign: 'left',
+            background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+            fontFamily: 'inherit', color: 'inherit',
+          }}
+        >
           <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {unit.name}
           </div>
           <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
-            {unit.role || '—'}
+            {unit.role || '—'} {open ? '· ▾' : '· ▸'}
           </div>
-        </div>
+        </button>
         <span
           style={{
             padding: '2px 8px', borderRadius: 999, fontSize: 'var(--fs-xs)',
@@ -371,40 +519,54 @@ function UnitCard({ unit, narrow, onModelDelta, onStatus, onNotes }) {
         >{statusMeta.label}</span>
       </div>
 
+      {/* ── Trackers row ── */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
+        display: 'grid',
+        gridTemplateColumns: leadMax > 1
+          ? (narrow ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)')
+          : '1fr',
         gap: 'var(--space-2)',
-        flexWrap: narrow ? 'wrap' : 'nowrap',
       }}>
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 2,
-            background: 'var(--color-surface)',
-          }}
-        >
-          <button type="button" onClick={() => onModelDelta(-1)} style={touchBtnStyle} aria-label="Modell entfernen">−</button>
-          <span style={{
-            minWidth: 56, textAlign: 'center',
-            fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--fw-semibold)',
-          }}>{unit.currentModels}/{unit.startingModels}</span>
-          <button type="button" onClick={() => onModelDelta(+1)} style={touchBtnStyle} aria-label="Modell hinzufügen">+</button>
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {UNIT_STATUSES.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onStatus(s.id)}
-              style={statusBtnStyle(unit.status === s.id, s.color)}
-              title={s.label}
-              aria-label={s.label}
-            >{s.id === unit.status ? '●' : '○'}</button>
-          ))}
-        </div>
+        {/* Model counter */}
+        <Tracker
+          label="Modelle"
+          value={`${unit.currentModels}/${unit.startingModels}`}
+          onDec={() => onModelDelta(-1)}
+          onInc={() => onModelDelta(+1)}
+          decDisabled={unit.currentModels <= 0}
+          incDisabled={unit.currentModels >= unit.startingModels}
+        />
+        {/* Wound bar (single multi-wound model OR character) */}
+        {leadMax > 1 && (
+          <Tracker
+            label={`Wunden Lead (W ${leadMax})`}
+            value={`${leadRemaining}`}
+            onDec={() => onWound(+1)}
+            onInc={() => onWound(-1)}
+            decDisabled={destroyed}
+            incDisabled={leadCur === 0 && unit.currentModels >= unit.startingModels}
+            bar={woundPct}
+            tone={woundPct < 50 ? 'warning' : woundPct < 25 ? 'danger' : 'success'}
+            invertButtons // − applies damage, + heals
+          />
+        )}
       </div>
 
+      {/* ── Status quick-switch ── */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {UNIT_STATUSES.map(s => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onStatus(s.id)}
+            style={statusBtnStyle(unit.status === s.id, s.color)}
+            title={s.label}
+            aria-label={s.label}
+          >{s.id === unit.status ? '●' : '○'} <span style={{ fontSize: 'var(--fs-xs)' }}>{s.label}</span></button>
+        ))}
+      </div>
+
+      {/* ── Notes ── */}
       <input
         type="text"
         value={unit.notes || ''}
@@ -422,9 +584,283 @@ function UnitCard({ unit, narrow, onModelDelta, onStatus, onNotes }) {
           minHeight: narrow ? 40 : undefined,
         }}
       />
+
+      {/* ── Drawer: datasheet reference ── */}
+      {open && unitCanon && (
+        <UnitDrawer
+          unitCanon={unitCanon}
+          oncePerBattleUsed={unit.oncePerBattleUsed || []}
+          onToggleOnceFlag={onToggleOnceFlag}
+          onceAbilities={onceAbilities}
+        />
+      )}
     </Panel>
   );
 }
+
+/** Reusable little ± tracker with optional progress bar (for wounds). */
+function Tracker({ label, value, onDec, onInc, decDisabled, incDisabled, bar, tone, invertButtons }) {
+  const toneColor = tone === 'danger'
+    ? 'var(--color-danger)'
+    : tone === 'warning' ? 'var(--color-warning)'
+    : tone === 'success' ? 'var(--color-success)'
+    : 'var(--color-accent)';
+  const decLabel = invertButtons ? '−1 Wunde' : '−1';
+  const incLabel = invertButtons ? 'heilen' : '+1';
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 4,
+      padding: '4px 6px',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      background: 'var(--color-surface)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.4, flex: 1,
+        }}>{label}</span>
+        <span style={{
+          fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--fw-semibold)',
+          fontSize: 'var(--fs-md)', color: toneColor,
+        }}>{value}</span>
+      </div>
+      {bar != null && (
+        <div style={{
+          height: 6, background: 'var(--color-bg-sunken)',
+          borderRadius: 999, overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%', width: `${bar}%`,
+            background: toneColor, transition: 'width var(--transition)',
+          }} />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          type="button"
+          onClick={onDec}
+          disabled={decDisabled}
+          style={trackerBtnStyle(decDisabled)}
+          title={decLabel}
+        >−</button>
+        <button
+          type="button"
+          onClick={onInc}
+          disabled={incDisabled}
+          style={trackerBtnStyle(incDisabled)}
+          title={incLabel}
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
+/** Drawer with weapons / abilities / keywords + once-per-battle togglers. */
+function UnitDrawer({ unitCanon, oncePerBattleUsed, onToggleOnceFlag, onceAbilities }) {
+  const usedSet = new Set(oncePerBattleUsed);
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
+      paddingTop: 'var(--space-2)',
+      borderTop: '1px dashed var(--color-border)',
+    }}>
+      {/* Once-per-battle toggles — surfaced first because they're the
+          single most-forgotten thing in a real game. */}
+      {onceAbilities.length > 0 && (
+        <DrawerSection title="Einmal-pro-Schlacht / Zug">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {onceAbilities.map(({ ability, flag }) => {
+              const isUsed = usedSet.has(flag.key);
+              return (
+                <button
+                  key={flag.key}
+                  type="button"
+                  onClick={() => onToggleOnceFlag(flag.key)}
+                  style={onceFlagBtnStyle(isUsed)}
+                  aria-pressed={isUsed}
+                >
+                  <span style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: '1px solid currentColor',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 'var(--fs-xs)',
+                  }}>{isUsed ? '✓' : ''}</span>
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <div style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ability.name}
+                    </div>
+                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
+                      {flag.label}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </DrawerSection>
+      )}
+
+      {/* Stats */}
+      {unitCanon.stats?.length > 0 && (
+        <DrawerSection title="Profile">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-xs)' }}>
+              <thead>
+                <tr>
+                  <th style={drawerThStyle}>Profil</th>
+                  {['M','T','Sv','W','Ld','OC'].map(c => (
+                    <th key={c} style={drawerThStyle}>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {unitCanon.stats.map((s, i) => (
+                  <tr key={i}>
+                    <td style={drawerTdStyle}>{s.name}</td>
+                    <td style={drawerTdStyle}>{s.m}</td>
+                    <td style={drawerTdStyle}>{s.t}</td>
+                    <td style={drawerTdStyle}>{s.sv}</td>
+                    <td style={drawerTdStyle}>{s.w}</td>
+                    <td style={drawerTdStyle}>{s.ld}</td>
+                    <td style={drawerTdStyle}>{s.oc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DrawerSection>
+      )}
+
+      {/* Weapons */}
+      {unitCanon.wargear?.length > 0 && (
+        <DrawerSection title={`Waffen (${unitCanon.wargear.length})`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
+            {unitCanon.wargear.map((w, i) => (
+              <div key={i} style={{
+                padding: '4px 8px',
+                background: 'var(--color-bg-sunken)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 'var(--fs-xs)',
+              }}>
+                <div style={{ fontWeight: 'var(--fw-semibold)', color: 'var(--color-text)' }}>
+                  {w.name}
+                </div>
+                <div style={{ color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  {w.range || '—'} · A {w.a || '–'} · {w.bs ? `BS ${w.bs}` : w.ws ? `WS ${w.ws}` : ''} · S {w.s || '–'} · AP {w.ap || '0'} · D {w.d || '1'}
+                </div>
+                {w.abilities?.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                    {w.abilities.slice(0, 6).map((a, j) => (
+                      <span key={j} style={{
+                        padding: '0 4px',
+                        fontSize: 10, letterSpacing: 0.4,
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text-muted)',
+                        borderRadius: 4,
+                      }}>{a}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </DrawerSection>
+      )}
+
+      {/* Abilities */}
+      {unitCanon.abilities?.length > 0 && (
+        <DrawerSection title={`Fähigkeiten (${unitCanon.abilities.length})`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
+            {unitCanon.abilities.map((a, i) => (
+              <div key={i} style={{
+                padding: '4px 8px',
+                background: 'var(--color-bg-sunken)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+              }}>
+                <div style={{ fontSize: 'var(--fs-xs)', fontWeight: 'var(--fw-semibold)' }}>{a.name}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>{a.text}</div>
+              </div>
+            ))}
+          </div>
+        </DrawerSection>
+      )}
+
+      {/* Keywords */}
+      {unitCanon.keywords?.length > 0 && (
+        <DrawerSection title="Keywords">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            {unitCanon.keywords.map(k => (
+              <span key={k} style={{
+                padding: '0 6px', fontSize: 10, letterSpacing: 0.4,
+                background: 'var(--color-surface)', color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4, textTransform: 'uppercase',
+              }}>{k}</span>
+            ))}
+          </div>
+        </DrawerSection>
+      )}
+    </div>
+  );
+}
+
+function DrawerSection({ title, children }) {
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <h4 style={{
+        margin: 0, fontSize: 10, fontWeight: 'var(--fw-semibold)',
+        textTransform: 'uppercase', letterSpacing: 0.6,
+        color: 'var(--color-text-muted)',
+      }}>{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function trackerBtnStyle(disabled) {
+  return {
+    flex: 1, minHeight: 40,
+    background: 'var(--color-bg-elevated)',
+    color: disabled ? 'var(--color-text-dim)' : 'var(--color-text)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--fs-lg)', fontWeight: 'var(--fw-semibold)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontFamily: 'inherit',
+  };
+}
+
+function onceFlagBtnStyle(isUsed) {
+  return {
+    display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+    width: '100%', minHeight: 40,
+    padding: 'var(--space-2)',
+    background: isUsed ? 'color-mix(in srgb, var(--color-success) 14%, transparent)' : 'var(--color-bg-sunken)',
+    color: isUsed ? 'var(--color-success)' : 'var(--color-text)',
+    border: `1px solid ${isUsed ? 'var(--color-success)' : 'var(--color-border)'}`,
+    borderRadius: 'var(--radius-md)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+  };
+}
+
+const drawerThStyle = {
+  textAlign: 'left',
+  padding: '2px 6px',
+  fontSize: 10, color: 'var(--color-text-muted)',
+  borderBottom: '1px solid var(--color-border)',
+  textTransform: 'uppercase', letterSpacing: 0.4,
+};
+const drawerTdStyle = {
+  padding: '2px 6px',
+  borderBottom: '1px solid var(--color-border)',
+  fontVariantNumeric: 'tabular-nums',
+};
 
 /* ─────────────────── styles ─────────────────── */
 
@@ -569,6 +1005,15 @@ const textareaStyle = {
   fontSize: 'var(--fs-sm)',
   fontFamily: 'inherit',
   resize: 'vertical',
+};
+const miniBtnStyle = {
+  width: 28, height: 28, padding: 0,
+  background: 'var(--color-bg-elevated)',
+  color: 'var(--color-text)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)',
+  fontSize: 'var(--fs-md)', lineHeight: 1, fontFamily: 'inherit',
+  cursor: 'pointer',
 };
 const counterBtnStyle = {
   width: 32, height: 32, padding: 0,

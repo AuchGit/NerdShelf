@@ -8,6 +8,8 @@ import MtgDeckBuilderApp from '../features/mtg/deck-builder/MtgDeckBuilderApp';
 import MtgInventoryPage from '../features/mtg/deck-builder/pages/MtgInventoryPage';
 import MtgWishlistPage from '../features/mtg/deck-builder/pages/MtgWishlistPage';
 import MtgFavoritesPage from '../features/mtg/deck-builder/pages/MtgFavoritesPage';
+import MatchHudDashboardPage from '../features/mtg/match-hud/pages/MatchHudDashboardPage';
+import MatchHudSessionPage from '../features/mtg/match-hud/pages/MatchHudSessionPage';
 import Wh40kApp from '../features/wh40k/Wh40kApp';
 
 const LAST_ROUTE_KEY = 'nerdshelf:lastRoute';
@@ -49,6 +51,8 @@ export default function Router() {
           <Route path="/mtg/wishlist" element={<MtgWishlistPage />} />
           <Route path="/mtg/inventory" element={<MtgInventoryPage />} />
           <Route path="/mtg/favorites" element={<MtgFavoritesPage />} />
+          <Route path="/mtg/match" element={<MatchHudDashboardPage />} />
+          <Route path="/mtg/match/:joinCode" element={<MatchHudSessionPage />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
           <Route path="/mtg/deck/:deckId" element={<MtgDeckBuilderApp />} />
           <Route path="/wh40k/*" element={<Wh40kApp />} />

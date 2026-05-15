@@ -4,6 +4,7 @@ import { useNavigate } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
 import { Panel } from '../../../../shared/ui'
 import DashboardLayout from '../../../../shared/dashboard/DashboardLayout'
+import { ShareTokenBadge } from '../../../../shared/tokens'
 
 const EDITION_ORDER = ['5e', '5.5e']
 const EDITION_LABEL = { '5e': '5e', '5.5e': '5.5e' }
@@ -19,7 +20,7 @@ export default function DashboardPage({ session }) {
     setLoading(true)
     const { data, error: err } = await supabase
       .from('characters')
-      .select('id, name, created_at, data')
+      .select('id, name, created_at, data, share_token')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
     if (err) setError(err.message)
@@ -179,12 +180,17 @@ function CharacterCard({ character, onOpen, onDelete }) {
         </div>
 
         <div style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
           fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)',
           borderTop: '1px solid var(--color-border)',
           paddingTop: 'var(--space-2)',
           marginTop: 'auto',
         }}>
-          Erstellt: {new Date(character.created_at).toLocaleDateString('de-DE')}
+          <span>Erstellt: {new Date(character.created_at).toLocaleDateString('de-DE')}</span>
+          <span style={{ flex: 1 }} />
+          {character.share_token && (
+            <ShareTokenBadge token={character.share_token} label="Charakter-Token" compact />
+          )}
         </div>
       </div>
     </Panel>

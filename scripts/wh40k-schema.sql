@@ -104,3 +104,34 @@ create policy "nerdshelf_inventory owner update" on nerdshelf_inventory
 drop policy if exists "nerdshelf_inventory owner delete" on nerdshelf_inventory;
 create policy "nerdshelf_inventory owner delete" on nerdshelf_inventory
   for delete using (auth.uid() = user_id);
+
+-- ─────────────────── share tokens ───────────────────
+--
+-- Every user-owned entity (MTG deck, WH40K army, DnD character) carries a
+-- short opaque token alongside its internal UUID. The token is the
+-- public identity used for exports, sharing, and future cross-user
+-- references. We do NOT make it the primary key — the canonical UUID
+-- stays untouched so existing foreign keys keep working.
+--
+-- Generation happens client-side (src/shared/tokens/shareToken.js).
+-- New rows always get a token; existing rows are back-filled on next
+-- save (the JS save handlers detect a NULL token and mint one).
+--
+-- This block is idempotent — re-running it on a DB that already has
+-- the columns is a no-op.
+
+alter table mtg_decks
+  add column if not exists share_token text;
+alter table wh40k_armies
+  add column if not exists share_token text;
+alter table characters
+  add column if not exists share_token text;
+
+-- Per-table uniqueness, scoped to non-null values so we don't choke on
+-- the back-fill window where some rows are still NULL.
+create unique index if not exists mtg_decks_share_token_uniq
+  on mtg_decks(share_token) where share_token is not null;
+create unique index if not exists wh40k_armies_share_token_uniq
+  on wh40k_armies(share_token) where share_token is not null;
+create unique index if not exists characters_share_token_uniq
+  on characters(share_token) where share_token is not null;

@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
+import { newShareToken } from '../../../../shared/tokens'
 import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
@@ -163,9 +164,17 @@ export default function CharacterEditPage({ session }) {
 
   async function handleFinish() {
     setSaving(true); setError(null)
+    // Pre-existing characters created before share_token rolled out have
+    // a NULL token — mint one on first edit so every row reaches a
+    // tokenised steady state without a one-off migration script.
+    const { data: existing } = await supabase
+      .from('characters').select('share_token')
+      .eq('id', id).eq('user_id', session.user.id).maybeSingle()
+    const update = { data: character, name: character.info.name }
+    if (!existing?.share_token) update.share_token = newShareToken()
     const { error: err } = await supabase
       .from('characters')
-      .update({ data: character, name: character.info.name })
+      .update(update)
       .eq('id', id).eq('user_id', session.user.id)
     if (err) { setError('Speichern fehlgeschlagen'); setSaving(false); return }
     navigate(`/character/${id}`)

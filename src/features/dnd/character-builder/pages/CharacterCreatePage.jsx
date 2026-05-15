@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../../../../core/auth/AuthContext'
+import { newShareToken } from '../../../../shared/tokens'
 import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
@@ -286,6 +287,7 @@ export default function CharacterCreatePage({ session }) {
       user_id: session.user.id,
       name:    character.info.name,
       data:    character,
+      share_token: newShareToken(),
     })
     if (error) { setError(t('errSave')); setSaving(false); return }
     navigate('/')
