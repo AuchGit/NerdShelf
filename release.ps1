@@ -22,6 +22,28 @@ if ($conf -match '"version": "(\d+)\.(\d+)\.(\d+)"') {
 Write-Host "Aktuelle Version: $old"
 Write-Host "Neue Version:     $new" -ForegroundColor Green
 Write-Host ""
+
+# ── Pre-release gate ───────────────────────────────────────────────────
+# Block the release if the WH40K dataset on disk is missing or broken.
+# Release builds bundle whatever is under public/data/, so a broken
+# dataset here ships to every user via the auto-updater.
+Write-Host "[gate] wh40k:check ..." -ForegroundColor Cyan
+node scripts/check-wh40k-dataset.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Pre-release gate failed. Aborting." -ForegroundColor Red
+    Read-Host "Enter druecken"
+    exit 1
+}
+
+Write-Host "[gate] wh40k:test ..." -ForegroundColor Cyan
+node scripts/wh40k-import test
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Dataset tests failed. Aborting." -ForegroundColor Red
+    Read-Host "Enter druecken"
+    exit 1
+}
+Write-Host ""
+
 $confirm = Read-Host "Release v$new? (j/n)"
 if ($confirm -ne "j") {
     Write-Host "Abgebrochen."

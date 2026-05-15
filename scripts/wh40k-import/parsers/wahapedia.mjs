@@ -39,6 +39,9 @@ const PARSE_OPTIONS = {
   relax_column_count: true,
   relax_quotes: true,
   trim: true,
+  // Wahapedia exports their CSVs with a UTF-8 BOM, which otherwise ends
+  // up prefixed to the first column header (`﻿id` instead of `id`).
+  bom: true,
 };
 
 async function readCsv(dir, file) {

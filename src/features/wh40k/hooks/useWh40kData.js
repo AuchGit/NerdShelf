@@ -30,21 +30,47 @@ const ROOT_INDEX = '/data/wh40k/index.json';
 // Module-level cache — survives component remounts and HMR.
 let cachePromise = null;
 
+/**
+ * Wrap fetch errors with a NerdShelf-specific diagnostic message so a
+ * misbundled or stale release fails loudly with a recipe to fix it
+ * (instead of e.g. "404" or "Unexpected token < in JSON").
+ */
+async function fetchJsonOrDiagnose(url, label) {
+  let res;
+  try { res = await fetch(url); }
+  catch (e) {
+    throw new Error(`WH40K dataset: network error fetching ${label} — ${e.message}`);
+  }
+  if (!res.ok) {
+    // The most common cause is a release that didn't bundle the dataset.
+    // Surface the diagnostic the user can act on instead of bare HTTP code.
+    const hint = res.status === 404
+      ? ` (file missing from bundle — run "npm run wh40k:seed" before building, or check that public/data/wh40k/ is on disk)`
+      : '';
+    throw new Error(`WH40K dataset: ${label} returned HTTP ${res.status}${hint}`);
+  }
+  try { return await res.json(); }
+  catch (e) {
+    throw new Error(`WH40K dataset: ${label} is not valid JSON (${e.message})`);
+  }
+}
+
 async function loadAll() {
+  if (typeof console !== 'undefined') {
+    console.info('[wh40k] loading dataset…');
+  }
+  const t0 = Date.now();
+
   // 1. Resolve current version
-  const idx = await fetch(ROOT_INDEX).then(r => {
-    if (!r.ok) throw new Error(`index.json: ${r.status}`);
-    return r.json();
-  });
+  const idx = await fetchJsonOrDiagnose(ROOT_INDEX, 'index.json');
   const { edition, version } = idx.current || {};
-  if (!edition || !version) throw new Error('index.json: missing current.{edition,version}');
+  if (!edition || !version) {
+    throw new Error('WH40K dataset: index.json has no current.{edition,version} — re-run "npm run wh40k:seed".');
+  }
   const base = `/data/wh40k/${edition}/${version}`;
 
   // 2. Fetch every canonical file in parallel.
-  const j = (path) => fetch(`${base}/${path}`).then(r => {
-    if (!r.ok) throw new Error(`${path}: ${r.status}`);
-    return r.json();
-  });
+  const j = (path) => fetchJsonOrDiagnose(`${base}/${path}`, path);
 
   const [
     factions, detachments, units,
@@ -96,6 +122,21 @@ async function loadAll() {
   const roleSet = new Set();
   for (const u of units) if (u.role) roleSet.add(u.role);
   const allRoles = [...roleSet].sort();
+
+  // Runtime sanity. The release-pipeline gate (`check-wh40k-dataset.mjs`)
+  // already enforces these, but we belt-and-braces in case a user mounts
+  // a hand-edited dist or runs from an unusual checkout.
+  if (manifest && idx.schemaVersion != null && manifest.schemaVersion !== idx.schemaVersion) {
+    console.warn(
+      `[wh40k] schemaVersion mismatch: index.json=${idx.schemaVersion}, manifest=${manifest.schemaVersion}`
+    );
+  }
+  if (factions.length === 0 || units.length === 0) {
+    console.error('[wh40k] dataset loaded but is empty — release likely missing import step.');
+  }
+  if (typeof console !== 'undefined') {
+    console.info(`[wh40k] loaded ${factions.length} factions, ${units.length} units in ${Date.now() - t0}ms`);
+  }
 
   return {
     // version metadata

@@ -11,6 +11,8 @@ import Wh40kArmyBuilderApp from './Wh40kArmyBuilderApp';
 import UnitBrowserPage from './pages/UnitBrowserPage';
 import FavoritesPage from './pages/FavoritesPage';
 import InventoryPage from './pages/InventoryPage';
+import CombatDashboardPage from './pages/CombatDashboardPage';
+import CombatSessionPage from './pages/CombatSessionPage';
 import Wh40kSubNav from './components/Wh40kSubNav';
 
 function withSubNav(node) {
@@ -29,9 +31,11 @@ export default function Wh40kApp() {
       <Route path="units"     element={withSubNav(<UnitBrowserPage />)} />
       <Route path="favorites" element={withSubNav(<FavoritesPage />)} />
       <Route path="inventory" element={withSubNav(<InventoryPage />)} />
-      {/* Army builder takes the full content area (its own header), no sub-nav */}
+      <Route path="combat"    element={withSubNav(<CombatDashboardPage />)} />
+      {/* Army builder + combat session take the full content area (own header) */}
       <Route path="army/new"        element={<Wh40kArmyBuilderApp />} />
       <Route path="army/:armyId"    element={<Wh40kArmyBuilderApp />} />
+      <Route path="combat/:sessionId" element={<CombatSessionPage />} />
     </Routes>
   );
 }

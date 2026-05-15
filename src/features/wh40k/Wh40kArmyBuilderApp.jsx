@@ -22,6 +22,7 @@ import UnitFilters from './components/UnitFilters';
 import UnitGrid from './components/UnitGrid';
 import UnitDetail from './components/UnitDetail';
 import ArmyPanel from './components/ArmyPanel';
+import DetachmentInfo from './components/DetachmentInfo';
 
 const EMPTY_ARMY = {
   name: 'Unbenannte Armee',
@@ -48,6 +49,10 @@ export default function Wh40kArmyBuilderApp() {
 
   const [filters, setFilters] = useState(() => emptyFilters());
   const [selectedUnitId, setSelectedUnitId] = useState(null);
+
+  // Detachment-info expanded? Auto-opens on first faction selection so the
+  // user sees what each detachment actually does before committing.
+  const [detachmentInfoCollapsed, setDetachmentInfoCollapsed] = useState(false);
 
   const [dirty, setDirty] = useState(false);
   const skipDirtyRef = useRef(false);
@@ -257,6 +262,15 @@ export default function Wh40kArmyBuilderApp() {
   }
 
   const factionDetachments = data.detachmentsByFaction[army.factionId] || [];
+  const selectedDetachment = army.detachmentId
+    ? data.detachmentsById?.[army.detachmentId]
+    : null;
+  const detachmentStratagems = selectedDetachment
+    ? (data.stratagemsByDetachment?.[selectedDetachment.id] || [])
+    : [];
+  const detachmentEnhancements = selectedDetachment
+    ? (data.enhancementsByDetachment?.[selectedDetachment.id] || [])
+    : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -272,6 +286,23 @@ export default function Wh40kArmyBuilderApp() {
         exportStatus={exportStatus}
         onBack={() => navigate('/wh40k')}
       />
+
+      {/* Detachment info — appears as soon as a detachment is picked so
+          the player can see its rule + stratagems + enhancements without
+          leaving the builder. Collapsible to reclaim vertical space once
+          the player knows what they've got. */}
+      {selectedDetachment && (
+        <div style={{ padding: 'var(--space-3) var(--space-5) 0' }}>
+          <DetachmentInfo
+            detachment={selectedDetachment}
+            abilitiesById={data.abilitiesById}
+            stratagems={detachmentStratagems}
+            enhancements={detachmentEnhancements}
+            collapsed={detachmentInfoCollapsed}
+            onToggle={() => setDetachmentInfoCollapsed(v => !v)}
+          />
+        </div>
+      )}
 
       {validation.errors.length > 0 && (
         <div

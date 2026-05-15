@@ -2,35 +2,42 @@
   "schemaVersion": 1,
   "edition": "10e",
   "version": "v1",
-  "generatedAt": "2026-05-09T21:06:11.179Z",
+  "generatedAt": "2026-05-15T15:02:02.085Z",
   "counts": {
-    "factions": 10,
-    "units": 22,
-    "detachments": 21,
-    "abilities": 24,
-    "stratagems": 0,
-    "enhancements": 0,
-    "keywords": 24,
-    "weaponProfiles": 28,
-    "modelProfiles": 29,
+    "factions": 26,
+    "units": 1710,
+    "detachments": 261,
+    "abilities": 7152,
+    "stratagems": 1452,
+    "enhancements": 927,
+    "keywords": 1417,
+    "weaponProfiles": 9159,
+    "modelProfiles": 1812,
     "armyRules": 0,
-    "unitCompositions": 22,
-    "wargearOptions": 0
+    "unitCompositions": 1710,
+    "wargearOptions": 2831
   },
-  "sources": {},
+  "sources": {
+    "bsdata": {
+      "commit": "b9932fb"
+    },
+    "wahapedia": {
+      "fetchedAt": "2026-05-15T15:02:01.355Z"
+    }
+  },
   "fileHashes": {
-    "factions.json": "9994b8de5e1c564e3e1ae7478370678f123ad4e40c394cbf302005b91f69d9bc",
-    "units.json": "c5e5d0c193b4314757bf854900be63e9341ec08f532d9d43f9888abdd0514e73",
-    "detachments.json": "fb19c3dab79efb0fe0f07e9f5d138fdaa33ebadb9c2a9c7ec28ffcfb2194bd80",
-    "abilities.json": "93548d435e540b584e98e025edaeefab9984a0af464f1cd59d437e4c642595d6",
-    "stratagems.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-    "enhancements.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-    "keywords.json": "f5d69caee42a4af6070014290929d8e6de63ab3e9c067061c4e9d68f61e19bfa",
-    "weapons.json": "fb5c8d2a253b1b6f132e6ec8383d28bb6d812582b408b12b6ddbac94c597a8f8",
-    "model-profiles.json": "af246c3f288d61142d06e0e58aa093d8677e391d5f0377ccaab3fdd07aa8b277",
+    "factions.json": "c6b93e04cd4a3f0d93797027f884f9634252868535b169ee8559db862cda4fc4",
+    "units.json": "b5c4052a5f0fa2eac69925131850c0665e6c5a6fa4f28fb907092dfc1f65622b",
+    "detachments.json": "84a8973af04b87835115d6e29c683ae08bf4b044d29f62cdbcabe8b205448c0f",
+    "abilities.json": "1bbf02defc3fea6f7674370fcb07e7597500ec932717fc34e3f013d772b2c52d",
+    "stratagems.json": "563e66cfdc7153624230dce4ebddea4bdd21f3171fa55317e98f787bf3f8bda8",
+    "enhancements.json": "60a3d41425f3e230abecf5dc532f75a4842937ff25e42f833c2232174f358551",
+    "keywords.json": "f301586ec98a6f54275496495ddfbdd55fc6e6fe37a015600e63c889abbfcf48",
+    "weapons.json": "2adf634f6d3ae58a5aa9ad7d03109047db62ff5951f69a7484432a4b91a30376",
+    "model-profiles.json": "8d04cd8bb4307bdc914b7fc39c369dcd4ccf40c27fe50098f98bf0b2c0a1c856",
     "army-rules.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-    "unit-compositions.json": "6f34814c02e9dae715c1334ddb214fbf3dd4db0be09c8e897c3a026d593eb117",
-    "wargear-options.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-    "aliases.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    "unit-compositions.json": "df02c9d239daddb965b77ec19eccc5949017b9fd4bfbc8e1feb52b6c5230bb0c",
+    "wargear-options.json": "3008754624438e882b8291ffeea504691c3a4aff2a36e6705d5f12a79d8f6c3a",
+    "aliases.json": "30e5caa7757dc7e89020fa4ee6708e3262facc1bdac8c5481a9f1a3c0b2e6513"
   }
 }

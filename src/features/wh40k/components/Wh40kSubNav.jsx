@@ -9,6 +9,7 @@ import { NavLink } from 'react-router-dom';
 const TABS = [
   { to: '/wh40k',           label: 'Armeen',     end: true },
   { to: '/wh40k/units',     label: 'Einheiten' },
+  { to: '/wh40k/combat',    label: 'Combat'    },
   { to: '/wh40k/favorites', label: 'Favoriten' },
   { to: '/wh40k/inventory', label: 'Sammlung'  },
 ];

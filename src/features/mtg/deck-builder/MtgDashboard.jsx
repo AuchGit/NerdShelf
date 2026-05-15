@@ -6,6 +6,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import { Panel } from '../../../shared/ui';
 import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
+import MtgSubNav from './components/MtgSubNav';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -78,6 +79,7 @@ export default function MtgDashboard() {
 
   return (
     <>
+      <MtgSubNav />
       {error && (
         <div style={{
           maxWidth: 1200, margin: '0 auto',

@@ -23,6 +23,7 @@ import { mergeCanonicals } from './merge.mjs';
 import { runValidators, partitionIssues } from './validate.mjs';
 import { writeDataset } from './output.mjs';
 import { buildReport, printReport, writeReportFile, makeLogger } from './report.mjs';
+import { ALIAS_IDS } from './canonicalize.mjs';
 //
 // Parsers are loaded lazily so that running `seed` mode works without the
 // optional dev dependencies (fast-xml-parser, csv-parse) being installed.
@@ -63,6 +64,11 @@ async function main() {
   if (cmd === 'test') {
     // Delegate to test.mjs by import; avoids spawning a child process.
     await import('./test.mjs');
+    return;
+  }
+  if (cmd === 'audit') {
+    const { runAuditCommand } = await import('./audit.mjs');
+    await runAuditCommand();
     return;
   }
 
@@ -143,6 +149,7 @@ async function main() {
   let writeResult = null;
   if (errors.length === 0) {
     writeResult = await writeDataset(merged, {
+      aliases: ALIAS_IDS,
       sources: {
         bsdata:    sourceResults.bsdata?.ok    ? { commit: sourceResults.bsdata.commit }    : undefined,
         wahapedia: sourceResults.wahapedia?.ok ? { fetchedAt: sourceResults.wahapedia.fetchedAt } : undefined,

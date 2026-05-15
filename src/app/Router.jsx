@@ -5,6 +5,9 @@ import Layout from './Layout';
 import DndCharacterApp from '../features/dnd/character-builder/DndCharacterApp';
 import MtgDashboard from '../features/mtg/deck-builder/MtgDashboard';
 import MtgDeckBuilderApp from '../features/mtg/deck-builder/MtgDeckBuilderApp';
+import MtgInventoryPage from '../features/mtg/deck-builder/pages/MtgInventoryPage';
+import MtgWishlistPage from '../features/mtg/deck-builder/pages/MtgWishlistPage';
+import MtgFavoritesPage from '../features/mtg/deck-builder/pages/MtgFavoritesPage';
 import Wh40kApp from '../features/wh40k/Wh40kApp';
 
 const LAST_ROUTE_KEY = 'nerdshelf:lastRoute';
@@ -43,6 +46,9 @@ export default function Router() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/dnd/*" element={<DndCharacterApp />} />
           <Route path="/mtg" element={<MtgDashboard />} />
+          <Route path="/mtg/wishlist" element={<MtgWishlistPage />} />
+          <Route path="/mtg/inventory" element={<MtgInventoryPage />} />
+          <Route path="/mtg/favorites" element={<MtgFavoritesPage />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
           <Route path="/mtg/deck/:deckId" element={<MtgDeckBuilderApp />} />
           <Route path="/wh40k/*" element={<Wh40kApp />} />

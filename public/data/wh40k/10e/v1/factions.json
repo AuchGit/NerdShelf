@@ -1,18 +1,58 @@
 [
   {
+    "id": "adepta-sororitas",
+    "name": "Adepta Sororitas",
+    "shortName": "Adepta Sororitas",
+    "alignment": "imperium",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AS"
+      }
+    }
+  },
+  {
     "id": "adeptus-custodes",
     "name": "Adeptus Custodes",
-    "shortName": "Custodes",
+    "shortName": "Adeptus Custodes",
     "alignment": "imperium",
-    "color": "#c8a74a",
-    "icon": "✦",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "IMPERIUM",
-      "ADEPTUS CUSTODES"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AC"
+      }
+    }
+  },
+  {
+    "id": "adeptus-mechanicus",
+    "name": "Adeptus Mechanicus",
+    "shortName": "Adeptus Mechanicus",
+    "alignment": "imperium",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AdM"
+      }
+    }
+  },
+  {
+    "id": "adeptus-titanicus",
+    "name": "Adeptus Titanicus",
+    "shortName": "Adeptus Titanicus",
+    "alignment": "unaligned",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "TL"
+      }
     }
   },
   {
@@ -20,46 +60,69 @@
     "name": "Aeldari",
     "shortName": "Aeldari",
     "alignment": "xenos",
-    "color": "#4a8aa8",
-    "icon": "✧",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "AELDARI"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AE"
+      }
     }
   },
   {
     "id": "astra-militarum",
     "name": "Astra Militarum",
-    "shortName": "Guard",
+    "shortName": "Astra Militarum",
     "alignment": "imperium",
-    "color": "#6b8e23",
-    "icon": "⚔",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "IMPERIUM",
-      "ASTRA MILITARUM"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AM"
+      }
+    }
+  },
+  {
+    "id": "chaos-daemons",
+    "name": "Chaos Daemons",
+    "shortName": "Chaos Daemons",
+    "alignment": "chaos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "CD"
+      }
+    }
+  },
+  {
+    "id": "chaos-knights",
+    "name": "Chaos Knights",
+    "shortName": "Chaos Knights",
+    "alignment": "chaos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "QT"
+      }
     }
   },
   {
     "id": "chaos-space-marines",
     "name": "Chaos Space Marines",
-    "shortName": "CSM",
+    "shortName": "Chaos Space Marines",
     "alignment": "chaos",
-    "color": "#9c2a2a",
-    "icon": "☠",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "CHAOS",
-      "HERETIC ASTARTES"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "CSM"
+      }
     }
   },
   {
@@ -67,15 +130,111 @@
     "name": "Death Guard",
     "shortName": "Death Guard",
     "alignment": "chaos",
-    "color": "#7a8c4a",
-    "icon": "✺",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "CHAOS",
-      "DEATH GUARD"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "DG"
+      }
+    }
+  },
+  {
+    "id": "drukhari",
+    "name": "Drukhari",
+    "shortName": "Drukhari",
+    "alignment": "xenos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "DRU"
+      }
+    }
+  },
+  {
+    "id": "emperors-children",
+    "name": "Emperor’s Children",
+    "shortName": "Emperor’s Children",
+    "alignment": "unaligned",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "EC"
+      }
+    }
+  },
+  {
+    "id": "genestealer-cults",
+    "name": "Genestealer Cults",
+    "shortName": "Genestealer Cults",
+    "alignment": "xenos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "GC"
+      }
+    }
+  },
+  {
+    "id": "grey-knights",
+    "name": "Grey Knights",
+    "shortName": "Grey Knights",
+    "alignment": "imperium",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "GK"
+      }
+    }
+  },
+  {
+    "id": "imperial-agents",
+    "name": "Imperial Agents",
+    "shortName": "Imperial Agents",
+    "alignment": "unaligned",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "AoI"
+      }
+    }
+  },
+  {
+    "id": "imperial-knights",
+    "name": "Imperial Knights",
+    "shortName": "Imperial Knights",
+    "alignment": "imperium",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "QI"
+      }
+    }
+  },
+  {
+    "id": "leagues-of-votann",
+    "name": "Leagues of Votann",
+    "shortName": "Leagues of Votann",
+    "alignment": "xenos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "LoV"
+      }
     }
   },
   {
@@ -83,14 +242,13 @@
     "name": "Necrons",
     "shortName": "Necrons",
     "alignment": "xenos",
-    "color": "#3a8a4a",
-    "icon": "◆",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "NECRONS"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "NEC"
+      }
     }
   },
   {
@@ -98,14 +256,13 @@
     "name": "Orks",
     "shortName": "Orks",
     "alignment": "xenos",
-    "color": "#6b9c2a",
-    "icon": "▲",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "ORKS"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "ORK"
+      }
     }
   },
   {
@@ -113,30 +270,41 @@
     "name": "Space Marines",
     "shortName": "Space Marines",
     "alignment": "imperium",
-    "color": "#4a6fa5",
-    "icon": "Ω",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "IMPERIUM",
-      "ADEPTUS ASTARTES"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "SM"
+      }
     }
   },
   {
     "id": "tau-empire",
-    "name": "T'au Empire",
-    "shortName": "T'au",
+    "name": "T’au Empire",
+    "shortName": "T’au Empire",
     "alignment": "xenos",
-    "color": "#c87a3a",
-    "icon": "◉",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "T'AU EMPIRE"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "TAU"
+      }
+    }
+  },
+  {
+    "id": "thousand-sons",
+    "name": "Thousand Sons",
+    "shortName": "Thousand Sons",
+    "alignment": "chaos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "TS"
+      }
     }
   },
   {
@@ -144,14 +312,55 @@
     "name": "Tyranids",
     "shortName": "Tyranids",
     "alignment": "xenos",
-    "color": "#8a4a8a",
-    "icon": "◈",
     "armyRuleIds": [],
-    "factionKeywords": [
-      "TYRANIDS"
-    ],
+    "factionKeywords": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "TYR"
+      }
+    }
+  },
+  {
+    "id": "unaligned-forces",
+    "name": "Unaligned Forces",
+    "shortName": "Unaligned Forces",
+    "alignment": "unaligned",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "UN"
+      }
+    }
+  },
+  {
+    "id": "unbound-adversaries",
+    "name": "Unbound Adversaries",
+    "shortName": "Unbound Adversaries",
+    "alignment": "unaligned",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "UA"
+      }
+    }
+  },
+  {
+    "id": "world-eaters",
+    "name": "World Eaters",
+    "shortName": "World Eaters",
+    "alignment": "chaos",
+    "armyRuleIds": [],
+    "factionKeywords": [],
+    "source": {
+      "primary": "wahapedia",
+      "sourceIds": {
+        "wahapedia": "WE"
+      }
     }
   }
 ]

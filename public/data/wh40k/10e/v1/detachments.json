@@ -1,5 +1,113 @@
 [
   {
+    "id": "det-adepta-sororitas--army-of-faith",
+    "factionId": "adepta-sororitas",
+    "name": "Army of Faith",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--bringers-of-flame",
+    "factionId": "adepta-sororitas",
+    "name": "Bringers of Flame",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--champions-of-faith",
+    "factionId": "adepta-sororitas",
+    "name": "Champions of Faith",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--hallowed-martyrs",
+    "factionId": "adepta-sororitas",
+    "name": "Hallowed Martyrs",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--penitent-host",
+    "factionId": "adepta-sororitas",
+    "name": "Penitent Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--penitents-and-pilgrims",
+    "factionId": "adepta-sororitas",
+    "name": "Penitents and Pilgrims",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adepta-sororitas--pious-protectors",
+    "factionId": "adepta-sororitas",
+    "name": "Pious Protectors",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--auric-champions",
+    "factionId": "adeptus-custodes",
+    "name": "Auric Champions",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--black-ship-guardians",
+    "factionId": "adeptus-custodes",
+    "name": "Black Ship Guardians",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
     "id": "det-adeptus-custodes--lions-of-the-emperor",
     "factionId": "adeptus-custodes",
     "name": "Lions of the Emperor",
@@ -8,7 +116,19 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--null-maiden-vigil",
+    "factionId": "adeptus-custodes",
+    "name": "Null Maiden Vigil",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -20,19 +140,343 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
-    "id": "det-aeldari--battle-host",
-    "factionId": "aeldari",
-    "name": "Battle Host",
+    "id": "det-adeptus-custodes--solar-spearhead",
+    "factionId": "adeptus-custodes",
+    "name": "Solar Spearhead",
     "description": "",
     "abilityIds": [],
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--talons-of-the-emperor",
+    "factionId": "adeptus-custodes",
+    "name": "Talons Of The Emperor",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-custodes--voyagers-in-darkness",
+    "factionId": "adeptus-custodes",
+    "name": "Voyagers in Darkness",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--cohort-cybernetica",
+    "factionId": "adeptus-mechanicus",
+    "name": "Cohort Cybernetica",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--data-psalm-conclave",
+    "factionId": "adeptus-mechanicus",
+    "name": "Data-Psalm Conclave",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--electromartyrs",
+    "factionId": "adeptus-mechanicus",
+    "name": "Electromartyrs",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--eradication-cohort",
+    "factionId": "adeptus-mechanicus",
+    "name": "Eradication Cohort",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--explorator-maniple",
+    "factionId": "adeptus-mechanicus",
+    "name": "Explorator Maniple",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--haloscreed-battle-clade",
+    "factionId": "adeptus-mechanicus",
+    "name": "Haloscreed Battle Clade",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--machine-cult",
+    "factionId": "adeptus-mechanicus",
+    "name": "Machine Cult",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--rad-zone-corps",
+    "factionId": "adeptus-mechanicus",
+    "name": "Rad-Zone Corps",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--response-clade",
+    "factionId": "adeptus-mechanicus",
+    "name": "Response Clade",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-adeptus-mechanicus--skitarii-hunter-cohort",
+    "factionId": "adeptus-mechanicus",
+    "name": "Skitarii Hunter Cohort",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--armoured-warhost",
+    "factionId": "aeldari",
+    "name": "Armoured Warhost",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--army-rules",
+    "factionId": "aeldari",
+    "name": "Army Rules",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--aspect-host",
+    "factionId": "aeldari",
+    "name": "Aspect Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--corsair-coterie",
+    "factionId": "aeldari",
+    "name": "Corsair Coterie",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--devoted-of-ynnead",
+    "factionId": "aeldari",
+    "name": "Devoted of Ynnead",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--eldritch-raiders",
+    "factionId": "aeldari",
+    "name": "Eldritch Raiders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--ghosts-of-the-webway",
+    "factionId": "aeldari",
+    "name": "Ghosts of the Webway",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--guardian-battlehost",
+    "factionId": "aeldari",
+    "name": "Guardian Battlehost",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--khaines-arrow",
+    "factionId": "aeldari",
+    "name": "Khaine’s Arrow",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--protector-host",
+    "factionId": "aeldari",
+    "name": "Protector Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--seer-council",
+    "factionId": "aeldari",
+    "name": "Seer Council",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--serpents-brood",
+    "factionId": "aeldari",
+    "name": "Serpent’s Brood",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--spirit-conclave",
+    "factionId": "aeldari",
+    "name": "Spirit Conclave",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--star-dancer-masque",
+    "factionId": "aeldari",
+    "name": "Star-dancer Masque",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--warhost",
+    "factionId": "aeldari",
+    "name": "Warhost",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -44,7 +488,31 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-aeldari--wraiths-of-the-void",
+    "factionId": "aeldari",
+    "name": "Wraiths of the Void",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--armoured-infantry",
+    "factionId": "astra-militarum",
+    "name": "Armoured Infantry",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -56,19 +524,439 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
-    "id": "det-astra-militarum--combined-regiment",
+    "id": "det-astra-militarum--combined-arms",
     "factionId": "astra-militarum",
-    "name": "Combined Regiment",
+    "name": "Combined Arms",
     "description": "",
     "abilityIds": [],
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--embarked-regiment",
+    "factionId": "astra-militarum",
+    "name": "Embarked Regiment",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--grizzled-company",
+    "factionId": "astra-militarum",
+    "name": "Grizzled Company",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--hammer-of-the-emperor",
+    "factionId": "astra-militarum",
+    "name": "Hammer of the Emperor",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--mechanised-assault",
+    "factionId": "astra-militarum",
+    "name": "Mechanised Assault",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--recon-element",
+    "factionId": "astra-militarum",
+    "name": "Recon Element",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--siege-regiment",
+    "factionId": "astra-militarum",
+    "name": "Siege Regiment",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--steel-hammer",
+    "factionId": "astra-militarum",
+    "name": "Steel Hammer",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-astra-militarum--tempestus-boarding-regiment",
+    "factionId": "astra-militarum",
+    "name": "Tempestus Boarding Regiment",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--blood-legion",
+    "factionId": "chaos-daemons",
+    "name": "Blood Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--daemonic-incursion",
+    "factionId": "chaos-daemons",
+    "name": "Daemonic Incursion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--dread-carnival",
+    "factionId": "chaos-daemons",
+    "name": "Dread Carnival",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--infernal-onslaught",
+    "factionId": "chaos-daemons",
+    "name": "Infernal Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--legion-of-excess",
+    "factionId": "chaos-daemons",
+    "name": "Legion of Excess",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--pandaemoniac-inferno",
+    "factionId": "chaos-daemons",
+    "name": "Pandaemoniac Inferno",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--plague-legion",
+    "factionId": "chaos-daemons",
+    "name": "Plague Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--rotten-and-rusted",
+    "factionId": "chaos-daemons",
+    "name": "Rotten and Rusted",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--scintillating-legion",
+    "factionId": "chaos-daemons",
+    "name": "Scintillating Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-daemons--shadow-legion",
+    "factionId": "chaos-daemons",
+    "name": "Shadow Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--helhunt-lance",
+    "factionId": "chaos-knights",
+    "name": "Helhunt Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--houndpack-lance",
+    "factionId": "chaos-knights",
+    "name": "Houndpack Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--iconoclast-fiefdom",
+    "factionId": "chaos-knights",
+    "name": "Iconoclast Fiefdom",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--infernal-lance",
+    "factionId": "chaos-knights",
+    "name": "Infernal Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--lords-of-dread",
+    "factionId": "chaos-knights",
+    "name": "Lords of Dread",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-knights--traitoris-lance",
+    "factionId": "chaos-knights",
+    "name": "Traitoris Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--cabal-of-chaos",
+    "factionId": "chaos-space-marines",
+    "name": "Cabal of Chaos",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--champions-of-chaos",
+    "factionId": "chaos-space-marines",
+    "name": "Champions of Chaos",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--chaos-cult",
+    "factionId": "chaos-space-marines",
+    "name": "Chaos Cult",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--creations-of-bile",
+    "factionId": "chaos-space-marines",
+    "name": "Creations of Bile",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--cult-of-the-arkifane",
+    "factionId": "chaos-space-marines",
+    "name": "Cult of the Arkifane",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--deceptors",
+    "factionId": "chaos-space-marines",
+    "name": "Deceptors",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--dread-talons",
+    "factionId": "chaos-space-marines",
+    "name": "Dread Talons",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--fellhammer-siege-host",
+    "factionId": "chaos-space-marines",
+    "name": "Fellhammer Siege-host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--hurons-marauders",
+    "factionId": "chaos-space-marines",
+    "name": "Huron’s Marauders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--infernal-reavers",
+    "factionId": "chaos-space-marines",
+    "name": "Infernal Reavers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--nightmare-hunt",
+    "factionId": "chaos-space-marines",
+    "name": "Nightmare Hunt",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -80,7 +968,7 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
@@ -92,19 +980,883 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
-    "id": "det-death-guard--plague-company",
-    "factionId": "death-guard",
-    "name": "Plague Company",
+    "id": "det-chaos-space-marines--renegade-warband",
+    "factionId": "chaos-space-marines",
+    "name": "Renegade Warband",
     "description": "",
     "abilityIds": [],
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--soulforged-warpack",
+    "factionId": "chaos-space-marines",
+    "name": "Soulforged Warpack",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--underdeck-uprising",
+    "factionId": "chaos-space-marines",
+    "name": "Underdeck Uprising",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--veterans-of-the-long-war",
+    "factionId": "chaos-space-marines",
+    "name": "Veterans of the Long War",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-chaos-space-marines--warpstrike-champions",
+    "factionId": "chaos-space-marines",
+    "name": "Warpstrike Champions",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--arch-contaminators",
+    "factionId": "death-guard",
+    "name": "Arch-Contaminators",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--champions-of-contagion",
+    "factionId": "death-guard",
+    "name": "Champions of Contagion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--death-lords-chosen",
+    "factionId": "death-guard",
+    "name": "Death Lord’s Chosen",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--flyblown-host",
+    "factionId": "death-guard",
+    "name": "Flyblown Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--mortarions-hammer",
+    "factionId": "death-guard",
+    "name": "Mortarion’s Hammer",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--shamblerot-vectorium",
+    "factionId": "death-guard",
+    "name": "Shamblerot Vectorium",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--tallyband-summoners",
+    "factionId": "death-guard",
+    "name": "Tallyband Summoners",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--unclean-uprising",
+    "factionId": "death-guard",
+    "name": "Unclean Uprising",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--vectors-of-decay",
+    "factionId": "death-guard",
+    "name": "Vectors of Decay",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-death-guard--virulent-vectorium",
+    "factionId": "death-guard",
+    "name": "Virulent Vectorium",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--covenite-coterie",
+    "factionId": "drukhari",
+    "name": "Covenite Coterie",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--kabalite-cartel",
+    "factionId": "drukhari",
+    "name": "Kabalite Cartel",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--kabalite-corsairs",
+    "factionId": "drukhari",
+    "name": "Kabalite Corsairs",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--painbringers",
+    "factionId": "drukhari",
+    "name": "Painbringers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--realspace-raiders",
+    "factionId": "drukhari",
+    "name": "Realspace Raiders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--reapers-wager",
+    "factionId": "drukhari",
+    "name": "Reaper’s Wager",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--ship-killer-cult",
+    "factionId": "drukhari",
+    "name": "Ship-killer Cult",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--skysplinter-assault",
+    "factionId": "drukhari",
+    "name": "Skysplinter Assault",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--space-lane-raiders",
+    "factionId": "drukhari",
+    "name": "Space Lane Raiders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-drukhari--spectacle-of-spite",
+    "factionId": "drukhari",
+    "name": "Spectacle of Spite",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--carnival-of-excess",
+    "factionId": "emperors-children",
+    "name": "Carnival of Excess",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--coterie-of-the-conceited",
+    "factionId": "emperors-children",
+    "name": "Coterie of the Conceited",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--court-of-the-phoenician",
+    "factionId": "emperors-children",
+    "name": "Court of the Phoenician",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--mercurial-host",
+    "factionId": "emperors-children",
+    "name": "Mercurial Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--peerless-bladesmen",
+    "factionId": "emperors-children",
+    "name": "Peerless Bladesmen",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--rapid-evisceration",
+    "factionId": "emperors-children",
+    "name": "Rapid Evisceration",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--slaaneshs-chosen",
+    "factionId": "emperors-children",
+    "name": "Slaanesh’s Chosen",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-emperors-children--sublime-strike",
+    "factionId": "emperors-children",
+    "name": "Sublime Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--biosanctic-broodsurge",
+    "factionId": "genestealer-cults",
+    "name": "Biosanctic Broodsurge",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--brood-brother-auxilia",
+    "factionId": "genestealer-cults",
+    "name": "Brood Brother Auxilia",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--cult-unveiled",
+    "factionId": "genestealer-cults",
+    "name": "Cult Unveiled",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--final-day",
+    "factionId": "genestealer-cults",
+    "name": "Final Day",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--genespawn-onslaught",
+    "factionId": "genestealer-cults",
+    "name": "Genespawn Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--host-of-ascension",
+    "factionId": "genestealer-cults",
+    "name": "Host of Ascension",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--infestation-swarm",
+    "factionId": "genestealer-cults",
+    "name": "Infestation Swarm",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--outlander-claw",
+    "factionId": "genestealer-cults",
+    "name": "Outlander Claw",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-genestealer-cults--xenocreed-congregation",
+    "factionId": "genestealer-cults",
+    "name": "Xenocreed Congregation",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--augurium-task-force",
+    "factionId": "grey-knights",
+    "name": "Augurium Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--baneslayer-strike",
+    "factionId": "grey-knights",
+    "name": "Baneslayer Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--banishers",
+    "factionId": "grey-knights",
+    "name": "Banishers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--brotherhood-strike",
+    "factionId": "grey-knights",
+    "name": "Brotherhood Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--hallowed-conclave",
+    "factionId": "grey-knights",
+    "name": "Hallowed Conclave",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--sanctic-spearhead",
+    "factionId": "grey-knights",
+    "name": "Sanctic Spearhead",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--void-purge-force",
+    "factionId": "grey-knights",
+    "name": "Void Purge Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-grey-knights--warpbane-task-force",
+    "factionId": "grey-knights",
+    "name": "Warpbane Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--imperialis-fleet",
+    "factionId": "imperial-agents",
+    "name": "Imperialis Fleet",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--interdiction-team",
+    "factionId": "imperial-agents",
+    "name": "Interdiction Team",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--ordo-hereticus-purgation-force",
+    "factionId": "imperial-agents",
+    "name": "Ordo Hereticus Purgation Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--ordo-malleus-daemon-hunters",
+    "factionId": "imperial-agents",
+    "name": "Ordo Malleus Daemon Hunters",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--ordo-xenos-alien-hunters",
+    "factionId": "imperial-agents",
+    "name": "Ordo Xenos Alien Hunters",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--veiled-blade-elimination-force",
+    "factionId": "imperial-agents",
+    "name": "Veiled Blade Elimination Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-agents--voidships-company",
+    "factionId": "imperial-agents",
+    "name": "Voidship’s Company",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--freeblade-company",
+    "factionId": "imperial-knights",
+    "name": "Freeblade Company",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--gate-warden-lance",
+    "factionId": "imperial-knights",
+    "name": "Gate Warden Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--questor-forgepact",
+    "factionId": "imperial-knights",
+    "name": "Questor Forgepact",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--questoris-companions",
+    "factionId": "imperial-knights",
+    "name": "Questoris Companions",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--spearhead-at-arms",
+    "factionId": "imperial-knights",
+    "name": "Spearhead-At-Arms",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-imperial-knights--valourstrike-lance",
+    "factionId": "imperial-knights",
+    "name": "Valourstrike Lance",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--brandfast-oathband",
+    "factionId": "leagues-of-votann",
+    "name": "Brandfast Oathband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--delve-assault-shift",
+    "factionId": "leagues-of-votann",
+    "name": "Dêlve Assault Shift",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--hearthband",
+    "factionId": "leagues-of-votann",
+    "name": "Hearthband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--hearthfire-strike",
+    "factionId": "leagues-of-votann",
+    "name": "Hearthfire Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--hearthfyre-arsenal",
+    "factionId": "leagues-of-votann",
+    "name": "Hearthfyre Arsenal",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--mercenary-oathband",
+    "factionId": "leagues-of-votann",
+    "name": "Mercenary Oathband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--needgaard-oathband",
+    "factionId": "leagues-of-votann",
+    "name": "Needgaârd Oathband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--persecution-prospect",
+    "factionId": "leagues-of-votann",
+    "name": "Persecution Prospect",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-leagues-of-votann--void-salvagers",
+    "factionId": "leagues-of-votann",
+    "name": "Void Salvagers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--annihilation-legion",
+    "factionId": "necrons",
+    "name": "Annihilation Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -116,7 +1868,7 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
@@ -128,7 +1880,211 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--canoptek-harvesters",
+    "factionId": "necrons",
+    "name": "Canoptek Harvesters",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--cryptek-conclave",
+    "factionId": "necrons",
+    "name": "Cryptek Conclave",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--cursed-legion",
+    "factionId": "necrons",
+    "name": "Cursed Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--deranged-outcasts",
+    "factionId": "necrons",
+    "name": "Deranged Outcasts",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--harbinger-cabal",
+    "factionId": "necrons",
+    "name": "Harbinger Cabal",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--hypercrypt-legion",
+    "factionId": "necrons",
+    "name": "Hypercrypt Legion",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--obeisance-phalanx",
+    "factionId": "necrons",
+    "name": "Obeisance Phalanx",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--pantheon-of-woe",
+    "factionId": "necrons",
+    "name": "Pantheon of Woe",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--starshatter-arsenal",
+    "factionId": "necrons",
+    "name": "Starshatter Arsenal",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-necrons--tomb-ship-complement",
+    "factionId": "necrons",
+    "name": "Tomb Ship Complement",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--blitz-brigade",
+    "factionId": "orks",
+    "name": "Blitz Brigade",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--bully-boyz",
+    "factionId": "orks",
+    "name": "Bully Boyz",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--da-big-hunt",
+    "factionId": "orks",
+    "name": "Da Big Hunt",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--dread-mob",
+    "factionId": "orks",
+    "name": "Dread Mob",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--freebooter-krew",
+    "factionId": "orks",
+    "name": "Freebooter Krew",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--green-tide",
+    "factionId": "orks",
+    "name": "Green Tide",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--kaptin-killers",
+    "factionId": "orks",
+    "name": "Kaptin Killers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -140,19 +2096,91 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
-    "id": "det-orks--waaagh-tribe",
+    "id": "det-orks--more-dakka",
     "factionId": "orks",
-    "name": "Waaagh! Tribe",
+    "name": "More Dakka!",
     "description": "",
     "abilityIds": [],
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--ramship-raiders",
+    "factionId": "orks",
+    "name": "Ramship Raiders",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--speedwaaagh",
+    "factionId": "orks",
+    "name": "Speedwaaagh!",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--taktikal-brigade",
+    "factionId": "orks",
+    "name": "Taktikal Brigade",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-orks--war-horde",
+    "factionId": "orks",
+    "name": "War Horde",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--1st-company-task-force",
+    "factionId": "space-marines",
+    "name": "1st Company Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--angelic-inheritors",
+    "factionId": "space-marines",
+    "name": "Angelic Inheritors",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -164,7 +2192,127 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--armoured-speartip",
+    "factionId": "space-marines",
+    "name": "Armoured Speartip",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--bastion-task-force",
+    "factionId": "space-marines",
+    "name": "Bastion Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--black-spear-task-force",
+    "factionId": "space-marines",
+    "name": "Black Spear Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--blade-of-ultramar",
+    "factionId": "space-marines",
+    "name": "Blade of Ultramar",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--boarding-strike",
+    "factionId": "space-marines",
+    "name": "Boarding Strike",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--ceramite-sentinels",
+    "factionId": "space-marines",
+    "name": "Ceramite Sentinels",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--champions-of-fenris",
+    "factionId": "space-marines",
+    "name": "Champions of Fenris",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--companions-of-vehemence",
+    "factionId": "space-marines",
+    "name": "Companions of Vehemence",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--company-of-hunters",
+    "factionId": "space-marines",
+    "name": "Company of Hunters",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--emperors-shield",
+    "factionId": "space-marines",
+    "name": "Emperor’s Shield",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -176,7 +2324,19 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--forgefathers-seekers",
+    "factionId": "space-marines",
+    "name": "Forgefather’s Seekers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -188,7 +2348,55 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--godhammer-assault-force",
+    "factionId": "space-marines",
+    "name": "Godhammer Assault Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--hammer-of-avernii",
+    "factionId": "space-marines",
+    "name": "Hammer of Avernii",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--headhunter-task-force",
+    "factionId": "space-marines",
+    "name": "Headhunter Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--inner-circle-task-force",
+    "factionId": "space-marines",
+    "name": "Inner Circle Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -200,7 +2408,307 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--liberator-assault-group",
+    "factionId": "space-marines",
+    "name": "Liberator Assault Group",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--librarius-conclave",
+    "factionId": "space-marines",
+    "name": "Librarius Conclave",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--lions-blade-task-force",
+    "factionId": "space-marines",
+    "name": "Lion’s Blade Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--orbital-assault-force",
+    "factionId": "space-marines",
+    "name": "Orbital Assault Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--pilum-strike-team",
+    "factionId": "space-marines",
+    "name": "Pilum Strike Team",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--rage-cursed-onslaught",
+    "factionId": "space-marines",
+    "name": "Rage-cursed Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--reclamation-force",
+    "factionId": "space-marines",
+    "name": "Reclamation Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--saga-of-the-beastslayer",
+    "factionId": "space-marines",
+    "name": "Saga of the Beastslayer",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--saga-of-the-bold",
+    "factionId": "space-marines",
+    "name": "Saga of the Bold",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--saga-of-the-great-wolf",
+    "factionId": "space-marines",
+    "name": "Saga of the Great Wolf",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--saga-of-the-hunter",
+    "factionId": "space-marines",
+    "name": "Saga of the Hunter",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--shadowmark-talon",
+    "factionId": "space-marines",
+    "name": "Shadowmark Talon",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--shield-of-the-void",
+    "factionId": "space-marines",
+    "name": "Shield of the Void",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--spearpoint-task-force",
+    "factionId": "space-marines",
+    "name": "Spearpoint Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--stormlance-task-force",
+    "factionId": "space-marines",
+    "name": "Stormlance Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--terminator-assault",
+    "factionId": "space-marines",
+    "name": "Terminator Assault",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--the-angelic-host",
+    "factionId": "space-marines",
+    "name": "The Angelic Host",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--the-lost-brethren",
+    "factionId": "space-marines",
+    "name": "The Lost Brethren",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--unforgiven-task-force",
+    "factionId": "space-marines",
+    "name": "Unforgiven Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--vanguard-spearhead",
+    "factionId": "space-marines",
+    "name": "Vanguard Spearhead",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--vindication-task-force",
+    "factionId": "space-marines",
+    "name": "Vindication Task Force",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--wrath-of-the-rock",
+    "factionId": "space-marines",
+    "name": "Wrath of the Rock",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-space-marines--wrathful-procession",
+    "factionId": "space-marines",
+    "name": "Wrathful Procession",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--auxiliary-cadre",
+    "factionId": "tau-empire",
+    "name": "Auxiliary Cadre",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--experimental-prototype-cadre",
+    "factionId": "tau-empire",
+    "name": "Experimental Prototype Cadre",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -212,19 +2720,175 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
     }
   },
   {
-    "id": "det-tau-empire--montka",
+    "id": "det-tau-empire--kroot-hunting-pack",
     "factionId": "tau-empire",
-    "name": "Mont'ka",
+    "name": "Kroot Hunting Pack",
     "description": "",
     "abilityIds": [],
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--kroot-raiding-party",
+    "factionId": "tau-empire",
+    "name": "Kroot Raiding Party",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--montka",
+    "factionId": "tau-empire",
+    "name": "Mont’ka",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--retaliation-cadre",
+    "factionId": "tau-empire",
+    "name": "Retaliation Cadre",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tau-empire--starfire-cadre",
+    "factionId": "tau-empire",
+    "name": "Starfire Cadre",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--changehost-of-deceit",
+    "factionId": "thousand-sons",
+    "name": "Changehost of Deceit",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--chosen-cabal",
+    "factionId": "thousand-sons",
+    "name": "Chosen Cabal",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--devoted-thralls",
+    "factionId": "thousand-sons",
+    "name": "Devoted Thralls",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--fateseekers",
+    "factionId": "thousand-sons",
+    "name": "Fateseekers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--grand-coven",
+    "factionId": "thousand-sons",
+    "name": "Grand Coven",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--hexwarp-thrallband",
+    "factionId": "thousand-sons",
+    "name": "Hexwarp Thrallband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--rubricae-phalanx",
+    "factionId": "thousand-sons",
+    "name": "Rubricae Phalanx",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--warpforged-cabal",
+    "factionId": "thousand-sons",
+    "name": "Warpforged Cabal",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-thousand-sons--warpmeld-pact",
+    "factionId": "thousand-sons",
+    "name": "Warpmeld Pact",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -236,7 +2900,55 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--biotide",
+    "factionId": "tyranids",
+    "name": "Biotide",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--boarding-swarm",
+    "factionId": "tyranids",
+    "name": "Boarding Swarm",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--crusher-stampede",
+    "factionId": "tyranids",
+    "name": "Crusher Stampede",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--infestation-swarm",
+    "factionId": "tyranids",
+    "name": "Infestation Swarm",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   },
   {
@@ -248,7 +2960,175 @@
     "stratagemIds": [],
     "enhancementIds": [],
     "source": {
-      "primary": "seed"
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--subterranean-assault",
+    "factionId": "tyranids",
+    "name": "Subterranean Assault",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--synaptic-nexus",
+    "factionId": "tyranids",
+    "name": "Synaptic Nexus",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--tyranid-attack",
+    "factionId": "tyranids",
+    "name": "Tyranid Attack",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--unending-swarm",
+    "factionId": "tyranids",
+    "name": "Unending Swarm",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--vanguard-onslaught",
+    "factionId": "tyranids",
+    "name": "Vanguard Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-tyranids--warrior-bioform-onslaught",
+    "factionId": "tyranids",
+    "name": "Warrior Bioform Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--berzerker-warband",
+    "factionId": "world-eaters",
+    "name": "Berzerker Warband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--boarding-butchers",
+    "factionId": "world-eaters",
+    "name": "Boarding Butchers",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--cult-of-blood",
+    "factionId": "world-eaters",
+    "name": "Cult of Blood",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--goretrack-onslaught",
+    "factionId": "world-eaters",
+    "name": "Goretrack Onslaught",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--khorne-daemonkin",
+    "factionId": "world-eaters",
+    "name": "Khorne Daemonkin",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--possessed-slaughterband",
+    "factionId": "world-eaters",
+    "name": "Possessed Slaughterband",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--skullsworn",
+    "factionId": "world-eaters",
+    "name": "Skullsworn",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
+    }
+  },
+  {
+    "id": "det-world-eaters--vessels-of-wrath",
+    "factionId": "world-eaters",
+    "name": "Vessels of Wrath",
+    "description": "",
+    "abilityIds": [],
+    "stratagemIds": [],
+    "enhancementIds": [],
+    "source": {
+      "primary": "wahapedia"
     }
   }
 ]

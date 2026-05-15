@@ -14,6 +14,9 @@ import {
   compositionId, wargearOptionId, slugify, withCollisionSuffix,
 } from './ids.mjs';
 import { stripHtml } from './parsers/util.mjs';
+import {
+  canonicalFactionName, canonicalKeyword, canonicalWeaponName,
+} from './canonicalize.mjs';
 
 /* ═══════════════════════════════════════════════════════════════════════
    BSData normalizer
@@ -24,7 +27,10 @@ export function normalizeBsdata(parsed, factionAlignmentMap = {}) {
   const seen = makeSeenSets();
 
   for (const interFaction of parsed.factions || []) {
-    const fId = factionId(interFaction.name);
+    // Canonicalise the source-supplied name so BSData/Wahapedia spelling
+    // drift collapses to the same id (e.g. "Tau Empire" → "T'au Empire").
+    const factionName = canonicalFactionName(interFaction.name);
+    const fId = factionId(factionName);
     if (out.factions.find(f => f.id === fId)) continue;
 
     const armyRules = (interFaction.armyRules || []).map(r => ({
@@ -38,11 +44,11 @@ export function normalizeBsdata(parsed, factionAlignmentMap = {}) {
 
     out.factions.push({
       id: fId,
-      name: interFaction.name,
-      shortName: interFaction.name,
+      name: factionName,
+      shortName: factionName,
       alignment: factionAlignmentMap[fId] || 'unaligned',
       armyRuleIds: armyRules.map(r => r.id),
-      factionKeywords: dedup(interFaction.factionKeywords || []),
+      factionKeywords: dedup((interFaction.factionKeywords || []).map(canonicalKeyword)),
       source: { primary: 'bsdata', sourceIds: { bsdata: interFaction.bsdataId } },
     });
 
@@ -136,16 +142,17 @@ export function normalizeBsdata(parsed, factionAlignmentMap = {}) {
       out.modelProfiles.push(...modelProfiles);
 
       const weaponProfiles = (u.weapons || []).map((w, i) => {
-        const baseId = weaponProfileId(uId, w.name || `weapon-${i}`);
-        const id = collide(baseId, [w.name, String(i)], seen.weaponProfiles);
+        const wName = canonicalWeaponName(w.name) || `Weapon ${i+1}`;
+        const baseId = weaponProfileId(uId, wName || `weapon-${i}`);
+        const id = collide(baseId, [wName, String(i)], seen.weaponProfiles);
         return {
           id, unitId: uId,
-          name: w.name || `Weapon ${i+1}`,
+          name: wName,
           kind: w.kind, range: w.range || (w.kind === 'melee' ? 'Melee' : ''),
           attacks: w.attacks || '',
           bs: w.bs || '', ws: w.ws || '',
           strength: w.strength || '', ap: w.ap || '', damage: w.damage || '',
-          abilities: w.abilities || [],
+          abilities: (w.abilities || []).map(canonicalKeyword),
           source: { primary: 'bsdata' },
         };
       });
@@ -183,13 +190,15 @@ export function normalizeBsdata(parsed, factionAlignmentMap = {}) {
         return id;
       });
 
+      const unitKeywords = dedup((u.keywords || []).map(canonicalKeyword));
+      const unitFactionKws = dedup(factionKeywordsForUnit.map(canonicalKeyword));
       out.units.push({
         id: uId,
         factionId: fId,
         name: u.name,
-        role: classifyRole(u.keywords || []),
-        keywords: dedup(u.keywords || []),
-        factionKeywords: dedup(factionKeywordsForUnit),
+        role: classifyRole(unitKeywords),
+        keywords: unitKeywords,
+        factionKeywords: unitFactionKws,
         points: (u.costs || []).map(c => ({ models: 1, cost: c })),
         modelProfileIds: modelProfiles.map(p => p.id),
         weaponProfileIds: weaponProfiles.map(p => p.id),
@@ -251,7 +260,14 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
   // Datasheets → units
   for (const ds of parsed.datasheets || []) {
     if (!ds.name) continue;
-    const fId = factionIdByWhpId.get(ds.faction_id) || factionId(ds.faction_id || '');
+    const rawFactionKey = (ds.faction_id || '').trim();
+    if (!rawFactionKey) continue;
+    // Prefer the lookup we built from Factions.csv (maps short-code → canonical
+    // FactionId). If the lookup misses (a datasheet references a faction
+    // that's not in Factions.csv), we slug the raw key — that produces a
+    // stable but ugly id like `unit-ac--…`. We tolerate it with a
+    // post-import dangling-ref warning so the audit catches it.
+    const fId = factionIdByWhpId.get(rawFactionKey) || factionId(rawFactionKey);
     const uId = collide(unitId(fId, ds.name), [ds.id, ds.name], seen.units);
 
     // Models
@@ -268,18 +284,33 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
         source: { primary: 'wahapedia' },
       };
     });
+
+    // Wahapedia ships a small number of placeholder rows (e.g. "Example
+    // Wargear", legends-only fragments) with no model profile at all.
+    // These are unplayable — skip the datasheet entirely so it never
+    // reaches the runtime UI or the validator's no-profile gate.
+    if (modelProfiles.length === 0) continue;
+
     out.modelProfiles.push(...modelProfiles);
 
-    // Wargear / weapons
+    // Wargear / weapons. Wahapedia's wargear table has continuation rows
+    // (subsequent profiles of a multi-profile weapon) with blank `name` —
+    // and a handful of "weapon" rows with no stats at all (fortification
+    // emplacements, etc.). Skip both rather than emit junk rows.
     const weaponProfiles = [];
+    const dsName = (ds.name || '').toLowerCase();
     for (const w of parsed.wargearByDsId.get(ds.id) || []) {
+      const wname = canonicalWeaponName(w.name);
       const range = (w.range || '').trim();
+      const hasStats = (w.A || w.S || w.D || w.AP || w.BS_WS);
+      if (!wname && !hasStats) continue;
+      if (!wname) continue;
       const kind = /melee/i.test(range) ? 'melee' : 'ranged';
-      const baseId = weaponProfileId(uId, w.name || 'weapon');
-      const id = collide(baseId, [w.line, w.name], seen.weaponProfiles);
+      const baseId = weaponProfileId(uId, wname);
+      const id = collide(baseId, [w.line, wname], seen.weaponProfiles);
       weaponProfiles.push({
         id, unitId: uId,
-        name: w.name || 'Weapon',
+        name: wname,
         kind,
         range: range || (kind === 'melee' ? 'Melee' : ''),
         attacks: w.A || '',
@@ -294,6 +325,7 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
       });
     }
     out.weaponProfiles.push(...weaponProfiles);
+    void dsName;
 
     // Abilities
     const unitAbilities = (parsed.abilitiesByDsId.get(ds.id) || []).map(a => ({
@@ -359,11 +391,33 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
     });
   }
 
-  // Stratagems
+  // Stratagems. Wahapedia doesn't ship a Detachments.csv — detachments
+  // are referenced by NAME in the stratagems and enhancements tables.
+  // Auto-create detachment rows on first sight so the foreign-key from
+  // stratagem.detachmentId always resolves.
+  const ensureDetachment = (fId, name) => {
+    if (!fId || !name) return null;
+    const dId = detachmentId(fId, name);
+    if (!out.detachments.find(d => d.id === dId)) {
+      out.detachments.push({
+        id: dId, factionId: fId, name,
+        description: '',
+        abilityIds: [], stratagemIds: [], enhancementIds: [],
+        source: { primary: 'wahapedia' },
+      });
+    }
+    return dId;
+  };
+
   for (const s of parsed.stratagems || []) {
     if (!s.name) continue;
-    const fId = factionIdByWhpId.get(s.faction_id) || factionId(s.faction_id || '');
-    const dId = s.detachment ? detachmentId(fId, s.detachment) : null;
+    // Skip rows with no faction context (Wahapedia ships some "core"
+    // boarding-action stratagems with empty faction_id — they don't
+    // belong to any datasheet pool and would crash the id generator).
+    const rawFactionKey = (s.faction_id || '').trim();
+    if (!rawFactionKey) continue;
+    const fId = factionIdByWhpId.get(rawFactionKey) || factionId(rawFactionKey);
+    const dId = s.detachment ? ensureDetachment(fId, s.detachment) : null;
     if (!dId) continue;
     const sId = collide(stratagemId(dId, s.name), [s.id, s.name], seen.stratagems);
     out.stratagems.push({
@@ -381,11 +435,32 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
     });
   }
 
+  // Global keyword universe — derived from the union of every unit's
+  // keyword list. The keyword `kind` is inferred from a small static
+  // table (general/role/faction/unit-type/…).
+  const seenKw = new Set();
+  for (const u of out.units) {
+    for (const k of u.keywords || []) {
+      if (!k || seenKw.has(k)) continue;
+      seenKw.add(k);
+      const factionMatch = out.factions.find(f => (f.factionKeywords || []).includes(k));
+      out.keywords.push({
+        id: keywordId(k),
+        name: k.toUpperCase(),
+        kind: factionMatch ? 'faction' : classifyKeyword(k),
+        factionId: factionMatch?.id,
+        source: { primary: 'wahapedia' },
+      });
+    }
+  }
+
   // Enhancements
   for (const e of parsed.enhancements || []) {
     if (!e.name) continue;
-    const fId = factionIdByWhpId.get(e.faction_id) || factionId(e.faction_id || '');
-    const dId = e.detachment ? detachmentId(fId, e.detachment) : null;
+    const rawFactionKey = (e.faction_id || '').trim();
+    if (!rawFactionKey) continue;
+    const fId = factionIdByWhpId.get(rawFactionKey) || factionId(rawFactionKey);
+    const dId = e.detachment ? ensureDetachment(fId, e.detachment) : null;
     if (!dId) continue;
     const eId = collide(enhancementId(dId, e.name), [e.id, e.name], seen.enhancements);
     out.enhancements.push({

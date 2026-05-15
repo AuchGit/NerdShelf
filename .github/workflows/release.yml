@@ -40,6 +40,17 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # ── Dataset gates ─────────────────────────────────────────────
+      # Fail the workflow loudly (with a useful message) if the WH40K
+      # dataset is missing or structurally broken on whatever ref was
+      # tagged. The prebuild script also runs as part of `npm run build`,
+      # but isolating the gates here gives clearer CI failure surface.
+      - name: WH40K dataset check
+        run: node scripts/check-wh40k-dataset.mjs
+
+      - name: WH40K dataset tests
+        run: node scripts/wh40k-import test
+
       - name: Build & Release
         uses: tauri-apps/tauri-action@v0.5
         env:
