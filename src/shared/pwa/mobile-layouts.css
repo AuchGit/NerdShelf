@@ -1,59 +1,79 @@
 /* src/shared/pwa/mobile-layouts.css
  *
- * Section-by-section mobile UX enhancements for MTG + DnD when the app is
- * running as a PWA on a phone. ALL rules are gated on
- * `body[data-pwa-layouts='true']`, which is set by usePwaMobile when:
+ * Lightweight mobile-layout enhancements for MTG / DnD / WH40K when the
+ * app runs as a PWA on a phone. All rules are gated on
+ * `body[data-pwa-layouts='true']`, which usePwaMobile sets only when the
+ * runtime is actually phone-shaped AND the user hasn't opted out via
+ * `?pwaLayouts=0`.
  *
- *   - isPwaMobile is true (touch PWA or phone-sized browser), AND
- *   - the user has NOT opted out via ?pwaLayouts=0
+ * Design rule for this file: be SURGICAL, not heavy-handed. theme.css
+ * already enforces the basic mobile touch ergonomics (16 px form fonts,
+ * 44 px input min-heights, 40 px button min-heights via the
+ * `@media (hover: none)` block). We add ONLY the things that the
+ * generic media-query layer can't express:
  *
- * Desktop, Tauri shell, and the user's explicit opt-out path therefore
- * never see any of this. The opt-out is the one-liner revert path:
+ *   • Anchor specific section nav strips to a scroll-snap rail (sub-nav
+ *     overflow on phones is the most common cause of "where did my tab
+ *     go?" complaints).
+ *   • Pin the DnD character-sheet tabs to the bottom of the viewport so
+ *     the in-session companion view becomes a thumb-reachable nav.
+ *   • Provide consistent tap-feedback on interactive surfaces.
  *
- *   ?pwaLayouts=0
+ * What we explicitly DON'T do here (after burning ourselves on this):
+ *   • Force every <button> to a fixed height. Icon-only buttons inside
+ *     dense rows look stretched and goofy.
+ *   • Override grid templates with `1fr !important`. The default
+ *     `auto-fill, minmax(280px, 1fr)` already collapses to one column on
+ *     any sane phone width — re-stating it just paints over content.
+ *   • Set `min-height` on dashboard cards. Lets small cards balloon and
+ *     looks bad next to large cards in the same column.
+ *   • Force-wrap arbitrary headers with `!important`. The headers that
+ *     genuinely need it get a `data-pwa-target` hook and an explicit
+ *     rule below.
  *
- * Code-side revert: remove the import from main.jsx + delete this file
- * and the `pwaLayouts` field from usePwaMobile (3-4 line revert).
- *
- * No JSX inside MTG/DnD is rewritten — only a handful of `data-pwa-target`
- * attributes are added so individual elements can be reached by selector.
- * Those attributes are tagged with `PWA-MOBILE` comments in the JSX so
- * they're easy to grep + remove.
+ * Runtime escape hatch: `?pwaLayouts=0` disables this entire file.
+ * Code-side revert: remove the import in src/main.jsx + delete this
+ * file. The `data-pwa-target` attributes in JSX become no-ops without
+ * the CSS and can be left in place or deleted at leisure.
  */
 
 /* ─────────────────────────────────────────────────────────────────────
-   Global PWA-mobile niceties (apply across all sections)
+   1. Global smoothness
    ───────────────────────────────────────────────────────────────────── */
 
-/* All scrolling containers use momentum on iOS / Android. */
 body[data-pwa-layouts='true'] {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Headings inside narrow surfaces shouldn't overflow off-screen. */
+/* Long German compound words / Wahapedia IDs etc. shouldn't drag the
+   viewport horizontally on a narrow phone. */
 body[data-pwa-layouts='true'] h1,
-body[data-pwa-layouts='true'] h2 {
-  word-break: break-word;
+body[data-pwa-layouts='true'] h2,
+body[data-pwa-layouts='true'] h3 {
+  overflow-wrap: anywhere;
 }
 
-/* Larger default tap targets on every interactive control (theme.css
-   already does the basics — this nudges them another step up for
-   thumb-only use in landscape gameplay scenarios). */
-body[data-pwa-layouts='true'] button,
-body[data-pwa-layouts='true'] [role='button'],
-body[data-pwa-layouts='true'] a.btn {
-  min-height: 44px;
+/* Universal tap feedback — short, subtle dim on press. The native
+   :active state on iOS / Android otherwise paints a tap-highlight box
+   we deliberately turned off elsewhere. */
+body[data-pwa-layouts='true'] button:active,
+body[data-pwa-layouts='true'] [role='button']:active,
+body[data-pwa-layouts='true'] a:active {
+  opacity: 0.7;
 }
 
-/* MTG and DnD sub-navs become horizontal scroll strips with snap, so
-   adding tabs doesn't break the layout on small viewports. */
+/* ─────────────────────────────────────────────────────────────────────
+   2. Sub-nav strips become horizontal scroll-snap rails
+       Targeted by JSX via `data-pwa-target="subnav"`.
+   ───────────────────────────────────────────────────────────────────── */
+
 body[data-pwa-layouts='true'] [data-pwa-target='subnav'] {
   overflow-x: auto;
   overflow-y: hidden;
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 2px !important;
+  padding-right: var(--space-4);   /* room to swipe past the last item */
 }
 body[data-pwa-layouts='true'] [data-pwa-target='subnav']::-webkit-scrollbar {
   display: none;
@@ -63,43 +83,30 @@ body[data-pwa-layouts='true'] [data-pwa-target='subnav'] > * {
   flex-shrink: 0;
 }
 
-/* Card-grid dashboards (MTG decks, WH40K armies, DnD characters): bias
-   toward one or two large cards per row on a phone. The grid defaults to
-   minmax(280px, 1fr) which already gives ~1 column on most phones; this
-   makes that explicit and slightly increases the gap. */
-body[data-pwa-layouts='true'] .nshelf-dashboard-grid {
-  grid-template-columns: 1fr !important;
-  gap: var(--space-3) !important;
-}
-body[data-pwa-layouts='true'] .nshelf-dashboard-section-title {
-  font-size: var(--fs-md) !important;
-}
-
 /* ─────────────────────────────────────────────────────────────────────
-   DnD — Character Sheet
+   3. DnD character sheet — bottom tabs
+       Targeted by `data-pwa-target="dnd-sheet-tabs"`.
+       Targeted by `data-pwa-target="dnd-sheet-header"`.
    ───────────────────────────────────────────────────────────────────── */
 
-/* The tab strip on the character sheet (Overview / Spells / Features /
-   Inventory / Personality) is the primary navigation surface for the
-   in-session companion view. On a phone we pin it to the BOTTOM where
-   the thumb naturally rests, scroll horizontally, and let it pick up
-   the safe-area inset so it doesn't sit under the home indicator. */
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-tabs'] {
-  position: fixed !important;
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 60;
   background: var(--color-bg-elevated);
   border-top: 1px solid var(--color-border);
-  border-bottom: none !important;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0)) !important;
+  border-bottom: none;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0));
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
-  flex-wrap: nowrap !important;
+  flex-wrap: nowrap;
   display: flex;
-  gap: 6px !important;
+  gap: 6px;
   box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+  -webkit-overflow-scrolling: touch;
 }
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-tabs']::-webkit-scrollbar {
   display: none;
@@ -107,118 +114,34 @@ body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-tabs']::-webkit-scroll
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-tabs'] > button {
   scroll-snap-align: start;
   flex: 0 0 auto;
-  min-height: 48px;
-  min-width: 84px;
-  padding: 8px 14px !important;
-  border-radius: var(--radius-md) !important;
-  font-size: var(--fs-sm) !important;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
 }
-/* Reserve space at the bottom of the sheet body so the floating tab
-   bar doesn't cover the last row of content. */
+
+/* Reserve breathing room at the bottom of the sheet body so the floating
+   tab bar doesn't sit on top of the last row of content. */
 body[data-pwa-layouts='true'] .dnd-sheet-tab-body {
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0)) !important;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0));
 }
 
-/* Header chrome on the sheet: stack the row's controls and let them wrap
-   sensibly. The desktop layout has them all in one row which overflows
-   on a 360 px phone. */
+/* Header on the sheet (back / export / level-up / custom / edit buttons)
+   would otherwise overflow on a 360 px viewport. Let it wrap. */
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-header'] {
-  flex-wrap: wrap !important;
-  gap: 6px !important;
-}
-body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-header'] button {
-  font-size: var(--fs-sm) !important;
-  padding: 6px 10px !important;
-}
-
-/* Side columns in the character sheet (proficiency lists, etc.) stack to
-   full width. The sheet uses inline-style grids in many places — we
-   force them to single column when they appear inside the tab body. */
-body[data-pwa-layouts='true'] .dnd-sheet-tab-body [style*='grid-template-columns'] {
-  grid-template-columns: 1fr !important;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   MTG — Deck Builder
+   4. Visual focus during gameplay HUDs
+       The Match HUD and the WH40K Combat HUD set their own classes;
+       these are accessibility / focus polish that complements them.
    ───────────────────────────────────────────────────────────────────── */
 
-/* The deck builder uses a 3-column desktop layout (preview / search /
-   deck). On a phone, the CollapsibleRail component already wraps the
-   side panels in collapsible drawers; here we just make the chrome
-   thumb-friendlier and ensure the search panel doesn't try to stay
-   inside its narrow rail by default. */
-
-body[data-pwa-layouts='true'] .app-header {
-  flex-wrap: wrap !important;
-  gap: var(--space-2) !important;
-  padding: 8px !important;
-}
-body[data-pwa-layouts='true'] .app-header input,
-body[data-pwa-layouts='true'] .app-header select {
-  min-height: 40px !important;
-}
-body[data-pwa-layouts='true'] .app-header .header-right {
-  margin-left: auto;
-}
-body[data-pwa-layouts='true'] .app-main {
-  /* Make the central search section breathe — rails take care of
-     themselves via their own width logic. */
-  padding-left: 4px !important;
-  padding-right: 4px !important;
-}
-
-/* Card list rows on mobile: bigger, more readable, easier to tap. */
-body[data-pwa-layouts='true' i] .search-section .card-row,
-body[data-pwa-layouts='true' i] .search-section [data-pwa-target='card-row'] {
-  min-height: 56px;
-  padding: 6px 8px;
-}
-
-/* CollapsibleRail's "open" button (small chevron) is a discoverability
-   problem on touch — make it larger and more obvious. */
-body[data-pwa-layouts='true'] .collapsible-rail-handle,
-body[data-pwa-layouts='true'] [data-pwa-target='rail-toggle'] {
-  min-height: 44px !important;
-  min-width: 44px !important;
-  font-size: var(--fs-md) !important;
-}
-
-/* Deck-list view rows (mainboard / sideboard inside the deck panel)
-   need bigger tap targets so the user can adjust counts mid-game. */
-body[data-pwa-layouts='true'] .deck-section button,
-body[data-pwa-layouts='true'] [data-pwa-target='deck-panel'] button {
-  min-height: 36px !important;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   MTG — dashboard cards (deck, wishlist, inventory, favorites)
-   ───────────────────────────────────────────────────────────────────── */
-
-/* Color bar and meta rows on deck cards get a bit more breathing room. */
-body[data-pwa-layouts='true'] .nshelf-dashboard-grid > div {
-  /* Cards inside the dashboard grid become single-column on phone —
-     bigger thumbnails, easier to read in dim lighting at a table. */
-  min-height: 120px;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   DnD — dashboard
-   ───────────────────────────────────────────────────────────────────── */
-
-/* The DnD dashboard already uses the shared DashboardLayout, so most of
-   the work is done by the generic .nshelf-dashboard-grid rule above.
-   We only want to make sure character portraits scale up rather than
-   stay tiny. */
-body[data-pwa-layouts='true'] .nshelf-dashboard-grid img {
-  max-width: 100%;
-  height: auto;
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   Misc: hide any overlay close-X buttons that already have a swipe-down
-   alternative on the gameplay HUDs, since the swipe handle is the
-   primary affordance.
-   ───────────────────────────────────────────────────────────────────── */
-body[data-pwa-layouts='true'] [data-pwa-hide-on-mobile='true'] {
-  display: none !important;
+/* When a gameplay HUD is on screen, suppress page-level scrollbars even
+   if the user wiggles the viewport. The HUD owns the whole screen. */
+body[data-pwa-layouts='true']:has(.mh-screen),
+body[data-pwa-layouts='true']:has(.ch-screen) {
+  overflow: hidden;
 }

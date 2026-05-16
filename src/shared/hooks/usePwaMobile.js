@@ -22,9 +22,10 @@
 
 import { useEffect, useState } from 'react';
 
-const MQ_MOBILE     = '(max-width: 768px)';
-const MQ_TOUCH      = '(hover: none) and (pointer: coarse)';
-const MQ_STANDALONE = '(display-mode: standalone)';
+const MQ_MOBILE      = '(max-width: 768px)';
+const MQ_TOUCH       = '(hover: none) and (pointer: coarse)';
+const MQ_STANDALONE  = '(display-mode: standalone)';
+const MQ_LANDSCAPE   = '(orientation: landscape)';
 
 // Override key. Set via URL ?pwaMobile=1 / 0 / reset. In dev mode the
 // choice persists across reloads (handy for iterating on the layout on
@@ -87,6 +88,7 @@ function readSnapshot() {
     return {
       isMobile: false, isTouch: false, isStandalone: false,
       isPwaMobile: false, pwaLayouts: false,
+      orientation: 'portrait', isLandscape: false,
     };
   }
   const isMobile = window.matchMedia(MQ_MOBILE).matches;
@@ -97,6 +99,8 @@ function readSnapshot() {
     // navigator.standalone is the platform-specific fallback for
     // "Add to Home Screen" launches.
     || !!window.navigator?.standalone;
+  const isLandscape = window.matchMedia(MQ_LANDSCAPE).matches;
+  const orientation = isLandscape ? 'landscape' : 'portrait';
   const tauri = isTauriShell();
 
   // Manual override (dev-friendly) always wins so testers can flip into
@@ -105,7 +109,7 @@ function readSnapshot() {
   const layoutsOverride = readLayoutsOverride();
   if (override !== null) {
     return {
-      isMobile, isTouch, isStandalone,
+      isMobile, isTouch, isStandalone, orientation, isLandscape,
       isPwaMobile: override,
       pwaLayouts: override && (layoutsOverride !== false),
     };
@@ -131,7 +135,10 @@ function readSnapshot() {
   // independently via ?pwaLayouts=0 if the user prefers the desktop-
   // style layout on their phone.
   const pwaLayouts = isPwaMobile && (layoutsOverride !== false);
-  return { isMobile, isTouch, isStandalone, isPwaMobile, pwaLayouts };
+  return {
+    isMobile, isTouch, isStandalone, isPwaMobile, pwaLayouts,
+    orientation, isLandscape,
+  };
 }
 
 // Independent toggle: the per-section "mobile layouts" CSS (sticky bottom
@@ -200,6 +207,11 @@ function syncBodyAttribute(snapshot) {
   } else {
     body.removeAttribute('data-pwa-layouts');
   }
+  // Orientation gets surfaced on every device — desktop also benefits
+  // from CSS rules that want to react to a rotated laptop screen — but
+  // most CSS selectors should combine it with [data-pwa-layouts] so the
+  // adaptation only kicks in on a real phone.
+  body.setAttribute('data-pwa-orientation', snapshot.orientation || 'portrait');
 }
 
 export default function usePwaMobile() {
@@ -211,10 +223,11 @@ export default function usePwaMobile() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    // matchMedia changes when the viewport resizes (rotating the phone, the
-    // user installing the PWA mid-session, …). Subscribing to all three
-    // queries keeps the snapshot fresh without a resize handler.
-    const queries = [MQ_MOBILE, MQ_TOUCH, MQ_STANDALONE].map(q => window.matchMedia(q));
+    // matchMedia changes when the viewport resizes (rotating the phone,
+    // the user installing the PWA mid-session, …). Subscribing to all
+    // four queries — including orientation — keeps the snapshot fresh
+    // without a resize handler.
+    const queries = [MQ_MOBILE, MQ_TOUCH, MQ_STANDALONE, MQ_LANDSCAPE].map(q => window.matchMedia(q));
     const handler = () => setState(readSnapshot());
     for (const q of queries) {
       // Older Safari uses addListener/removeListener; modern uses addEventListener.

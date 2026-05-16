@@ -70,7 +70,7 @@
 .ch-counter-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 .ch-counter {
   display: flex;
@@ -79,46 +79,46 @@
   background: var(--color-bg-sunken);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 6px 4px 8px;
+  padding: 8px 6px 10px;
   user-select: none;
   position: relative;
   overflow: hidden;
 }
 .ch-counter-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
   font-weight: var(--fw-semibold);
 }
 .ch-counter-value {
-  font-size: clamp(20px, 6vmin, 32px);
+  font-size: clamp(22px, 7vmin, 36px);
   font-weight: var(--fw-bold);
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .ch-counter-accent { color: var(--color-accent); }
 .ch-counter-danger { color: var(--color-danger); }
 .ch-counter-controls {
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 6px;
   width: 100%;
 }
 .ch-counter-btn {
   flex: 1;
-  height: 28px;
+  height: 36px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: var(--fw-bold);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.ch-counter-btn:active { background: var(--color-surface-hover); }
+.ch-counter-btn:active { background: var(--color-surface-hover); transform: scale(0.96); }
 
 /* Round badge — sits to the right of the title row */
 .ch-round-pill {
@@ -150,8 +150,8 @@
 .ch-phase {
   scroll-snap-align: center;
   flex: 0 0 auto;
-  min-width: 92px;
-  padding: 8px 14px;
+  min-width: 104px;
+  padding: 10px 16px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -161,18 +161,20 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   font-family: inherit;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition: background 140ms, color 140ms, border-color 140ms, transform 100ms;
 }
+.ch-phase:active { transform: scale(0.96); }
 .ch-phase.is-active {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   border-color: var(--color-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
-.ch-phase-icon { font-size: 18px; line-height: 1; }
+.ch-phase-icon { font-size: 22px; line-height: 1; }
 .ch-phase-name { font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; }
 .ch-phase-badges {
   display: flex;
@@ -191,14 +193,14 @@
 .ch-phase-badge.info  { background: color-mix(in srgb, var(--color-text-muted) 22%, transparent); color: var(--color-text-muted); }
 .ch-phase-nav {
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px 10px;
   background: var(--color-bg-elevated);
   border-bottom: 1px solid var(--color-border);
 }
 .ch-phase-nav-btn {
   flex: 1;
-  height: 40px;
+  height: 48px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
@@ -208,12 +210,16 @@
   font-weight: var(--fw-semibold);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms;
 }
+.ch-phase-nav-btn:active { transform: scale(0.97); }
 .ch-phase-nav-btn.primary {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   border-color: var(--color-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
+.ch-phase-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Body: scrollable card column ───────────────────────────────────── */
 .ch-body {
@@ -225,6 +231,32 @@
   flex-direction: column;
   gap: var(--space-3);
   -webkit-overflow-scrolling: touch;
+}
+
+/* Landscape variant — two parallel scrollable columns side-by-side. The
+   phone has the horizontal real estate, so context (reminders + rules +
+   stratagems + abilities) and the units tracker both stay on screen
+   without the tab toggle. */
+.ch-body.ch-body-landscape {
+  flex-direction: row;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.ch-body-col {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  -webkit-overflow-scrolling: touch;
+}
+.ch-body-col-right {
+  border-left: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-sunken) 35%, var(--color-bg));
 }
 
 .ch-section {
@@ -499,17 +531,19 @@
   text-align: center;
 }
 .ch-unit-stat-btn {
-  width: 32px; height: 32px;
+  width: 40px; height: 40px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
   border-radius: var(--radius-sm);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: var(--fw-bold);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 100ms;
 }
-.ch-unit-stat-btn:active { background: var(--color-surface-hover); }
+.ch-unit-stat-btn:active { background: var(--color-surface-hover); transform: scale(0.94); }
+.ch-unit-stat-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .ch-unit-status-row {
   display: flex;

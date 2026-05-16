@@ -23,6 +23,7 @@ import { formatCode } from '../services/matchCodes';
 import useMatchSession from '../hooks/useMatchSession';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
 import useSwipe from '../../../../shared/hooks/useSwipe';
+import useWakeLock from '../../../../shared/hooks/useWakeLock';
 import PlayerTile from '../components/PlayerTile';
 import PlayerSettingsModal from '../components/PlayerSettingsModal';
 import JoinMatchPanel from '../components/JoinMatchPanel';
@@ -76,6 +77,13 @@ export default function MatchHudSessionPage() {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, [me]);
+
+  // Keep the phone screen on while a match is live. The user has the
+  // phone face-up on the table during a game — auto-locking after 30 s
+  // is exactly the wrong behaviour. The hook is a no-op when the
+  // platform doesn't support the Screen Wake Lock API.
+  const matchActive = !!me && match?.status !== 'ended';
+  useWakeLock(matchActive);
 
   const allPlayers = useMemo(
     () => (me ? [me, ...others] : others),

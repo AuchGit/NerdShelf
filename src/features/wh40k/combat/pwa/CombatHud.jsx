@@ -19,6 +19,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSwipe from '../../../../shared/hooks/useSwipe';
+import useWakeLock from '../../../../shared/hooks/useWakeLock';
+import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
 import { PHASES, UNIT_STATUSES, nextPhase, prevPhase } from '../schema.js';
 import { buildPhaseContext } from '../phaseContext.js';
 import { reminderCountsByPhase, buildContext as buildReminderContext } from '../reminders.js';
@@ -36,7 +38,8 @@ const PHASE_ICONS = {
 
 export default function CombatHud({ session, api, data }) {
   const navigate = useNavigate();
-  const [view, setView] = useState('context'); // 'context' | 'units'
+  const { isLandscape } = usePwaMobile();
+  const [view, setView] = useState('context'); // 'context' | 'units' (portrait-only)
   // Track which stratagem / ability card has its full text expanded.
   const [expanded, setExpanded] = useState(() => new Set());
   const toggle = (key) => setExpanded(prev => {
@@ -50,6 +53,11 @@ export default function CombatHud({ session, api, data }) {
     { onSwipeDown: () => navigate('/wh40k/combat') },
     { minDistance: 60 }
   );
+
+  // Keep the phone screen on for the entire combat session — the phone
+  // sits face-up on the table next to the army, auto-locking would
+  // force constant unlocks between phases. No-op outside of touch PWAs.
+  useWakeLock(true);
 
   const phase = session.currentPhase;
   const ctx = useMemo(
@@ -133,42 +141,75 @@ export default function CombatHud({ session, api, data }) {
       </div>
 
       {/* ── Body ────────────────────────────────────────────── */}
-      <div className="ch-body">
-        {view === 'context' ? (
-          <ContextView
-            ctx={ctx}
-            session={session}
-            api={api}
-            expanded={expanded}
-            toggle={toggle}
-            currentPhaseLabel={currentPhaseDef?.label}
-          />
+      {/*  Landscape: two columns, both views always visible — the phone is
+          held wide, the player has room for everything at once and the
+          tab toggle is redundant.
+          Portrait: classic mobile pattern — one view at a time, sticky
+          bottom tabs to switch. */}
+      <div className={`ch-body ${isLandscape ? 'ch-body-landscape' : ''}`}>
+        {isLandscape ? (
+          <>
+            <div className="ch-body-col">
+              <ContextView
+                ctx={ctx}
+                session={session}
+                api={api}
+                expanded={expanded}
+                toggle={toggle}
+                currentPhaseLabel={currentPhaseDef?.label}
+              />
+            </div>
+            <div className="ch-body-col ch-body-col-right">
+              <div className="ch-section-head" style={{ marginBottom: 'var(--space-2)' }}>
+                <h3 className="ch-section-title">Einheiten</h3>
+                <span className="ch-section-count">{aliveCount}/{totalCount}</span>
+              </div>
+              <UnitsView
+                session={session}
+                api={api}
+                data={data}
+              />
+            </div>
+          </>
         ) : (
-          <UnitsView
-            session={session}
-            api={api}
-            data={data}
-          />
-        )}
-
-        <div className="ch-view-tabs">
-          <button type="button"
-            className={`ch-view-tab ${view === 'context' ? 'is-active' : ''}`}
-            onClick={() => setView('context')}>
-            Hinweise
-            {(ctx.reminders.length + ctx.stratagems.length + ctx.abilities.length) > 0 && (
-              <span className="ch-view-tab-badge">
-                {ctx.reminders.length + ctx.stratagems.length + ctx.abilities.length}
-              </span>
+          <>
+            {view === 'context' ? (
+              <ContextView
+                ctx={ctx}
+                session={session}
+                api={api}
+                expanded={expanded}
+                toggle={toggle}
+                currentPhaseLabel={currentPhaseDef?.label}
+              />
+            ) : (
+              <UnitsView
+                session={session}
+                api={api}
+                data={data}
+              />
             )}
-          </button>
-          <button type="button"
-            className={`ch-view-tab ${view === 'units' ? 'is-active' : ''}`}
-            onClick={() => setView('units')}>
-            Einheiten
-            <span className="ch-view-tab-badge">{aliveCount}/{totalCount}</span>
-          </button>
-        </div>
+
+            <div className="ch-view-tabs">
+              <button type="button"
+                className={`ch-view-tab ${view === 'context' ? 'is-active' : ''}`}
+                onClick={() => setView('context')}>
+                Hinweise
+                {(ctx.reminders.length + ctx.stratagems.length + ctx.abilities.length) > 0 && (
+                  <span className="ch-view-tab-badge">
+                    {ctx.reminders.length + ctx.stratagems.length + ctx.abilities.length}
+                  </span>
+                )}
+              </button>
+              <button type="button"
+                className={`ch-view-tab ${view === 'units' ? 'is-active' : ''}`}
+                onClick={() => setView('units')}>
+                Einheiten
+                <span className="ch-view-tab-badge">{aliveCount}/{totalCount}</span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
