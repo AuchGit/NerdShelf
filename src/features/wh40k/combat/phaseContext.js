@@ -20,6 +20,7 @@ import { parseAbility, isRelevantInPhase } from './abilityParser.js';
 import { buildContext as buildReminderContext, listRemindersForPhase } from './reminders.js';
 import { detectOnceFlag } from './onceFlags.js';
 import { getCorePhaseRules } from './coreRules.js';
+import { getFactionPhaseRules } from './factionRules.js';
 
 /**
  * Build the per-phase context.

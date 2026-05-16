@@ -1,17 +1,17 @@
-// src/features/wh40k/combat/pwa/CombatHud.jsx
+﻿// src/features/wh40k/combat/pwa/CombatHud.jsx
 //
 // Full-bleed PWA Combat HUD. Mounted by CombatSessionPage only when
 // usePwaMobile() reports we're in PWA-mobile mode. Desktop continues to
 // use the existing two-column layout.
 //
-// Layout (top → bottom):
-//   1. Sticky chrome — swipe-handle, title, round pill, CP/VP counters
-//   2. Phase strip — horizontal scroll-snap with hit-target badges
-//   3. Prev / next phase row — always-visible thumb-reachable nav
-//   4. Body — switches between two views:
-//        • "Kontext" : reminders → stratagems → abilities → once-flags,
+// Layout (top â†’ bottom):
+//   1. Sticky chrome â€” swipe-handle, title, round pill, CP/VP counters
+//   2. Phase strip â€” horizontal scroll-snap with hit-target badges
+//   3. Prev / next phase row â€” always-visible thumb-reachable nav
+//   4. Body â€” switches between two views:
+//        â€¢ "Kontext" : reminders â†’ stratagems â†’ abilities â†’ once-flags,
 //                      all filtered to the active phase by phaseContext.js
-//        • "Einheiten": flat list of unit trackers (models / wounds / status)
+//        â€¢ "Einheiten": flat list of unit trackers (models / wounds / status)
 //
 // The HUD relies on the existing useCombatSession API for all mutations.
 // No new persistence layer or session shape is introduced.
@@ -21,19 +21,20 @@ import { useNavigate } from 'react-router-dom';
 import useSwipe from '../../../../shared/hooks/useSwipe';
 import useWakeLock from '../../../../shared/hooks/useWakeLock';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
-import { PHASES, UNIT_STATUSES, nextPhase, prevPhase } from '../schema.js';
+import { PHASES, nextPhase, prevPhase } from '../schema.js';
 import { buildPhaseContext } from '../phaseContext.js';
 import { reminderCountsByPhase, buildContext as buildReminderContext } from '../reminders.js';
 import { TAG_LABELS } from '../coreRules.js';
+import UnitPhaseCard from '../UnitPhaseCard.jsx';
 import './CombatHud.css';
 
 const PHASE_ICONS = {
-  command:  '✦',
-  movement: '➤',
-  shooting: '◎',
-  charge:   '⚔',
-  fight:    '✕',
-  end:      '◇',
+  command:  'âœ¦',
+  movement: 'âž¤',
+  shooting: 'â—Ž',
+  charge:   'âš”',
+  fight:    'âœ•',
+  end:      'â—‡',
 };
 
 export default function CombatHud({ session, api, data }) {
@@ -54,7 +55,7 @@ export default function CombatHud({ session, api, data }) {
     { minDistance: 60 }
   );
 
-  // Keep the phone screen on for the entire combat session — the phone
+  // Keep the phone screen on for the entire combat session â€” the phone
   // sits face-up on the table next to the army, auto-locking would
   // force constant unlocks between phases. No-op outside of touch PWAs.
   useWakeLock(true);
@@ -75,7 +76,7 @@ export default function CombatHud({ session, api, data }) {
 
   return (
     <div className="ch-screen">
-      {/* ── Top chrome ──────────────────────────────────────── */}
+      {/* â”€â”€ Top chrome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="ch-top" {...topSwipe} style={{ touchAction: 'pan-x' }}>
         <span className="pwa-swipe-handle" aria-hidden="true" />
 
@@ -104,7 +105,7 @@ export default function CombatHud({ session, api, data }) {
         </div>
       </div>
 
-      {/* ── Phase strip ─────────────────────────────────────── */}
+      {/* â”€â”€ Phase strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="ch-phases" role="tablist">
         {PHASES.map(p => {
           const c = counts[p.id] || {};
@@ -133,18 +134,18 @@ export default function CombatHud({ session, api, data }) {
 
       <div className="ch-phase-nav">
         <button type="button" className="ch-phase-nav-btn"
-          onClick={api.prevPhase} disabled={!prevPhase(phase)}>← Phase</button>
+          onClick={api.prevPhase} disabled={!prevPhase(phase)}>â† Phase</button>
         <button type="button" className="ch-phase-nav-btn primary"
           onClick={api.nextPhase}>
-          {nextPhase(phase) ? 'Phase →' : 'Runde + →'}
+          {nextPhase(phase) ? 'Phase â†’' : 'Runde + â†’'}
         </button>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────── */}
-      {/*  Landscape: two columns, both views always visible — the phone is
+      {/* â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  Landscape: two columns, both views always visible â€” the phone is
           held wide, the player has room for everything at once and the
           tab toggle is redundant.
-          Portrait: classic mobile pattern — one view at a time, sticky
+          Portrait: classic mobile pattern â€” one view at a time, sticky
           bottom tabs to switch. */}
       <div className={`ch-body ${isLandscape ? 'ch-body-landscape' : ''}`}>
         {isLandscape ? (
@@ -168,6 +169,9 @@ export default function CombatHud({ session, api, data }) {
                 session={session}
                 api={api}
                 data={data}
+                phase={phase}
+                expanded={expanded}
+                toggle={toggle}
               />
             </div>
           </>
@@ -187,6 +191,9 @@ export default function CombatHud({ session, api, data }) {
                 session={session}
                 api={api}
                 data={data}
+                phase={phase}
+                expanded={expanded}
+                toggle={toggle}
               />
             )}
 
@@ -215,7 +222,7 @@ export default function CombatHud({ session, api, data }) {
   );
 }
 
-/* ─────────────────── sub-views ─────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ sub-views â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 function CounterTile({ label, value, max, accent, text, onAdjust }) {
   return (
@@ -230,7 +237,7 @@ function CounterTile({ label, value, max, accent, text, onAdjust }) {
       {onAdjust && (
         <div className="ch-counter-controls">
           <button type="button" className="ch-counter-btn"
-            onClick={() => onAdjust(-1)} aria-label={`${label} −1`}>−</button>
+            onClick={() => onAdjust(-1)} aria-label={`${label} âˆ’1`}>âˆ’</button>
           <button type="button" className="ch-counter-btn"
             onClick={() => onAdjust(+1)} aria-label={`${label} +1`}>+</button>
         </div>
@@ -240,21 +247,25 @@ function CounterTile({ label, value, max, accent, text, onAdjust }) {
 }
 
 function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel }) {
-  const { coreRules, detachmentRule, reminders, stratagems, abilities, onceFlags } = ctx;
+  const { coreRules, detachmentRule, reminders, stratagems } = ctx;
+  // Per-unit reminders are now rendered inside each unit's card in the
+  // Einheiten-View, so the context column shows only ARMY-WIDE reminders
+  // here (the global scope ones).
+  const globalReminders = reminders.filter(r => r.scope === 'global');
   const totalCards =
     coreRules.length + (detachmentRule ? 1 : 0)
-    + reminders.length + stratagems.length + abilities.length + onceFlags.length;
+    + globalReminders.length + stratagems.length;
   if (totalCards === 0) {
     return (
       <div className="ch-empty">
-        Keine spezifischen Hinweise für {currentPhaseLabel}.<br />
-        Schaue in „Einheiten" für Trefferpunkte und Status.
+        Keine allgemeinen Hinweise fÃ¼r {currentPhaseLabel}.<br />
+        Schaue in â€žEinheiten" â€” dort siehst du pro Einheit ihre Phasen-Aktionen.
       </div>
     );
   }
   return (
     <>
-      {/* Core rules section — always visible at the top so the player can
+      {/* Core rules section â€” always visible at the top so the player can
           glance at "what do I do in this phase?" no matter the army. */}
       {coreRules.length > 0 && (
         <section className="ch-section">
@@ -273,12 +284,12 @@ function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel })
         </section>
       )}
 
-      {/* Detachment rule(s) — applies to your whole army for the whole game.
+      {/* Detachment rule(s) â€” applies to your whole army for the whole game.
           Always visible across every phase since the rule is persistent. */}
       {detachmentRule && detachmentRule.rules?.length > 0 && (
         <section className="ch-section">
           <div className="ch-section-head">
-            <h3 className="ch-section-title">Detachment · {detachmentRule.name}</h3>
+            <h3 className="ch-section-title">Detachment Â· {detachmentRule.name}</h3>
             <span className="ch-section-count">{detachmentRule.rules.length}</span>
           </div>
           {detachmentRule.rules.map(rule => (
@@ -292,17 +303,17 @@ function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel })
         </section>
       )}
 
-      {reminders.length > 0 && (
+      {globalReminders.length > 0 && (
         <section className="ch-section">
           <div className="ch-section-head">
             <h3 className="ch-section-title">Reminder</h3>
-            <span className="ch-section-count">{reminders.length}</span>
+            <span className="ch-section-count">{globalReminders.length}</span>
           </div>
-          {reminders.map(r => (
+          {globalReminders.map(r => (
             <ReminderCard
-              key={`${r.id}:${r.unitInstanceId || 'g'}`}
+              key={`${r.id}:g`}
               reminder={r}
-              unitName={r.unitInstanceId ? session.units[r.unitInstanceId]?.name : null}
+              unitName={null}
             />
           ))}
         </section>
@@ -329,50 +340,6 @@ function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel })
         </section>
       )}
 
-      {abilities.length > 0 && (
-        <section className="ch-section">
-          <div className="ch-section-head">
-            <h3 className="ch-section-title">Aktive Fähigkeiten</h3>
-            <span className="ch-section-count">{abilities.length}</span>
-          </div>
-          {abilities.map(({ unit, ability, parsed }) => (
-            <AbilityCard
-              key={`a:${unit.instanceId}:${ability.id || ability.name}`}
-              unit={unit}
-              ability={ability}
-              parsed={parsed}
-              expanded={expanded.has(`a:${unit.instanceId}:${ability.id || ability.name}`)}
-              onToggle={() => toggle(`a:${unit.instanceId}:${ability.id || ability.name}`)}
-            />
-          ))}
-        </section>
-      )}
-
-      {onceFlags.length > 0 && (
-        <section className="ch-section">
-          <div className="ch-section-head">
-            <h3 className="ch-section-title">Einmalige Effekte</h3>
-            <span className="ch-section-count">{onceFlags.length}</span>
-          </div>
-          {onceFlags.map(({ unit, ability, flag }) => {
-            const used = (unit.oncePerBattleUsed || []).includes(flag.key);
-            return (
-              <button
-                key={`o:${unit.instanceId}:${flag.key}`}
-                type="button"
-                className={`ch-once-btn ${used ? 'is-used' : ''}`}
-                onClick={() => api.toggleUnitOnceFlag(unit.instanceId, flag.key)}
-              >
-                <span className="ch-once-check">{used ? '✓' : ''}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{ability.name}</div>
-                  <div style={{ fontSize: 11, opacity: 0.75 }}>{unit.name} · {flag.label}</div>
-                </span>
-              </button>
-            );
-          })}
-        </section>
-      )}
     </>
   );
 }
@@ -391,7 +358,7 @@ function CoreRuleCard({ rule, expanded, onToggle }) {
                  display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span className="ch-card-title">{rule.title}</span>
-          <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+          <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
         </div>
         {(rule.tags?.length > 0 || rule.timing) && (
           <div className="ch-chip-row">
@@ -419,7 +386,7 @@ function DetachmentRuleCard({ rule, expanded, onToggle }) {
                  width: '100%', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit',
                  display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span className="ch-card-title">{rule.name || 'Detachment-Regel'}</span>
-        <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+        <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
       </button>
       {expanded && rule.text && (
         <div className="ch-card-body">{rule.text}</div>
@@ -437,7 +404,7 @@ function ReminderCard({ reminder, unitName }) {
     <div className={`ch-card ${klass}`}>
       <div className="ch-card-title">
         {reminder.title}
-        {unitName && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> · {unitName}</span>}
+        {unitName && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> Â· {unitName}</span>}
       </div>
       <div className="ch-card-body">{reminder.detail}</div>
     </div>
@@ -459,13 +426,13 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
                  display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span className="ch-card-title">{strat.name}</span>
         <span className={`ch-cp-badge ${enoughCp ? '' : 'disabled'}`}>{strat.cpCost ?? 0} CP</span>
-        <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+        <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
       </button>
       <div className="ch-chip-row">
         {strat.kind && <span className="ch-chip">{stratKindLabel(strat.kind)}</span>}
         {strat.phase && <span className="ch-chip">{strat.phase}</span>}
         {usedThisRound && (
-          <span className="ch-chip" style={{ color: 'var(--color-success)' }}>✓ Verwendet R{currentRound}</span>
+          <span className="ch-chip" style={{ color: 'var(--color-success)' }}>âœ“ Verwendet R{currentRound}</span>
         )}
       </div>
       {expanded && (
@@ -488,8 +455,8 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
             onClick={onApply}
           >
             {usedThisRound
-              ? `Erneut anwenden · ${strat.cpCost} CP`
-              : enoughCp ? `Anwenden · ${strat.cpCost} CP`
+              ? `Erneut anwenden Â· ${strat.cpCost} CP`
+              : enoughCp ? `Anwenden Â· ${strat.cpCost} CP`
                          : `Nicht genug CP (${cp}/${strat.cpCost})`}
           </button>
         </>
@@ -498,38 +465,7 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
   );
 }
 
-function AbilityCard({ unit, ability, parsed, expanded, onToggle }) {
-  return (
-    <div className="ch-card is-ability">
-      <button type="button"
-        onClick={onToggle}
-        style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left',
-                 width: '100%', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit',
-                 display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span className="ch-card-title">{ability.name}</span>
-          <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
-        </div>
-        <div className="ch-card-subtitle">{unit.name}</div>
-      </button>
-      <div className="ch-chip-row">
-        {parsed.timing === 'start' && <span className="ch-chip timing-start">Start der Phase</span>}
-        {parsed.timing === 'end'   && <span className="ch-chip timing-end">Ende der Phase</span>}
-        {parsed.frequency === 'battle' && <span className="ch-chip freq">1× Schlacht</span>}
-        {parsed.frequency === 'turn'   && <span className="ch-chip freq">1× Zug</span>}
-        {parsed.frequency === 'phase'  && <span className="ch-chip freq">1× Phase</span>}
-        {parsed.triggers.map(t => (
-          <span key={t.tag} className="ch-chip trigger">{t.label}</span>
-        ))}
-      </div>
-      {expanded && ability.text && (
-        <div className="ch-card-body">{ability.text}</div>
-      )}
-    </div>
-  );
-}
-
-function UnitsView({ session, api, data: _data }) {
+function UnitsView({ session, api, data, phase, expanded, toggle }) {
   const units = Object.values(session.units || {});
   if (units.length === 0) {
     return (
@@ -547,59 +483,24 @@ function UnitsView({ session, api, data: _data }) {
   return (
     <>
       {ordered.map(u => (
-        <UnitTracker key={u.instanceId} unit={u} api={api} />
+        <UnitPhaseCard
+          key={u.instanceId}
+          unit={u}
+          canon={data?.unitsById?.[u.unitId] || null}
+          phase={phase}
+          api={api}
+          abilitiesById={data?.abilitiesById || {}}
+          expanded={expanded}
+          toggle={toggle}
+        />
       ))}
     </>
   );
 }
 
-function UnitTracker({ unit, api }) {
-  const statusColor = UNIT_STATUSES.find(s => s.id === unit.status)?.color || 'var(--color-text-muted)';
-  return (
-    <div className={`ch-unit-card ${unit.status === 'destroyed' ? 'is-destroyed' : ''}`}>
-      <div className="ch-unit-head">
-        <span className="ch-status-dot" style={{ background: statusColor }} aria-hidden="true" />
-        <span className="ch-unit-name">{unit.name}</span>
-      </div>
-
-      <div className="ch-unit-stats">
-        <div className="ch-unit-stat">
-          <span className="ch-unit-stat-label">Modelle</span>
-          <button type="button" className="ch-unit-stat-btn"
-            onClick={() => api.adjustModels(unit.instanceId, -1)}
-            disabled={unit.currentModels <= 0}>−</button>
-          <span className="ch-unit-stat-value">{unit.currentModels}/{unit.startingModels}</span>
-          <button type="button" className="ch-unit-stat-btn"
-            onClick={() => api.adjustModels(unit.instanceId, +1)}
-            disabled={unit.currentModels >= unit.startingModels}>+</button>
-        </div>
-        <div className="ch-unit-stat">
-          <span className="ch-unit-stat-label">Wunden</span>
-          <button type="button" className="ch-unit-stat-btn"
-            onClick={() => api.applyWound(unit.instanceId, -1)}>−</button>
-          <span className="ch-unit-stat-value">
-            {unit.leadWoundsCurrent}/{unit.leadWoundsMax}
-          </span>
-          <button type="button" className="ch-unit-stat-btn"
-            onClick={() => api.applyWound(unit.instanceId, +1)}>+</button>
-        </div>
-      </div>
-
-      <div className="ch-unit-status-row">
-        {UNIT_STATUSES.map(s => (
-          <button
-            key={s.id}
-            type="button"
-            className={`ch-unit-status-chip ${unit.status === s.id ? 'is-active' : ''}`}
-            onClick={() => api.setUnitStatus(unit.instanceId, s.id)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+/* The per-unit card lives in ../UnitPhaseCard.jsx so the desktop
+ * CombatSessionPage can share exactly the same component + styles
+ * without dragging in the full-bleed phone chrome of this file. */
 
 function stratKindLabel(kind) {
   return {

@@ -1,6 +1,6 @@
 // src/features/wh40k/combat/reminders.js
 //
-// Reminder engine — pure, data-driven.
+// Reminder engine — pure, data-driven, deliberately small.
 //
 // Each reminder is a tiny rule object:
 //
@@ -13,13 +13,20 @@
 //     when(ctx) -> bool    // pure: should this reminder show right now?
 //   }
 //
-// The engine evaluates reminders against a `ReminderContext` derived from
-// the current CombatSession. The UI groups them by scope (global vs
-// unit-bound) and severity, lets the user dismiss them, and surfaces the
-// active count next to the phase nav.
+// What lives here vs. what lives in coreRules.js:
+//   • coreRules.js holds the *rule reference* — what you do this phase,
+//     the rulebook walk-through. It's always present once the phase is
+//     active, and it's where the player goes for "how does X work?".
+//   • reminders here are *conditional nudges* — they only appear when
+//     the session state warrants them. "You have a unit under half
+//     strength, expect a Battle-shock test", "You haven't gained your
+//     CP yet", etc. The trigger is the value, not the text.
 //
-// The set below intentionally starts small — the foundation matters more
-// than coverage at this stage. Adding a reminder is a one-line change.
+// Anything that's just a duplicated paragraph from the rulebook (e.g.
+// "remember to declare charges, roll 2D6, ≥ distance, …") does NOT
+// belong here — it's noise next to the actual phase guide and clutters
+// every alive unit's card. The Combat HUD already shows the phase
+// flow in coreRules.charge with proper companion-style cards.
 
 import { PHASE_IDS } from './schema.js';
 
@@ -46,29 +53,27 @@ const REMINDERS = [
     phase: 'command',
     scope: 'global',
     severity: 'info',
-    title: 'Kommandopunkt erhalten?',
-    detail: 'Zu Beginn deines Command Phase erhältst du normalerweise 1 CP (max. 15 CP gespeichert).',
+    title: 'Kommandopunkt einsammeln',
+    detail: 'Zu Beginn deiner Command Phase: +1 CP (max. 15). Im allerersten Player-Turn der Schlacht entfällt das.',
     when: (ctx) => ctx.phase === 'command' && !ctx.onceFlag(`cp-gained-r${ctx.round}`),
   },
   {
-    id: 'battle-shock',
+    id: 'battle-shock-due',
     phase: 'command',
     scope: 'global',
     severity: 'warning',
-    title: 'Battle-shock-Tests',
-    detail: 'Battle-shock-Tests für Einheiten unter halber Stärke oder mit Battle-shock-Marker.',
+    title: 'Battle-shock-Tests fällig',
+    detail: 'Mindestens eine deiner Einheiten ist unter halber Stärke. Test pro betroffener Einheit: 2W6 + Ld vs. Threshold. Bei Fehlschlag: OC 0, keine Stratagems.',
     when: (ctx) => ctx.phase === 'command'
-      && ctx.aliveUnits.some(u =>
-        u.currentModels > 0 && u.currentModels < (u.startingModels / 2)
-      ),
+      && ctx.aliveUnits.some(u => u.currentModels > 0 && u.currentModels < (u.startingModels / 2)),
   },
   {
     id: 'leader-not-attached',
-    phase: '*',
+    phase: 'command',
     scope: 'unit',
     severity: 'warning',
-    title: 'Anführer nicht zugewiesen',
-    detail: 'Diese Anführer-Einheit ist noch keiner Bodyguard-Einheit zugeordnet.',
+    title: 'Anführer noch nicht zugewiesen',
+    detail: 'Diese Character-Einheit ist nicht an eine Bodyguard-Einheit attached. Vor der ersten Bewegung deklarieren — bewahrt vor Verlust durch sniping.',
     when: (ctx, unit) =>
       Array.isArray(unit.keywords) && unit.keywords.includes('CHARACTER')
       && !unit.attached
@@ -77,58 +82,17 @@ const REMINDERS = [
       && ctx.phase === 'command',
   },
   {
-    id: 'shooting-eligible',
-    phase: 'shooting',
-    scope: 'unit',
-    severity: 'info',
-    title: 'Beschuss noch nicht durchgeführt',
-    detail: 'Diese Einheit hat in dieser Schussphase noch nicht gefeuert.',
-    when: (ctx, unit) =>
-      ctx.phase === 'shooting'
-      && unit.status === 'alive'
-      && !unit.tags?.includes(`shot-r${ctx.round}`),
-  },
-  {
-    id: 'charge-declared',
-    phase: 'charge',
-    scope: 'unit',
-    severity: 'info',
-    title: 'Charge möglich?',
-    detail: 'Erinnerung: Charge erklären, 2W6 würfeln, ≥ Distanz, 1" Engagement.',
-    when: (ctx, unit) =>
-      ctx.phase === 'charge'
-      && unit.status === 'alive'
-      && !unit.tags?.includes(`advanced-r${ctx.round}`)
-      && !unit.tags?.includes(`fellback-r${ctx.round}`),
-  },
-  {
-    id: 'fight-eligible',
-    phase: 'fight',
+    id: 'unit-below-half',
+    phase: '*',
     scope: 'unit',
     severity: 'warning',
-    title: 'Kampf in der Fight Phase',
-    detail: 'Einheiten innerhalb Engagement Range können / müssen kämpfen.',
+    title: 'Unter halber Stärke',
+    detail: 'Diese Einheit ist unter ihrer Starting Strength halbiert. Kommende Command Phase: Battle-shock-Test. Bei Fehlschlag: OC 0 + keine Stratagems.',
     when: (ctx, unit) =>
-      ctx.phase === 'fight'
-      && unit.status === 'engaged',
-  },
-  {
-    id: 'end-objectives',
-    phase: 'end',
-    scope: 'global',
-    severity: 'critical',
-    title: 'Punkte werten',
-    detail: 'Primary + Secondary Missions auswerten und VP eintragen.',
-    when: (ctx) => ctx.phase === 'end',
-  },
-  {
-    id: 'end-once-cleanup',
-    phase: 'end',
-    scope: 'global',
-    severity: 'info',
-    title: 'Auras / einmalige Effekte',
-    detail: 'Auras zurücksetzen, Marker entfernen, Reactive Stratagems freigeben.',
-    when: (ctx) => ctx.phase === 'end',
+      unit.status === 'alive'
+      && unit.currentModels > 0
+      && unit.startingModels > 1
+      && unit.currentModels < (unit.startingModels / 2),
   },
 ];
 

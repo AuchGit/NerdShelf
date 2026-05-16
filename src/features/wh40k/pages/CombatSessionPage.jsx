@@ -35,6 +35,7 @@ import { buildContext, listRemindersForPhase, reminderCountsByPhase } from '../c
 import { detectOnceFlag } from '../combat/onceFlags';
 import DetachmentInfo from '../components/DetachmentInfo';
 import CombatHud from '../combat/pwa/CombatHud';
+import UnitPhaseCard from '../combat/UnitPhaseCard';
 
 /** Mobile threshold for content width (excluding sidebar). */
 const NARROW_MAX = 900;
@@ -108,21 +109,24 @@ export default function CombatSessionPage() {
   const totalCount = Object.values(session.units).length;
   const currentPhaseLabel = PHASES.find(p => p.id === session.currentPhase)?.label || session.currentPhase;
 
-  // Reusable content panels — composed differently per layout
+  // Per-unit reminders now live inside each unit's UnitPhaseCard (which
+  // matches the mobile companion). The left "Hinweise" panel here therefore
+  // surfaces only ARMY-WIDE reminders — the global-scope ones.
+  const globalReminders = phaseReminders.filter(r => r.scope === 'global');
   const remindersPanel = (
     <Panel padding={narrow ? 'sm' : 'md'} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
       <h3 style={sectionTitleStyle}>Hinweise · {currentPhaseLabel}</h3>
-      {phaseReminders.length === 0 ? (
+      {globalReminders.length === 0 ? (
         <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
-          Keine aktiven Hinweise für diese Phase.
+          Keine allgemeinen Hinweise für diese Phase — siehe die einzelnen Einheiten.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          {phaseReminders.map(r => (
+          {globalReminders.map(r => (
             <ReminderRow
-              key={`${r.id}:${r.unitInstanceId || 'g'}`}
+              key={`${r.id}:g`}
               reminder={r}
-              unitName={r.unitInstanceId ? session.units[r.unitInstanceId]?.name : null}
+              unitName={null}
             />
           ))}
         </div>
@@ -183,25 +187,31 @@ export default function CombatSessionPage() {
     </Panel>
   );
 
+  // Sort: alive first, then engaged, fled, destroyed — same order the
+  // mobile companion uses, so the two surfaces feel like one product.
+  const STATUS_RANK = { alive: 0, engaged: 1, fled: 2, destroyed: 3 };
+  const orderedUnits = Object.values(session.units || {}).slice().sort((a, b) =>
+    (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
+    a.name.localeCompare(b.name)
+  );
+
   const unitsPanel = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minHeight: 0 }}>
       <h3 style={sectionTitleStyle}>Einheiten ({aliveCount}/{totalCount})</h3>
-      {Object.values(session.units).length === 0 ? (
+      {orderedUnits.length === 0 ? (
         <Panel style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
           Diese Sitzung hat keine Einheiten gespeichert.
         </Panel>
       ) : (
-        Object.values(session.units).map(u => (
-          <UnitCard
+        orderedUnits.map(u => (
+          <UnitPhaseCard
             key={u.instanceId}
             unit={u}
-            unitCanon={data?.unitsById?.[u.unitId] || null}
-            narrow={narrow}
-            onModelDelta={(d) => api.adjustModels(u.instanceId, d)}
-            onWound={(d) => api.applyWound(u.instanceId, d)}
-            onStatus={(s) => api.setUnitStatus(u.instanceId, s)}
-            onNotes={(n) => api.setUnitNotes(u.instanceId, n)}
-            onToggleOnceFlag={(key) => api.toggleUnitOnceFlag(u.instanceId, key)}
+            canon={data?.unitsById?.[u.unitId] || null}
+            phase={session.currentPhase}
+            abilitiesById={data?.abilitiesById || {}}
+            api={api}
+            reminders={phaseReminders}
           />
         ))
       )}

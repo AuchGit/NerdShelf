@@ -1,18 +1,19 @@
 // src/features/wh40k/combat/coreRules.js
 //
-// Comprehensive per-phase reference of the 10e Core Rules. These are the
-// same for every army — the rulebook procedures the player needs to walk
-// through during their turn — so they live in code as a curated dataset.
-// Faction-, detachment- and unit-specific rules continue to flow from
-// the JSON dataset (units.json, detachments.json, stratagems.json, …) via
-// phaseContext, so this file does NOT replicate anything army-specific.
+// Per-phase reference of the 10e Core Rules — written for a player who's
+// holding their phone at the table mid-game, not for someone reading the
+// rulebook on the couch. So:
 //
-// Each entry:
-//   id      — stable string used by the UI for keying + collapse state
-//   title   — short, one-line label
-//   text    — multi-paragraph guidance, copy-friendly across the table
-//   timing  — optional 'start' | 'end' bias for sort ordering
-//   tags    — chips shown alongside the title (Pflicht/Optional/etc.)
+//   • Companion tone — short, conversational, second person. Tells the
+//     player WHAT to do next, then how. No encyclopedic detail.
+//   • Action-oriented titles ("Charge-Sequenz", "Wer kann chargen?",
+//     "Overwatch reagiert") rather than rulebook headings.
+//   • Steps are numbered or bulleted so the player can glance and pick
+//     up where they paused.
+//
+// Faction-, detachment- and unit-specific rules continue to come from
+// the JSON dataset via phaseContext + UnitPhaseCard; this file does NOT
+// duplicate anything army-specific.
 
 const T_REQUIRED = 'required';
 const T_OPTIONAL = 'optional';
@@ -30,309 +31,300 @@ export const CORE_PHASE_RULES = {
   command: [
     {
       id: 'core-cmd-cp',
-      title: 'Kommandopunkt erhalten',
+      title: '+1 CP einsammeln',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
-`Erhalte 1 CP zu Beginn deiner Command Phase (max. 15 CP gespeichert).
-Ausnahme: Der Spieler, der die erste Player-Turn der Schlacht hat, erhält in seiner ersten Command Phase KEINEN CP.`,
+`Du bekommst 1 CP — max. 15 gespeichert.
+
+Ausnahme: im ALLERERSTEN Player-Turn der Schlacht bekommt der erste Spieler keinen CP.`,
     },
     {
       id: 'core-cmd-battle-shock',
-      title: 'Battle-shock-Tests',
+      title: 'Battle-shock-Tests durchführen',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
-`Für jede Einheit, die diese Bedingungen erfüllt, machst du einen Battle-shock-Test:
-• Sie ist unter halber Starting Strength
-• Sie hat einen Battle-shock-Token von der vorigen Runde
+`Für jede Einheit, die …
+• unter halber Starting Strength steht, ODER
+• einen Battle-shock-Token hat
+… einen Test machen: 2W6 + Ld. Schafft den Threshold der Einheit? Sonst Battle-shock.
 
-Test: 2W6, scheitert wenn das Ergebnis < Ld-Wert eines Modells (höchstes Ld der Einheit zählt).
-Folgen bei Battle-shock:
-• OC = 0 bis Ende der nächsten Command Phase
-• Einheit kann keine Stratagems verwenden
-• Auto-fail Morale-Tests
-Erhalte einen Battle-shock-Token.`,
+Battle-shocked:
+• OC = 0 bis Ende deiner nächsten Command Phase
+• Keine Stratagems verwendbar
+• Token nehmen`,
     },
     {
       id: 'core-cmd-start-effects',
-      title: 'Start-of-turn-Effekte',
+      title: '„Start of your turn"-Effekte',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
-`Löse alle Abilities, Stratagems und Detachment-Regeln auf, die "at the start of your Command phase" oder "at the start of your turn" sagen. Nutze die untenstehende Ability-Liste für die deiner Armee.`,
+`Schau in den Unit-Karten — jede Fähigkeit, die mit „at the start of your Command phase" oder „at the start of your turn" markiert ist, wird jetzt aufgelöst.
+
+Auch Detachment-Regeln + Stratagems mit Command-Phase-Timing.`,
     },
     {
       id: 'core-cmd-objectives',
-      title: 'Objective Control prüfen',
-      tags: [T_REACTIVE],
+      title: 'Objective-Kontrolle prüfen',
+      tags: [T_OPTIONAL],
       text:
-`Eine Einheit hält ein Objective, wenn die Summe ihrer OC-Werte größer als die der feindlichen Einheiten in 3" davon ist. Sticky Objectives bleiben "deins" auch wenn niemand mehr in Reichweite ist, bis ein Gegner es kontrolliert.`,
+`Eine Einheit hält ein Objective, wenn ihre OC-Summe größer ist als die der gegnerischen Einheiten in 3" darum herum.
+
+Sticky Objectives bleiben deins, bis ein Gegner es kontrolliert — auch wenn niemand mehr in Reichweite steht.`,
     },
   ],
 
   movement: [
     {
-      id: 'core-mov-normal',
-      title: 'Normaler Bewegungsweg',
+      id: 'core-mov-flow',
+      title: 'Bewegungs-Optionen',
+      timing: 'start',
       tags: [T_OPTIONAL],
       text:
-`Jede Einheit darf bis zu ihrem M-Wert (in Zoll) bewegen.
-• Models dürfen nicht über andere Models hinwegfliegen (außer FLY).
-• Models dürfen nicht über/durch Einheiten in Engagement Range, die nicht ihre eigene Einheit sind.
-• Modelle einer Einheit müssen am Ende der Bewegung in 2" zueinander (kohärent) sein.`,
+`Pro Einheit eine der vier Optionen wählen:
+
+1. Normale Bewegung — bis zu M Zoll
+2. Advance — +W6 Zoll, aber kein Schießen / Charge diese Runde (außer Assault-Waffen / -Einheiten)
+3. Fall Back — aus Engagement raus, Desperate-Escape-Test
+4. Stehenbleiben — zählt als „Stationary" (relevant für Heavy-Waffen)
+
+Am Ende: 2" Kohärenz wahren.`,
     },
     {
       id: 'core-mov-advance',
-      title: 'Vorrücken (Advance)',
+      title: 'Advance würfeln',
       tags: [T_OPTIONAL],
       text:
-`Wirf einen W6 (manche Regeln modifizieren diesen Wurf) und addiere das Ergebnis zur Bewegung.
-• Diese Einheit kann diese Phase nicht schießen und nicht chargen.
-• AUSNAHME: Assault-Waffen dürfen geschossen werden, Assault-Einheiten dürfen chargen.
-Vergib der Einheit den Tag "advanced" im Tracker.`,
+`Wirf 1W6 und addiere das Ergebnis zu deiner Bewegung.
+
+Konsequenz: diese Einheit darf diese Runde
+• NICHT schießen (außer mit [ASSAULT] Waffen)
+• NICHT chargen (außer ASSAULT-Einheiten)`,
     },
     {
       id: 'core-mov-fall-back',
-      title: 'Zurückziehen (Fall Back)',
+      title: 'Fall Back (aus Engagement)',
       tags: [T_OPTIONAL],
       text:
-`Aus Engagement Range einer feindlichen Einheit raus bewegen.
-• Diese Einheit kann diese Phase nicht schießen, nicht chargen.
-• Sie macht einen Desperate-Escape-Test: pro Modell 1W6 — bei 1en (oder 1-2en bei Battle-shock) wird ein Modell zerstört.
-Vergib den Tag "fellback".`,
-    },
-    {
-      id: 'core-mov-remain',
-      title: 'Stehenbleiben',
-      tags: [T_OPTIONAL],
-      text:
-`Die Einheit bewegt sich nicht. Sie zählt als "Stationary" — relevant für Heavy-Waffen (volles BS), Crusader, Battleline-Buffs etc.`,
+`Engagement Range verlassen. Diese Einheit:
+• kann NICHT schießen
+• kann NICHT chargen
+• macht Desperate-Escape-Test: pro Modell 1W6 — bei 1en (bei Battle-shock: 1-2en) wird ein Modell zerstört.`,
     },
     {
       id: 'core-mov-reinforcements',
       title: 'Reinforcements einsetzen',
       tags: [T_OPTIONAL],
       text:
-`Einheiten in Strategic Reserves oder mit Deep-Strike-Ability dürfen kommen.
-• Frühestens in deiner ZWEITEN Movement Phase.
-• Spätestens am Ende der Battle Round 3 — sonst gilt sie als zerstört.
-• Deep Strike: Set up >9" von feindlichen Einheiten.`,
+`Strategic Reserves & Deep Strike kommen JETZT.
+
+• Frühestens deine ZWEITE Movement Phase
+• Spätestens Ende Battle Round 3 — sonst zerstört
+• Deep Strike: setze die Einheit > 9" von feindlichen Modellen entfernt ab`,
     },
     {
-      id: 'core-mov-disembark',
-      title: 'Aussteigen / Einsteigen',
+      id: 'core-mov-transports',
+      title: 'Aus- / Einsteigen',
       tags: [T_OPTIONAL],
       text:
-`Aussteigen: am Anfang der Movement Phase, alle Modelle in 3" um den Transporter platzieren, danach normal bewegen (max. M-Wert). Wenn der Transporter zerstört wurde: 9" Test je Modell, sonst tot.
-Einsteigen: Modelle in 3" zum Transporter (am Ende der Bewegung).`,
+`Aussteigen am Anfang der Bewegung: Modelle in 3" um den Transporter platzieren, danach normal bewegen (M-Wert).
+
+Einsteigen am Ende der Bewegung: Modelle in 3" zum Transporter, der nicht 'advanced' ist.`,
     },
   ],
 
   shooting: [
     {
-      id: 'core-shoot-select',
-      title: 'Schieß-fähige Einheiten',
+      id: 'core-shoot-flow',
+      title: 'Schießphase-Ablauf',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
-`Eine Einheit darf schießen, wenn sie:
-• NICHT in Engagement Range einer feindlichen Einheit ist (Ausnahme: Pistolen oder BIG GUNS NEVER TIRE-Einheiten = Monster/Vehicles).
-• Diese Phase nicht "Fallen Back" ist (außer Ability sagt was anderes).
-• Diese Phase nicht "Advanced" ist — AUSSER mit Assault-Waffe.`,
+`Pro Einheit (eine nach der anderen):
+
+1. Ziel(e) wählen — Sichtlinie + Reichweite nötig
+2. Pro Waffen-Gruppe: Hit, Wound, Save, Damage abwickeln
+3. Gegner zieht Modelle weg
+
+Schau in der Unit-Card — dort siehst du nur die Fernkampf-Waffen, die JETZT geschossen werden.`,
+    },
+    {
+      id: 'core-shoot-eligibility',
+      title: 'Wer darf schießen?',
+      tags: [T_OPTIONAL],
+      text:
+`Eine Einheit darf schießen wenn sie …
+• NICHT in Engagement steht (Ausnahme: Pistolen, BIG GUNS NEVER TIRE)
+• Diese Runde NICHT „Fallen Back" ist (außer Sonderregel)
+• Diese Runde NICHT „Advanced" ist (außer [ASSAULT]-Waffen)`,
     },
     {
       id: 'core-shoot-target',
-      title: 'Zielwahl',
+      title: 'Zielwahl-Regeln',
       tags: [T_REQUIRED],
       text:
-`Wähle die Ziel(e) BEVOR du würfelst.
-• Mindestens ein Modell der Einheit muss Sichtlinie auf das Ziel haben (Indirect Fire ausgenommen).
-• Mindestens eine Waffe muss in Reichweite sein.
-• Wenn das Ziel ein Character ist und es andere Einheiten näher gibt: nicht erlaubt (Look Out, Sir!), AUSSER der Character ist Monster/Vehicle ODER eine Battleline-Einheit ist näher.`,
+`Vor dem Würfeln festlegen:
+• Mindestens ein Modell muss Sichtlinie haben (außer [INDIRECT FIRE])
+• Mindestens eine Waffe in Reichweite
+• Character als Ziel: nur wenn KEINE nähere Einheit existiert (Look Out, Sir)
+  Ausnahmen: Monster/Vehicle-Character, oder Battleline-Einheit näher`,
     },
     {
       id: 'core-shoot-sequence',
-      title: 'Angriffssequenz',
+      title: 'Würfel-Sequenz',
       tags: [T_REQUIRED],
       text:
-`Pro Waffen-Gruppe:
-1. Anzahl Attacken bestimmen (A-Wert × Modelle mit der Waffe, ggf. modifiziert).
-2. Hit-Rolls (BS-Wert, modifizierte W6, max ±1 Modifier).
-3. Wound-Rolls: S vs T (S≥2×T = 2+; S>T = 3+; S=T = 4+; S<T = 5+; 2×S≤T = 6+).
-4. Saves: Gegner zieht beste Sv ab. Sv minus AP. Cover = +1 Sv (cap 3+ bei Infantry). Invuln-Save ignoriert AP, immer roh.
-5. Damage je verlorener Save: D-Wert pro Wunde. Schaden geht an EIN Modell, bis zerstört, dann zum nächsten. Excess-Damage verfällt (außer Devastating Wounds → Critical Hits = mortal wounds).`,
+`Pro Waffe:
+1. Anzahl Attacken (A × Modelle mit der Waffe)
+2. Hit-Roll: BS, max ±1 Modifier
+3. Wound-Roll: S vs T
+   2× T = 2+ · > T = 3+ · = T = 4+ · < T = 5+ · ≤ ½T = 6+
+4. Saves: Sv − AP, oder Invul (ignoriert AP)
+5. Damage: D pro durchgelassene Wunde, Excess verfällt`,
     },
     {
-      id: 'core-shoot-pistol',
-      title: 'Pistolen-Ausnahme',
+      id: 'core-shoot-special',
+      title: 'Spezialfälle',
       tags: [T_OPTIONAL],
       text:
-`Pistolen können in Engagement Range geschossen werden, AUSSER auf andere Einheiten in dieser selben Range. Wenn eine Einheit eine Pistole schießt, kann sie diese Phase keine andere Waffen-Gruppe abfeuern.`,
-    },
-    {
-      id: 'core-shoot-indirect',
-      title: 'Indirect Fire',
-      tags: [T_OPTIONAL],
-      text:
-`Waffen mit [INDIRECT FIRE]: dürfen auf Ziele ohne Sichtlinie schießen.
-• -1 to hit auf solche Ziele.
-• Wenn Ziel keine Sichtlinie hat: +1 Sv (Benefit of Cover).
-• Modifier-Cap: max -1 cumulative.`,
-    },
-    {
-      id: 'core-shoot-bgnt',
-      title: 'Big Guns Never Tire',
-      tags: [T_OPTIONAL],
-      text:
-`Monster / Vehicles dürfen in Engagement Range einer feindlichen Einheit schießen, aber:
-• -1 to hit auf alle Ranged-Attacken
-• Sie dürfen nur auf Einheiten in Engagement Range zu ihnen schießen.`,
+`• Pistolen: in Engagement erlaubt, aber nur Pistolen diese Phase
+• Big Guns Never Tire: Monster/Vehicles dürfen in Engagement schießen, −1 to hit
+• Indirect Fire: ohne Sichtlinie möglich, −1 to hit, Ziel bekommt Benefit of Cover`,
     },
   ],
 
   charge: [
     {
-      id: 'core-chg-eligibility',
-      title: 'Charge-Erlaubnis',
+      id: 'core-chg-flow',
+      title: 'Charge-Sequenz',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
-`Wählbar sind Einheiten, die in dieser Runde NICHT "Advanced" oder "Fallen Back" sind, NICHT bereits in Engagement Range sind, und die innerhalb 12" mindestens eines Ziels sind. AUSNAHME: Assault-Einheiten (die nach Advance chargen dürfen).`,
+`So läuft jeder Charge ab:
+
+1. Einheit wählen (in 12" eines Ziels, nicht advanced/fellback, noch nicht in Engagement)
+2. Bis zu 3 Ziele erklären — alle in 12"
+3. Gegner darf Overwatch ansagen (1 CP)
+4. 2W6 würfeln — Ergebnis = max. Bewegung
+5. Bewegen — Engagement Range (≤1") zu ALLEN Zielen erreichen, sonst Charge schlägt fehl
+
+Nach allen Charges: Heroic Intervention für deine CHARACTER.`,
     },
     {
-      id: 'core-chg-declare',
-      title: 'Charge erklären',
-      tags: [T_REQUIRED],
+      id: 'core-chg-eligibility',
+      title: 'Wer kann chargen?',
+      tags: [T_OPTIONAL],
       text:
-`Wähle bis zu drei feindliche Einheiten als Ziel(e). Alle Ziele müssen innerhalb 12" der chargenden Einheit sein. Wenn mehrere Ziele: am Ende muss MINDESTENS EIN Modell der chargenden Einheit Engagement Range zu JEDEM erklärten Ziel haben.`,
-    },
-    {
-      id: 'core-chg-overwatch',
-      title: 'Overwatch (Stratagem, 1 CP)',
-      tags: [T_REACTIVE],
-      text:
-`Der Verteidiger darf das Overwatch-Stratagem (1 CP) verwenden:
-• Eine seiner Einheiten in 24" Sichtlinie schießt auf die chargende Einheit.
-• Trifft NUR bei rohen 6en (BS effektiv 6+).
-• Pistolen dürfen auch nicht-Engagement-Range Ziele anvisieren.`,
+`Charge-fähig sind Einheiten die …
+• in 12" eines feindlichen Modells sind
+• diese Runde NICHT „advanced" sind (außer [ASSAULT]-Einheiten)
+• NICHT „Fallen Back" sind
+• NICHT bereits in Engagement Range stehen`,
     },
     {
       id: 'core-chg-roll',
-      title: 'Charge-Wurf',
+      title: '2W6 würfeln',
       tags: [T_REQUIRED],
       text:
-`Wirf 2W6.
-• Ergebnis = maximale Bewegung in Zoll.
-• Charge gelingt, wenn die Einheit so positioniert werden kann, dass mindestens ein Modell in Engagement Range (≤1") jedes erklärten Ziels endet.
-• Charge schlägt fehl → keine Bewegung.`,
+`Wirf zwei W6 — das Ergebnis ist deine maximale Charge-Bewegung in Zoll.
+
+Charge gelingt NUR, wenn am Ende mindestens ein Modell deiner Einheit Engagement Range (≤1") zu JEDEM erklärten Ziel hat.
+
+Schlägt fehl → keine Bewegung, weiter zum nächsten Charge.`,
     },
     {
-      id: 'core-chg-move',
-      title: 'Charge-Bewegung',
-      tags: [T_REQUIRED],
+      id: 'core-chg-overwatch',
+      title: 'Overwatch (Gegner reagiert)',
+      tags: [T_REACTIVE],
       text:
-`Bewege jedes Modell der chargenden Einheit (kein Modell darf den Charge-Wurf in Zoll überschreiten).
-• Erstes Modell muss in Engagement Range eines Ziels enden.
-• Folge-Modelle: in Engagement Range ODER in Kohärenz mit der Einheit.
-• Modelle dürfen über Walls/Ruinen, aber keine vertikalen Wände durchqueren (außer FLY).`,
+`Verteidiger darf nach deiner Charge-Erklärung Overwatch ansagen (Stratagem, 1 CP):
+
+Eine seiner Einheiten in 24" Sichtlinie schießt auf die chargende Einheit. Trifft NUR bei rohen 6en (BS effektiv 6+). Pistolen erlaubt.`,
     },
     {
       id: 'core-chg-heroic',
       title: 'Heroic Intervention',
       tags: [T_REACTIVE],
       text:
-`Nachdem alle Charges aufgelöst sind: jedes deiner CHARACTER-Modelle innerhalb 6" einer feindlichen Einheit, die diese Phase NICHT gechargt hat, darf eine Heroic Intervention machen — bis zu 3" Bewegung, muss in Engagement Range einer feindlichen Einheit enden.`,
+`Nach allen Charges deiner Runde:
+
+Jedes deiner CHARACTER-Modelle innerhalb 6" einer feindlichen Einheit, die diese Phase NICHT gechargt hat, darf bis zu 3" Bewegung machen — muss in Engagement Range enden.`,
     },
   ],
 
   fight: [
     {
       id: 'core-fight-order',
-      title: 'Fights-First-Reihenfolge',
+      title: 'Fight-Reihenfolge',
       timing: 'start',
       tags: [T_REQUIRED],
       text:
 `Reihenfolge:
-1. ZUERST alle Einheiten mit [FIGHTS FIRST] (chargende Einheiten haben das automatisch). Aktiver Spieler entscheidet bei Gleichstand zuerst.
-2. DANN alternierend: aktiver Spieler kämpft eine Einheit, dann Gegner, dann aktiver, …
+
+1. ZUERST alle Einheiten mit [FIGHTS FIRST]. Charger haben das automatisch. Bei Gleichstand entscheidet der Active Player.
+2. DANN alternierend — du eine Einheit, dann Gegner, dann du, …
 3. ZULETZT [FIGHTS LAST]-Einheiten (selten).`,
     },
     {
-      id: 'core-fight-pile-in',
-      title: 'Pile In',
+      id: 'core-fight-step',
+      title: 'Fight-Schritte pro Einheit',
       tags: [T_REQUIRED],
       text:
-`Vor den Attacken: bewege bis zu drei Modelle der Einheit jeweils bis zu 3", um näher zum nächstgelegenen feindlichen Modell in Engagement Range zu kommen. Mehr Modelle in Engagement Range bringen = mehr potentielle Attacken.`,
+`1. Pile In: bis zu 3 Modelle bewegen je 3" Richtung nächstes feindliches Modell (in Engagement bleiben)
+2. Attacken auswählen (Melee-Waffen — siehe Unit-Card)
+3. Hit / Wound / Save / Damage abwickeln
+4. Consolidate: bis zu 3 Modelle bewegen je 3" — näher zum Gegner ODER zu einem Objective`,
     },
     {
-      id: 'core-fight-attacks',
-      title: 'Attacken durchführen',
+      id: 'core-fight-sequence',
+      title: 'Würfel-Sequenz',
       tags: [T_REQUIRED],
       text:
-`Wähle Waffe(n), dann je Waffen-Gruppe:
-1. Anzahl Attacken (A × Modelle in Engagement Range mit der Waffe)
-2. Hit-Rolls (WS-Wert)
-3. Wound, Save, Damage genau wie in der Shooting Phase
-4. Allocate-Regel: Schaden zuerst an ein Modell, das bereits Wunden hat`,
-    },
-    {
-      id: 'core-fight-vehicles',
-      title: 'Vehicles im Nahkampf',
-      tags: [T_OPTIONAL],
-      text:
-`Vehicles (außer Walker) haben -1 to hit auf Melee-Attacken. Walker bekommen den Malus nicht.`,
-    },
-    {
-      id: 'core-fight-consolidate',
-      title: 'Consolidate',
-      tags: [T_REQUIRED],
-      text:
-`Nach allen Attacken: bewege bis zu drei Modelle jeweils bis zu 3" — jedes muss näher zum nächsten feindlichen Modell enden ODER Engagement Range ergreifen/halten ODER näher zu einem Objective Marker den die Einheit kontrolliert.`,
+`Pro Waffe identisch zum Schießen:
+1. Anzahl Attacken (A × Modelle in Engagement)
+2. Hit-Roll: WS
+3. Wound-Roll: S vs T (gleiches Schema wie Shooting)
+4. Saves & Damage
+
+Vehicles (außer Walker) im Nahkampf: −1 to hit.`,
     },
   ],
 
   end: [
     {
-      id: 'core-end-score-primary',
-      title: 'Primary Mission werten',
+      id: 'core-end-score',
+      title: 'Punkte werten',
       timing: 'end',
       tags: [T_REQUIRED],
       text:
-`Werte die Primary-Mission nach den Mission-Regeln.
-• Typische Primary-Werte: 5 / 10 / 15 VP pro gehaltenes/dominiertes Objective (max. 50 VP gesamt).
-• In Battle Round 1 wird KEINE Primary gewertet — der erste Spieler.`,
-    },
-    {
-      id: 'core-end-score-secondary',
-      title: 'Secondary Missions werten',
-      timing: 'end',
-      tags: [T_REQUIRED],
-      text:
-`Werte die ausgewählten Secondary-Karten / Tactical Objectives.
-• Max. 50 VP gesamt aus Secondaries pro Schlacht (8 VP pro Karte typisch).
-• Fixed: vorgewählte Secondaries für die Schlacht.
-• Tactical: 2 Karten ziehen je Command Phase, max. 1 fertig pro Phase werten.`,
+`Primary: nach Mission-Regeln (typ. 5/10/15 VP pro Objective, max 50).
+• Battle Round 1: der erste Spieler wertet KEINE Primary in seinem ersten Turn.
+
+Secondary: ausgewählte Karten / Tactical Objectives werten (max 50 VP gesamt).`,
     },
     {
       id: 'core-end-effects',
-      title: 'End-of-turn-Effekte',
+      title: '„End of turn"-Effekte',
       timing: 'end',
       tags: [T_REQUIRED],
       text:
-`Löse alle Abilities und Stratagems auf, die "at the end of your turn" oder "at the end of the battle round" sagen.
-• Reset once-per-turn-Stratagems.
-• Marker entfernen, die mit "at the end of the turn" auslaufen.`,
+`Schau in den Unit-Karten:
+• alle „at the end of your turn"-Abilities auflösen
+• Once-per-Turn-Stratagems wieder freischalten
+• ablaufende Marker entfernen
+
+Battle-shock-Token: bleiben bis zur nächsten Command Phase.`,
     },
     {
-      id: 'core-end-cleanup',
-      title: 'Bookkeeping',
-      timing: 'end',
+      id: 'core-end-game',
+      title: 'Spielende?',
       tags: [T_OPTIONAL],
       text:
-`Battle-shock-Token bleiben bis zur nächsten Command Phase aktiv.
-Erinnere dich: aufgespart unerledigte CP-Refunds, Aura-Buffs zurücksetzen.
-Falls Battle Round 5 abgeschlossen UND keine Sudden Death: das Spiel endet jetzt — finale VPs ermitteln.`,
+`Nach Battle Round 5 endet das Spiel — finale VPs ermitteln.
+
+Sudden Death früher möglich, wenn Mission das vorsieht (z.B. Tabling).`,
     },
   ],
 };

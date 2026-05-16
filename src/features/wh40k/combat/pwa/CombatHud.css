@@ -569,6 +569,160 @@
   border-color: var(--color-accent);
 }
 
+/* ── Unit card sub-sections (phase-relevant abilities / weapons) ──── */
+.ch-unit-head .ch-unit-points {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.ch-unit-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ch-unit-sub-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.ch-unit-sub-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Stat strip: highlights phase-relevant stats ──────────────────── */
+.ch-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ch-stat-cell {
+  flex: 1 1 0;
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 2px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+.ch-stat-cell .ch-stat-label {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: var(--fw-semibold);
+}
+.ch-stat-cell .ch-stat-value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  line-height: 1.05;
+}
+.ch-stat-cell.is-hi {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg-sunken));
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+}
+.ch-stat-cell.is-hi .ch-stat-label { color: var(--color-accent); }
+.ch-stat-cell.is-hi .ch-stat-value { color: var(--color-accent); }
+
+/* ── Weapon list rows ─────────────────────────────────────────────── */
+.ch-weapon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ch-weapon-row {
+  padding: 6px 8px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ch-weapon-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+.ch-weapon-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ch-weapon-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+.ch-weapon-keywords .ch-chip {
+  font-size: 10px;
+  padding: 0 5px;
+}
+
+/* ── Mehr-Details toggle + drawer ─────────────────────────────────── */
+.ch-unit-details-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 100ms, color 100ms;
+}
+.ch-unit-details-toggle:hover { color: var(--color-text); }
+.ch-unit-details-toggle:active { background: var(--color-surface-hover); }
+.ch-unit-details-meta {
+  color: var(--color-text-dim);
+  font-weight: var(--fw-medium);
+}
+
+.ch-unit-details {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ch-unit-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.ch-unit-keywords .ch-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 /* Empty state in the body */
 .ch-empty {
   text-align: center;
