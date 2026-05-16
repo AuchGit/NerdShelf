@@ -26,6 +26,10 @@ const TABS = [
 export default function MtgSubNav() {
   return (
     <div
+      // PWA-MOBILE: data-pwa-target makes mobile-layouts.css convert this
+      // sub-nav into a horizontally-scrollable snap strip on a phone so
+      // 5+ tabs fit without overflow. Revert: drop the attribute.
+      data-pwa-target="subnav"
       style={{
         display: 'flex',
         gap: 'var(--space-1)',

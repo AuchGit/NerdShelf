@@ -276,7 +276,10 @@ export default function CharacterSheetPage({ session }) {
   return (
     <div style={S.page}>
       {/* ═══ HEADER ═══ */}
-      <div style={S.header}>
+      {/* PWA-MOBILE: data-pwa-target lets mobile-layouts.css wrap the
+          header chrome on a phone so 5+ buttons stack instead of
+          overflowing. Revert: drop the data-pwa-target attribute. */}
+      <div data-pwa-target="dnd-sheet-header" style={S.header}>
         <button style={S.headerBackBtn} onClick={() => navigate('/')}>
           ← Dashboard
         </button>
@@ -504,7 +507,10 @@ export default function CharacterSheetPage({ session }) {
         {/* ── MAIN CONTENT ── */}
         <div className="dnd-sheet-main" style={S.main}>
           {/* Tab-Navigation */}
-          <div style={S.tabs}>
+          {/* PWA-MOBILE: data-pwa-target lets mobile-layouts.css pin this
+              row to the bottom of the viewport on a phone. Revert: drop
+              the data-pwa-target attribute. */}
+          <div data-pwa-target="dnd-sheet-tabs" style={S.tabs}>
             {TABS.map(tab => (
               <button key={tab.id}
                 style={{ ...S.tab, ...(activeTab === tab.id ? S.tabActive : {}) }}

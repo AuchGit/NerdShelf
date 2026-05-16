@@ -84,7 +84,10 @@ function isTauriShell() {
 
 function readSnapshot() {
   if (typeof window === 'undefined') {
-    return { isMobile: false, isTouch: false, isStandalone: false, isPwaMobile: false };
+    return {
+      isMobile: false, isTouch: false, isStandalone: false,
+      isPwaMobile: false, pwaLayouts: false,
+    };
   }
   const isMobile = window.matchMedia(MQ_MOBILE).matches;
   const isTouch  = window.matchMedia(MQ_TOUCH).matches;
@@ -99,8 +102,13 @@ function readSnapshot() {
   // Manual override (dev-friendly) always wins so testers can flip into
   // / out of mobile mode regardless of the device.
   const override = readOverride();
+  const layoutsOverride = readLayoutsOverride();
   if (override !== null) {
-    return { isMobile, isTouch, isStandalone, isPwaMobile: override };
+    return {
+      isMobile, isTouch, isStandalone,
+      isPwaMobile: override,
+      pwaLayouts: override && (layoutsOverride !== false),
+    };
   }
 
   // Detection. The product brief is "PWA → mobile, desktop binary →
@@ -117,11 +125,62 @@ function readSnapshot() {
   //                             touch fallback.
   //   • Browser, desktop      → desktop UI (false).
   const isPwaMobile = !tauri && (isStandalone || (isMobile && isTouch));
-  return { isMobile, isTouch, isStandalone, isPwaMobile };
+  // pwaLayouts: section-by-section mobile UI enhancements (sticky bottom
+  // tabs on the DnD sheet, drawer-style deck panel on MTG, …). Enabled
+  // by default whenever PWA-mobile is active; can be disabled
+  // independently via ?pwaLayouts=0 if the user prefers the desktop-
+  // style layout on their phone.
+  const pwaLayouts = isPwaMobile && (layoutsOverride !== false);
+  return { isMobile, isTouch, isStandalone, isPwaMobile, pwaLayouts };
 }
 
-// Sync a single source of truth onto <body> so CSS selectors (and any
-// non-React module that wants to branch behaviour) can read it cheaply.
+// Independent toggle: the per-section "mobile layouts" CSS (sticky bottom
+// tabs on the DnD sheet, bottom-sheet deck panel on MTG, etc.) can be
+// disabled separately from the PWA-mobile mode itself. Useful as an
+// escape hatch — the user can keep the BottomNav but turn off the
+// rest if a particular layout doesn't suit them.
+//
+//   ?pwaLayouts=0       → disable mobile layouts, persist
+//   ?pwaLayouts=1       → enable mobile layouts (default), persist
+//   ?pwaLayouts=reset   → wipe override, fall back to default (enabled)
+//
+// In dev the override persists across reloads via localStorage. In
+// production builds we never persist it — same defensive logic as the
+// pwaMobile override.
+const LAYOUTS_KEY = 'nerdshelf:pwaLayoutsOverride';
+
+function readLayoutsOverride() {
+  if (typeof window === 'undefined') return null;
+  let urlValue = null;
+  try {
+    const url = new URL(window.location.href);
+    const param = url.searchParams.get('pwaLayouts');
+    if (param === '1' || param === 'true')  urlValue = true;
+    else if (param === '0' || param === 'false') urlValue = false;
+    else if (param === 'reset' || param === 'clear') {
+      try { localStorage.removeItem(LAYOUTS_KEY); } catch { /* ignore */ }
+      return null;
+    }
+  } catch { /* ignore */ }
+
+  if (!IS_DEV) {
+    try { localStorage.removeItem(LAYOUTS_KEY); } catch { /* ignore */ }
+    return urlValue;
+  }
+  if (urlValue !== null) {
+    try { localStorage.setItem(LAYOUTS_KEY, urlValue ? '1' : '0'); } catch { /* ignore */ }
+    return urlValue;
+  }
+  try {
+    const stored = localStorage.getItem(LAYOUTS_KEY);
+    if (stored === '1') return true;
+    if (stored === '0') return false;
+  } catch { /* ignore */ }
+  return null;
+}
+
+// Sync the active flags onto <body> so CSS selectors (and any non-React
+// module that wants to branch behaviour) can read them cheaply.
 function syncBodyAttribute(snapshot) {
   if (typeof document === 'undefined') return;
   const body = document.body;
@@ -135,6 +194,11 @@ function syncBodyAttribute(snapshot) {
     body.setAttribute('data-pwa-standalone', 'true');
   } else {
     body.removeAttribute('data-pwa-standalone');
+  }
+  if (snapshot.pwaLayouts) {
+    body.setAttribute('data-pwa-layouts', 'true');
+  } else {
+    body.removeAttribute('data-pwa-layouts');
   }
 }
 

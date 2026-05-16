@@ -17,6 +17,9 @@ const TABS = [
 export default function Wh40kSubNav() {
   return (
     <div
+      // PWA-MOBILE: data-pwa-target enables horizontal scroll-snap on a
+      // phone (mobile-layouts.css). Revert: drop the attribute.
+      data-pwa-target="subnav"
       style={{
         display: 'flex',
         gap: 'var(--space-1)',
