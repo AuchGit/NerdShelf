@@ -3,11 +3,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
-import { Panel } from '../../../shared/ui';
+import { Panel, ActionSheet } from '../../../shared/ui';
 import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
 import MtgSubNav from './components/MtgSubNav';
 import { ShareTokenBadge } from '../../../shared/tokens';
+import useLongPress from '../../../shared/hooks/useLongPress';
+import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -119,6 +121,14 @@ export default function MtgDashboard() {
 function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
   const data = deck.data || {};
   const priceSettings = useMtgPriceSettings();
+  const { isPwaMobile } = usePwaMobile();
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Long-press surfaces the same delete/duplicate actions that desktop
+  // exposes via the icon buttons in the card's top-right corner. We keep
+  // those buttons visible on desktop and rely on long-press on PWA mobile
+  // (where the icons feel cramped and tap-prone).
+  const longPress = useLongPress(() => setSheetOpen(true), { enabled: isPwaMobile });
   const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
@@ -175,6 +185,7 @@ function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
 
   return (
     <Panel
+      {...longPress}
       style={{
         display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
         cursor: 'pointer',
@@ -319,6 +330,20 @@ function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
         <span style={{ flex: 1 }} />
         {deck.share_token && <ShareTokenBadge token={deck.share_token} label="Deck-Token" compact />}
       </div>
+
+      {/* Long-press menu — PWA mobile only. Desktop keeps the existing
+          inline icon buttons in the top-right of the card. */}
+      <ActionSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={deck.name || 'Deck'}
+        items={[
+          { id: 'open',  label: 'Öffnen',     icon: '↗', onSelect: () => onOpen?.() },
+          { id: 'dup',   label: 'Duplizieren', icon: '⎘', onSelect: () => onDuplicate?.() },
+          { id: 'del',   label: 'Löschen',     icon: '🗑', danger: true,
+            onSelect: () => onDelete?.() },
+        ]}
+      />
     </Panel>
   );
 }

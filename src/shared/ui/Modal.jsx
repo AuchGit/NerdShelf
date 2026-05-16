@@ -12,8 +12,12 @@ export default function Modal({ open, onClose, title, children, width = 520, foo
 
   if (!open) return null;
 
+  // data-modal-root / data-modal-card hooks let `pwa.css` re-style the modal
+  // into a bottom sheet on PWA mobile WITHOUT changing the JSX. Desktop
+  // CSS isn't touched, so layout there is unchanged.
   return (
     <div
+      data-modal-root
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -23,6 +27,7 @@ export default function Modal({ open, onClose, title, children, width = 520, foo
       }}
     >
       <div
+        data-modal-card
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: width,

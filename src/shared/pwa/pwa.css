@@ -1,0 +1,216 @@
+/* src/shared/pwa/pwa.css
+ *
+ * Global UX layer that ONLY applies when the app is running as a PWA on a
+ * phone (`body[data-pwa-mobile="true"]`). Desktop, Tauri shell, and
+ * non-installed browser sessions are unaffected — that's an explicit
+ * requirement from the product brief.
+ *
+ * Anything visible to the user that benefits from one-handed thumb
+ * ergonomics, larger tap targets, or platform-native interaction patterns
+ * lives here. Component-local PWA tweaks (e.g. Match HUD full-bleed) stay
+ * in the feature's own stylesheet.
+ */
+
+/* ── Safe-area-inset baseline (notch / dynamic island / nav bar) ─────── */
+body[data-pwa-mobile='true'] {
+  /* The OS hands the app these CSS env() values; we hoist them onto
+     custom properties so feature CSS can read them as a normal var.
+     Falls back to 0 when the OS hasn't provided them. */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+  /* Height of the bottom tab bar — also exposed as a var so feature
+     screens can avoid being covered by it. */
+  --pwa-bottom-nav-h: calc(64px + var(--safe-bottom));
+}
+
+/* ── No accidental text-selection on taps (feels native) ─────────────── */
+body[data-pwa-mobile='true'] {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body[data-pwa-mobile='true'] button,
+body[data-pwa-mobile='true'] a,
+body[data-pwa-mobile='true'] [role='button'] {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Text inputs DO need selection, of course. */
+body[data-pwa-mobile='true'] input,
+body[data-pwa-mobile='true'] textarea,
+body[data-pwa-mobile='true'] [contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ── Disable scroll-rubberband over the chrome row, allow it in main ── */
+body[data-pwa-mobile='true'] {
+  overscroll-behavior-y: contain;
+}
+
+/* ── Hover-only "card hover" reveals don't work without a mouse ──────── */
+@media (hover: none) and (pointer: coarse) {
+  /* Generic dashboard card actions (delete, duplicate icons) usually live
+     in the top-right of each card and rely on hover-to-reveal. Force them
+     visible on touch — and let long-press supplement when we wire it. */
+  .nshelf-card-actions { opacity: 1 !important; }
+}
+
+/* ── Bottom tab bar styles ───────────────────────────────────────────── */
+.pwa-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: stretch;
+  height: var(--pwa-bottom-nav-h, 64px);
+  padding-bottom: var(--safe-bottom, 0);
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+}
+.pwa-bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--transition);
+  padding: 6px 4px;
+  min-height: 0;
+}
+.pwa-bottom-nav-item.is-active {
+  color: var(--color-accent);
+  font-weight: var(--fw-semibold);
+}
+.pwa-bottom-nav-item .pwa-bn-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.pwa-bottom-nav-item:active {
+  background: var(--color-surface-hover);
+}
+
+/* Pad the main scroll area so the tab bar doesn't cover the last row. */
+body[data-pwa-mobile='true'] main {
+  padding-bottom: var(--pwa-bottom-nav-h) !important;
+}
+/* Exception: the Match HUD live screen draws its own bottom-safe layout
+   and explicitly wants to extend behind the tab bar (which it hides). */
+body[data-pwa-mobile='true'] main:has(.mh-screen) {
+  padding-bottom: 0 !important;
+}
+
+/* ── Action sheet (long-press menu) ─────────────────────────────────── */
+.pwa-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1050;
+  animation: pwaSheetFadeIn 160ms ease-out;
+}
+.pwa-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1051;
+  background: var(--color-bg-elevated);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  padding: var(--space-3) var(--space-4) calc(var(--space-4) + var(--safe-bottom, 0));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: pwaSheetSlideUp 220ms cubic-bezier(.2,.8,.2,1);
+}
+.pwa-sheet-grip {
+  width: 40px;
+  height: 4px;
+  background: var(--color-border-strong);
+  border-radius: 999px;
+  align-self: center;
+  margin-bottom: var(--space-2);
+}
+.pwa-sheet-title {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+}
+.pwa-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--fs-lg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.pwa-sheet-item:active { background: var(--color-surface-hover); }
+.pwa-sheet-item-icon { font-size: 20px; opacity: 0.75; width: 24px; text-align: center; }
+.pwa-sheet-item-danger { color: var(--color-danger); }
+.pwa-sheet-item-danger .pwa-sheet-item-icon { opacity: 1; }
+
+@keyframes pwaSheetFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pwaSheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* ── Modal becomes a bottom sheet on PWA mobile ─────────────────────── */
+/* The shared <Modal> uses inline styles that pin to centre. We override
+   only when data-pwa-mobile is set so desktop is untouched. */
+body[data-pwa-mobile='true'] [data-modal-root] {
+  align-items: flex-end !important;
+  padding: 0 !important;
+}
+body[data-pwa-mobile='true'] [data-modal-card] {
+  width: 100% !important;
+  max-width: none !important;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+  max-height: 92vh !important;
+  padding-bottom: var(--safe-bottom, 0) !important;
+  animation: pwaSheetSlideUp 220ms cubic-bezier(.2,.8,.2,1);
+}
+
+/* Long-press hint feedback: brief background flash when held */
+.pwa-long-press-active {
+  background: var(--color-surface-hover) !important;
+  transition: background 0ms !important;
+}
+
+/* Swipe-to-dismiss handle (for full-screen overlays like Match HUD) */
+.pwa-swipe-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.4);
+  margin: 6px auto 4px;
+  flex-shrink: 0;
+}

@@ -22,6 +22,7 @@ import { findMatchByCode, joinMatch } from '../services/matchApi';
 import { formatCode } from '../services/matchCodes';
 import useMatchSession from '../hooks/useMatchSession';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
+import useSwipe from '../../../../shared/hooks/useSwipe';
 import PlayerTile from '../components/PlayerTile';
 import PlayerSettingsModal from '../components/PlayerSettingsModal';
 import JoinMatchPanel from '../components/JoinMatchPanel';
@@ -174,9 +175,22 @@ export default function MatchHudSessionPage() {
     } catch { /* ignore */ }
   }
 
+  // Swipe-down on the header bar to leave the session — the native
+  // "I'm done with this screen" gesture on iOS/Android. Only enabled in
+  // PWA mobile mode so the desktop drag-to-select still works.
+  const headerSwipe = useSwipe(
+    { onSwipeDown: () => navigate('/mtg/match') },
+    { enabled: isPwaMobile, minDistance: 50 }
+  );
+
   return (
     <div className="mh-screen" data-mobile={isPwaMobile ? 'true' : 'false'}>
-      <div className="mh-header">
+      <div
+        className="mh-header"
+        {...headerSwipe}
+        style={{ touchAction: isPwaMobile ? 'pan-x' : undefined }}
+      >
+        {isPwaMobile && <span className="pwa-swipe-handle" aria-hidden="true" />}
         <IconButton
           aria-label="Zurück"
           onClick={() => navigate('/mtg/match')}

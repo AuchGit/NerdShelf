@@ -12,10 +12,13 @@
 //                   false on desktops and the Tauri shell
 // - isStandalone — running as an installed PWA (display-mode: standalone), or
 //                   the iOS-specific navigator.standalone flag
-// - isPwaMobile  — the actual "phone in your hand mid-game" signal: either
-//                   running as a PWA OR (mobile viewport AND touch input).
-//                   This is what Match HUD uses to switch into full-bleed
-//                   layouts.
+// - isPwaMobile  — the actual "phone in your hand" signal: either running
+//                   as a PWA OR (mobile viewport AND touch input).
+//                   This is what gates all mobile-only UX everywhere in the
+//                   app. When true, `document.body` is also marked with
+//                   `data-pwa-mobile="true"` so CSS rules (and any non-React
+//                   code) can target the mode without re-checking media
+//                   queries on every paint.
 
 import { useEffect, useState } from 'react';
 
@@ -38,8 +41,30 @@ function readSnapshot() {
   return { isMobile, isTouch, isStandalone, isPwaMobile };
 }
 
+// Sync a single source of truth onto <body> so CSS selectors (and any
+// non-React module that wants to branch behaviour) can read it cheaply.
+function syncBodyAttribute(snapshot) {
+  if (typeof document === 'undefined') return;
+  const body = document.body;
+  if (!body) return;
+  if (snapshot.isPwaMobile) {
+    body.setAttribute('data-pwa-mobile', 'true');
+  } else {
+    body.removeAttribute('data-pwa-mobile');
+  }
+  if (snapshot.isStandalone) {
+    body.setAttribute('data-pwa-standalone', 'true');
+  } else {
+    body.removeAttribute('data-pwa-standalone');
+  }
+}
+
 export default function usePwaMobile() {
   const [state, setState] = useState(readSnapshot);
+
+  useEffect(() => {
+    syncBodyAttribute(state);
+  }, [state]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -62,4 +87,10 @@ export default function usePwaMobile() {
   }, []);
 
   return state;
+}
+
+// Re-export the raw matcher so non-hook code can read the current state
+// without going through React. Useful for one-off branches in services.
+export function readPwaMobile() {
+  return readSnapshot();
 }

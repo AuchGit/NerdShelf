@@ -4,20 +4,23 @@ import { useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import SettingsModal from './settings/SettingsModal';
 import BugReportModal from '../core/bug-report/BugReportModal';
+import { BottomNav } from '../shared/ui';
 import useWindowWidth from '../shared/hooks/useWindowWidth';
+import usePwaMobile from '../shared/hooks/usePwaMobile';
 
 export default function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const { mode } = useWindowWidth();
+  const { isPwaMobile } = usePwaMobile();
 
-  // Auto-close overlay if window grows back into compact/full mode
+  // Auto-close overlay if window grows back into compact/full mode.
   useEffect(() => {
     if (mode !== 'hidden' && overlayOpen) setOverlayOpen(false);
   }, [mode, overlayOpen]);
 
-  // ESC closes overlay
+  // ESC closes overlay.
   useEffect(() => {
     if (!overlayOpen) return;
     const onKey = (e) => { if (e.key === 'Escape') setOverlayOpen(false); };
@@ -30,6 +33,23 @@ export default function Layout() {
     onOpenSettings: () => { setSettingsOpen(true); if (overlayOpen) setOverlayOpen(false); },
     onOpenBugReport: () => { setBugOpen(true); if (overlayOpen) setOverlayOpen(false); },
   };
+
+  // Layout selection:
+  //   - PWA on a phone → bottom tab bar, no sidebar. One-handed native feel.
+  //   - Desktop / Tauri → existing sidebar at full or compact width.
+  //   - Narrow desktop browser → existing hamburger overlay (unchanged).
+  if (isPwaMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--color-bg)' }}>
+        <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+          <Outlet />
+        </main>
+        <BottomNav {...sidebarProps} />
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <BugReportModal open={bugOpen} onClose={() => setBugOpen(false)} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--color-bg)' }}>
