@@ -25,7 +25,9 @@
   padding-bottom: env(safe-area-inset-bottom, 0);
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
-  z-index: 10;
+  /* Must sit above the PWA bottom tab bar (z-index 100 in pwa.css) so the
+     poison ± buttons at the bottom of each tile aren't covered. */
+  z-index: 200;
   overflow: hidden;
 }
 

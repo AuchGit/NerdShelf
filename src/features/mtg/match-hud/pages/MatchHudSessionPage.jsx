@@ -65,13 +65,16 @@ export default function MatchHudSessionPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [joinBusy, setJoinBusy] = useState(false);
 
-  // Lock the page from scrolling — the HUD is supposed to feel like a
-  // native fullscreen view, not a long document.
+  // Lock the page from scrolling ONLY while we're in the actual HUD. The
+  // pre-game join screen is a regular column of form fields that may be
+  // taller than the viewport on small phones — locking scroll there would
+  // leave the user unable to reach the "Match beitreten" button.
   useEffect(() => {
+    if (!me) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
-  }, []);
+  }, [me]);
 
   const allPlayers = useMemo(
     () => (me ? [me, ...others] : others),

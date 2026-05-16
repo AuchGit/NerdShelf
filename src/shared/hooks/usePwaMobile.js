@@ -37,7 +37,13 @@ function readSnapshot() {
     // iOS Safari predates the standard display-mode query; navigator.standalone
     // is the platform-specific fallback for "Add to Home Screen" launches.
     || !!window.navigator?.standalone;
-  const isPwaMobile = isStandalone || (isMobile && isTouch);
+  // PWA-mobile mode requires a TOUCH device. Standalone alone isn't
+  // enough — the Tauri desktop shell, and any desktop PWA install, both
+  // report display-mode: standalone but have a mouse, not a finger. Touch
+  // is the gating signal for "phone in your hand" UX. Within touch we
+  // accept either a phone-sized viewport OR an installed PWA (so tablet
+  // PWAs and phones rotated to landscape still get the mobile layout).
+  const isPwaMobile = isTouch && (isStandalone || isMobile);
   return { isMobile, isTouch, isStandalone, isPwaMobile };
 }
 
