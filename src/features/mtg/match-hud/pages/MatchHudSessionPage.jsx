@@ -60,6 +60,7 @@ export default function MatchHudSessionPage() {
   const {
     match, me, others, presence, loading, error,
     adjustLife, adjustPoison, setLife, setPoison, setColor, setPlayerName, setDeck, leave,
+    isCreator, closeMatch,
   } = session;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -122,6 +123,26 @@ export default function MatchHudSessionPage() {
       <Centered>
         <div style={{ marginBottom: 'var(--space-3)' }}>Match nicht verfügbar.</div>
         <Button onClick={() => navigate('/mtg/match')}>Zurück</Button>
+      </Centered>
+    );
+  }
+
+  // ── Match ended by the creator: replace the HUD with a closing card ──
+  // The realtime postgres-changes echo on mtg_matches keeps `match.status`
+  // up to date for every connected peer, so when the creator hits the
+  // close button this branch lights up on everyone's phone within ~300 ms.
+  if (match.status === 'ended') {
+    return (
+      <Centered>
+        <div style={{ fontSize: 'var(--fs-xl)', marginBottom: 'var(--space-2)' }}>
+          Match wurde beendet
+        </div>
+        <div style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+          {match.created_by === user?.id
+            ? 'Du hast diese Session geschlossen.'
+            : 'Der Ersteller hat die Session geschlossen.'}
+        </div>
+        <Button onClick={() => navigate('/mtg/match')}>Zur Übersicht</Button>
       </Centered>
     );
   }
@@ -256,6 +277,15 @@ export default function MatchHudSessionPage() {
           setSettingsOpen(false);
           await leave();
           navigate('/mtg/match');
+        }}
+        isCreator={isCreator}
+        onCloseMatch={async () => {
+          setSettingsOpen(false);
+          const { error: closeErr } = await closeMatch();
+          // The realtime postgres-changes echo will flip every peer's
+          // session screen to the "Match wurde beendet" branch — for the
+          // creator we just navigate back to the dashboard right away.
+          if (!closeErr) navigate('/mtg/match');
         }}
       />
     </div>

@@ -146,6 +146,63 @@ export async function deleteMatch({ matchId }) {
   return { error };
 }
 
+/** Close a match by flipping its status to 'ended'. RLS only lets the
+ *  creator do this. Cascade-deletion of player rows is preserved (the
+ *  status stays in DB as historical record). For a hard wipe use
+ *  deleteMatch instead. */
+export async function closeMatch({ matchId }) {
+  return updateMatch({
+    matchId,
+    patch: { status: 'ended', updated_at: new Date().toISOString() },
+  });
+}
+
+/** List every match that's still "open" (status != 'ended'), sorted
+ *  newest-first. Used by the dashboard to render the "Offene Matches"
+ *  discovery grid so signed-in users can spot live tables at a glance
+ *  without needing the join code shared with them. */
+export async function listOpenMatches({ limit = 50, hoursMax = 24 } = {}) {
+  const sinceIso = new Date(Date.now() - hoursMax * 3600 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('mtg_matches')
+    .select('*, mtg_match_players(id, user_id, player_name, color)')
+    .neq('status', 'ended')
+    .gte('updated_at', sinceIso)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) return { data: [], error };
+  // Flatten the nested player rows into a count + a roster of colours so
+  // the grid card can show "3 Spieler" plus the player swatches without
+  // a second fetch.
+  const enriched = (data || []).map(m => ({
+    ...m,
+    player_count: Array.isArray(m.mtg_match_players) ? m.mtg_match_players.length : 0,
+    players_meta: Array.isArray(m.mtg_match_players) ? m.mtg_match_players : [],
+  }));
+  return { data: enriched, error: null };
+}
+
+/** Subscribe to realtime changes that affect the open-matches grid:
+ *  any INSERT/UPDATE/DELETE on `mtg_matches` and any INSERT/DELETE on
+ *  `mtg_match_players` (player count drifts otherwise). Returns an
+ *  unsubscribe function. The caller is expected to debounce a refetch
+ *  in response to these events — the payloads are deliberately ignored
+ *  here so the channel stays cheap and the dashboard's state machine
+ *  stays simple. */
+export function subscribeOpenMatchesChanges(onAnyChange) {
+  const channel = supabase.channel('mtg-open-matches');
+  channel.on('postgres_changes',
+    { event: '*', schema: 'public', table: 'mtg_matches' },
+    () => onAnyChange?.('match'),
+  );
+  channel.on('postgres_changes',
+    { event: '*', schema: 'public', table: 'mtg_match_players' },
+    () => onAnyChange?.('player'),
+  );
+  channel.subscribe();
+  return () => { supabase.removeChannel(channel); };
+}
+
 /** List the matches the current user is involved in (created or joined). The
  *  dashboard uses this to surface "rejoin" links after a refresh. */
 export async function listUserMatches({ userId }) {

@@ -21,6 +21,10 @@ export default function PlayerSettingsModal({
   onSetLife,
   onSetPoison,
   onLeave,
+  // Creator-only: end the match for everyone. The session-page caller
+  // hands these in only when the current user owns the match row.
+  isCreator = false,
+  onCloseMatch,
 }) {
   const { user } = useAuth();
   const [decks, setDecks] = useState([]);
@@ -125,20 +129,34 @@ export default function PlayerSettingsModal({
         </div>
 
         <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
           paddingTop: 'var(--space-2)', borderTop: '1px solid var(--color-border)',
         }}>
-          <Button
-            variant="ghost"
-            size="md"
-            onClick={() => {
-              if (window.confirm('Match wirklich verlassen?')) onLeave?.();
-            }}
-            style={{ color: 'var(--color-danger)' }}
-          >
-            Match verlassen
-          </Button>
-          <Button onClick={onClose}>Schließen</Button>
+          {isCreator && (
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => {
+                if (window.confirm('Match für ALLE Spieler beenden?')) onCloseMatch?.();
+              }}
+              style={{ color: 'var(--color-danger)', justifyContent: 'flex-start' }}
+            >
+              ✕ Match für alle beenden
+            </Button>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => {
+                if (window.confirm('Match wirklich verlassen?')) onLeave?.();
+              }}
+              style={{ color: 'var(--color-danger)' }}
+            >
+              Match verlassen
+            </Button>
+            <Button onClick={onClose}>Schließen</Button>
+          </div>
         </div>
       </div>
     </Modal>

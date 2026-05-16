@@ -26,11 +26,29 @@
 // accepts broadcasts newer than the last one it applied for that row.
 // Per-row timestamps are sender-monotonic (one writer per row — RLS),
 // so this is safe without any cross-clock synchronisation.
+//
+// Architecture note — playersRef as the synchronous source of truth:
+//   React 18 batches setState calls inside event handlers and does NOT
+//   guarantee that the updater function runs synchronously. Earlier
+//   versions of this hook captured `playerId` / `patch` / `nextRow`
+//   inside the setPlayers updater and then used them on the line below
+//   to fire broadcast + DB write. In the batched case the updater ran
+//   AFTER the side effects, so those closure variables were still null,
+//   the broadcast was silently skipped, and peers only saw the update
+//   when the NEXT tap forced a render — which is exactly the user-
+//   reported symptom of "HP doesn't change until I also tap poison".
+//
+//   The fix: everything mutateSelf needs is computed BEFORE setPlayers
+//   from `playersRef.current`, which is kept in lock-step with React
+//   state — updated synchronously inside every setPlayers updater AND
+//   by a useEffect as a safety net. Side effects then run with values
+//   that are guaranteed correct, regardless of React's batching mood.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../../../core/supabase/client';
 import {
   fetchMatch, fetchMatchPlayers, updatePlayer, leaveMatch, updateMatch,
+  closeMatch as apiCloseMatch,
 } from '../services/matchApi';
 
 const SUB_DEBUG = false;
@@ -59,25 +77,38 @@ export default function useMatchSession(matchId, userId) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Refs that mutators reach through to avoid re-running the subscription
-  // effect every render.
   const channelRef       = useRef(null);
   const channelReadyRef  = useRef(false);
-  // Per-field freshness — keyed `${playerId}:${field}` → local ts.
-  // Used to suppress stale postgres-changes echoes that arrive AFTER a
-  // newer broadcast has already updated the field.
   const freshRef         = useRef(new Map());
-  // Per-row last-applied broadcast ts. Drops out-of-order broadcasts so
-  // rapid-fire mutations always settle on the LATEST value, never on a
-  // late-arriving older one.
   const lastBroadcastTsRef = useRef(new Map());
-  // True after the first SUBSCRIBED — any subsequent transition into
-  // SUBSCRIBED therefore represents a RECONNECT and triggers a refetch.
   const everSubscribedRef = useRef(false);
-  // Stable per-sender base used to keep our own broadcast timestamps
-  // monotonic even across page reloads (Date.now() is, but small clock
-  // adjustments could theoretically reverse it).
-  const senderSeqRef = useRef(0);
+  const senderSeqRef     = useRef(0);
+
+  // Synchronous mirror of `players`. Every code path that calls setPlayers
+  // also updates this ref inside the same updater (or for non-updater
+  // setPlayers, immediately afterward), so reads are always in lock-step
+  // with React state. The useEffect below is a defensive backstop in case
+  // any future setPlayers caller forgets to keep the ref in sync.
+  const playersRef = useRef([]);
+  useEffect(() => { playersRef.current = players; }, [players]);
+
+  // Helper: setState + sync ref in one place. Accepts either a functional
+  // updater or a plain value, matching React's setState signature.
+  const writePlayers = useCallback((updaterOrValue) => {
+    if (typeof updaterOrValue === 'function') {
+      setPlayers(prev => {
+        const next = updaterOrValue(prev);
+        // Setting refs from inside a setState updater is safe — refs
+        // don't trigger renders, and even if the updater runs twice in
+        // StrictMode, the value derived from `prev` is deterministic.
+        playersRef.current = next;
+        return next;
+      });
+    } else {
+      playersRef.current = updaterOrValue;
+      setPlayers(updaterOrValue);
+    }
+  }, []);
 
   const nextSenderTs = useCallback(() => {
     const t = Math.max(Date.now(), senderSeqRef.current + 1);
@@ -105,22 +136,18 @@ export default function useMatchSession(matchId, userId) {
     }
     if (ts > last) lastBroadcastTsRef.current.set(payload.id, ts);
     markFresh(payload.id, payload.row);
-    setPlayers(prev => {
+    writePlayers(prev => {
       const idx = prev.findIndex(p => p.id === payload.id);
-      if (idx === -1) {
-        // Brand-new player — could be a join we missed.
-        return [...prev, payload.row];
-      }
+      if (idx === -1) return [...prev, payload.row];
       const merged = { ...prev[idx], ...payload.row };
       if (shallowEqual(merged, prev[idx])) return prev;
       const next = prev.slice();
       next[idx] = merged;
       return next;
     });
-  }, [markFresh]);
+  }, [markFresh, writePlayers]);
 
-  // Send a full-row broadcast for a player. Caller passes the local row
-  // they just mutated; we tag it with the next sender ts.
+  // Send a full-row broadcast for a player.
   const sendBroadcast = useCallback((row) => {
     if (!row) return;
     const ch = channelRef.current;
@@ -130,25 +157,23 @@ export default function useMatchSession(matchId, userId) {
       type: 'broadcast',
       event: BROADCAST_PATCH,
       payload: { id: row.id, row, ts },
-    }).catch(() => { /* fire-and-forget; pg-changes is the backstop */ });
+    }).catch(() => { /* DB write + pg-changes are the durable backstop */ });
   }, [nextSenderTs]);
 
-  // Pull the latest snapshot of the players from the DB and merge it in
-  // without clobbering fresh local fields. Used on initial load, on
-  // reconnect, and on the periodic safety net.
+  // Pull the latest snapshot from the DB and merge it in without
+  // clobbering fields that were touched locally within the freshness
+  // window. Used for initial load, reconnect, and the safety net.
   const reconcileFromDb = useCallback(async () => {
     if (!matchId) return;
     const { data } = await fetchMatchPlayers(matchId);
     if (!data) return;
-    setPlayers(prev => {
+    writePlayers(prev => {
       const byId = new Map(prev.map(p => [p.id, p]));
-      const next = data.map(serverRow => {
+      const now = Date.now();
+      return data.map(serverRow => {
         const local = byId.get(serverRow.id);
         if (!local) return serverRow;
-        // For each field, prefer local if it was modified recently
-        // (fresh window) — otherwise trust the server.
         const merged = { ...serverRow };
-        const now = Date.now();
         for (const k of Object.keys(local)) {
           const stamp = freshRef.current.get(`${serverRow.id}:${k}`);
           if (stamp && now - stamp < FRESH_WINDOW_MS) {
@@ -157,14 +182,14 @@ export default function useMatchSession(matchId, userId) {
         }
         return merged;
       });
-      return next;
     });
-  }, [matchId]);
+  }, [matchId, writePlayers]);
 
   // ── Initial fetch + channel subscription ─────────────
   useEffect(() => {
     if (!matchId) {
-      setMatch(null); setPlayers([]); setLoading(false);
+      writePlayers([]);
+      setMatch(null); setLoading(false);
       return undefined;
     }
     let cancelled = false;
@@ -185,7 +210,7 @@ export default function useMatchSession(matchId, userId) {
       if (mRes.error)   { setError(mRes.error.message); setLoading(false); return; }
       if (!mRes.data)   { setError('Match nicht gefunden'); setLoading(false); return; }
       setMatch(mRes.data);
-      setPlayers(pRes.data || []);
+      writePlayers(pRes.data || []);
       setLoading(false);
 
       channel = supabase.channel(`mtg-match:${matchId}`, {
@@ -212,18 +237,16 @@ export default function useMatchSession(matchId, userId) {
           const row = payload.new;
           if (payload.eventType === 'DELETE') {
             const id = payload.old?.id;
-            if (id) setPlayers(prev => prev.filter(p => p.id !== id));
+            if (id) writePlayers(prev => prev.filter(p => p.id !== id));
             return;
           }
           if (!row) return;
-          // Own row UPDATEs: local state + DB ACK are already authoritative.
-          // INSERT we still process (joining in another tab counts).
+          // Own row UPDATEs: local state is already authoritative.
           if (payload.eventType === 'UPDATE' && row.user_id === userId) return;
-          setPlayers(prev => mergePeerRow(prev, row, freshRef.current));
+          writePlayers(prev => mergePeerRow(prev, row, freshRef.current));
         }
       );
 
-      // Broadcast: instant peer-to-peer, full row with sender timestamp.
       channel.on('broadcast', { event: BROADCAST_PATCH }, ({ payload }) => {
         applyBroadcast(payload);
       });
@@ -248,9 +271,6 @@ export default function useMatchSession(matchId, userId) {
           if (userId) {
             await channel.track({ user_id: userId, online_at: new Date().toISOString() });
           }
-          // First connect: snapshot already loaded above. Subsequent
-          // connects (re-establishment after a WS drop): refetch the
-          // players to catch up anything we missed while offline.
           if (isReconnect) {
             log('reconnect — reconciling from DB');
             reconcileFromDb();
@@ -260,8 +280,6 @@ export default function useMatchSession(matchId, userId) {
         }
       });
 
-      // Safety-net refetch. Bounded drift, trivial bandwidth — one tiny
-      // SELECT every 15 s per phone in the session.
       safetyTimer = setInterval(() => {
         if (cancelled) return;
         reconcileFromDb();
@@ -275,7 +293,7 @@ export default function useMatchSession(matchId, userId) {
       if (safetyTimer) clearInterval(safetyTimer);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [matchId, userId, applyBroadcast, reconcileFromDb]);
+  }, [matchId, userId, applyBroadcast, reconcileFromDb, writePlayers]);
 
   // ── Derived selectors ────────────────────────────────
   const me = useMemo(
@@ -287,63 +305,78 @@ export default function useMatchSession(matchId, userId) {
     [players, userId]
   );
 
-  // ── Mutators (optimistic, three-broadcast path) ──────
+  // ── Mutators (optimistic, synchronous side-effect ordering) ──────
   const mutateSelf = useCallback((derive) => {
     if (!userId) return;
-    let playerId = null;
-    let before = null;
-    let patch = null;
-    let nextRow = null;
 
-    setPlayers(prev => {
-      const idx = prev.findIndex(p => p.user_id === userId);
-      if (idx === -1) return prev;
-      before = prev[idx];
-      playerId = before.id;
-      patch = derive(before);
-      if (!patch || Object.keys(patch).length === 0) return prev;
-      nextRow = { ...before, ...patch };
-      const next = prev.slice();
-      next[idx] = nextRow;
-      return next;
-    });
-    if (!playerId || !patch || !nextRow) return;
+    // Read the freshest local state from the ref. This is the critical
+    // change vs. the previous implementation, which captured these
+    // values INSIDE the setPlayers updater — under React 18 batching
+    // that capture happened after the broadcast / DB code below, so
+    // mutations silently no-op'd.
+    const prev = playersRef.current;
+    const idx = prev.findIndex(p => p.user_id === userId);
+    if (idx === -1) return;
+    const before = prev[idx];
+    const playerId = before.id;
+    const patch = derive(before);
+    if (!patch || Object.keys(patch).length === 0) return;
+    const nextRow = { ...before, ...patch };
 
-    // Mark all patched fields fresh so any laggy WAL echo can't undo them.
+    // Apply locally + sync ref in one shot.
+    const newPlayers = prev.slice();
+    newPlayers[idx] = nextRow;
+    writePlayers(newPlayers);
+
+    // Side effects with values that are guaranteed populated.
     markFresh(playerId, patch);
-    // Optimistic broadcast — full row + ts. Peers see this within a frame.
     sendBroadcast(nextRow);
 
-    // Durable DB write. On success we issue a CONFIRMATION broadcast
-    // that carries the server-authoritative row — this is the failsafe
-    // that brings any peer up to date even if every optimistic broadcast
-    // was dropped on the way. On error we re-fetch the row and resync.
+    // Durable DB write.
     updatePlayer({ playerId, userId, patch }).then(({ data, error: err }) => {
       if (err) {
-        // Refetch the canonical state for this row and snap local + peers
-        // to whatever the DB says — much more reliable than trying to
-        // unwind partial state that might already have other patches
-        // layered on top of it.
+        // Refetch the row from DB and reconcile — but only sync local if
+        // no NEWER local mutation has overwritten the fields we just
+        // tried to write. Without this guard, a slow / failed write of
+        // the FIRST tap could roll back the SECOND tap's value.
         fetchMatchPlayers(matchId).then(({ data: rows }) => {
           if (!rows) return;
           const serverRow = rows.find(r => r.id === playerId);
           if (!serverRow) return;
-          setPlayers(prev => prev.map(p => p.id === playerId ? serverRow : p));
-          markFresh(playerId, serverRow);
-          sendBroadcast(serverRow);
+          const localRow = playersRef.current.find(r => r.id === playerId);
+          if (!localRow) return;
+          const stillMatchesOurWrite = Object.keys(patch).every(k => localRow[k] === patch[k]);
+          if (!stillMatchesOurWrite) return; // newer mutation; leave local
+          const updated = { ...localRow, ...serverRow };
+          writePlayers(p => p.map(x => x.id === playerId ? updated : x));
+          markFresh(playerId, updated);
+          sendBroadcast(updated);
         });
         setError(err.message);
         return;
       }
       if (data) {
-        // Sync local own row to the server's authoritative copy (in case
-        // a trigger added fields like updated_at) and re-broadcast as
-        // confirmation.
-        setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, ...data } : p));
-        sendBroadcast({ ...nextRow, ...data });
+        // Confirmation: only fold server data into local if our local
+        // values for the patched fields STILL match what we wrote — i.e.
+        // no rapid follow-up tap has already moved them past this. If
+        // they don't match anymore, the follow-up tap already started
+        // its own broadcast+DB roundtrip and we leave it alone.
+        const localRow = playersRef.current.find(r => r.id === playerId);
+        if (!localRow) return;
+        const stillMatchesOurWrite = Object.keys(patch).every(k => localRow[k] === patch[k]);
+        if (stillMatchesOurWrite) {
+          const updated = { ...localRow, ...data };
+          writePlayers(p => p.map(x => x.id === playerId ? updated : x));
+          sendBroadcast(updated);
+        } else {
+          // Local is ahead — just re-broadcast our current local row
+          // so peers stay aligned with the newest value, even if the
+          // newer mutation's own broadcast was dropped on the wire.
+          sendBroadcast(localRow);
+        }
       }
     });
-  }, [userId, markFresh, sendBroadcast, matchId]);
+  }, [userId, markFresh, sendBroadcast, writePlayers, matchId]);
 
   const adjustLife = useCallback((delta) => {
     mutateSelf(cur => ({ life: cur.life + delta }));
@@ -384,19 +417,28 @@ export default function useMatchSession(matchId, userId) {
     return updateMatch({ matchId: match.id, patch });
   }, [match, isCreator]);
 
+  // Creator-only: flip status to 'ended'. The realtime postgres-changes
+  // echo on mtg_matches pushes the new status to every connected peer,
+  // who will then see the "Match wurde beendet" screen in their session
+  // page instead of the HUD.
+  const closeMatch = useCallback(async () => {
+    if (!isCreator) return { error: new Error('Nur Ersteller darf Match beenden') };
+    return apiCloseMatch({ matchId: match.id });
+  }, [match, isCreator]);
+
   return {
     match, players, me, others, presence, loading, error,
     isCreator,
     adjustLife, adjustPoison, setLife, setPoison, setColor,
     setPlayerName, setDeck, leave,
-    updateMatchPatch,
+    updateMatchPatch, closeMatch,
   };
 }
 
 /**
- * Merge a postgres-changes UPDATE/INSERT row for a *peer* row into the
- * players array. Per-field freshness gating means a slow WAL echo can't
- * undo a faster broadcast we already applied.
+ * Merge a postgres-changes UPDATE/INSERT row for a *peer* row. Per-field
+ * freshness gating means a slow WAL echo can't undo a faster broadcast
+ * we already applied.
  */
 function mergePeerRow(prev, row, freshMap) {
   if (!row) return prev;

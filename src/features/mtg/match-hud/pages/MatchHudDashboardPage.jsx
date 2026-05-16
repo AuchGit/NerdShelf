@@ -11,13 +11,17 @@
 // We also list "active matches" the user is already part of, with a quick
 // rejoin link — phone closes and reopens during a game, this matters.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import MtgSubNav from '../../deck-builder/components/MtgSubNav';
 import { useAuth } from '../../../../core/auth/AuthContext';
 import { Panel } from '../../../../shared/ui';
-import { createMatch, joinMatch, listUserMatches } from '../services/matchApi';
+import {
+  createMatch, joinMatch, listUserMatches,
+  listOpenMatches, subscribeOpenMatchesChanges,
+} from '../services/matchApi';
 import { formatCode } from '../services/matchCodes';
+import { getColor } from '../services/playerColors';
 import CreateMatchPanel from '../components/CreateMatchPanel';
 import JoinMatchPanel from '../components/JoinMatchPanel';
 import '../MatchHud.css';
@@ -36,6 +40,7 @@ export default function MatchHudDashboardPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [open, setOpen] = useState([]);
 
   // Load the user's active matches (created or joined) for the rejoin list.
   const reload = useCallback(async () => {
@@ -44,6 +49,49 @@ export default function MatchHudDashboardPage() {
     setRecent(data || []);
   }, [user]);
   useEffect(() => { reload(); }, [reload]);
+
+  // Load the global list of "open" matches (status != ended, < 24h old)
+  // and keep it live via a Supabase realtime subscription. We debounce
+  // refetches because rapid HP / poison taps trigger postgres_changes on
+  // mtg_match_players too, which we don't actually care to surface — we
+  // only need the player COUNT to stay roughly current. 400 ms collapses
+  // bursts into a single refetch.
+  const refetchOpenRef = useRef(null);
+  const scheduleRefetchOpen = useCallback(() => {
+    if (refetchOpenRef.current) clearTimeout(refetchOpenRef.current);
+    refetchOpenRef.current = setTimeout(async () => {
+      refetchOpenRef.current = null;
+      const { data } = await listOpenMatches({ limit: 40, hoursMax: 24 });
+      setOpen(data || []);
+    }, 400);
+  }, []);
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    (async () => {
+      const { data } = await listOpenMatches({ limit: 40, hoursMax: 24 });
+      if (!cancelled) setOpen(data || []);
+    })();
+    const unsub = subscribeOpenMatchesChanges(() => {
+      if (!cancelled) scheduleRefetchOpen();
+    });
+    return () => {
+      cancelled = true;
+      if (refetchOpenRef.current) clearTimeout(refetchOpenRef.current);
+      unsub?.();
+    };
+  }, [user, scheduleRefetchOpen]);
+
+  // Open matches the user is NOT in yet — the discovery grid. Matches
+  // they already joined are surfaced in "Deine Matches" below, so we
+  // dedupe to avoid showing the same row twice.
+  const userMatchIds = new Set([
+    ...recent.map(m => m.id),
+    ...open
+      .filter(m => (m.players_meta || []).some(p => p.user_id === user?.id))
+      .map(m => m.id),
+  ]);
+  const discoverable = open.filter(m => !userMatchIds.has(m.id));
 
   async function handleCreate({ startingLife, playerName: name, color }) {
     if (!user) return;
@@ -119,6 +167,34 @@ export default function MatchHudDashboardPage() {
 
         {mode === 'idle' && (
           <>
+            {/* Discovery grid: every match still in lobby / live status
+                that the user hasn't joined yet. Updates live via a
+                Supabase realtime channel — newly created matches pop in
+                without a reload, player counts adjust as people join. */}
+            {discoverable.length > 0 && (
+              <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <h2 style={sectionLabelStyle}>
+                  Offene Matches <span style={{ color: 'var(--color-text-dim)' }}>·</span>{' '}
+                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 'var(--fw-medium)' }}>
+                    {discoverable.length}
+                  </span>
+                </h2>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                  gap: 'var(--space-3)',
+                }}>
+                  {discoverable.map(m => (
+                    <OpenMatchCard
+                      key={m.id}
+                      match={m}
+                      onJoin={() => navigate(`/mtg/match/${m.join_code}`)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -140,14 +216,7 @@ export default function MatchHudDashboardPage() {
 
             {recent.length > 0 && (
               <section style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                <h2 style={{
-                  fontSize: 'var(--fs-md)',
-                  margin: 0,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                  color: 'var(--color-text-muted)',
-                  fontWeight: 'var(--fw-semibold)',
-                }}>Deine Matches</h2>
+                <h2 style={sectionLabelStyle}>Deine Matches</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                   {recent.map(m => (
                     <RecentRow
@@ -209,6 +278,108 @@ function ActionCard({ title, description, icon, onClick }) {
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>{description}</div>
     </Panel>
   );
+}
+
+const sectionLabelStyle = {
+  fontSize: 'var(--fs-md)',
+  margin: 0,
+  textTransform: 'uppercase',
+  letterSpacing: 0.5,
+  color: 'var(--color-text-muted)',
+  fontWeight: 'var(--fw-semibold)',
+};
+
+function OpenMatchCard({ match, onJoin }) {
+  // Colour dots derived from the player roster so a glance at the card
+  // tells you how many people are at the table and which colours are
+  // taken — useful for picking a non-clashing colour before tapping
+  // join.
+  const players = match.players_meta || [];
+  const statusBadge = match.status === 'live'
+    ? { label: 'Live', color: 'var(--color-success)' }
+    : { label: 'Lobby', color: 'var(--color-warning)' };
+  return (
+    <Panel
+      padding="md"
+      onClick={onJoin}
+      style={{
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2)',
+        transition: 'border-color var(--transition), transform var(--transition)',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-accent)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border)'}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontWeight: 'var(--fw-bold)',
+          letterSpacing: 1.5,
+          fontSize: 'var(--fs-md)',
+          padding: '4px 10px',
+          background: 'var(--color-bg-sunken)',
+          borderRadius: 'var(--radius-sm)',
+        }}>{formatCode(match.join_code)}</span>
+        <span style={{ flex: 1 }} />
+        <span style={{
+          fontSize: 'var(--fs-xs)',
+          fontWeight: 'var(--fw-semibold)',
+          color: statusBadge.color,
+          padding: '2px 8px',
+          borderRadius: 999,
+          background: `color-mix(in srgb, ${statusBadge.color} 18%, transparent)`,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}>{statusBadge.label}</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {players.slice(0, 6).map(p => (
+            <span
+              key={p.id}
+              title={p.player_name || 'Spieler'}
+              style={{
+                width: 16, height: 16, borderRadius: '50%',
+                background: getColor(p.color).bg,
+                border: '1px solid var(--color-border)',
+                flexShrink: 0,
+              }}
+            />
+          ))}
+          {players.length > 6 && (
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
+              +{players.length - 6}
+            </span>
+          )}
+        </div>
+        <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
+          {match.player_count} Spieler · {match.starting_life} Leben
+        </span>
+      </div>
+
+      <div style={{
+        fontSize: 'var(--fs-xs)',
+        color: 'var(--color-text-dim)',
+        paddingTop: 'var(--space-1)',
+        borderTop: '1px solid var(--color-border)',
+      }}>
+        {match.updated_at ? `Aktiv seit ${relativeTime(match.updated_at)}` : ''}
+      </div>
+    </Panel>
+  );
+}
+
+function relativeTime(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1)  return 'gerade eben';
+  if (min < 60) return `${min} Min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} Std`;
+  return new Date(iso).toLocaleDateString('de-DE');
 }
 
 function RecentRow({ match, onOpen }) {
