@@ -82,7 +82,16 @@ export default function MatchHudSessionPage() {
   );
 
   // ── Top-level loading / error ────────────────────────
-  if (lookupLoading || loading) {
+  // The "matchId set but match snapshot not loaded yet AND no error" branch
+  // exists because React schedules the session hook's effect *after* the
+  // commit that introduced the new matchId. There is exactly one render in
+  // between where the hook still reports the previous run's stale
+  // (loading=false, match=null) state — without the extra clause the
+  // session page briefly painted "Match nicht verfügbar" before the loading
+  // spinner came back, which on a fast machine looks like the UI just goes
+  // empty.
+  const stillLoadingMatch = matchId && !match && !error && !lookupErr;
+  if (lookupLoading || loading || stillLoadingMatch) {
     return <Centered>Lade Match…</Centered>;
   }
   if (lookupErr || error) {
