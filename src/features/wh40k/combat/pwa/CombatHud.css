@@ -1,0 +1,544 @@
+/* src/features/wh40k/combat/pwa/CombatHud.css
+ *
+ * Full-bleed PWA layout for the Combat Helper. Mirrors the Match HUD's
+ * `mh-screen` approach: position:fixed cover, sticky top chrome, scrollable
+ * body, hidden bottom-nav via the global :has() rule. All class names are
+ * `ch-` prefixed so they never collide with the existing wh40k components.
+ *
+ * The styles assume `body[data-pwa-mobile='true']`. On desktop these classes
+ * never get applied because the React component branches first.
+ */
+
+.ch-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  z-index: 200;  /* above the PWA BottomNav (z=100) — same rule as Match HUD */
+  overflow: hidden;
+}
+
+/* ── Top chrome ──────────────────────────────────────────────────────── */
+.ch-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3) var(--space-2);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  position: relative;
+}
+.ch-top .pwa-swipe-handle {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-border-strong);
+  margin: 0;
+}
+
+.ch-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 8px;
+}
+.ch-title-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ch-title-meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.ch-counter-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.ch-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 6px 4px 8px;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+.ch-counter-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: var(--fw-semibold);
+}
+.ch-counter-value {
+  font-size: clamp(20px, 6vmin, 32px);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  margin-top: 2px;
+}
+.ch-counter-accent { color: var(--color-accent); }
+.ch-counter-danger { color: var(--color-danger); }
+.ch-counter-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  width: 100%;
+}
+.ch-counter-btn {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-counter-btn:active { background: var(--color-surface-hover); }
+
+/* Round badge — sits to the right of the title row */
+.ch-round-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Phase strip (horizontal scroll, snap, large hit area) ──────────── */
+.ch-phases {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  gap: 6px;
+  padding: 8px 8px 10px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  -webkit-overflow-scrolling: touch;
+}
+.ch-phases::-webkit-scrollbar { display: none; }
+.ch-phase {
+  scroll-snap-align: center;
+  flex: 0 0 auto;
+  min-width: 92px;
+  padding: 8px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.ch-phase.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+.ch-phase-icon { font-size: 18px; line-height: 1; }
+.ch-phase-name { font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; }
+.ch-phase-badges {
+  display: flex;
+  gap: 3px;
+  margin-top: 2px;
+}
+.ch-phase-badge {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.ch-phase-badge.crit  { background: color-mix(in srgb, var(--color-danger) 22%, transparent); color: var(--color-danger); }
+.ch-phase-badge.warn  { background: color-mix(in srgb, var(--color-warning) 22%, transparent); color: var(--color-warning); }
+.ch-phase-badge.info  { background: color-mix(in srgb, var(--color-text-muted) 22%, transparent); color: var(--color-text-muted); }
+.ch-phase-nav {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+}
+.ch-phase-nav-btn {
+  flex: 1;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-phase-nav-btn.primary {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+
+/* ── Body: scrollable card column ───────────────────────────────────── */
+.ch-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  -webkit-overflow-scrolling: touch;
+}
+
+.ch-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ch-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.ch-section-title {
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.ch-section-count {
+  font-size: 11px;
+  color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────── */
+.ch-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+.ch-card.is-reminder-crit { border-left: 4px solid var(--color-danger); }
+.ch-card.is-reminder-warn { border-left: 4px solid var(--color-warning); }
+.ch-card.is-reminder-info { border-left: 4px solid var(--color-text-muted); }
+.ch-card.is-strat         { border-left: 4px solid var(--color-accent); }
+.ch-card.is-ability       { border-left: 4px solid color-mix(in srgb, var(--color-accent) 60%, var(--color-success)); }
+.ch-card.is-once-used     { opacity: 0.55; }
+
+.ch-card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ch-card-title {
+  flex: 1;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  line-height: 1.25;
+  min-width: 0;
+}
+.ch-card-subtitle {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+  margin-top: -2px;
+}
+.ch-card-body {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  line-height: var(--lh-normal);
+  white-space: pre-wrap;
+}
+.ch-card-toggle {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.ch-cp-badge {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+.ch-cp-badge.disabled {
+  background: var(--color-bg-sunken);
+  color: var(--color-text-dim);
+}
+
+.ch-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ch-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: var(--color-bg-sunken);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.ch-chip.timing-start { color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border)); }
+.ch-chip.timing-end   { color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, var(--color-border)); }
+.ch-chip.freq         { color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border)); }
+.ch-chip.trigger      { color: var(--color-text); }
+
+.ch-apply-btn {
+  margin-top: 4px;
+  width: 100%;
+  height: 40px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-apply-btn:disabled {
+  background: var(--color-bg-sunken);
+  color: var(--color-text-dim);
+  cursor: not-allowed;
+}
+
+.ch-once-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-once-btn.is-used {
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+  color: var(--color-success);
+}
+.ch-once-check {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: var(--fw-bold);
+  flex-shrink: 0;
+}
+.ch-once-btn.is-used .ch-once-check {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-accent-contrast);
+}
+
+/* Section tabs at the bottom of the body — only for switching between
+   "kontext" view and "Einheiten" tracker. Bottom-anchored so they're
+   thumb-reachable; we use position:sticky so they remain visible while
+   the body scrolls. */
+.ch-view-tabs {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 4px;
+  margin: 8px -12px -12px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0));
+  background: linear-gradient(to top, var(--color-bg) 75%, transparent);
+  z-index: 1;
+}
+.ch-view-tab {
+  flex: 1;
+  height: 44px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ch-view-tab.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+.ch-view-tab-badge {
+  font-size: 11px;
+  padding: 0 6px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Unit tracker rows ──────────────────────────────────────────────── */
+.ch-unit-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ch-unit-card.is-destroyed { opacity: 0.5; }
+.ch-unit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ch-unit-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ch-status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ch-unit-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.ch-unit-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.ch-unit-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-semibold);
+  margin-right: auto;
+}
+.ch-unit-stat-value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: center;
+}
+.ch-unit-stat-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-unit-stat-btn:active { background: var(--color-surface-hover); }
+
+.ch-unit-status-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.ch-unit-status-chip {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-sunken);
+  color: var(--color-text-muted);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.ch-unit-status-chip.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+
+/* Empty state in the body */
+.ch-empty {
+  text-align: center;
+  padding: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}

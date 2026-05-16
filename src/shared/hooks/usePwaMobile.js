@@ -26,6 +26,62 @@ const MQ_MOBILE     = '(max-width: 768px)';
 const MQ_TOUCH      = '(hover: none) and (pointer: coarse)';
 const MQ_STANDALONE = '(display-mode: standalone)';
 
+// Override key. Set via URL ?pwaMobile=1 / 0 / reset. In dev mode the
+// choice persists across reloads (handy for iterating on the layout on
+// a desktop); in production builds it's a one-shot — the URL param
+// applies for that page load only and is NEVER persisted, so a phone
+// PWA can't accidentally end up stuck in desktop mode after a stray
+// debug visit.
+const OVERRIDE_KEY = 'nerdshelf:pwaMobileOverride';
+const IS_DEV = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+
+function readOverride() {
+  if (typeof window === 'undefined') return null;
+
+  let urlValue = null;
+  try {
+    const url = new URL(window.location.href);
+    const param = url.searchParams.get('pwaMobile');
+    if (param === '1' || param === 'true')   urlValue = true;
+    else if (param === '0' || param === 'false') urlValue = false;
+    else if (param === 'reset' || param === 'clear') {
+      try { localStorage.removeItem(OVERRIDE_KEY); } catch { /* ignore */ }
+      return null;
+    }
+  } catch { /* ignore */ }
+
+  if (!IS_DEV) {
+    // Production: defensively clear any stale dev-override that may have
+    // slipped into localStorage from a previous dev session, and only
+    // honour the in-URL flag for this page load.
+    try { localStorage.removeItem(OVERRIDE_KEY); } catch { /* ignore */ }
+    return urlValue;
+  }
+
+  // Dev mode: persist URL param so reloads keep the mode, then fall back
+  // to whatever was previously stored.
+  if (urlValue !== null) {
+    try { localStorage.setItem(OVERRIDE_KEY, urlValue ? '1' : '0'); } catch { /* ignore */ }
+    return urlValue;
+  }
+  try {
+    const stored = localStorage.getItem(OVERRIDE_KEY);
+    if (stored === '1') return true;
+    if (stored === '0') return false;
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** Detect the Tauri desktop shell by the globals it injects into the
+ *  webview. Both Tauri 1.x (`__TAURI__`) and 2.x (`__TAURI_INTERNALS__`)
+ *  are covered. The shell reports display-mode: standalone like a PWA,
+ *  so we need this explicit check to avoid mis-routing it into the
+ *  mobile layout. */
+function isTauriShell() {
+  if (typeof window === 'undefined') return false;
+  return ('__TAURI_INTERNALS__' in window) || ('__TAURI__' in window);
+}
+
 function readSnapshot() {
   if (typeof window === 'undefined') {
     return { isMobile: false, isTouch: false, isStandalone: false, isPwaMobile: false };
@@ -34,16 +90,33 @@ function readSnapshot() {
   const isTouch  = window.matchMedia(MQ_TOUCH).matches;
   const isStandalone =
     window.matchMedia(MQ_STANDALONE).matches
-    // iOS Safari predates the standard display-mode query; navigator.standalone
-    // is the platform-specific fallback for "Add to Home Screen" launches.
+    // iOS Safari predates the standard display-mode query;
+    // navigator.standalone is the platform-specific fallback for
+    // "Add to Home Screen" launches.
     || !!window.navigator?.standalone;
-  // PWA-mobile mode requires a TOUCH device. Standalone alone isn't
-  // enough — the Tauri desktop shell, and any desktop PWA install, both
-  // report display-mode: standalone but have a mouse, not a finger. Touch
-  // is the gating signal for "phone in your hand" UX. Within touch we
-  // accept either a phone-sized viewport OR an installed PWA (so tablet
-  // PWAs and phones rotated to landscape still get the mobile layout).
-  const isPwaMobile = isTouch && (isStandalone || isMobile);
+  const tauri = isTauriShell();
+
+  // Manual override (dev-friendly) always wins so testers can flip into
+  // / out of mobile mode regardless of the device.
+  const override = readOverride();
+  if (override !== null) {
+    return { isMobile, isTouch, isStandalone, isPwaMobile: override };
+  }
+
+  // Detection. The product brief is "PWA → mobile, desktop binary →
+  // desktop"; in practice that means:
+  //
+  //   • Tauri shell           → desktop UI (false), never mobile, even
+  //                             though it reports display-mode standalone.
+  //   • Installed PWA         → mobile UI (true). Touch isn't required —
+  //                             some Android browsers under-report
+  //                             pointer-coarse when a Bluetooth mouse is
+  //                             paired, and installing the app is itself
+  //                             a strong signal the user wants mobile UX.
+  //   • Browser, narrow phone → mobile UI (true), via the viewport +
+  //                             touch fallback.
+  //   • Browser, desktop      → desktop UI (false).
+  const isPwaMobile = !tauri && (isStandalone || (isMobile && isTouch));
   return { isMobile, isTouch, isStandalone, isPwaMobile };
 }
 

@@ -114,12 +114,16 @@ body[data-pwa-mobile='true'] main {
 body[data-pwa-mobile='true'] main:has(.mh-screen) {
   padding-bottom: 0 !important;
 }
-/* Hide the bottom tab bar entirely while a full-bleed Match HUD session is
-   on screen — it's a focused gameplay surface, navigation belongs behind
-   the back button / swipe-down gesture there. The mh-screen also wins on
-   z-index so this is belt-and-suspenders. */
-body[data-pwa-mobile='true']:has(.mh-screen) .pwa-bottom-nav {
+/* Hide the bottom tab bar entirely while a full-bleed gameplay HUD is on
+   screen (Match HUD or WH40K Combat HUD) — these are focused surfaces,
+   navigation belongs behind the back button / swipe-down gesture there.
+   The HUD also wins on z-index so this is belt-and-suspenders. */
+body[data-pwa-mobile='true']:has(.mh-screen) .pwa-bottom-nav,
+body[data-pwa-mobile='true']:has(.ch-screen) .pwa-bottom-nav {
   display: none;
+}
+body[data-pwa-mobile='true'] main:has(.ch-screen) {
+  padding-bottom: 0 !important;
 }
 
 /* ── Action sheet (long-press menu) ─────────────────────────────────── */

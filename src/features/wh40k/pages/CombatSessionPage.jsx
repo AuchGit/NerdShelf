@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Panel } from '../../../shared/ui';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
+import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 import { useWh40kData } from '../hooks/useWh40kData';
 import { loadSession } from '../combat/persistence';
 import { PHASES, UNIT_STATUSES, nextPhase } from '../combat/schema';
@@ -33,6 +34,7 @@ import { useCombatSession } from '../combat/useCombatSession';
 import { buildContext, listRemindersForPhase, reminderCountsByPhase } from '../combat/reminders';
 import { detectOnceFlag } from '../combat/onceFlags';
 import DetachmentInfo from '../components/DetachmentInfo';
+import CombatHud from '../combat/pwa/CombatHud';
 
 /** Mobile threshold for content width (excluding sidebar). */
 const NARROW_MAX = 900;
@@ -46,6 +48,7 @@ export default function CombatSessionPage() {
 
   const { contentWidth } = useWindowWidth();
   const narrow = contentWidth < NARROW_MAX;
+  const { isPwaMobile } = usePwaMobile();
 
   // Tab state — only used in narrow mode
   const [tab, setTab] = useState('reminders'); // reminders|scoring|detachment|notes|units
@@ -91,6 +94,14 @@ export default function CombatSessionPage() {
   }
   if (!session || dataLoading) {
     return <div style={{ padding: 60, textAlign: 'center', color: 'var(--color-text-muted)' }}>Lade…</div>;
+  }
+
+  // PWA on a phone → drop into the dedicated full-bleed companion. The
+  // existing desktop two-column layout below is left untouched so anyone
+  // running the Tauri shell or a normal desktop browser keeps their
+  // current workflow exactly as it was.
+  if (isPwaMobile) {
+    return <CombatHud session={session} api={api} data={data} />;
   }
 
   const aliveCount = Object.values(session.units).filter(u => u.status !== 'destroyed' && u.status !== 'fled').length;

@@ -81,6 +81,19 @@ export default function MatchHudSessionPage() {
     [me, others]
   );
 
+  // Swipe-down on the header bar to leave the session — the native
+  // "I'm done with this screen" gesture on iOS/Android. Only enabled in
+  // PWA mobile mode so the desktop drag-to-select still works.
+  //
+  // Declared up here, BEFORE any conditional return, because hooks must
+  // run in the same order on every render — placing it after the early
+  // loading/error returns triggers "Rendered more hooks than during the
+  // previous render" the moment the loading state flips.
+  const headerSwipe = useSwipe(
+    { onSwipeDown: () => navigate('/mtg/match') },
+    { enabled: isPwaMobile, minDistance: 50 }
+  );
+
   // ── Top-level loading / error ────────────────────────
   // The "matchId set but match snapshot not loaded yet AND no error" branch
   // exists because React schedules the session hook's effect *after* the
@@ -186,14 +199,6 @@ export default function MatchHudSessionPage() {
       await navigator.clipboard.writeText(url);
     } catch { /* ignore */ }
   }
-
-  // Swipe-down on the header bar to leave the session — the native
-  // "I'm done with this screen" gesture on iOS/Android. Only enabled in
-  // PWA mobile mode so the desktop drag-to-select still works.
-  const headerSwipe = useSwipe(
-    { onSwipeDown: () => navigate('/mtg/match') },
-    { enabled: isPwaMobile, minDistance: 50 }
-  );
 
   return (
     <div className="mh-screen" data-mobile={isPwaMobile ? 'true' : 'false'}>
