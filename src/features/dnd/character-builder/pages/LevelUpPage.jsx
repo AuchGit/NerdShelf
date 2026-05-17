@@ -288,14 +288,14 @@ async function handleUndo() {
   const totalLevel = getTotalLevel(char)
 
   return (
-    <div style={S.page}>
-      <div style={S.header}>
+    <div className="dnd-wizard-page" style={S.page}>
+      <div className="dnd-wizard-header" data-pwa-target="dnd-wizard-header" style={S.header}>
         <button style={S.backBtn} onClick={() => stepIdx>0 ? setStepIdx(0) : nav(`/character/${id}`)}>
           ← {stepIdx>0?'Klassenwahl':'Zurück'}</button>
-        <h1 style={S.headerTitle}>{char.info.name} — Level Up</h1>
+        <h1 className="dnd-wizard-title" style={S.headerTitle}>{char.info.name} — Level Up</h1>
         <div style={{display:"flex",gap:8,alignItems:"center"}}><span style={S.levelBadge}>Lv. {totalLevel}</span><HeaderButtons session={session} /></div>
       </div>
-      <div style={S.stepBar}>
+      <div className="dnd-wizard-stepbar" data-pwa-target="dnd-wizard-stepbar" style={S.stepBar}>
         {activeSteps.map((s,i) => (
           <div key={s.id} onClick={() => i<=stepIdx && setStepIdx(i)} style={{
             ...S.stepDot, cursor:i<=stepIdx?'pointer':'default',
@@ -304,7 +304,7 @@ async function handleUndo() {
           }}>{i<stepIdx?'✓':i+1}<span style={{marginLeft:6}}>{s.label}</span></div>
         ))}
       </div>
-      <div style={S.content}>
+      <div className="dnd-wizard-content" data-pwa-target="dnd-wizard-content" style={S.content}>
         {currentStep.id==='class' && <StepClassChoice char={char} classes={classes} rcm={rcm}
           abScores={computeAbilityScores(char)} onSelect={selectClass} onUndo={handleUndo} session={session} id={id} />}
         {currentStep.id==='hp' && effectiveInfo && <StepHP info={effectiveInfo} draft={draft} setDraft={setDraft} subFeats={subclassFeatureObjects} />}
@@ -317,7 +317,7 @@ async function handleUndo() {
           allSp={allSp} csn={csn} char={char} optF={optF} />}
         {currentStep.id==='summary' && effectiveInfo && <StepSummary info={effectiveInfo} draft={draft} />}
       </div>
-      <div style={S.footer}>
+      <div className="dnd-wizard-footer" data-pwa-target="dnd-wizard-footer" style={S.footer}>
         <div>{stepIdx>0&&<button style={S.navBtn} onClick={prevStep}>← Zurück</button>}</div>
         <div>
           {currentStep.id!=='class'&&currentStep.id!=='summary'&&<button style={{...S.navBtn,...S.navPri}} onClick={nextStep}>Weiter →</button>}

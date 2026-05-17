@@ -163,6 +163,95 @@ body[data-pwa-layouts='true'] .dnd-sheet-tab-body ~ * [style*='combatBar'] {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   5. DnD — Wizards (Character Create + Level Up)
+       Both pages share the same skeleton: top header, scrollable step
+       indicator strip, content area, sticky footer with prev / next.
+       On a phone the desktop padding values (32 px) eat half the
+       viewport — we slim them down and pin the footer to the bottom
+       so the navigation is always thumb-reachable.
+       Targeted by JSX via `data-pwa-target="dnd-wizard-*"`.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Header: keep one compact row, smaller padding. */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-header'] {
+  padding: 8px 12px !important;
+  gap: 8px !important;
+  flex-wrap: wrap;
+}
+body[data-pwa-layouts='true'] .dnd-wizard-title {
+  font-size: 14px !important;
+  max-width: 50%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Step indicator: horizontal scroll-snap rail so all 7-11 steps fit on
+   any viewport without wrapping into 3 rows. */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar'] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap !important;
+  white-space: nowrap;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px !important;
+}
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar']::-webkit-scrollbar { display: none; }
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar'] > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+/* The StepIndicator (CharacterCreate) is wrapped by us; its inner
+   container is a flex row that we just made nowrap above. The
+   wrapper applies overflow-x — the inner flex still flows in line. */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar'] > div[style] {
+  flex-wrap: nowrap !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  justify-content: flex-start !important;
+}
+
+/* Content area: tighten horizontal padding, reserve bottom padding for
+   the sticky footer + safe-area inset. */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-content'] {
+  padding: 12px !important;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0)) !important;
+}
+
+/* Footer: pin to the bottom of the viewport so prev/next is always
+   thumb-reachable. The full-bleed wizard pages don't use the global
+   BottomNav (their own footer is the navigation), so a fixed footer
+   is the natural pattern. */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-footer'] {
+  position: fixed !important;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0)) !important;
+  background: var(--color-bg-elevated) !important;
+  border-top: 1px solid var(--color-border) !important;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+}
+/* Footer buttons get comfortable hit-areas */
+body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-footer'] button {
+  min-height: 44px;
+  font-size: 14px !important;
+}
+
+/* The wizard's BottomNav (PWA shell) would double up with the
+   sticky footer here, so hide it the moment a wizard page is
+   active. Pattern matches the gameplay HUDs. */
+body[data-pwa-mobile='true']:has(.dnd-wizard-page) .pwa-bottom-nav {
+  display: none;
+}
+body[data-pwa-mobile='true'] main:has(.dnd-wizard-page) {
+  padding-bottom: 0 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    4. Visual focus during gameplay HUDs
        The Match HUD and the WH40K Combat HUD set their own classes;
        these are accessibility / focus polish that complements them.

@@ -315,30 +315,44 @@ export default function CharacterCreatePage({ session }) {
   const canNext = isStepComplete(currentStep) || isLast
 
   return (
-    <div style={styles.page}>
+    <div className="dnd-wizard-page" style={styles.page}>
 
       {/* ── Header ── */}
-      <div className="dnd-create-header" style={styles.header}>
+      <div
+        className="dnd-create-header dnd-wizard-header"
+        data-pwa-target="dnd-wizard-header"
+        style={styles.header}
+      >
         <button style={styles.backBtn} onClick={() => navigate('/')}>{t('back')}</button>
-        <h1 style={styles.headerTitle}>{t('appTitle')}</h1>
+        <h1 className="dnd-wizard-title" style={styles.headerTitle}>{t('appTitle')}</h1>
         <HeaderButtons session={session} />
       </div>
 
       {/* ── Step indicator ── */}
-      <StepIndicator
-        steps          = {stepLabels}
-        currentStep    = {currentStep}
-        onStepClick    = {idx => canGoToStep(idx) && setCurrentStep(idx)}
-        completedSteps = {completedSteps}
-      />
+      <div data-pwa-target="dnd-wizard-stepbar">
+        <StepIndicator
+          steps          = {stepLabels}
+          currentStep    = {currentStep}
+          onStepClick    = {idx => canGoToStep(idx) && setCurrentStep(idx)}
+          completedSteps = {completedSteps}
+        />
+      </div>
 
       {/* ── Active step ── */}
-      <div className="dnd-create-content" style={styles.content}>
+      <div
+        className="dnd-create-content dnd-wizard-content"
+        data-pwa-target="dnd-wizard-content"
+        style={styles.content}
+      >
         {stepComponents[currentStep]}
       </div>
 
       {/* ── Navigation footer ── */}
-      <div className="dnd-create-footer" style={styles.footer}>
+      <div
+        className="dnd-create-footer dnd-wizard-footer"
+        data-pwa-target="dnd-wizard-footer"
+        style={styles.footer}
+      >
         <button
           style={{ ...styles.navBtn, opacity: currentStep === 0 ? 0.3 : 1 }}
           disabled={currentStep === 0}
