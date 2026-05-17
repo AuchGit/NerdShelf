@@ -1,17 +1,17 @@
-﻿// src/features/wh40k/combat/pwa/CombatHud.jsx
+// src/features/wh40k/combat/pwa/CombatHud.jsx
 //
 // Full-bleed PWA Combat HUD. Mounted by CombatSessionPage only when
 // usePwaMobile() reports we're in PWA-mobile mode. Desktop continues to
 // use the existing two-column layout.
 //
-// Layout (top â†’ bottom):
-//   1. Sticky chrome â€” swipe-handle, title, round pill, CP/VP counters
-//   2. Phase strip â€” horizontal scroll-snap with hit-target badges
-//   3. Prev / next phase row â€” always-visible thumb-reachable nav
-//   4. Body â€” switches between two views:
-//        â€¢ "Kontext" : reminders â†’ stratagems â†’ abilities â†’ once-flags,
+// Layout (top → bottom):
+//   1. Sticky chrome — swipe-handle, title, round pill, CP/VP counters
+//   2. Phase strip — horizontal scroll-snap with hit-target badges
+//   3. Prev / next phase row — always-visible thumb-reachable nav
+//   4. Body — switches between two views:
+//        • "Kontext" : reminders → stratagems → abilities → once-flags,
 //                      all filtered to the active phase by phaseContext.js
-//        â€¢ "Einheiten": flat list of unit trackers (models / wounds / status)
+//        • "Einheiten": flat list of unit trackers (models / wounds / status)
 //
 // The HUD relies on the existing useCombatSession API for all mutations.
 // No new persistence layer or session shape is introduced.
@@ -29,12 +29,12 @@ import UnitPhaseCard from '../UnitPhaseCard.jsx';
 import './CombatHud.css';
 
 const PHASE_ICONS = {
-  command:  'âœ¦',
-  movement: 'âž¤',
-  shooting: 'â—Ž',
-  charge:   'âš”',
-  fight:    'âœ•',
-  end:      'â—‡',
+  command:  '✦',
+  movement: '➤',
+  shooting: '◎',
+  charge:   '⚔',
+  fight:    '✕',
+  end:      '◇',
 };
 
 export default function CombatHud({ session, api, data }) {
@@ -55,7 +55,7 @@ export default function CombatHud({ session, api, data }) {
     { minDistance: 60 }
   );
 
-  // Keep the phone screen on for the entire combat session â€” the phone
+  // Keep the phone screen on for the entire combat session — the phone
   // sits face-up on the table next to the army, auto-locking would
   // force constant unlocks between phases. No-op outside of touch PWAs.
   useWakeLock(true);
@@ -76,7 +76,7 @@ export default function CombatHud({ session, api, data }) {
 
   return (
     <div className="ch-screen">
-      {/* â”€â”€ Top chrome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Top chrome ──────────────────────────────────────── */}
       <div className="ch-top" {...topSwipe} style={{ touchAction: 'pan-x' }}>
         <span className="pwa-swipe-handle" aria-hidden="true" />
 
@@ -105,7 +105,7 @@ export default function CombatHud({ session, api, data }) {
         </div>
       </div>
 
-      {/* â”€â”€ Phase strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ── Phase strip ─────────────────────────────────────── */}
       <div className="ch-phases" role="tablist">
         {PHASES.map(p => {
           const c = counts[p.id] || {};
@@ -134,18 +134,18 @@ export default function CombatHud({ session, api, data }) {
 
       <div className="ch-phase-nav">
         <button type="button" className="ch-phase-nav-btn"
-          onClick={api.prevPhase} disabled={!prevPhase(phase)}>â† Phase</button>
+          onClick={api.prevPhase} disabled={!prevPhase(phase)}>← Phase</button>
         <button type="button" className="ch-phase-nav-btn primary"
           onClick={api.nextPhase}>
-          {nextPhase(phase) ? 'Phase â†’' : 'Runde + â†’'}
+          {nextPhase(phase) ? 'Phase →' : 'Runde + →'}
         </button>
       </div>
 
-      {/* â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      {/*  Landscape: two columns, both views always visible â€” the phone is
+      {/* ── Body ────────────────────────────────────────────── */}
+      {/*  Landscape: two columns, both views always visible — the phone is
           held wide, the player has room for everything at once and the
           tab toggle is redundant.
-          Portrait: classic mobile pattern â€” one view at a time, sticky
+          Portrait: classic mobile pattern — one view at a time, sticky
           bottom tabs to switch. */}
       <div className={`ch-body ${isLandscape ? 'ch-body-landscape' : ''}`}>
         {isLandscape ? (
@@ -224,7 +224,7 @@ export default function CombatHud({ session, api, data }) {
   );
 }
 
-/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ sub-views â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─────────────────── sub-views ─────────────────── */
 
 function CounterTile({ label, value, max, accent, text, onAdjust }) {
   return (
@@ -239,7 +239,7 @@ function CounterTile({ label, value, max, accent, text, onAdjust }) {
       {onAdjust && (
         <div className="ch-counter-controls">
           <button type="button" className="ch-counter-btn"
-            onClick={() => onAdjust(-1)} aria-label={`${label} âˆ’1`}>âˆ’</button>
+            onClick={() => onAdjust(-1)} aria-label={`${label} −1`}>−</button>
           <button type="button" className="ch-counter-btn"
             onClick={() => onAdjust(+1)} aria-label={`${label} +1`}>+</button>
         </div>
@@ -430,7 +430,7 @@ function CoreRuleCard({ rule, expanded, onToggle }) {
                  display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span className="ch-card-title">{rule.title}</span>
-          <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
+          <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
         </div>
         {(rule.tags?.length > 0 || rule.timing) && (
           <div className="ch-chip-row">
@@ -499,7 +499,7 @@ function DetachmentRuleCard({ rule, expanded, onToggle }) {
                  width: '100%', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit',
                  display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span className="ch-card-title">{rule.name || 'Detachment-Regel'}</span>
-        <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
+        <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
       </button>
       {expanded && rule.text && (
         <div className="ch-card-body">{rule.text}</div>
@@ -517,7 +517,7 @@ function ReminderCard({ reminder, unitName }) {
     <div className={`ch-card ${klass}`}>
       <div className="ch-card-title">
         {reminder.title}
-        {unitName && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> Â· {unitName}</span>}
+        {unitName && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> · {unitName}</span>}
       </div>
       <div className="ch-card-body">{reminder.detail}</div>
     </div>
@@ -548,13 +548,13 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
                  display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span className="ch-card-title">{strat.name}</span>
         <span className={`ch-cp-badge ${enoughCp ? '' : 'disabled'}`}>{strat.cpCost ?? 0} CP</span>
-        <span className="ch-card-toggle" aria-hidden="true">{expanded ? 'â–´' : 'â–¾'}</span>
+        <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
       </button>
       <div className="ch-chip-row">
         {strat.kind && <span className="ch-chip">{stratKindLabel(strat.kind)}</span>}
         {strat.phase && <span className="ch-chip">{strat.phase}</span>}
         {usedThisRound && (
-          <span className="ch-chip" style={{ color: 'var(--color-success)' }}>âœ“ Verwendet R{currentRound}</span>
+          <span className="ch-chip" style={{ color: 'var(--color-success)' }}>✓ Verwendet R{currentRound}</span>
         )}
       </div>
       {expanded && (
@@ -577,8 +577,8 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
             onClick={onApply}
           >
             {usedThisRound
-              ? `Erneut anwenden Â· ${strat.cpCost} CP`
-              : enoughCp ? `Anwenden Â· ${strat.cpCost} CP`
+              ? `Erneut anwenden · ${strat.cpCost} CP`
+              : enoughCp ? `Anwenden · ${strat.cpCost} CP`
                          : `Nicht genug CP (${cp}/${strat.cpCost})`}
           </button>
         </>

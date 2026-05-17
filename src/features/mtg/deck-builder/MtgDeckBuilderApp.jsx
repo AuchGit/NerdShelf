@@ -14,6 +14,8 @@ import ImportDeckModal from './components/ImportDeckModal';
 import CoverPickerModal from './components/CoverPickerModal';
 import DeckAnalyzerModal from './components/DeckAnalyzerModal';
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
+import usePwaMobile from '../../../shared/hooks/usePwaMobile';
+import MtgDeckBuilderMobile from './pwa/MtgDeckBuilderMobile';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
 import { useMtgInventory } from './hooks/useMtgInventory';
@@ -491,6 +493,7 @@ export default function MtgDeckBuilderApp() {
   const { mtgMode } = useWindowWidth();
   const previewAsRail = mtgMode !== 'full';
   const deckAsRail    = mtgMode === 'both-rails';
+  const { isPwaMobile } = usePwaMobile();
 
   const previewPanel = (
     <CardPreview
@@ -539,6 +542,124 @@ export default function MtgDeckBuilderApp() {
         <div style={{ color: 'var(--color-danger)', marginBottom: 12 }}>Fehler: {loadError}</div>
         <button onClick={() => navigate('/mtg')}>Zurück zum Dashboard</button>
       </div>
+    );
+  }
+
+  // Pre-build the CardSearch / CardList / DeckListView / DeckPanel /
+  // CardPreview panels so both the mobile shell AND the desktop layout
+  // below can reference them by JSX node. Keeps the data wiring in one
+  // place — the mobile component just composes them differently.
+  const cardSearchEl = (
+    <CardSearch
+      deckFormatLabel={MTG_FORMATS.find(f => f.value === deckFormat)?.label || ''}
+      showFavoritesOnly={showFavoritesOnly}
+      setShowFavoritesOnly={setShowFavoritesOnly}
+      showOwnedOnly={showOwnedOnly}
+      setShowOwnedOnly={setShowOwnedOnly}
+      query={query}           setQuery={setQuery}
+      searchMode={searchMode} setSearchMode={setSearchMode}
+      colors={colors}         setColors={setColors}
+      colorMode={colorMode}   setColorMode={setColorMode}
+      cardType={cardType}     setCardType={setCardType}
+      sortOrder={sortOrder}   setSortOrder={setSortOrder}
+      sortDir={sortDir}       setSortDir={setSortDir}
+      showLands={showLands}   setShowLands={setShowLands}
+      rarity={rarity}         setRarity={setRarity}
+      cmcMin={cmcMin}         setCmcMin={setCmcMin}
+      cmcMax={cmcMax}         setCmcMax={setCmcMax}
+      subtype={subtype}       setSubtype={setSubtype}
+      format={format}         setFormat={setFormat}
+      setCode={setCode}       setSetCode={setSetCode}
+      priceMin={priceMin}     setPriceMin={setPriceMin}
+      priceMax={priceMax}     setPriceMax={setPriceMax}
+      totalCards={totalCards}
+      loading={loading}
+    />
+  );
+  const cardListEl = (
+    <CardList
+      cards={cards || []}
+      loading={loading}
+      error={error}
+      hasMore={hasMore}
+      onLoadMore={loadMore}
+      onAddCard={addToMain}
+      onAddSideCard={addToSide}
+      deck={combinedForCardList}
+      onHoverCard={setHoveredCard}
+      onPinCard={handlePin}
+      pinnedCard={pinnedCard}
+      viewMode={viewMode}
+      setViewMode={setViewMode}
+      isFavorite={favs.isFavorite}
+      onToggleFavorite={favs.toggleFavorite}
+      getOwnedQty={inv.getQuantity}
+      onIncOwned={incOwnedCard}
+      onDecOwned={decOwnedCard}
+    />
+  );
+  const deckListViewEl = (
+    <DeckListView
+      mainboard={mainboard}
+      sideboard={sideboard}
+      onHoverCard={setHoveredCard}
+      onPinCard={handlePin}
+      viewMode={viewMode}
+      setViewMode={setViewMode}
+      isFavorite={favs.isFavorite}
+      onToggleFavorite={favs.toggleFavorite}
+    />
+  );
+
+  // PWA on a phone → drop into the dedicated mobile shell. The desktop
+  // 3-column layout below is left untouched.
+  if (isPwaMobile) {
+    return (
+      <SettingsProvider>
+        <MtgDeckBuilderMobile
+          navigate={navigate}
+          deckName={deckName} setDeckName={setDeckName}
+          deckFormat={deckFormat} setDeckFormat={setDeckFormat}
+          formats={MTG_FORMATS}
+          coverCardId={coverCardId} onOpenCoverPicker={() => setShowCoverPicker(true)}
+          commander={commander} isCommanderFormat={isCommanderFormat}
+          onRemoveCommander={setCommanderCard}
+          saving={saving} saveStatus={saveStatus} exportStatus={exportStatus} dirty={dirty}
+          onSave={handleSave}
+          onImport={() => setShowImport(true)}
+          onExport={handleExport}
+          onAnalyze={() => setShowAnalyzer(true)}
+          searchPanel={cardSearchEl}
+          cardListPanel={cardListEl}
+          deckListViewPanel={deckListViewEl}
+          deckPanelEl={deckPanelEl}
+          previewPanel={previewPanel}
+          viewMode={viewMode} setViewMode={setViewMode}
+          mainCount={mainCount} sideCount={sideCount}
+          pinnedCard={pinnedCard}
+        />
+        <ImportDeckModal
+          open={showImport}
+          onClose={() => setShowImport(false)}
+          onImport={handleImport}
+        />
+        <CoverPickerModal
+          open={showCoverPicker}
+          onClose={() => setShowCoverPicker(false)}
+          mainboard={mainboard}
+          sideboard={sideboard}
+          currentCoverId={coverCardId}
+          onPick={(id) => setCoverCardId(id)}
+        />
+        <DeckAnalyzerModal
+          open={showAnalyzer}
+          onClose={() => setShowAnalyzer(false)}
+          mainboard={mainboard}
+          commander={commander}
+          deckFormat={deckFormat}
+          onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
+        />
+      </SettingsProvider>
     );
   }
 
