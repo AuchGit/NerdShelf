@@ -341,16 +341,94 @@ body[data-pwa-mobile='true'] main:has(.mtg-mob-screen) {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ─── Mobile-friendly tweaks for shared sub-components ────────────── */
-/* CardSearch + CardList have desktop-oriented spacing. Tighten on
-   mobile so more results fit on screen. These are inside the mobile
-   shell so they only apply on a phone. */
-.mtg-mob-pane .search-section,
-.mtg-mob-col-search .search-section {
-  padding: 8px;
-  gap: 6px;
+/* ─── Hide the desktop bottom toolbar on mobile ───────────────────
+   The size / cols / view-mode controls live in the floating FAB
+   popover and the global bottom-nav tab strip, so the in-list
+   bottom toolbar is redundant — and it eats valuable vertical space
+   on a small screen. */
+.mtg-mob-screen .card-toolbar {
+  display: none;
 }
-.mtg-mob-pane .card-list,
-.mtg-mob-col-search .card-list {
-  padding: 4px;
+
+/* ─── Floating grid-settings FAB ───────────────────────────────── */
+.mtg-mob-fab {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0));
+  /* Above the tab bar in portrait, comfortable bottom margin in
+     landscape (tab bar isn't rendered there). */
+  bottom: calc(80px + env(safe-area-inset-bottom, 0));
+  z-index: 5;
+  width: 48px;
+  height: 48px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition), color var(--transition), transform 100ms;
+}
+.mtg-mob-fab:active { transform: scale(0.94); }
+.mtg-mob-fab.is-open {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+/* In landscape there's no tab bar — drop the FAB lower. */
+body[data-pwa-orientation='landscape'] .mtg-mob-fab {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+}
+
+.mtg-mob-fab-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 4;
+}
+.mtg-mob-fab-popover {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0));
+  bottom: calc(140px + env(safe-area-inset-bottom, 0));
+  z-index: 6;
+  min-width: 220px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: mtg-mob-fab-pop 140ms ease-out;
+}
+body[data-pwa-orientation='landscape'] .mtg-mob-fab-popover {
+  bottom: calc(76px + env(safe-area-inset-bottom, 0));
+}
+.mtg-mob-fab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mtg-mob-fab-row-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-semibold);
+  min-width: 56px;
+}
+.mtg-mob-fab-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+@keyframes mtg-mob-fab-pop {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

@@ -149,18 +149,19 @@ export function CardToolbar({ settings, updateSetting, viewMode, setViewMode }) 
         <>
           <div className="toolbar-divider" />
           <div className="toolbar-group toolbar-group--right">
-            <span className="toolbar-label">Modus</span>
             <div className="toolbar-pills">
               <button
                 className={`toolbar-pill ${viewMode === 'edit' ? 'active' : ''}`}
                 onClick={() => setViewMode('edit')}
                 title="Suche & Karten hinzufügen"
-              >Edit</button>
+                aria-label="Edit-Modus"
+              >✎</button>
               <button
                 className={`toolbar-pill ${viewMode === 'view' ? 'active' : ''}`}
                 onClick={() => setViewMode('view')}
                 title="Decklist als Liste anzeigen"
-              >View</button>
+                aria-label="View-Modus"
+              >◉</button>
             </div>
           </div>
         </>

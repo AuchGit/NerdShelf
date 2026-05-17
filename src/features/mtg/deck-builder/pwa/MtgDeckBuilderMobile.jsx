@@ -28,6 +28,7 @@
 import { useState } from 'react';
 import { ActionSheet } from '../../../../shared/ui';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
+import { useSettings } from '../context/SettingsContext';
 import './MtgDeckBuilderMobile.css';
 
 export default function MtgDeckBuilderMobile({
@@ -179,8 +180,15 @@ export default function MtgDeckBuilderMobile({
     { id: 'analyze', label: 'Deck analysieren', icon: '⚡', onSelect: onAnalyze },
   ];
 
+  // The `mtg-deck-builder` class is the scope that re-maps the global
+  // colour tokens into the MTG-specific ones (var(--bg-card),
+  // var(--accent-glow), …) used by CardSearch / CardList / DeckPanel.
+  // Wrapping the mobile shell in it makes the search filters look
+  // identical to desktop — same chip styling, same accent colour for
+  // active states, same border tone for inactive ones — so the user
+  // recognises it's the same app on both screens.
   return (
-    <div className="mtg-mob-screen">
+    <div className="mtg-mob-screen mtg-deck-builder">
       {header}
       {toolbar}
 
@@ -247,6 +255,14 @@ export default function MtgDeckBuilderMobile({
         </nav>
       )}
 
+      {/* Floating grid-settings button. Lives outside .mtg-mob-main so it
+          stays anchored to the viewport while the pane scrolls.
+          Visible in landscape (search column is always on screen) and
+          on the Suche tab in portrait. */}
+      <CardGridSettingsButton
+        visible={isLandscape || tab === 'search'}
+      />
+
       <ActionSheet
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
@@ -254,6 +270,86 @@ export default function MtgDeckBuilderMobile({
         items={menuItems}
       />
     </div>
+  );
+}
+
+/**
+ * Floating grid-settings button. Sits in the bottom-right of the screen
+ * (above the tab bar in portrait, free-floating in landscape) and
+ * opens a small popover with the card-size and per-row controls — the
+ * same settings the desktop CardToolbar offers, but as a pop-up that
+ * doesn't take dedicated vertical space at the bottom of the list.
+ *
+ * Only mounted in the Suche-Tab / left landscape column, since size +
+ * column count are meaningless when looking at the deck panel.
+ */
+function CardGridSettingsButton({ visible }) {
+  const [open, setOpen] = useState(false);
+  const { settings, updateSetting } = useSettings();
+
+  if (!visible) return null;
+
+  const SIZE_OPTS = [
+    { value: 'small',  label: 'S' },
+    { value: 'medium', label: 'M' },
+    { value: 'large',  label: 'L' },
+  ];
+  const COL_OPTS = [
+    { value: 'auto', label: '∞' },
+    { value: 2,      label: '2' },
+    { value: 3,      label: '3' },
+    { value: 4,      label: '4' },
+    { value: 5,      label: '5' },
+    { value: 6,      label: '6' },
+  ];
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`mtg-mob-fab ${open ? 'is-open' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        title="Anzeige-Einstellungen"
+        aria-expanded={open}
+      >⚙</button>
+      {open && (
+        <>
+          <div
+            className="mtg-mob-fab-backdrop"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="mtg-mob-fab-popover">
+            <div className="mtg-mob-fab-row">
+              <span className="mtg-mob-fab-row-label">Größe</span>
+              <div className="mtg-mob-fab-pills">
+                {SIZE_OPTS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`toolbar-pill ${settings.cardSize === value ? 'active' : ''}`}
+                    onClick={() => updateSetting('cardSize', value)}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="mtg-mob-fab-row">
+              <span className="mtg-mob-fab-row-label">Spalten</span>
+              <div className="mtg-mob-fab-pills">
+                {COL_OPTS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`toolbar-pill ${settings.cardsPerRow === value ? 'active' : ''}`}
+                    onClick={() => updateSetting('cardsPerRow', value)}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
