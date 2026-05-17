@@ -123,7 +123,17 @@ body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-tabs'] > button {
 /* Reserve breathing room at the bottom of the sheet body so the floating
    tab bar doesn't sit on top of the last row of content. */
 body[data-pwa-layouts='true'] .dnd-sheet-tab-body {
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0));
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0)) !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* Sections inside the sheet body get tighter padding on mobile so more
+   content fits per screen. The desktop-oriented `Section` component
+   uses inline padding values we override here. */
+body[data-pwa-layouts='true'] .dnd-sheet-tab-body > section,
+body[data-pwa-layouts='true'] .dnd-sheet-tab-body > div[style] {
+  margin-bottom: 12px !important;
 }
 
 /* Header on the sheet (back / export / level-up / custom / edit buttons)
@@ -131,6 +141,25 @@ body[data-pwa-layouts='true'] .dnd-sheet-tab-body {
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-sheet-header'] {
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Stat-grid layouts (ability scores, identity grid, etc.) that hardcode
+   3 columns sometimes get cramped on a 360 px viewport. Force them to
+   wrap to 2 columns max. The inline styles use grid-template-columns,
+   which we override via an attribute selector when it contains '1fr'. */
+body[data-pwa-layouts='true'] .dnd-sheet-tab-body [style*='1fr 1fr 1fr'] {
+  grid-template-columns: 1fr 1fr 1fr !important;
+}
+body[data-pwa-layouts='true'] .dnd-sheet-tab-body [style*='grid-template-columns: repeat(auto-fill'] {
+  grid-template-columns: 1fr !important;
+}
+
+/* Combat stats bar at the top of the sheet (AC / Init / Movement / HP /
+   Prof / …) — the desktop layout sets each cell to flex: 1, minWidth:
+   100. On a 360 px viewport ~3-4 cells fit per row before wrapping —
+   keep it that way but tighten padding. */
+body[data-pwa-layouts='true'] .dnd-sheet-tab-body ~ * [style*='combatBar'] {
+  padding: 6px 4px !important;
 }
 
 /* ─────────────────────────────────────────────────────────────────────

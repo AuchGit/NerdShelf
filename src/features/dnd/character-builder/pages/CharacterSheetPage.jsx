@@ -12,6 +12,8 @@ import HeaderButtons from '../components/ui/HeaderButtons'
 import CustomEditModal from '../components/ui/CustomEditModal'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
 import useWindowWidth from '../../../../shared/hooks/useWindowWidth'
+import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
+import { ActionSheet } from '../../../../shared/ui'
 import './CharacterSheetPage.css'
 
 // ── Hilfsfunktionen ─────────────────────────────────────────
@@ -180,6 +182,8 @@ export default function CharacterSheetPage({ session }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showCustomEdit, setShowCustomEdit] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const { isPwaMobile } = usePwaMobile()
 
   useEffect(() => { loadCharacter() }, [id])
 
@@ -276,9 +280,42 @@ export default function CharacterSheetPage({ session }) {
   return (
     <div style={S.page}>
       {/* ═══ HEADER ═══ */}
-      {/* PWA-MOBILE: data-pwa-target lets mobile-layouts.css wrap the
-          header chrome on a phone so 5+ buttons stack instead of
-          overflowing. Revert: drop the data-pwa-target attribute. */}
+      {/* PWA-MOBILE: in PWA-mobile mode we render a much more compact
+          header (icon back, name, overflow menu). All actions move into
+          an ActionSheet so the buttons don't crowd the phone screen.
+          The data-pwa-target hook is still present for non-PWA narrow
+          windows where the desktop header just needs to wrap. */}
+      {isPwaMobile ? (
+        <div data-pwa-target="dnd-sheet-header" style={S.headerMobile}>
+          <button
+            type="button"
+            style={S.headerIconBtn}
+            onClick={() => navigate('/')}
+            aria-label="Zurück zum Dashboard"
+            title="Zurück"
+          >←</button>
+          <div style={S.headerMobileTitle}>
+            {portrait && (
+              <img src={portrait} style={S.headerMobilePortrait} alt="" />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ ...S.headerName, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {character.info.name || 'Unbenannt'}
+              </div>
+              <div style={{ ...S.headerSubline, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {className} · L{totalLevel}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            style={S.headerIconBtn}
+            onClick={() => setShowMobileMenu(true)}
+            aria-label="Mehr Optionen"
+            title="Optionen"
+          >⋯</button>
+        </div>
+      ) : (
       <div data-pwa-target="dnd-sheet-header" style={S.header}>
         <button style={S.headerBackBtn} onClick={() => navigate('/')}>
           ← Dashboard
@@ -364,6 +401,61 @@ export default function CharacterSheetPage({ session }) {
           <HeaderButtons session={session} />
         </div>
       </div>
+      )}
+
+      {/* Mobile-only overflow menu — surfaces all the same actions the
+          desktop header has, just routed through an ActionSheet so the
+          phone chrome stays a single compact row. */}
+      <ActionSheet
+        open={showMobileMenu}
+        onClose={() => setShowMobileMenu(false)}
+        title={character.info.name || 'Charakter'}
+        items={[
+          { id: 'levelup', label: 'Level Up', icon: '⬆',
+            onSelect: () => navigate(`/character/${id}/levelup`) },
+          { id: 'custom', label: 'Custom Edit', icon: '✦',
+            onSelect: () => setShowCustomEdit(true) },
+          ...(totalLevel === 1 ? [{
+            id: 'edit', label: 'Bearbeiten', icon: '✎',
+            onSelect: () => navigate(`/character/${id}/edit`),
+          }] : []),
+          { id: 'export', label: 'Foundry-Export', icon: '⬇',
+            onSelect: async () => { await downloadFoundryJSON(character) } },
+          ...((character.levelHistory || []).length > 0 ? [{
+            id: 'leveldown', label: 'Level Down', icon: '↩', danger: true,
+            onSelect: async () => {
+              const h = character.levelHistory || []
+              const last = h[h.length - 1]
+              if (!last?.snapshot) return
+              const cls = character.classes.find(c => c.classId === last.classId)
+              const lc = cls?.levelChoices?.[last.classLevel] || {}
+              const parts = [`${last.classId} Lv.${last.classLevel}`]
+              if (lc.type === 'asi') parts.push('ASI: ' + Object.entries(lc.improvements||{}).map(([k,v])=>`${k.toUpperCase()} +${v}`).join(', '))
+              if (lc.type === 'feat') parts.push(`Feat: ${lc.featId}`)
+              if (lc.cantrips?.length) parts.push(`${lc.cantrips.length} Cantrips`)
+              if (lc.knownSpells?.length) parts.push(`${lc.knownSpells.length} Spells`)
+              if (lc.optionalFeatures?.length) parts.push(lc.optionalFeatures.map(f => f.name).join(', '))
+              for (const [fn, sp] of Object.entries(lc.optFeatureSpells || {})) { if (sp?.length) parts.push(`${fn}: ${sp.join(', ')}`) }
+              if (!window.confirm(`Level Down rückgängig machen?\n\n${parts.join('\n')}`)) return
+              const restored = undoLastLevelUp(character)
+              if (!restored) { alert('Kein Snapshot verfügbar.'); return }
+              if (character.appearance?.portrait)
+                restored.appearance = { ...(restored.appearance || {}), portrait: character.appearance.portrait }
+              try { localStorage.setItem(`dndbuilder_backup_${id}`, JSON.stringify({ timestamp: new Date().toISOString(), previous: character, updated: restored })) } catch (_) {}
+              let saved = false
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                const { error: e } = await supabase.from('characters').update({ data: restored, name: restored.info.name })
+                  .eq('id', id).eq('user_id', session.user.id)
+                if (!e) { saved = true; break }
+                if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1500))
+              }
+              if (!saved) { alert('Level Down fehlgeschlagen. Dein Charakter ist lokal gesichert.'); return }
+              try { localStorage.removeItem(`dndbuilder_backup_${id}`) } catch (_) {}
+              loadCharacter()
+            },
+          }] : []),
+        ]}
+      />
 
       {showCustomEdit && (
         <CustomEditModal
@@ -1554,6 +1646,28 @@ const S = {
   headerBtn: {
     padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border)',
     background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13,
+  },
+  // Mobile-specific header — compact single row with icon-only back/menu.
+  headerMobile: {
+    background: 'var(--bg-surface)', padding: '8px 10px',
+    display: 'flex', alignItems: 'center', gap: 8,
+    borderBottom: '2px solid var(--border)', flexShrink: 0,
+  },
+  headerMobileTitle: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    flex: 1, minWidth: 0,
+  },
+  headerMobilePortrait: {
+    width: 32, height: 32, borderRadius: 6, objectFit: 'cover',
+    border: '1.5px solid var(--accent)', flexShrink: 0,
+  },
+  headerIconBtn: {
+    width: 36, height: 36,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: 'transparent', color: 'var(--text-primary)',
+    border: '1px solid var(--border)', borderRadius: 6,
+    fontSize: 18, cursor: 'pointer', flexShrink: 0,
+    fontFamily: 'inherit',
   },
   exportBtn: {
     padding: '7px 14px', borderRadius: 6, border: '1px solid var(--accent-blue)',
