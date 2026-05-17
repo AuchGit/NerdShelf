@@ -247,30 +247,135 @@ function CounterTile({ label, value, max, accent, text, onAdjust }) {
 }
 
 function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel }) {
-  const { coreRules, detachmentRule, reminders, stratagems } = ctx;
-  // Per-unit reminders are now rendered inside each unit's card in the
-  // Einheiten-View, so the context column shows only ARMY-WIDE reminders
-  // here (the global scope ones).
+  const { coreRules, factionRules, detachmentRule, reminders, stratagems } = ctx;
+  // Per-unit reminders are rendered inside each unit's card; the context
+  // column shows ARMY-WIDE reminders here (global-scope).
   const globalReminders = reminders.filter(r => r.scope === 'global');
+
+  // Stratagems applied THIS ROUND become "active effects" the player has
+  // to remember during the rest of the turn. We split the available
+  // stratagems list in two so the active ones can lead the column with
+  // a focused visual treatment, while the unused remainder stays
+  // available but visually quieter.
+  const activeStratagems = stratagems.filter(s => {
+    const used = session.stratagemUsage?.[s.id]?.roundUses?.[session.currentRound];
+    return used && used > 0;
+  });
+  const availableStratagems = stratagems.filter(s => !activeStratagems.includes(s));
+
   const totalCards =
-    coreRules.length + (detachmentRule ? 1 : 0)
-    + globalReminders.length + stratagems.length;
+    coreRules.length + (factionRules?.length || 0) + (detachmentRule ? 1 : 0)
+    + globalReminders.length + activeStratagems.length + availableStratagems.length;
   if (totalCards === 0) {
     return (
       <div className="ch-empty">
-        Keine allgemeinen Hinweise fÃ¼r {currentPhaseLabel}.<br />
-        Schaue in â€žEinheiten" â€” dort siehst du pro Einheit ihre Phasen-Aktionen.
+        Keine allgemeinen Hinweise für {currentPhaseLabel}.<br />
+        Schaue in „Einheiten" — dort siehst du pro Einheit ihre Phasen-Aktionen.
       </div>
     );
   }
+
+  const hasFocus =
+    activeStratagems.length > 0
+    || (factionRules && factionRules.length > 0)
+    || (detachmentRule && detachmentRule.rules?.length > 0)
+    || globalReminders.length > 0;
+
   return (
     <>
-      {/* Core rules section â€” always visible at the top so the player can
-          glance at "what do I do in this phase?" no matter the army. */}
+      {/* ─── FOCUS LAYER ───────────────────────────────────────────
+          Everything the player explicitly chose / triggered, plus the
+          standing army rule and any state-driven reminders. This is
+          the "what's special right now?" view. Comes first, brighter
+          backgrounds, accent-coloured headings. */}
+      {hasFocus && <div className="ch-focus-wrap">
+        {/* Stratagems applied THIS round — the most volatile, action-
+            relevant thing on screen. Lead with them so the player
+            doesn't forget to resolve them mid-phase. */}
+        {activeStratagems.length > 0 && (
+          <section className="ch-section is-focus">
+            <div className="ch-section-head">
+              <h3 className="ch-section-title">Aktiv diese Runde</h3>
+              <span className="ch-section-count">{activeStratagems.length}</span>
+            </div>
+            {activeStratagems.map(s => (
+              <StratagemCard
+                key={s.id}
+                strat={s}
+                usage={session.stratagemUsage?.[s.id]}
+                currentRound={session.currentRound}
+                cp={session.cp}
+                expanded={expanded.has(`s:${s.id}`)}
+                onToggle={() => toggle(`s:${s.id}`)}
+                onApply={() => api.applyStratagem(s.id, s.cpCost || 0, s.name)}
+                isActiveNow
+              />
+            ))}
+          </section>
+        )}
+
+        {/* Faction army rule — Oath / Doctrina / Acts of Faith / … */}
+        {factionRules && factionRules.length > 0 && (
+          <section className="ch-section is-focus">
+            <div className="ch-section-head">
+              <h3 className="ch-section-title">Army-Regel</h3>
+              <span className="ch-section-count">{factionRules.length}</span>
+            </div>
+            {factionRules.map(rule => (
+              <FactionRuleCard
+                key={rule.id}
+                rule={rule}
+                expanded={expanded.has(`f:${rule.id}`)}
+                onToggle={() => toggle(`f:${rule.id}`)}
+              />
+            ))}
+          </section>
+        )}
+
+        {/* Detachment rule(s) — passive, applies all game. */}
+        {detachmentRule && detachmentRule.rules?.length > 0 && (
+          <section className="ch-section is-focus">
+            <div className="ch-section-head">
+              <h3 className="ch-section-title">Detachment · {detachmentRule.name}</h3>
+              <span className="ch-section-count">{detachmentRule.rules.length}</span>
+            </div>
+            {detachmentRule.rules.map(rule => (
+              <DetachmentRuleCard
+                key={rule.id}
+                rule={rule}
+                expanded={expanded.has(`d:${rule.id}`)}
+                onToggle={() => toggle(`d:${rule.id}`)}
+              />
+            ))}
+          </section>
+        )}
+
+        {/* State-driven reminders (CP gain, battle-shock due, …). */}
+        {globalReminders.length > 0 && (
+          <section className="ch-section is-focus">
+            <div className="ch-section-head">
+              <h3 className="ch-section-title">Reminder</h3>
+              <span className="ch-section-count">{globalReminders.length}</span>
+            </div>
+            {globalReminders.map(r => (
+              <ReminderCard
+                key={`${r.id}:g`}
+                reminder={r}
+                unitName={null}
+              />
+            ))}
+          </section>
+        )}
+      </div>}
+
+      {/* ─── BACKGROUND LAYER ──────────────────────────────────────
+          Standard rulebook and the rest of the available stratagem
+          catalogue. Visually quieter so the focus layer above wins
+          the eye. */}
       {coreRules.length > 0 && (
-        <section className="ch-section">
+        <section className="ch-section is-secondary">
           <div className="ch-section-head">
-            <h3 className="ch-section-title">Phasen-Regeln</h3>
+            <h3 className="ch-section-title">Phasen-Ablauf</h3>
             <span className="ch-section-count">{coreRules.length}</span>
           </div>
           {coreRules.map(rule => (
@@ -284,48 +389,13 @@ function ContextView({ ctx, session, api, expanded, toggle, currentPhaseLabel })
         </section>
       )}
 
-      {/* Detachment rule(s) â€” applies to your whole army for the whole game.
-          Always visible across every phase since the rule is persistent. */}
-      {detachmentRule && detachmentRule.rules?.length > 0 && (
-        <section className="ch-section">
+      {availableStratagems.length > 0 && (
+        <section className="ch-section is-secondary">
           <div className="ch-section-head">
-            <h3 className="ch-section-title">Detachment Â· {detachmentRule.name}</h3>
-            <span className="ch-section-count">{detachmentRule.rules.length}</span>
+            <h3 className="ch-section-title">Stratagems verfügbar</h3>
+            <span className="ch-section-count">{availableStratagems.length}</span>
           </div>
-          {detachmentRule.rules.map(rule => (
-            <DetachmentRuleCard
-              key={rule.id}
-              rule={rule}
-              expanded={expanded.has(`d:${rule.id}`)}
-              onToggle={() => toggle(`d:${rule.id}`)}
-            />
-          ))}
-        </section>
-      )}
-
-      {globalReminders.length > 0 && (
-        <section className="ch-section">
-          <div className="ch-section-head">
-            <h3 className="ch-section-title">Reminder</h3>
-            <span className="ch-section-count">{globalReminders.length}</span>
-          </div>
-          {globalReminders.map(r => (
-            <ReminderCard
-              key={`${r.id}:g`}
-              reminder={r}
-              unitName={null}
-            />
-          ))}
-        </section>
-      )}
-
-      {stratagems.length > 0 && (
-        <section className="ch-section">
-          <div className="ch-section-head">
-            <h3 className="ch-section-title">Stratagems</h3>
-            <span className="ch-section-count">{stratagems.length}</span>
-          </div>
-          {stratagems.map(s => (
+          {availableStratagems.map(s => (
             <StratagemCard
               key={s.id}
               strat={s}
@@ -377,6 +447,47 @@ function CoreRuleCard({ rule, expanded, onToggle }) {
   );
 }
 
+function FactionRuleCard({ rule, expanded, onToggle }) {
+  return (
+    <div
+      className="ch-card"
+      style={{
+        borderLeft: `4px solid ${
+          rule.timing === 'start' ? 'var(--color-success)'
+          : rule.timing === 'end'  ? 'var(--color-warning)'
+          :                          'var(--color-accent)'
+        }`,
+      }}
+    >
+      <button type="button"
+        onClick={onToggle}
+        style={{ background: 'transparent', border: 'none', padding: 0, textAlign: 'left',
+                 width: '100%', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit',
+                 display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="ch-card-title">{rule.title}</span>
+          <span className="ch-card-toggle" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+        </div>
+        <div className="ch-chip-row">
+          {rule.timing === 'start' && <span className="ch-chip timing-start">Phasen-Start</span>}
+          {rule.timing === 'end'   && <span className="ch-chip timing-end">Phasen-Ende</span>}
+          {(rule.tags || []).map(t => (
+            <span key={t} className="ch-chip">{TAG_LABELS[t] || t}</span>
+          ))}
+          {rule.name && (
+            <span className="ch-chip" style={{ color: 'var(--color-accent)' }}>
+              {rule.name}
+            </span>
+          )}
+        </div>
+      </button>
+      {expanded && rule.text && (
+        <div className="ch-card-body">{rule.text}</div>
+      )}
+    </div>
+  );
+}
+
 function DetachmentRuleCard({ rule, expanded, onToggle }) {
   return (
     <div className="ch-card is-strat">
@@ -411,13 +522,22 @@ function ReminderCard({ reminder, unitName }) {
   );
 }
 
-function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onApply }) {
+function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onApply, isActiveNow = false }) {
   const usedThisRound = currentRound && usage?.roundUses?.[currentRound] > 0;
   const enoughCp = cp == null || cp >= (strat.cpCost || 0);
+  // When the parent flags this card as "active now", we lean into the
+  // success-green treatment instead of just dimming it — the player
+  // wants to SEE this card, it represents an effect currently on the
+  // table.
+  const cardStyle = isActiveNow
+    ? { borderLeftColor: 'var(--color-success)' }
+    : usedThisRound
+      ? { opacity: 0.7, borderLeftColor: 'var(--color-success)' }
+      : undefined;
   return (
     <div
-      className="ch-card is-strat"
-      style={usedThisRound ? { opacity: 0.7, borderLeftColor: 'var(--color-success)' } : undefined}
+      className={`ch-card is-strat ${isActiveNow ? 'is-active-strat' : ''}`}
+      style={cardStyle}
     >
       <button type="button" className="ch-card-row"
         onClick={onToggle}

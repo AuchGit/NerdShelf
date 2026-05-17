@@ -283,6 +283,64 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Visual hierarchy: focus vs secondary sections ────────────────────
+   The "what's special about your army right now?" layer (active
+   stratagems + faction + detachment + reminders) gets a brighter,
+   accent-tinted treatment. Standard rulebook material (core phase
+   procedure, available stratagem catalogue) stays present but
+   visually quieter so the focus layer wins the eye. */
+.ch-focus-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin: 0 calc(var(--space-3) * -1);
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+}
+.ch-section.is-focus .ch-section-title {
+  color: var(--color-accent);
+  font-size: 12px;
+}
+.ch-section.is-focus .ch-section-count {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-weight: var(--fw-semibold);
+}
+.ch-section.is-secondary {
+  opacity: 0.85;
+}
+.ch-section.is-secondary .ch-section-title {
+  color: var(--color-text-dim);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+}
+.ch-section.is-secondary .ch-card {
+  background: color-mix(in srgb, var(--color-bg-elevated) 92%, var(--color-bg));
+}
+
+/* ── Active stratagem highlight ────────────────────────────────────
+   A stratagem that was applied THIS round is the most important card
+   on screen — the player has spent CP on it and the effect is still
+   in play. The green left border + success-tinted background make it
+   pop out of the focus layer. */
+.ch-card.is-active-strat {
+  background: color-mix(in srgb, var(--color-success) 10%, var(--color-bg-elevated));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-border));
+  border-left-width: 5px;
+  border-left-color: var(--color-success);
+}
+.ch-card.is-active-strat .ch-card-title {
+  color: var(--color-text);
+}
+.ch-card.is-active-strat .ch-cp-badge {
+  background: var(--color-success);
+  color: var(--color-accent-contrast);
+}
+
 /* ── Cards ──────────────────────────────────────────────────────────── */
 .ch-card {
   background: var(--color-bg-elevated);

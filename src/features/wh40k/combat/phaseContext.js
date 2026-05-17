@@ -29,6 +29,7 @@ import { getFactionPhaseRules } from './factionRules.js';
  * @param {object} data            — hydrated dataset from useWh40kData
  * @returns {{
  *   coreRules:      object[],
+ *   factionRules:   object[],
  *   detachmentRule: { name: string, text: string, description?: string } | null,
  *   stratagems:     object[],
  *   abilities:      { unit: object, ability: object, parsed: object }[],
@@ -39,7 +40,7 @@ import { getFactionPhaseRules } from './factionRules.js';
 export function buildPhaseContext(session, data) {
   if (!session || !data) {
     return {
-      coreRules: [], detachmentRule: null,
+      coreRules: [], factionRules: [], detachmentRule: null,
       stratagems: [], abilities: [], reminders: [], onceFlags: [],
     };
   }
@@ -48,6 +49,12 @@ export function buildPhaseContext(session, data) {
   // 0. Core rules of the active phase — the 10e rulebook procedure the
   //    player needs to walk through regardless of army or detachment.
   const coreRules = getCorePhaseRules(phaseId);
+
+  // 0a. Faction army rules. Curated per faction (see factionRules.js):
+  //     things like Oath of Moment for Marines, Doctrina Imperatives for
+  //     AdMech, Acts of Faith for Sororitas. Surfaced at the phase where
+  //     the player needs to invoke them so it doesn't get forgotten.
+  const factionRules = getFactionPhaseRules(session.factionId, phaseId);
 
   // 0b. Detachment rule itself (e.g. "Oath of Moment", "Spirit Stones",
   //     "Hateful Assault"). Pulled from the canonical dataset so it works
@@ -138,5 +145,5 @@ export function buildPhaseContext(session, data) {
   const reminderCtx = buildReminderContext(session, data.unitsById);
   const reminders = listRemindersForPhase(reminderCtx);
 
-  return { coreRules, detachmentRule, stratagems, abilities, reminders, onceFlags };
+  return { coreRules, factionRules, detachmentRule, stratagems, abilities, reminders, onceFlags };
 }
