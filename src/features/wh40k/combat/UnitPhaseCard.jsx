@@ -34,6 +34,8 @@ import './UnitPhaseCard.css';
  * @param {object}   props.unit          live session unit (CombatUnitState)
  * @param {object}   props.canon         hydrated canonical unit (from useWh40kData)
  * @param {string}   props.phase         current phase id
+ * @param {number}   [props.currentRound] active battle round (for the per-
+ *                                       phase "done" marker key)
  * @param {object}   props.abilitiesById data.abilitiesById from useWh40kData
  * @param {object}   props.api           useCombatSession api
  * @param {Array}    [props.reminders]   phase reminders (we filter for this unit)
@@ -41,7 +43,7 @@ import './UnitPhaseCard.css';
  * @param {Function} [props.onToggleDetails] external toggle handler
  */
 export default function UnitPhaseCard({
-  unit, canon, phase, abilitiesById, api,
+  unit, canon, phase, currentRound = 1, abilitiesById, api,
   reminders = [],
   detailsOpen, onToggleDetails,
 }) {
@@ -71,14 +73,33 @@ export default function UnitPhaseCard({
   const unitReminders = reminders.filter(r => r.unitInstanceId === unit.instanceId);
   const destroyed = unit.status === 'destroyed';
 
+  // Per-phase done state. Each (phase, round) combo gets its own marker
+  // key so the marks reset naturally as the player advances through the
+  // turn. Destroyed units don't need a marker — they're sunk to the
+  // bottom by their status anyway.
+  const phaseDoneKey = `${phase}-r${currentRound}`;
+  const isPhaseDone = !!unit.phaseDone?.[phaseDoneKey];
+  const togglePhaseDone = () => api?.setUnitPhaseDone?.(unit.instanceId, phaseDoneKey, !isPhaseDone);
+
   return (
-    <div className={`ch-unit-card ${destroyed ? 'is-destroyed' : ''}`}>
-      {/* ── Head: name + points + status ─────────────────────────── */}
+    <div className={`ch-unit-card ${destroyed ? 'is-destroyed' : ''} ${isPhaseDone ? 'is-phase-done' : ''}`}>
+      {/* ── Head: name + points + status + per-phase done marker ─── */}
       <div className="ch-unit-head">
         <span className="ch-status-dot" style={{ background: statusColor }} aria-hidden="true" />
         <span className="ch-unit-name">{unit.name}</span>
         {canon?.points > 0 && (
           <span className="ch-unit-points">{canon.points} Pkt</span>
+        )}
+        {!destroyed && api?.setUnitPhaseDone && (
+          <button
+            type="button"
+            className={`ch-phase-done-pill ${isPhaseDone ? 'is-done' : ''}`}
+            onClick={togglePhaseDone}
+            title={isPhaseDone ? 'Wieder als offen markieren' : 'Diese Phase erledigt'}
+            aria-pressed={isPhaseDone}
+          >
+            {isPhaseDone ? '✓ Erledigt' : 'Phase erledigen'}
+          </button>
         )}
       </div>
 

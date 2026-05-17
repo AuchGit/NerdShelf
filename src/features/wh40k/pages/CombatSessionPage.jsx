@@ -187,13 +187,20 @@ export default function CombatSessionPage() {
     </Panel>
   );
 
-  // Sort: alive first, then engaged, fled, destroyed — same order the
-  // mobile companion uses, so the two surfaces feel like one product.
+  // Sort priority — mirrors the mobile companion:
+  //   1. Phase-done units sink to the bottom so the player can "work
+  //      down" the list during a phase.
+  //   2. Within still-pending units, status rank.
+  //   3. Alphabetical tiebreak.
   const STATUS_RANK = { alive: 0, engaged: 1, fled: 2, destroyed: 3 };
-  const orderedUnits = Object.values(session.units || {}).slice().sort((a, b) =>
-    (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
-    a.name.localeCompare(b.name)
-  );
+  const phaseKey = `${session.currentPhase}-r${session.currentRound}`;
+  const orderedUnits = Object.values(session.units || {}).slice().sort((a, b) => {
+    const aDone = !!a.phaseDone?.[phaseKey];
+    const bDone = !!b.phaseDone?.[phaseKey];
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
+      a.name.localeCompare(b.name);
+  });
 
   const unitsPanel = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minHeight: 0 }}>
@@ -209,6 +216,7 @@ export default function CombatSessionPage() {
             unit={u}
             canon={data?.unitsById?.[u.unitId] || null}
             phase={session.currentPhase}
+            currentRound={session.currentRound}
             abilitiesById={data?.abilitiesById || {}}
             api={api}
             reminders={phaseReminders}

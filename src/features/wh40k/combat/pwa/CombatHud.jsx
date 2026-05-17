@@ -172,6 +172,7 @@ export default function CombatHud({ session, api, data }) {
                 phase={phase}
                 expanded={expanded}
                 toggle={toggle}
+                reminders={ctx.reminders}
               />
             </div>
           </>
@@ -194,6 +195,7 @@ export default function CombatHud({ session, api, data }) {
                 phase={phase}
                 expanded={expanded}
                 toggle={toggle}
+                reminders={ctx.reminders}
               />
             )}
 
@@ -585,7 +587,7 @@ function StratagemCard({ strat, usage, currentRound, cp, expanded, onToggle, onA
   );
 }
 
-function UnitsView({ session, api, data, phase, expanded, toggle }) {
+function UnitsView({ session, api, data, phase, expanded, toggle, reminders = [] }) {
   const units = Object.values(session.units || {});
   if (units.length === 0) {
     return (
@@ -594,12 +596,21 @@ function UnitsView({ session, api, data, phase, expanded, toggle }) {
       </div>
     );
   }
-  // Sort: alive first, then engaged, then fled, destroyed last.
+  // Sort priority:
+  //   1. Phase-done units sink to the bottom (player can "work down" the
+  //      list until everything is ticked).
+  //   2. Within still-pending units, status rank (alive → engaged →
+  //      fled → destroyed).
+  //   3. Alphabetical tiebreak so the order is stable across renders.
   const STATUS_RANK = { alive: 0, engaged: 1, fled: 2, destroyed: 3 };
-  const ordered = units.slice().sort((a, b) =>
-    (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
-    a.name.localeCompare(b.name)
-  );
+  const phaseKey = `${phase}-r${session.currentRound}`;
+  const ordered = units.slice().sort((a, b) => {
+    const aDone = !!a.phaseDone?.[phaseKey];
+    const bDone = !!b.phaseDone?.[phaseKey];
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) ||
+      a.name.localeCompare(b.name);
+  });
   return (
     <>
       {ordered.map(u => (
@@ -608,10 +619,12 @@ function UnitsView({ session, api, data, phase, expanded, toggle }) {
           unit={u}
           canon={data?.unitsById?.[u.unitId] || null}
           phase={phase}
+          currentRound={session.currentRound}
           api={api}
           abilitiesById={data?.abilitiesById || {}}
           expanded={expanded}
           toggle={toggle}
+          reminders={reminders}
         />
       ))}
     </>

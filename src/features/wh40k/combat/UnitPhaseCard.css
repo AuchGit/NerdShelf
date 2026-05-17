@@ -24,6 +24,21 @@
 }
 .ch-unit-card.is-destroyed { opacity: 0.5; }
 
+/* Per-phase "erledigt" state. Card dims down to ~55 % and a thin
+   success-coloured border appears so the player can spot at a glance
+   what's already been worked through. The card stays interactive so
+   you can un-mark or open Mehr Details if needed. */
+.ch-unit-card.is-phase-done {
+  opacity: 0.55;
+  border-color: color-mix(in srgb, var(--color-success) 32%, var(--color-border));
+  background: color-mix(in srgb, var(--color-success) 6%, var(--color-bg-elevated));
+}
+.ch-unit-card.is-phase-done .ch-unit-name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--color-success) 60%, transparent);
+  text-decoration-thickness: 2px;
+}
+
 .ch-unit-head {
   display: flex;
   align-items: center;
@@ -46,11 +61,42 @@
 }
 .ch-unit-head .ch-unit-points {
   flex-shrink: 0;
-  margin-left: auto;
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
+}
+
+/* Phase-done toggle. Lives in the unit's head row, hugs the right
+   edge. Subtle when un-pressed (outline), pops to success-coloured
+   when active so the dim card still has a clear "✓ done" affordance. */
+.ch-phase-done-pill {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  transition: background 100ms, color 100ms, border-color 100ms, transform 100ms;
+}
+.ch-phase-done-pill:hover { color: var(--color-text); border-color: var(--color-border-strong); }
+.ch-phase-done-pill:active { transform: scale(0.96); }
+.ch-phase-done-pill.is-done {
+  background: var(--color-success);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-success);
+}
+/* When points and the done-pill both want to hug the right, put the
+   pill outside (rightmost) and let the points sit next to it. */
+.ch-unit-head .ch-unit-points + .ch-phase-done-pill {
+  margin-left: var(--space-2);
 }
 
 /* ── Sub-section headings (Aktive Fähigkeiten, Waffen, …) ────────── */

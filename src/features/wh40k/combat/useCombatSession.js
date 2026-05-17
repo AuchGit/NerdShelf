@@ -166,6 +166,23 @@ function reducer(state, action) {
         updatedAt: new Date().toISOString(),
       };
     }
+    case 'unitPhaseDone': {
+      // Mark / unmark a unit as having finished its actions for a given
+      // (phase, round) — the Combat HUD uses this to dim+sink completed
+      // units to the bottom of the list so the player can work the list
+      // top-down each phase. Key is freeform but conventionally
+      // `${phaseId}-r${round}`.
+      const u = state.units[action.instanceId];
+      if (!u) return state;
+      const next = { ...(u.phaseDone || {}) };
+      if (action.value) next[action.key] = true;
+      else delete next[action.key];
+      return {
+        ...state,
+        units: { ...state.units, [action.instanceId]: { ...u, phaseDone: next } },
+        updatedAt: new Date().toISOString(),
+      };
+    }
     case 'unitNotes': {
       const u = state.units[action.instanceId];
       if (!u) return state;
@@ -334,6 +351,7 @@ export function useCombatSession(initialSession) {
     setUnitNotes:  (instanceId, notes) => dispatch({ type: 'unitNotes', instanceId, notes }),
     toggleUnitTag: (instanceId, tag, add) => dispatch({ type: 'unitTag', instanceId, tag, add: add !== false }),
     toggleUnitOnceFlag: (instanceId, key) => dispatch({ type: 'unitOnceFlag', instanceId, key }),
+    setUnitPhaseDone:   (instanceId, key, value) => dispatch({ type: 'unitPhaseDone', instanceId, key, value }),
 
     toggleStratagem: (stratagemId) => dispatch({ type: 'stratUsage', stratagemId }),
     applyStratagem:  (stratagemId, cpCost, name, opts = {}) =>
