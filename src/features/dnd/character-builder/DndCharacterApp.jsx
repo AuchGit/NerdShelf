@@ -9,6 +9,7 @@ import CharacterCreatePage from './pages/CharacterCreatePage'
 import CharacterSheetPage from './pages/CharacterSheetPage'
 import LevelUpPage from './pages/LevelUpPage'
 import CharacterEditPage from './pages/CharacterEditPage'
+import CharacterViewPage from './pages/CharacterViewPage'
 
 setupErrorCollector()
 
@@ -51,8 +52,11 @@ function useHashRoute() {
 function matchRoute(route) {
   // /character/new
   if (route === '/character/new') return { page: 'create' }
+  // /character/view/:token   (read-only viewer for imported characters)
+  let m = route.match(/^\/character\/view\/([^/]+)\/?$/)
+  if (m) return { page: 'view', token: m[1] }
   // /character/:id/levelup
-  let m = route.match(/^\/character\/([^/]+)\/levelup\/?$/)
+  m = route.match(/^\/character\/([^/]+)\/levelup\/?$/)
   if (m) return { page: 'levelup', id: m[1] }
   // /character/:id/edit
   m = route.match(/^\/character\/([^/]+)\/edit\/?$/)
@@ -73,6 +77,7 @@ function DndRoutes({ session }) {
     case 'sheet':     return <CharacterSheetPage session={session} />
     case 'levelup':   return <LevelUpPage session={session} />
     case 'edit':      return <CharacterEditPage session={session} />
+    case 'view':      return <CharacterViewPage />
     case 'dashboard':
     default:          return <DashboardPage session={session} />
   }

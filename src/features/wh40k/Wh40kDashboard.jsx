@@ -13,6 +13,7 @@ import DashboardLayout from '../../shared/dashboard/DashboardLayout';
 import { useWh40kData } from './hooks/useWh40kData';
 import { totalArmyPoints } from './services/points';
 import { ShareTokenBadge } from '../../shared/tokens';
+import { ImportedSection, useImports } from '../../shared/imports';
 
 export default function Wh40kDashboard() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function Wh40kDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { data } = useWh40kData();
+  const imports = useImports({ domain: 'wh40k_army' });
 
   const loadArmies = useCallback(async () => {
     if (!user) return;
@@ -119,11 +121,37 @@ export default function Wh40kDashboard() {
           />
         )}
       />
+
+      <ImportedSection
+        title="Importierte Armeen"
+        entities={imports.entities}
+        owners={imports.owners}
+        loading={imports.loading}
+        tableMissing={imports.tableMissing}
+        domain="wh40k_army"
+        onImport={imports.add}
+        onRemove={imports.remove}
+        getSubCategory={(army) => data?.factionsById[army.faction]?.name || 'Unbekannte Fraktion'}
+        subCategoryOrder={factionOrder}
+        storageKey="wh40k-imports-collapsed"
+        renderItem={(army, ctx) => (
+          <ArmyCard
+            key={army.id}
+            army={army}
+            unitsById={data?.unitsById || {}}
+            faction={data?.factionsById[army.faction]}
+            onOpen={() => navigate(`/wh40k/army/view/${army.share_token}`)}
+            onRemove={ctx.onRemove}
+            readOnly
+            ownerName={ctx.ownerName}
+          />
+        )}
+      />
     </>
   );
 }
 
-function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate }) {
+function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
   const data = army.data || {};
   const entries = data.entries || {};
   const totalPts = totalArmyPoints(entries, unitsById);
@@ -174,22 +202,46 @@ function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-            style={iconBtnStyle}
-            title="Armee duplizieren"
-          >⎘</button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            style={iconBtnStyle}
-            title="Armee löschen"
-            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
-            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
-          >✕</button>
+          {readOnly ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+              style={iconBtnStyle}
+              title="Import entfernen"
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+            >⊘</button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+                style={iconBtnStyle}
+                title="Armee duplizieren"
+              >⎘</button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                style={iconBtnStyle}
+                title="Armee löschen"
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+              >✕</button>
+            </>
+          )}
         </div>
       </div>
+
+      {readOnly && ownerName && (
+        <div style={{
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--color-text-dim)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}>
+          👁 Nur lesen · von {ownerName}
+        </div>
+      )}
 
       <div
         style={{

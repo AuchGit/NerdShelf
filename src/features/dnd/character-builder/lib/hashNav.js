@@ -11,7 +11,10 @@ export function useNavigate() {
 
 export function useParams() {
   const h = window.location.hash.replace(/^#/, '') || '/'
+  // /character/view/:token — read-only viewer for imported characters
+  let m = h.match(/^\/character\/view\/([^/]+)/)
+  if (m) return { token: m[1] }
   // /character/:id, /character/:id/edit, /character/:id/levelup
-  const m = h.match(/^\/character\/([^/]+)/)
+  m = h.match(/^\/character\/([^/]+)/)
   return m ? { id: m[1] } : {}
 }

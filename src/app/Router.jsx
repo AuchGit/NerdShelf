@@ -5,6 +5,7 @@ import Layout from './Layout';
 import DndCharacterApp from '../features/dnd/character-builder/DndCharacterApp';
 import MtgDashboard from '../features/mtg/deck-builder/MtgDashboard';
 import MtgDeckBuilderApp from '../features/mtg/deck-builder/MtgDeckBuilderApp';
+import DeckViewPage from '../features/mtg/deck-builder/pages/DeckViewPage';
 import MtgInventoryPage from '../features/mtg/deck-builder/pages/MtgInventoryPage';
 import MtgWishlistPage from '../features/mtg/deck-builder/pages/MtgWishlistPage';
 import MtgFavoritesPage from '../features/mtg/deck-builder/pages/MtgFavoritesPage';
@@ -73,6 +74,7 @@ export default function Router() {
           <Route path="/mtg/match" element={<MatchHudDashboardPage />} />
           <Route path="/mtg/match/:joinCode" element={<MatchHudSessionPage />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
+          <Route path="/mtg/deck/view/:token" element={<DeckViewPage />} />
           <Route path="/mtg/deck/:deckId" element={<MtgDeckBuilderApp />} />
           <Route path="/wh40k/*" element={<Wh40kApp />} />
         </Route>

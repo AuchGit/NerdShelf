@@ -17,6 +17,7 @@ import { SearchBar } from '../../../../shared/search';
 import { useMtgInventory } from '../hooks/useMtgInventory';
 import { useFavorites } from '../hooks/useFavorites';
 import { fetchCardsByIds } from '../services/scryfallCollection';
+import { getCardPriceEur, formatEur } from '../services/scryfall';
 import MtgSubNav from '../components/MtgSubNav';
 import InventoryImportModal from '../components/InventoryImportModal';
 
@@ -65,6 +66,20 @@ export default function MtgInventoryPage() {
     return n;
   }, [inv.quantities]);
 
+  // Cardmarket trend price (EUR via Scryfall) summed across the whole
+  // collection. Only counts rows where Scryfall has already returned a
+  // price — partially-loaded inventories show a smaller number until the
+  // background fetch finishes.
+  const totalEur = useMemo(() => {
+    if (!cards) return 0;
+    let sum = 0;
+    for (const [id, qty] of inv.quantities) {
+      const price = getCardPriceEur(cards[id]);
+      if (price != null) sum += price * qty;
+    }
+    return sum;
+  }, [cards, inv.quantities]);
+
   return (
     <>
       <MtgSubNav />
@@ -73,6 +88,10 @@ export default function MtgInventoryPage() {
           <h1 style={titleStyle}>Sammlung</h1>
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
             {ownedIds.length} Karten · <strong style={{ color: 'var(--color-text)' }}>{totalOwned}</strong> Kopien
+            {' · '}
+            <strong style={{ color: 'var(--color-accent)' }} title="Gesamtwert (Cardmarket Trend, EUR via Scryfall)">
+              ≈ {formatEur(totalEur)}
+            </strong>
           </span>
           <div style={{ flex: 1, minWidth: 200 }}>
             <SearchBar value={query} onChange={setQuery} placeholder="Sammlung durchsuchen…" />

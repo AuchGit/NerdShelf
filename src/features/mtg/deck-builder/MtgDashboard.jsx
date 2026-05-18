@@ -8,6 +8,7 @@ import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
 import MtgSubNav from './components/MtgSubNav';
 import { ShareTokenBadge } from '../../../shared/tokens';
+import { ImportedSection, useImports } from '../../../shared/imports';
 import useLongPress from '../../../shared/hooks/useLongPress';
 import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 
@@ -33,6 +34,7 @@ export default function MtgDashboard() {
   const [decks, setDecks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const imports = useImports({ domain: 'mtg_deck' });
 
   const loadDecks = useCallback(async () => {
     if (!user) return;
@@ -114,11 +116,35 @@ export default function MtgDashboard() {
           />
         )}
       />
+
+      <ImportedSection
+        title="Importierte Decks"
+        entities={imports.entities}
+        owners={imports.owners}
+        loading={imports.loading}
+        tableMissing={imports.tableMissing}
+        domain="mtg_deck"
+        onImport={imports.add}
+        onRemove={imports.remove}
+        getSubCategory={(deck) => deck.format || 'Kein Format'}
+        subCategoryOrder={FORMAT_ORDER}
+        storageKey="mtg-imports-collapsed"
+        renderItem={(deck, ctx) => (
+          <DeckCard
+            key={deck.id}
+            deck={deck}
+            onOpen={() => navigate(`/mtg/deck/view/${deck.share_token}`)}
+            onRemove={ctx.onRemove}
+            readOnly
+            ownerName={ctx.ownerName}
+          />
+        )}
+      />
     </>
   );
 }
 
-function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
+function DeckCard({ deck, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
   const data = deck.data || {};
   const priceSettings = useMtgPriceSettings();
   const { isPwaMobile } = usePwaMobile();
@@ -250,32 +276,60 @@ function DeckCard({ deck, onOpen, onDelete, onDuplicate }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {onDuplicate && (
+          {readOnly ? (
             <button
-              onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+              onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
               style={{
                 background: 'transparent', border: 'none',
                 color: 'var(--color-text-dim)', cursor: 'pointer',
-                padding: 4, borderRadius: 4, fontSize: 14,
+                padding: 4, borderRadius: 4, fontSize: 16,
               }}
-              title="Deck duplizieren"
-              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
+              title="Import entfernen"
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
-            >⎘</button>
+            >⊘</button>
+          ) : (
+            <>
+              {onDuplicate && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: 'var(--color-text-dim)', cursor: 'pointer',
+                    padding: 4, borderRadius: 4, fontSize: 14,
+                  }}
+                  title="Deck duplizieren"
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+                >⎘</button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: 'var(--color-text-dim)', cursor: 'pointer',
+                  padding: 4, borderRadius: 4, fontSize: 16,
+                }}
+                title="Deck löschen"
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+              >✕</button>
+            </>
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            style={{
-              background: 'transparent', border: 'none',
-              color: 'var(--color-text-dim)', cursor: 'pointer',
-              padding: 4, borderRadius: 4, fontSize: 16,
-            }}
-            title="Deck löschen"
-            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
-            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
-          >✕</button>
         </div>
       </div>
+
+      {readOnly && ownerName && (
+        <div style={{
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--color-text-dim)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+          textShadow: coverArt ? TEXT_SHADOW : undefined,
+        }}>
+          👁 Nur lesen · von {ownerName}
+        </div>
+      )}
 
       <div style={{
         display: 'flex', gap: 'var(--space-4)', color: 'var(--color-text-muted)',

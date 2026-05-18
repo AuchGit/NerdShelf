@@ -15,6 +15,8 @@ import { useMtgWishlist } from '../hooks/useMtgWishlist';
 import { useMtgInventory } from '../hooks/useMtgInventory';
 import { useFavorites } from '../hooks/useFavorites';
 import MtgSubNav from '../components/MtgSubNav';
+import CardmarketExportModal from '../components/CardmarketExportModal';
+import { getCardPriceEur, formatEur } from '../services/scryfall';
 
 export default function MtgWishlistPage() {
   const w = useMtgWishlist();
@@ -22,6 +24,17 @@ export default function MtgWishlistPage() {
   const favs = useFavorites();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all'); // 'all' | 'auto' | 'manual'
+  const [selected, setSelected] = useState(() => new Set());
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportSource, setExportSource] = useState('everything');
+
+  const toggleSelect = (cardId) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(cardId)) next.delete(cardId); else next.add(cardId);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -42,6 +55,17 @@ export default function MtgWishlistPage() {
     await inv.adjustQuantity(id, row.missing, name);
   }
 
+  // Cardmarket trend price summed across the whole wishlist (the price
+  // of buying everything that's still missing right now).
+  const totalEur = useMemo(() => {
+    let sum = 0;
+    for (const row of w.wishlist) {
+      const p = getCardPriceEur(row.card);
+      if (p != null) sum += p * row.missing;
+    }
+    return sum;
+  }, [w.wishlist]);
+
   if (w.error) {
     return <ErrorState message={w.error} />;
   }
@@ -56,9 +80,26 @@ export default function MtgWishlistPage() {
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
               Automatisch berechnet aus {w.decks.length} Deck(s).
               {w.totalMissing > 0 && <> Du brauchst noch <strong style={{ color: 'var(--color-text)' }}>{w.totalMissing}</strong> Kopien.</>}
+              {totalEur > 0 && (
+                <>
+                  {' · '}
+                  Gesamt{' '}
+                  <strong style={{ color: 'var(--color-accent)' }} title="Cardmarket Trend (EUR via Scryfall) für alle fehlenden Karten">
+                    ≈ {formatEur(totalEur)}
+                  </strong>
+                </>
+              )}
             </div>
           </div>
           <div style={{ flex: 1 }} />
+          <Button
+            size="sm"
+            onClick={() => { setExportSource(selected.size > 0 ? 'selected' : 'everything'); setExportOpen(true); }}
+            disabled={w.wishlist.length === 0 && selected.size === 0}
+            title="Erzeugt eine Cardmarket-kompatible Decklist"
+          >
+            🛒 Cardmarket-Liste{selected.size > 0 ? ` (${selected.size} ausgewählt)` : ''}
+          </Button>
           <div style={filterGroupStyle}>
             {[['all', 'Alle'], ['auto', 'Aus Decks'], ['manual', 'Manuell']].map(([k, label]) => (
               <button
@@ -99,6 +140,8 @@ export default function MtgWishlistPage() {
                 key={row.cardId}
                 row={row}
                 isFavorite={favs.isFavorite(row.cardId)}
+                isSelected={selected.has(row.cardId)}
+                onToggleSelect={() => toggleSelect(row.cardId)}
                 onAcquire={() => handleAcquire(row)}
                 onRemoveManual={row.kind === 'manual' ? () => w.removeManual(row.cardId) : null}
                 onToggleFavorite={row.card ? () => favs.toggleFavorite(row.card) : null}
@@ -107,16 +150,37 @@ export default function MtgWishlistPage() {
           </div>
         )}
       </div>
+
+      <CardmarketExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        decks={w.decks}
+        inventory={inv.quantities}
+        initialSource={exportSource}
+        preselectedRows={selected}
+      />
     </>
   );
 }
 
-function WishlistRow({ row, isFavorite, onAcquire, onRemoveManual, onToggleFavorite }) {
+function WishlistRow({ row, isFavorite, isSelected, onToggleSelect, onAcquire, onRemoveManual, onToggleFavorite }) {
   const img = row.card?.image_uris?.small
     || row.card?.card_faces?.[0]?.image_uris?.small
     || null;
+  const eur = getCardPriceEur(row.card);
+  const lineEur = eur != null ? eur * row.missing : null;
   return (
-    <Panel padding="sm" style={rowStyle}>
+    <Panel padding="sm" style={{
+      ...rowStyle,
+      borderColor: isSelected ? 'var(--color-accent)' : undefined,
+    }}>
+      <input
+        type="checkbox"
+        checked={!!isSelected}
+        onChange={onToggleSelect}
+        title="Für Cardmarket-Export auswählen"
+        style={{ flexShrink: 0 }}
+      />
       <div
         aria-hidden="true"
         style={{
@@ -136,6 +200,9 @@ function WishlistRow({ row, isFavorite, onAcquire, onRemoveManual, onToggleFavor
           <span style={{ color: 'var(--color-warning)', fontWeight: 'var(--fw-semibold)' }}>
             fehlen {row.missing}
           </span>
+          {lineEur != null && (
+            <> · <strong style={{ color: 'var(--color-accent)' }}>{formatEur(lineEur)}</strong></>
+          )}
         </div>
         {row.sources.length > 0 && (
           <div style={{ marginTop: 2, fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)' }}>

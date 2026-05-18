@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Panel } from '../../../../shared/ui'
 import DashboardLayout from '../../../../shared/dashboard/DashboardLayout'
 import { ShareTokenBadge } from '../../../../shared/tokens'
+import { ImportedSection, useImports } from '../../../../shared/imports'
 
 const EDITION_ORDER = ['5e', '5.5e']
 const EDITION_LABEL = { '5e': '5e', '5.5e': '5.5e' }
@@ -14,6 +15,7 @@ export default function DashboardPage({ session }) {
   const [characters, setCharacters] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const imports = useImports({ domain: 'dnd_character' })
 
   const loadCharacters = useCallback(async () => {
     if (!session?.user?.id) return
@@ -72,11 +74,35 @@ export default function DashboardPage({ session }) {
           />
         )}
       />
+
+      <ImportedSection
+        title="Importierte Charaktere"
+        entities={imports.entities}
+        owners={imports.owners}
+        loading={imports.loading}
+        tableMissing={imports.tableMissing}
+        domain="dnd_character"
+        onImport={imports.add}
+        onRemove={imports.remove}
+        getSubCategory={(char) => EDITION_LABEL[char.data?.meta?.edition] || char.data?.meta?.edition || 'Unbekannte Edition'}
+        subCategoryOrder={EDITION_ORDER.map(e => EDITION_LABEL[e])}
+        storageKey="dnd-imports-collapsed"
+        renderItem={(char, ctx) => (
+          <CharacterCard
+            key={char.id}
+            character={char}
+            onOpen={() => navigate(`/character/view/${char.share_token}`)}
+            onRemove={ctx.onRemove}
+            readOnly
+            ownerName={ctx.ownerName}
+          />
+        )}
+      />
     </>
   )
 }
 
-function CharacterCard({ character, onOpen, onDelete }) {
+function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerName, onRemove }) {
   const data = character.data || {}
   const classes = data.classes || []
   const totalLevel = classes.reduce((s, c) => s + (c.level || 0), 0)
@@ -153,17 +179,28 @@ function CharacterCard({ character, onOpen, onDelete }) {
             )}
           </div>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            onClick={(e) => { e.stopPropagation(); readOnly ? onRemove?.() : onDelete(); }}
             style={{
               background: 'transparent', border: 'none',
               color: 'var(--color-text-dim)', cursor: 'pointer',
               padding: 4, borderRadius: 4, fontSize: 16, flexShrink: 0,
             }}
-            title="Charakter löschen"
+            title={readOnly ? 'Import entfernen' : 'Charakter löschen'}
             onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
             onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
-          >✕</button>
+          >{readOnly ? '⊘' : '✕'}</button>
         </div>
+
+        {readOnly && ownerName && (
+          <div style={{
+            fontSize: 'var(--fs-xs)',
+            color: 'var(--color-text-dim)',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            👁 Nur lesen · von {ownerName}
+          </div>
+        )}
 
         <div style={{
           display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)',
