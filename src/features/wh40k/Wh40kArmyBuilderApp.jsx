@@ -24,6 +24,8 @@ import UnitDetail from './components/UnitDetail';
 import ArmyPanel from './components/ArmyPanel';
 import DetachmentInfo from './components/DetachmentInfo';
 import { newShareToken } from '../../shared/tokens';
+import usePwaMobile from '../../shared/hooks/usePwaMobile';
+import Wh40kArmyBuilderMobile from './pwa/Wh40kArmyBuilderMobile';
 
 const EMPTY_ARMY = {
   name: 'Unbenannte Armee',
@@ -41,6 +43,7 @@ export default function Wh40kArmyBuilderApp() {
   const { data, loading: dataLoading, error: dataError } = useWh40kData();
   const favs = useWh40kFavorites();
   const inv = useWh40kInventory();
+  const { isPwaMobile } = usePwaMobile();
 
   const [army, setArmy] = useState(EMPTY_ARMY);
   const [loadingArmy, setLoadingArmy] = useState(!!armyId);
@@ -280,6 +283,97 @@ export default function Wh40kArmyBuilderApp() {
   const detachmentEnhancements = selectedDetachment
     ? (data.enhancementsByDetachment?.[selectedDetachment.id] || [])
     : [];
+
+  // Total army points — used as a badge on the "Armee" tab in the
+  // mobile shell so the player always sees their cost at a glance.
+  const pointsTotal = Object.values(army.entries || {}).reduce((sum, e) => {
+    const u = data.unitsById?.[e.unitId];
+    if (!u) return sum;
+    const pts = (u.points || 0) * (e.count || 1);
+    return sum + pts;
+  }, 0);
+
+  // PWA on a phone → mobile shell. Desktop / Tauri / browser keep the
+  // existing 2-column layout below untouched.
+  if (isPwaMobile) {
+    const unitFiltersPanel = (
+      <UnitFilters
+        filters={filters}
+        setFilters={setFilters}
+        factions={data.factions}
+        allKeywords={data.allKeywords}
+        totalCount={data.units.length}
+        shownCount={filteredUnits.length}
+        loading={dataLoading}
+      />
+    );
+    const unitGridPanel = (
+      <UnitGrid
+        units={filteredUnits}
+        factionsById={data.factionsById}
+        selectedId={selectedUnitId}
+        onSelect={(u) => setSelectedUnitId(prev => prev === u.id ? null : u.id)}
+        isFavorite={favs.isFavorite}
+        onToggleFavorite={favs.toggleFavorite}
+        getOwned={inv.getQuantity}
+        onIncOwned={incOwned}
+        onDecOwned={decOwned}
+        onAdd={addUnit}
+        inArmyCount={inArmyCount}
+      />
+    );
+    const unitDetailPanel = selectedUnit
+      ? <UnitDetail unit={selectedUnit} faction={selectedFaction} />
+      : null;
+    const armyPanelEl = (
+      <ArmyPanel
+        army={army}
+        unitsById={data.unitsById}
+        factionsById={data.factionsById}
+        detachments={data.detachments}
+        onUpdateCount={updateCount}
+        onRemove={removeUnit}
+        onClear={clearUnits}
+        onExport={handleExport}
+      />
+    );
+    const detachmentPanelEl = selectedDetachment
+      ? (
+        <DetachmentInfo
+          detachment={selectedDetachment}
+          abilitiesById={data.abilitiesById}
+          stratagems={detachmentStratagems}
+          enhancements={detachmentEnhancements}
+        />
+      )
+      : null;
+
+    return (
+      <Wh40kArmyBuilderMobile
+        army={army}
+        setArmy={setArmy}
+        factions={data.factions}
+        detachments={factionDetachments}
+        dirty={dirty}
+        saving={saving}
+        onSave={handleSave}
+        saveStatus={saveStatus}
+        exportStatus={exportStatus}
+        onBack={() => navigate('/wh40k')}
+        onExport={handleExport}
+        onClear={clearUnits}
+        validationErrors={validation.errors}
+        unitFiltersPanel={unitFiltersPanel}
+        unitGridPanel={unitGridPanel}
+        unitDetailPanel={unitDetailPanel}
+        armyPanel={armyPanelEl}
+        detachmentPanel={detachmentPanelEl}
+        selectedDetachment={selectedDetachment}
+        selectedUnit={selectedUnit}
+        pointsTotal={pointsTotal}
+      />
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>

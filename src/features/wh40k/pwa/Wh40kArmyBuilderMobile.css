@@ -1,0 +1,294 @@
+/* src/features/wh40k/pwa/Wh40kArmyBuilderMobile.css
+ *
+ * Mobile shell for the WH40K army builder. Only mounted when
+ * usePwaMobile reports we're on a phone (Wh40kArmyBuilderApp branches
+ * on isPwaMobile). Class prefix `ab-mob-*` so styles don't collide
+ * with the existing desktop layout.
+ */
+
+.ab-mob-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding-top: env(safe-area-inset-top, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  z-index: 200;        /* above the global BottomNav (z=100) */
+  overflow: hidden;
+}
+
+/* The global BottomNav and the in-shell tab bar would double up; hide
+   the global one while the army builder is on screen. */
+body[data-pwa-mobile='true']:has(.ab-mob-screen) .pwa-bottom-nav {
+  display: none;
+}
+body[data-pwa-mobile='true'] main:has(.ab-mob-screen) {
+  padding-bottom: 0 !important;
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.ab-mob-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-mob-back-btn,
+.ab-mob-menu-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 18px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.ab-mob-back-btn:active,
+.ab-mob-menu-btn:active { background: var(--color-surface-hover); }
+
+.ab-mob-name-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 0 8px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  font-family: inherit;
+  border-radius: var(--radius-md);
+}
+.ab-mob-name-input:focus {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  outline: none;
+}
+
+.ab-mob-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ab-mob-save-btn {
+  flex-shrink: 0;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.ab-mob-save-btn.is-dirty {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+.ab-mob-save-btn:disabled { opacity: 0.6; cursor: wait; }
+
+/* ── Toolbar: faction + detachment selects ────────────────────── */
+.ab-mob-toolbar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-mob-select {
+  height: 36px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.ab-mob-select:disabled { opacity: 0.5; }
+
+/* ── Validation banner ────────────────────────────────────────── */
+.ab-mob-validation {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+  font-size: var(--fs-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-mob-validation > div + div { margin-top: 2px; }
+
+/* ── Main: tabbed body ────────────────────────────────────────── */
+.ab-mob-main {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  /* Reserve space for the bottom tab bar so panes don't underlap. */
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0));
+}
+.ab-mob-pane {
+  position: absolute;
+  inset: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+}
+
+/* Units pane: filters at top, then either grid OR (when a unit is
+   selected) a slide-up overlay with the unit-detail above the grid. */
+.ab-mob-pane-units {
+  /* nothing extra — children stack naturally */
+}
+.ab-mob-grid-wrap {
+  flex: 1;
+  min-height: 0;
+}
+.ab-mob-detail-overlay {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* Roster pane: army panel above, notes below */
+.ab-mob-roster-frame {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.ab-mob-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+}
+.ab-mob-notes-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-semibold);
+}
+.ab-mob-notes-input {
+  width: 100%;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.ab-mob-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-5);
+}
+
+/* ── Bottom tab bar ───────────────────────────────────────────── */
+.ab-mob-tabs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  height: calc(64px + env(safe-area-inset-bottom, 0));
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  display: flex;
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+}
+.ab-mob-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  padding: 6px 4px;
+  position: relative;
+}
+.ab-mob-tab.is-active {
+  color: var(--color-accent);
+  font-weight: var(--fw-semibold);
+}
+.ab-mob-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.ab-mob-tab-icon { font-size: 20px; line-height: 1; }
+.ab-mob-tab-badge {
+  position: absolute;
+  top: 4px;
+  right: 18%;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Landscape: pane content gets some breathing room ─────────── */
+body[data-pwa-orientation='landscape'] .ab-mob-pane {
+  padding: 10px 14px;
+}
