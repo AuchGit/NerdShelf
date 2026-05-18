@@ -66,6 +66,7 @@ export default function UnitBrowserPage() {
         setFilters={setFilters}
         factions={data.factions}
         allKeywords={data.allKeywords}
+        keywordCounts={data.keywordCounts}
         totalCount={data.units.length}
         shownCount={filtered.length}
         loading={loading}

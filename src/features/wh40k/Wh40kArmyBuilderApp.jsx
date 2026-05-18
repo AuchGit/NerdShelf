@@ -15,14 +15,18 @@ import { useAuth } from '../../core/auth/AuthContext';
 import { useWh40kData } from './hooks/useWh40kData';
 import { useWh40kFavorites } from './hooks/useWh40kFavorites';
 import { useWh40kInventory } from './hooks/useWh40kInventory';
+import { useWh40kSquads } from './hooks/useWh40kSquads';
 import { emptyFilters, filterAndSortUnits } from './services/filterUnits';
 import { copyArmyToClipboard } from './services/armyExport';
 import { validateArmy } from './services/validation';
+import { totalArmyPoints } from './services/points';
 import UnitFilters from './components/UnitFilters';
 import UnitGrid from './components/UnitGrid';
 import UnitDetail from './components/UnitDetail';
 import ArmyPanel from './components/ArmyPanel';
 import DetachmentInfo from './components/DetachmentInfo';
+import SquadListPanel from './components/SquadListPanel';
+import SquadBuilderModal from './components/SquadBuilderModal';
 import { newShareToken } from '../../shared/tokens';
 import usePwaMobile from '../../shared/hooks/usePwaMobile';
 import Wh40kArmyBuilderMobile from './pwa/Wh40kArmyBuilderMobile';
@@ -43,7 +47,9 @@ export default function Wh40kArmyBuilderApp() {
   const { data, loading: dataLoading, error: dataError } = useWh40kData();
   const favs = useWh40kFavorites();
   const inv = useWh40kInventory();
+  const squads = useWh40kSquads();
   const { isPwaMobile } = usePwaMobile();
+  const [squadModal, setSquadModal] = useState(null);
 
   const [army, setArmy] = useState(EMPTY_ARMY);
   const [loadingArmy, setLoadingArmy] = useState(!!armyId);
@@ -124,6 +130,12 @@ export default function Wh40kArmyBuilderApp() {
   const selectedFaction = selectedUnit ? data?.factionsById[selectedUnit.factionId] : null;
 
   // ── Mutations ────────────────────────────────────────
+  // Entries are now keyed by either:
+  //   - unitId (plain unit slot, mergeable on re-add)
+  //   - `squad-<squadId>` (saved squad slot, never merges so two squads
+  //     of the same datasheet stay distinct)
+  // The mutation helpers take an entry KEY, not a unitId, so the ArmyPanel
+  // and mobile shell can hand back whichever the entry was keyed by.
   const addUnit = useCallback((unit) => {
     setArmy(prev => {
       const existing = prev.entries[unit.id];
@@ -139,22 +151,49 @@ export default function Wh40kArmyBuilderApp() {
     });
   }, []);
 
-  const updateCount = useCallback((unitId, delta) => {
+  const addSquad = useCallback((squad) => {
+    if (!squad?.unitId) return;
     setArmy(prev => {
-      const e = prev.entries[unitId];
+      // Each "add" of a saved squad spawns a fresh slot so the user can
+      // add the same squad multiple times if they want a second copy.
+      let key = `squad-${squad.id || Math.random().toString(36).slice(2, 8)}`;
+      let suffix = 2;
+      while (prev.entries[key]) {
+        key = `squad-${squad.id}-${suffix++}`;
+      }
+      return {
+        ...prev,
+        entries: {
+          ...prev.entries,
+          [key]: {
+            unitId: squad.unitId,
+            count: 1,
+            squadId: squad.id,
+            squadName: squad.name,
+            modelCount: squad.modelCount,
+            wargearOptionIds: squad.wargearOptionIds || [],
+          },
+        },
+      };
+    });
+  }, []);
+
+  const updateCount = useCallback((entryKey, delta) => {
+    setArmy(prev => {
+      const e = prev.entries[entryKey];
       if (!e) return prev;
       const next = e.count + delta;
       const entries = { ...prev.entries };
-      if (next <= 0) delete entries[unitId];
-      else entries[unitId] = { ...e, count: next };
+      if (next <= 0) delete entries[entryKey];
+      else entries[entryKey] = { ...e, count: next };
       return { ...prev, entries };
     });
   }, []);
 
-  const removeUnit = useCallback((unitId) => {
+  const removeUnit = useCallback((entryKey) => {
     setArmy(prev => {
       const entries = { ...prev.entries };
-      delete entries[unitId];
+      delete entries[entryKey];
       return { ...prev, entries };
     });
   }, []);
@@ -163,8 +202,16 @@ export default function Wh40kArmyBuilderApp() {
     setArmy(prev => ({ ...prev, entries: {} }));
   }, []);
 
+  // Tile-overlay "currently in army" counter — sums every entry that
+  // references this unitId (across plain slots and squad slots).
   const inArmyCount = useCallback(
-    (unitId) => army.entries[unitId]?.count || 0,
+    (unitId) => {
+      let n = 0;
+      for (const e of Object.values(army.entries || {})) {
+        if (e.unitId === unitId) n += e.count || 0;
+      }
+      return n;
+    },
     [army.entries]
   );
 
@@ -286,12 +333,7 @@ export default function Wh40kArmyBuilderApp() {
 
   // Total army points — used as a badge on the "Armee" tab in the
   // mobile shell so the player always sees their cost at a glance.
-  const pointsTotal = Object.values(army.entries || {}).reduce((sum, e) => {
-    const u = data.unitsById?.[e.unitId];
-    if (!u) return sum;
-    const pts = (u.points || 0) * (e.count || 1);
-    return sum + pts;
-  }, 0);
+  const pointsTotal = totalArmyPoints(army.entries, data.unitsById);
 
   // PWA on a phone → mobile shell. Desktop / Tauri / browser keep the
   // existing 2-column layout below untouched.
@@ -302,6 +344,7 @@ export default function Wh40kArmyBuilderApp() {
         setFilters={setFilters}
         factions={data.factions}
         allKeywords={data.allKeywords}
+        keywordCounts={data.keywordCounts}
         totalCount={data.units.length}
         shownCount={filteredUnits.length}
         loading={dataLoading}
@@ -347,31 +390,65 @@ export default function Wh40kArmyBuilderApp() {
         />
       )
       : null;
+    const squadPanelEl = (
+      <SquadListPanel
+        squads={squads.squads}
+        loading={squads.loading}
+        tableMissing={squads.tableMissing}
+        unitsById={data.unitsById}
+        factionsById={data.factionsById}
+        factionFilter={army.factionId || null}
+        onAdd={(s) => addSquad(s)}
+        onEdit={(s) => setSquadModal({ edit: s })}
+        onDuplicate={(s) => squads.duplicate(s.id)}
+        onDelete={(s) => squads.remove(s.id)}
+        onCreateNew={() => setSquadModal({ factionFilter: army.factionId || null })}
+        emptyHint="Trupps werden in der Sammlung oder hier in der Armee angelegt und können dann mit einem Tap eingefügt werden."
+        compact
+      />
+    );
 
     return (
-      <Wh40kArmyBuilderMobile
-        army={army}
-        setArmy={setArmy}
-        factions={data.factions}
-        detachments={factionDetachments}
-        dirty={dirty}
-        saving={saving}
-        onSave={handleSave}
-        saveStatus={saveStatus}
-        exportStatus={exportStatus}
-        onBack={() => navigate('/wh40k')}
-        onExport={handleExport}
-        onClear={clearUnits}
-        validationErrors={validation.errors}
-        unitFiltersPanel={unitFiltersPanel}
-        unitGridPanel={unitGridPanel}
-        unitDetailPanel={unitDetailPanel}
-        armyPanel={armyPanelEl}
-        detachmentPanel={detachmentPanelEl}
-        selectedDetachment={selectedDetachment}
-        selectedUnit={selectedUnit}
-        pointsTotal={pointsTotal}
-      />
+      <>
+        <Wh40kArmyBuilderMobile
+          army={army}
+          setArmy={setArmy}
+          factions={data.factions}
+          detachments={factionDetachments}
+          dirty={dirty}
+          saving={saving}
+          onSave={handleSave}
+          saveStatus={saveStatus}
+          exportStatus={exportStatus}
+          onBack={() => navigate('/wh40k')}
+          onExport={handleExport}
+          onClear={clearUnits}
+          validationErrors={validation.errors}
+          unitFiltersPanel={unitFiltersPanel}
+          unitGridPanel={unitGridPanel}
+          unitDetailPanel={unitDetailPanel}
+          armyPanel={armyPanelEl}
+          detachmentPanel={detachmentPanelEl}
+          squadPanel={squadPanelEl}
+          squadCount={squads.squads.length}
+          selectedDetachment={selectedDetachment}
+          selectedUnit={selectedUnit}
+          pointsTotal={pointsTotal}
+        />
+        <SquadBuilderModal
+          open={!!squadModal}
+          onClose={() => setSquadModal(null)}
+          data={data}
+          canonicalWargear={data?.canonical?.wargearOptions || []}
+          initial={squadModal?.edit}
+          lockedUnitId={squadModal?.lockedUnitId}
+          factionFilter={squadModal?.factionFilter}
+          onSave={async (s) => {
+            if (s.id) await squads.update(s.id, s);
+            else await squads.create(s);
+          }}
+        />
+      </>
     );
   }
 
@@ -437,6 +514,7 @@ export default function Wh40kArmyBuilderApp() {
             setFilters={setFilters}
             factions={data.factions}
             allKeywords={data.allKeywords}
+            keywordCounts={data.keywordCounts}
             totalCount={data.units.length}
             shownCount={filteredUnits.length}
             loading={dataLoading}
@@ -493,6 +571,44 @@ export default function Wh40kArmyBuilderApp() {
             onClear={clearUnits}
             onExport={handleExport}
           />
+
+          <details
+            style={{
+              borderTop: '1px solid var(--color-border)',
+              padding: 'var(--space-3)',
+            }}
+          >
+            <summary
+              style={{
+                cursor: 'pointer',
+                fontSize: 'var(--fs-xs)',
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+                color: 'var(--color-text-muted)',
+                fontWeight: 'var(--fw-semibold)',
+                marginBottom: 'var(--space-2)',
+                userSelect: 'none',
+              }}
+            >
+              ⛬ Gespeicherte Trupps ({squads.squads.length})
+            </summary>
+            <SquadListPanel
+              squads={squads.squads}
+              loading={squads.loading}
+              tableMissing={squads.tableMissing}
+              unitsById={data.unitsById}
+              factionsById={data.factionsById}
+              factionFilter={army.factionId || null}
+              onAdd={(s) => addSquad(s)}
+              onEdit={(s) => setSquadModal({ edit: s })}
+              onDuplicate={(s) => squads.duplicate(s.id)}
+              onDelete={(s) => squads.remove(s.id)}
+              onCreateNew={() => setSquadModal({ factionFilter: army.factionId || null })}
+              emptyHint={'Lege Trupps in der Sammlung oder hier an, dann mit „+ Armee" einfügen.'}
+              compact
+            />
+          </details>
+
           <div
             style={{
               padding: 'var(--space-3)',
@@ -533,6 +649,20 @@ export default function Wh40kArmyBuilderApp() {
           </div>
         </aside>
       </main>
+
+      <SquadBuilderModal
+        open={!!squadModal}
+        onClose={() => setSquadModal(null)}
+        data={data}
+        canonicalWargear={data?.canonical?.wargearOptions || []}
+        initial={squadModal?.edit}
+        lockedUnitId={squadModal?.lockedUnitId}
+        factionFilter={squadModal?.factionFilter}
+        onSave={async (s) => {
+          if (s.id) await squads.update(s.id, s);
+          else await squads.create(s);
+        }}
+      />
     </div>
   );
 }

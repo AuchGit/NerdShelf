@@ -24,16 +24,26 @@ const SORT_OPTIONS = [
   { value: 'faction', label: 'Fraktion'},
 ];
 
+// A keyword that appears on fewer than this many units is almost always a
+// unit-instance name (the dataset stores every unit's own name as a
+// keyword, which floods the picker with ~900 single-use tags). Hiding
+// these by default turns the keyword filter from "scroll through 1400
+// entries" into "pick from ~170 actually-useful army-wide tags".
+const COMMON_KEYWORD_MIN = 5;
+
 export default function UnitFilters({
   filters,
   setFilters,
   factions,
   allKeywords,
+  keywordCounts,
   totalCount,
   shownCount,
   loading,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [kwSearch, setKwSearch] = useState('');
+  const [showAllKw, setShowAllKw] = useState(false);
 
   const set = (patch) => setFilters(prev => ({ ...prev, ...patch }));
 
@@ -75,7 +85,40 @@ export default function UnitFilters({
     ownedOnly: false,
   }));
 
-  const sortedKeywords = useMemo(() => allKeywords.slice(), [allKeywords]);
+  // Sort by usage frequency desc, then alphabetically. Active keywords are
+  // pinned to the top so users can always see / un-toggle their current
+  // selection regardless of search/common-filter state.
+  const filteredKeywords = useMemo(() => {
+    const counts = keywordCounts || {};
+    const q = kwSearch.trim().toLowerCase();
+    const activeSet = new Set(filters.keywords);
+
+    const base = allKeywords.filter(kw => {
+      if (activeSet.has(kw)) return true;             // always keep active
+      if (!showAllKw && (counts[kw] || 0) < COMMON_KEYWORD_MIN) return false;
+      if (q && !kw.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    base.sort((a, b) => {
+      const aActive = activeSet.has(a), bActive = activeSet.has(b);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      const ca = counts[a] || 0, cb = counts[b] || 0;
+      if (ca !== cb) return cb - ca;
+      return a.localeCompare(b);
+    });
+    return base;
+  }, [allKeywords, keywordCounts, kwSearch, showAllKw, filters.keywords]);
+
+  const hiddenKwCount = useMemo(() => {
+    if (showAllKw) return 0;
+    const counts = keywordCounts || {};
+    let n = 0;
+    for (const kw of allKeywords) {
+      if ((counts[kw] || 0) < COMMON_KEYWORD_MIN) n++;
+    }
+    return n;
+  }, [allKeywords, keywordCounts, showAllKw]);
 
   return (
     <div
@@ -231,16 +274,58 @@ export default function UnitFilters({
 
           <div>
             <div style={advLabelStyle}>Schlüsselwörter</div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxHeight: 160, overflowY: 'auto' }}>
-              {sortedKeywords.map(kw => (
-                <FilterChip
-                  key={kw}
-                  active={filters.keywords.includes(kw)}
-                  onClick={() => toggleKeyword(kw)}
-                >
-                  {kw}
-                </FilterChip>
-              ))}
+            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+              <input
+                type="search"
+                value={kwSearch}
+                onChange={(e) => setKwSearch(e.target.value)}
+                placeholder="Schlüsselwort suchen…"
+                style={{
+                  flex: 1,
+                  minWidth: 160,
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '6px 8px',
+                  fontSize: 'var(--fs-sm)',
+                  fontFamily: 'inherit',
+                  minHeight: 28,
+                }}
+              />
+              <FilterChip
+                active={showAllKw}
+                onClick={() => setShowAllKw(v => !v)}
+                title={showAllKw
+                  ? 'Aktuell werden alle Tags gezeigt (inkl. Einheiten-Eigennamen)'
+                  : `${hiddenKwCount} seltene Tags (Eigennamen, <${COMMON_KEYWORD_MIN}× genutzt) ausgeblendet`}
+              >
+                {showAllKw ? `Alle (${allKeywords.length})` : `Häufige (${allKeywords.length - hiddenKwCount})`}
+              </FilterChip>
+            </div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxHeight: 200, overflowY: 'auto' }}>
+              {filteredKeywords.length === 0 ? (
+                <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-xs)', padding: '4px 2px' }}>
+                  Keine passenden Tags{kwSearch ? ` für „${kwSearch}“` : ''}.
+                </div>
+              ) : filteredKeywords.map(kw => {
+                const count = keywordCounts?.[kw];
+                return (
+                  <FilterChip
+                    key={kw}
+                    active={filters.keywords.includes(kw)}
+                    onClick={() => toggleKeyword(kw)}
+                    title={count ? `${kw} — ${count} Einheit${count === 1 ? '' : 'en'}` : kw}
+                  >
+                    {kw}
+                    {count != null && (
+                      <span style={{ marginLeft: 4, opacity: 0.55, fontSize: '0.85em' }}>
+                        {count}
+                      </span>
+                    )}
+                  </FilterChip>
+                );
+              })}
             </div>
           </div>
         </div>

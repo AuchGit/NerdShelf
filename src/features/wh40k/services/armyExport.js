@@ -5,6 +5,8 @@
 // into a forum, tournament app, or chat. Unit detail is intentionally
 // minimal so the format reads naturally.
 
+import { entryPoints } from './points';
+
 export function armyToText({ army, unitsById, factionsById, detachments }) {
   const faction = factionsById[army.factionId]?.name || army.factionId || 'Keine Fraktion';
   const det = detachments.find(d => d.id === army.detachmentId)?.name || '';
@@ -15,9 +17,14 @@ export function armyToText({ army, unitsById, factionsById, detachments }) {
   for (const e of Object.values(army.entries || {})) {
     const u = unitsById[e.unitId];
     if (!u) continue;
-    const pts = (u.points || 0) * (e.count || 0);
+    const pts = entryPoints(e, unitsById);
     total += pts;
-    lines.push(`${e.count}x ${u.name} — ${pts} Pkt`);
+    if (e.squadId) {
+      const tag = e.squadName ? `„${e.squadName}" — ` : '';
+      lines.push(`${e.count}x ${tag}${u.name} (${e.modelCount} Mod.) — ${pts} Pkt`);
+    } else {
+      lines.push(`${e.count}x ${u.name} — ${pts} Pkt`);
+    }
   }
   lines.push('');
   lines.push(`Gesamt: ${total} Pkt`);

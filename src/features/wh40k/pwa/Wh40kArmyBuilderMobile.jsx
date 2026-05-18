@@ -39,11 +39,13 @@ export default function Wh40kArmyBuilderMobile({
   unitDetailPanel,
   armyPanel,
   detachmentPanel,
+  squadPanel,
+  squadCount = 0,
   selectedDetachment,
   selectedUnit,
   pointsTotal,
 }) {
-  const [tab, setTab] = useState('units');     // 'units' | 'roster' | 'detach'
+  const [tab, setTab] = useState('units');     // 'units' | 'roster' | 'squads' | 'detach'
   const [menuOpen, setMenuOpen] = useState(false);
 
   const status = saveStatus || exportStatus;
@@ -184,6 +186,15 @@ export default function Wh40kArmyBuilderMobile({
     </div>
   );
 
+  const squadsPane = (
+    <div
+      className="ab-mob-pane ab-mob-pane-squads"
+      style={{ display: tab === 'squads' ? 'flex' : 'none' }}
+    >
+      {squadPanel}
+    </div>
+  );
+
   return (
     <div className="ab-mob-screen">
       {header}
@@ -193,6 +204,7 @@ export default function Wh40kArmyBuilderMobile({
       <main className="ab-mob-main">
         {unitsPane}
         {rosterPane}
+        {squadsPane}
         {detachPane}
       </main>
 
@@ -211,6 +223,14 @@ export default function Wh40kArmyBuilderMobile({
           active={tab === 'roster'}
           onClick={() => setTab('roster')}
           badge={pointsTotal != null ? `${pointsTotal}` : null}
+        />
+        <TabBtn
+          id="squads"
+          icon="⛬"
+          label="Trupps"
+          active={tab === 'squads'}
+          onClick={() => setTab('squads')}
+          badge={squadCount > 0 ? `${squadCount}` : null}
         />
         <TabBtn
           id="detach"

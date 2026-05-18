@@ -4,7 +4,7 @@
 // added unit with quantity controls and aggregated points. Mirrors MTG's
 // DeckPanel philosophy: lightweight, single-pane, optimised for rapid edits.
 
-import { totalArmyPoints, totalModelCount } from '../services/points';
+import { totalArmyPoints, totalModelCount, entryPoints } from '../services/points';
 
 export default function ArmyPanel({
   army,
@@ -16,7 +16,10 @@ export default function ArmyPanel({
   onClear,
   onExport,
 }) {
-  const entries = Object.values(army.entries || {});
+  // Entries are now keyed by entry-key (unitId for plain slots,
+  // `squad-<squadId>` for saved-squad slots). We pass the key around as a
+  // separate field so the callbacks below can target the exact slot.
+  const entries = Object.entries(army.entries || {}).map(([key, e]) => ({ key, ...e }));
   const totalPts = totalArmyPoints(army.entries, unitsById);
   const totalModels = totalModelCount(army.entries, unitsById);
 
@@ -72,9 +75,13 @@ export default function ArmyPanel({
             {entries.map(e => {
               const u = unitsById[e.unitId];
               if (!u) return null;
+              const isSquad = !!e.squadId;
+              const perCost = entryPoints({ ...e, count: 1 }, unitsById);
+              const totalCost = entryPoints(e, unitsById);
+              const primaryLabel = isSquad ? e.squadName || u.name : u.name;
               return (
                 <div
-                  key={e.unitId}
+                  key={e.key}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -82,7 +89,8 @@ export default function ArmyPanel({
                     padding: '6px 8px',
                     borderRadius: 'var(--radius-md)',
                     background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
+                    border: '1px solid',
+                    borderColor: isSquad ? 'var(--color-accent)' : 'var(--color-border)',
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -95,15 +103,23 @@ export default function ArmyPanel({
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      {u.name}
+                      {isSquad && <span style={{ color: 'var(--color-accent)', marginRight: 4 }}>⛬</span>}
+                      {primaryLabel}
                     </div>
                     <div
                       style={{
                         fontSize: 'var(--fs-xs)',
                         color: 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      {u.points} Pkt × {e.count} = {(u.points || 0) * e.count} Pkt
+                      {isSquad ? (
+                        <>{u.name} · {e.modelCount} Mod. · {perCost} Pkt × {e.count} = {totalCost} Pkt</>
+                      ) : (
+                        <>{u.points} Pkt × {e.count} = {totalCost} Pkt</>
+                      )}
                     </div>
                   </div>
                   <div
@@ -118,7 +134,7 @@ export default function ArmyPanel({
                   >
                     <button
                       type="button"
-                      onClick={() => onUpdateCount(u.id, -1)}
+                      onClick={() => onUpdateCount(e.key, -1)}
                       style={miniBtnStyle}
                       aria-label="Reduzieren"
                     >−</button>
@@ -134,14 +150,14 @@ export default function ArmyPanel({
                     </span>
                     <button
                       type="button"
-                      onClick={() => onUpdateCount(u.id, +1)}
+                      onClick={() => onUpdateCount(e.key, +1)}
                       style={miniBtnStyle}
                       aria-label="Erhöhen"
                     >+</button>
                   </div>
                   <button
                     type="button"
-                    onClick={() => onRemove(u.id)}
+                    onClick={() => onRemove(e.key)}
                     title="Entfernen"
                     aria-label="Entfernen"
                     style={{
@@ -152,8 +168,8 @@ export default function ArmyPanel({
                       fontSize: 'var(--fs-md)',
                       padding: 2,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+                    onMouseEnter={(ev) => ev.currentTarget.style.color = 'var(--color-danger)'}
+                    onMouseLeave={(ev) => ev.currentTarget.style.color = 'var(--color-text-dim)'}
                   >
                     ✕
                   </button>

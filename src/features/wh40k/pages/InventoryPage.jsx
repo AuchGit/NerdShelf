@@ -7,7 +7,11 @@ import { useMemo, useState } from 'react';
 import { useWh40kData } from '../hooks/useWh40kData';
 import { useWh40kFavorites } from '../hooks/useWh40kFavorites';
 import { useWh40kInventory } from '../hooks/useWh40kInventory';
+import { useWh40kSquads } from '../hooks/useWh40kSquads';
 import UnitCard from '../components/UnitCard';
+import SquadListPanel from '../components/SquadListPanel';
+import SquadBuilderModal from '../components/SquadBuilderModal';
+import { Button } from '../../../shared/ui';
 import { SearchBar } from '../../../shared/search';
 import { totalArmyPoints } from '../services/points';
 
@@ -15,7 +19,10 @@ export default function InventoryPage() {
   const { data, loading, error } = useWh40kData();
   const favs = useWh40kFavorites();
   const inv = useWh40kInventory();
+  const squads = useWh40kSquads();
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('units');             // 'units' | 'squads'
+  const [squadModal, setSquadModal] = useState(null);  // null | {} | {edit: squad} | {lockedUnitId, factionFilter}
 
   const grouped = useMemo(() => {
     if (!data) return [];
@@ -73,13 +80,49 @@ export default function InventoryPage() {
           <span><strong style={{ color: 'var(--color-text)' }}>{totalUnitsOwned}</strong> Modelle/Einheiten</span>
           <span>·</span>
           <span><strong style={{ color: 'var(--color-text)' }}>{totalValuePts}</strong> Pkt</span>
+          <span>·</span>
+          <span><strong style={{ color: 'var(--color-text)' }}>{squads.squads.length}</strong> Trupps</span>
         </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <SearchBar value={query} onChange={setQuery} placeholder="Sammlung durchsuchen…" />
-        </div>
+        {tab === 'units' && (
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <SearchBar value={query} onChange={setQuery} placeholder="Sammlung durchsuchen…" />
+          </div>
+        )}
       </div>
 
-      {grouped.length === 0 ? (
+      <div
+        data-pwa-target="inventory-tabs"
+        role="tablist"
+        style={{
+          display: 'flex',
+          gap: 4,
+          padding: 4,
+          background: 'var(--color-bg-elevated)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          alignSelf: 'flex-start',
+        }}
+      >
+        <TabBtn active={tab === 'units'} onClick={() => setTab('units')}>Einheiten</TabBtn>
+        <TabBtn active={tab === 'squads'} onClick={() => setTab('squads')}>
+          Trupps {squads.squads.length > 0 && <span style={{ opacity: 0.7 }}>({squads.squads.length})</span>}
+        </TabBtn>
+      </div>
+
+      {tab === 'squads' ? (
+        <SquadListPanel
+          squads={squads.squads}
+          loading={squads.loading}
+          tableMissing={squads.tableMissing}
+          unitsById={data?.unitsById || {}}
+          factionsById={data?.factionsById || {}}
+          onEdit={(s) => setSquadModal({ edit: s })}
+          onDuplicate={(s) => squads.duplicate(s.id)}
+          onDelete={(s) => squads.remove(s.id)}
+          onCreateNew={() => setSquadModal({})}
+          emptyHint={'Lege Trupps direkt im Einheiten-Tab über die Karte einer Einheit an, oder benutze „+ Neuer Trupp".'}
+        />
+      ) : grouped.length === 0 ? (
         <div
           style={{
             padding: 'var(--space-7)',
@@ -106,6 +149,7 @@ export default function InventoryPage() {
                 gap: 'var(--space-2)',
                 paddingBottom: 'var(--space-2)',
                 borderBottom: '1px solid var(--color-border)',
+                flexWrap: 'wrap',
               }}
             >
               <span style={{ fontSize: 'var(--fs-lg)', fontWeight: 'var(--fw-semibold)' }}>
@@ -124,6 +168,14 @@ export default function InventoryPage() {
               >
                 {g.units.length}
               </span>
+              <span style={{ flex: 1 }} />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setSquadModal({ factionFilter: g.faction?.id })}
+              >
+                + Trupp aus {g.faction?.shortName || g.faction?.name || 'Fraktion'}
+              </Button>
             </header>
             <div
               style={{
@@ -133,22 +185,86 @@ export default function InventoryPage() {
               }}
             >
               {g.units.map(u => (
-                <UnitCard
-                  key={u.id}
-                  unit={u}
-                  faction={g.faction}
-                  isFavorite={favs.isFavorite(u.id)}
-                  onToggleFavorite={favs.toggleFavorite}
-                  ownedQty={inv.getQuantity(u.id)}
-                  onIncOwned={(unit) => inv.adjustQuantity(unit.id, +1, unit.name)}
-                  onDecOwned={(unit) => inv.adjustQuantity(unit.id, -1, unit.name)}
-                />
+                <div key={u.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <UnitCard
+                    unit={u}
+                    faction={g.faction}
+                    isFavorite={favs.isFavorite(u.id)}
+                    onToggleFavorite={favs.toggleFavorite}
+                    ownedQty={inv.getQuantity(u.id)}
+                    onIncOwned={(unit) => inv.adjustQuantity(unit.id, +1, unit.name)}
+                    onDecOwned={(unit) => inv.adjustQuantity(unit.id, -1, unit.name)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSquadModal({ lockedUnitId: u.id, factionFilter: g.faction?.id })}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: 'var(--fs-xs)',
+                      background: 'transparent',
+                      color: 'var(--color-text-muted)',
+                      border: '1px dashed var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--color-accent)';
+                      e.currentTarget.style.borderColor = 'var(--color-accent)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--color-text-muted)';
+                      e.currentTarget.style.borderColor = 'var(--color-border)';
+                    }}
+                  >
+                    ⛬ Trupp aus dieser Einheit
+                  </button>
+                </div>
               ))}
             </div>
           </section>
         ))
       )}
+
+      <SquadBuilderModal
+        open={!!squadModal}
+        onClose={() => setSquadModal(null)}
+        data={data}
+        canonicalWargear={data?.canonical?.wargearOptions || []}
+        initial={squadModal?.edit}
+        lockedUnitId={squadModal?.lockedUnitId}
+        factionFilter={squadModal?.factionFilter}
+        onSave={async (s) => {
+          if (s.id) await squads.update(s.id, s);
+          else await squads.create(s);
+        }}
+      />
     </div>
+  );
+}
+
+function TabBtn({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      role="tab"
+      aria-selected={active}
+      style={{
+        padding: '6px 14px',
+        background: active ? 'var(--color-accent)' : 'transparent',
+        color: active ? 'var(--color-accent-contrast)' : 'var(--color-text)',
+        border: 'none',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 'var(--fs-sm)',
+        fontWeight: active ? 'var(--fw-semibold)' : 'var(--fw-medium)',
+        fontFamily: 'inherit',
+        cursor: 'pointer',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

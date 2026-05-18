@@ -114,10 +114,20 @@ async function loadAll() {
   const hydratedById = indexBy(hydratedUnits, 'id');
   const hydratedByFaction = groupBy(hydratedUnits, 'factionId');
 
-  // Pre-compute filter universes
-  const keywordSet = new Set();
-  for (const u of units) for (const k of u.keywords || []) keywordSet.add(k);
-  const allKeywords = [...keywordSet].sort();
+  // Pre-compute filter universes. We track *how often* each keyword
+  // appears across units so the filter UI can:
+  //   - sort by frequency (most-useful filters surface first)
+  //   - hide unit-instance names that only ever appear on 1 unit
+  //     (the dataset uses a unit's own name as a keyword, which floods
+  //     the list with 900+ noise-tags like "Abaddon the Despoiler")
+  const keywordCountMap = new Map();
+  for (const u of units) {
+    for (const k of u.keywords || []) {
+      keywordCountMap.set(k, (keywordCountMap.get(k) || 0) + 1);
+    }
+  }
+  const allKeywords = [...keywordCountMap.keys()].sort();
+  const keywordCounts = Object.fromEntries(keywordCountMap);
 
   const roleSet = new Set();
   for (const u of units) if (u.role) roleSet.add(u.role);
@@ -165,7 +175,7 @@ async function loadAll() {
     resolveId: (id) => aliases[id] || id,
 
     // filter universes
-    allKeywords, allRoles,
+    allKeywords, allRoles, keywordCounts,
   };
 }
 
