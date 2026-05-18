@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 import { SearchBar } from '../../../shared/search';
 import { FilterChip } from '../../../shared/filters';
+import { getSubfactions, getSubfactionKeywords } from '../services/subfactions';
 
 const ROLES = [
   { id: 'character',  label: 'Charakter' },
@@ -72,11 +73,48 @@ export default function UnitFilters({
 
   const set = (patch) => setFilters(prev => ({ ...prev, ...patch }));
 
-  const toggleFaction = (id) => set({
-    factionIds: filters.factionIds.includes(id)
+  // When the user switches faction, drop any subfaction-keyword that
+  // belonged to the previous faction set. Other keywords (Infantry,
+  // Grenades, …) the user added by hand stay put.
+  const toggleFaction = (id) => {
+    const nextFactionIds = filters.factionIds.includes(id)
       ? filters.factionIds.filter(x => x !== id)
-      : [...filters.factionIds, id],
-  });
+      : [...filters.factionIds, id];
+    // collect subfaction-keywords of factions that just got REMOVED
+    const removed = filters.factionIds.filter(fid => !nextFactionIds.includes(fid));
+    let nextKeywords = filters.keywords;
+    if (removed.length > 0) {
+      const stripSet = new Set();
+      for (const fid of removed) for (const k of getSubfactionKeywords(fid)) stripSet.add(k);
+      nextKeywords = nextKeywords.filter(k => !stripSet.has(k));
+    }
+    set({ factionIds: nextFactionIds, keywords: nextKeywords });
+  };
+
+  // Subfaction picker — visible only when exactly one faction is active
+  // and the curated lookup has entries for it. Mutually exclusive within
+  // that faction: picking "Salamanders" replaces "Ultramarines" but
+  // leaves the rest of the keyword filter alone.
+  const subfactionFactionId = filters.factionIds.length === 1 ? filters.factionIds[0] : null;
+  const subfactionOptions = subfactionFactionId ? getSubfactions(subfactionFactionId) : null;
+  const subfactionKeywordSet = subfactionFactionId
+    ? getSubfactionKeywords(subfactionFactionId)
+    : null;
+  const activeSubfactionKeyword = subfactionFactionId
+    ? filters.keywords.find(k => subfactionKeywordSet.has(k)) || null
+    : null;
+
+  const pickSubfaction = (keyword) => {
+    if (!subfactionFactionId) return;
+    // Strip any other subfaction-keyword from THIS faction's set, leave
+    // every other selected keyword (manual picks like "Battleline")
+    // untouched. Toggle off when the same keyword is picked twice.
+    const stripped = filters.keywords.filter(k => !subfactionKeywordSet.has(k));
+    const next = activeSubfactionKeyword === keyword
+      ? stripped
+      : [...stripped, keyword];
+    set({ keywords: next });
+  };
   const toggleRole = (id) => set({
     roles: filters.roles.includes(id)
       ? filters.roles.filter(x => x !== id)
@@ -221,6 +259,43 @@ export default function UnitFilters({
           </FilterChip>
         ))}
       </div>
+
+      {/* Row 2b: subfaction quick picker — only when one faction is
+          active AND the curated lookup knows that faction. Auswahl
+          schreibt einen Subfaction-Keyword in den keyword-Filter; das
+          existierende Keyword-Filterpanel sieht das genauso wie eine
+          Hand-Auswahl. */}
+      {subfactionOptions && subfactionOptions.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 'var(--fs-xs)',
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+            color: 'var(--color-text-muted)',
+            fontWeight: 'var(--fw-semibold)',
+            marginRight: 2,
+          }}>
+            Subfaction
+          </span>
+          <FilterChip
+            active={activeSubfactionKeyword == null}
+            onClick={() => activeSubfactionKeyword && pickSubfaction(activeSubfactionKeyword)}
+            title="Alle Subfactions zeigen"
+          >
+            Alle
+          </FilterChip>
+          {subfactionOptions.map(opt => (
+            <FilterChip
+              key={opt.id}
+              active={activeSubfactionKeyword === opt.keyword}
+              onClick={() => pickSubfaction(opt.keyword)}
+              title={`${opt.label} (Keyword „${opt.keyword}")`}
+            >
+              {opt.label}
+            </FilterChip>
+          ))}
+        </div>
+      )}
 
       {/* Row 3: roles + sort */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
