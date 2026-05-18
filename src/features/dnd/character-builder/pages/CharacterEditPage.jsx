@@ -199,17 +199,21 @@ export default function CharacterEditPage({ session }) {
   const canNext = isStepComplete(currentStep) || isLast
 
   return (
-    <div style={S.page}>
-      <div style={S.header}>
+    <div className="dnd-wizard-page" style={S.page}>
+      <div className="dnd-wizard-header" data-pwa-target="dnd-wizard-header" style={S.header}>
         <button style={S.backBtn} onClick={() => navigate(`/character/${id}`)}>← Zurück zum Sheet</button>
-        <h1 style={S.headerTitle}>✎ {character.info.name} bearbeiten</h1>
+        <h1 className="dnd-wizard-title" style={S.headerTitle}>✎ {character.info.name} bearbeiten</h1>
         <HeaderButtons session={session} />
       </div>
-      <StepIndicator steps={stepLabels} currentStep={currentStep}
-        onStepClick={idx => (completedSteps.includes(idx) || completedSteps.includes(idx - 1)) && setCurrentStep(idx)}
-        completedSteps={completedSteps} />
-      <div style={S.content}>{stepComponents[currentStep]}</div>
-      <div style={S.footer}>
+      <div data-pwa-target="dnd-wizard-stepbar">
+        <StepIndicator steps={stepLabels} currentStep={currentStep}
+          onStepClick={idx => (completedSteps.includes(idx) || completedSteps.includes(idx - 1)) && setCurrentStep(idx)}
+          completedSteps={completedSteps} />
+      </div>
+      <div className="dnd-wizard-content" data-pwa-target="dnd-wizard-content" style={S.content}>
+        {stepComponents[currentStep]}
+      </div>
+      <div className="dnd-wizard-footer" data-pwa-target="dnd-wizard-footer" style={S.footer}>
         <button style={{ ...S.navBtn, opacity: currentStep === 0 ? 0.3 : 1 }}
           disabled={currentStep === 0} onClick={() => setCurrentStep(getPrevStep(currentStep))}>
           {t('back')}

@@ -56,9 +56,11 @@ export default function UnitBrowserPage() {
         gap: 'var(--space-4)',
       }}
     >
-      <h1 style={{ margin: 0, fontSize: 'var(--fs-2xl)', fontWeight: 'var(--fw-semibold)' }}>
-        Einheiten
-      </h1>
+      <div data-pwa-target="page-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <h1 style={{ margin: 0, fontSize: 'var(--fs-2xl)', fontWeight: 'var(--fw-semibold)' }}>
+          Einheiten
+        </h1>
+      </div>
       <UnitFilters
         filters={filters}
         setFilters={setFilters}

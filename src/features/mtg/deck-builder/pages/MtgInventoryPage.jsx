@@ -69,7 +69,7 @@ export default function MtgInventoryPage() {
     <>
       <MtgSubNav />
       <div style={containerStyle}>
-        <div style={toolbarStyle}>
+        <div data-pwa-target="page-toolbar" style={toolbarStyle}>
           <h1 style={titleStyle}>Sammlung</h1>
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
             {ownedIds.length} Karten · <strong style={{ color: 'var(--color-text)' }}>{totalOwned}</strong> Kopien

@@ -50,7 +50,7 @@ export default function MtgWishlistPage() {
     <>
       <MtgSubNav />
       <div style={containerStyle}>
-        <div style={toolbarStyle}>
+        <div data-pwa-target="page-toolbar" style={toolbarStyle}>
           <div>
             <h1 style={titleStyle}>Wunschliste</h1>
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>

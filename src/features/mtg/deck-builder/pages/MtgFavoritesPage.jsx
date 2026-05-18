@@ -34,7 +34,7 @@ export default function MtgFavoritesPage() {
     <>
       <MtgSubNav />
       <div style={containerStyle}>
-        <div style={toolbarStyle}>
+        <div data-pwa-target="page-toolbar" style={toolbarStyle}>
           <h1 style={titleStyle}>Favoriten</h1>
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
             {favs.favorites.size} markiert

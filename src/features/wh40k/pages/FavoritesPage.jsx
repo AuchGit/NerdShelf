@@ -44,7 +44,7 @@ export default function FavoritesPage() {
         gap: 'var(--space-4)',
       }}
     >
-      <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div data-pwa-target="page-toolbar" style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0, fontSize: 'var(--fs-2xl)', fontWeight: 'var(--fw-semibold)' }}>
           Favoriten
         </h1>

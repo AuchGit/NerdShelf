@@ -252,6 +252,31 @@ body[data-pwa-mobile='true'] main:has(.dnd-wizard-page) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   6. Page toolbar — MTG / WH40K list pages
+       Inventory / Wishlist / Favorites / Unit Browser all share the
+       same pattern: a flex row at the top with H1 + meta + search bar
+       + actions. On desktop they fit in one row; on a 360 px phone
+       they overflow and look messy. We force them to stack with
+       generous gap so each control gets its own row.
+       Targeted via `data-pwa-target="page-toolbar"`.
+   ───────────────────────────────────────────────────────────────────── */
+body[data-pwa-layouts='true'] [data-pwa-target='page-toolbar'] {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+}
+body[data-pwa-layouts='true'] [data-pwa-target='page-toolbar'] h1 {
+  font-size: var(--fs-xl) !important;
+  margin: 0 !important;
+}
+/* The search-bar wrapper inside the toolbar (with flex:1 + minWidth)
+   gets full width on mobile so the user can actually type. */
+body[data-pwa-layouts='true'] [data-pwa-target='page-toolbar'] > div[style*='flex'] {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    4. Visual focus during gameplay HUDs
        The Match HUD and the WH40K Combat HUD set their own classes;
        these are accessibility / focus polish that complements them.
