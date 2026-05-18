@@ -81,7 +81,7 @@ export default function InventoryPage() {
           <span>·</span>
           <span><strong style={{ color: 'var(--color-text)' }}>{totalValuePts}</strong> Pkt</span>
           <span>·</span>
-          <span><strong style={{ color: 'var(--color-text)' }}>{squads.squads.length}</strong> Trupps</span>
+          <span><strong style={{ color: 'var(--color-text)' }}>{squads.squads.length}</strong> Squads</span>
         </div>
         {tab === 'units' && (
           <div style={{ flex: 1, minWidth: 200 }}>
@@ -105,7 +105,7 @@ export default function InventoryPage() {
       >
         <TabBtn active={tab === 'units'} onClick={() => setTab('units')}>Einheiten</TabBtn>
         <TabBtn active={tab === 'squads'} onClick={() => setTab('squads')}>
-          Trupps {squads.squads.length > 0 && <span style={{ opacity: 0.7 }}>({squads.squads.length})</span>}
+          Squads {squads.squads.length > 0 && <span style={{ opacity: 0.7 }}>({squads.squads.length})</span>}
         </TabBtn>
       </div>
 
@@ -120,7 +120,7 @@ export default function InventoryPage() {
           onDuplicate={(s) => squads.duplicate(s.id)}
           onDelete={(s) => squads.remove(s.id)}
           onCreateNew={() => setSquadModal({})}
-          emptyHint={'Lege Trupps direkt im Einheiten-Tab über die Karte einer Einheit an, oder benutze „+ Neuer Trupp".'}
+          emptyHint={'Lege Squads direkt im Einheiten-Tab über die Karte einer Einheit an, oder benutze „+ Neuer Squad".'}
         />
       ) : grouped.length === 0 ? (
         <div
@@ -174,7 +174,7 @@ export default function InventoryPage() {
                 variant="secondary"
                 onClick={() => setSquadModal({ factionFilter: g.faction?.id })}
               >
-                + Trupp aus {g.faction?.shortName || g.faction?.name || 'Fraktion'}
+                + Squad aus {g.faction?.shortName || g.faction?.name || 'Fraktion'}
               </Button>
             </header>
             <div
@@ -217,7 +217,7 @@ export default function InventoryPage() {
                       e.currentTarget.style.borderColor = 'var(--color-border)';
                     }}
                   >
-                    ⛬ Trupp aus dieser Einheit
+                    ⛬ Squad aus dieser Einheit
                   </button>
                 </div>
               ))}
@@ -232,7 +232,7 @@ export default function InventoryPage() {
         data={data}
         canonicalWargear={data?.canonical?.wargearOptions || []}
         initial={squadModal?.edit}
-        lockedUnitId={squadModal?.lockedUnitId}
+        lockedFirstUnitId={squadModal?.lockedUnitId}
         factionFilter={squadModal?.factionFilter}
         onSave={async (s) => {
           if (s.id) await squads.update(s.id, s);

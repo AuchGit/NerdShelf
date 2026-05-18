@@ -38,6 +38,14 @@ export function emptyFilters() {
     favoritesOnly: false,
     sortKey: 'name',
     sortDir: 'asc',
+    // Subfaction picker — null when not in use. When set:
+    //   { keyword, mode, peerKeywords }
+    // mode 'chapter'  → unit OK if it has `keyword` OR none of the
+    //                   other peerKeywords (= chapter-agnostic).
+    // mode 'category' → unit must literally have `keyword`.
+    // peerKeywords is the FULL list of subfaction keywords for the
+    // active faction, used to identify "other chapters" in chapter mode.
+    subfaction: null,
   };
 }
 
@@ -50,7 +58,8 @@ export function isFiltering(f) {
     f.pointsMin != null ||
     f.pointsMax != null ||
     f.ownedOnly ||
-    f.favoritesOnly
+    f.favoritesOnly ||
+    f.subfaction
   );
 }
 
@@ -75,6 +84,28 @@ export function filterAndSortUnits(units, f, ctx = {}) {
     if (keywordSet.size) {
       const uk = new Set(u.keywords || []);
       for (const k of keywordSet) if (!uk.has(k)) return false;
+    }
+    // Subfaction filter — separate from the keyword filter because its
+    // semantics differ between chapter-style (OR rule) and category-style
+    // (strict AND); see emptyFilters() for the field shape.
+    if (f.subfaction && f.subfaction.keyword) {
+      const uk = new Set(u.keywords || []);
+      const ownKw = f.subfaction.keyword;
+      if (f.subfaction.mode === 'chapter') {
+        // Allow units that either have the chosen chapter-keyword OR
+        // have none of the OTHER chapter-keywords from the same set —
+        // i.e. chapter-agnostic generic datasheets are also allowed.
+        if (!uk.has(ownKw)) {
+          for (const peer of (f.subfaction.peerKeywords || [])) {
+            if (peer === ownKw) continue;
+            if (uk.has(peer)) return false;
+          }
+          // No peer match → it's a generic, chapter-agnostic unit, OK.
+        }
+      } else {
+        // Default 'category' mode — must literally have the keyword.
+        if (!uk.has(ownKw)) return false;
+      }
     }
     if (f.favoritesOnly && ctx.isFavorite && !ctx.isFavorite(u.id)) return false;
     if (f.ownedOnly && ctx.isOwned && !ctx.isOwned(u.id)) return false;

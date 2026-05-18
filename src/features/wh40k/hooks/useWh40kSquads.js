@@ -19,21 +19,59 @@ import { useAuth } from '../../../core/auth/AuthContext';
 const TABLE = 'wh40k_squads';
 
 /**
- * Row shape (in-memory, camelCased):
- *   { id, userId, name, factionId, unitId, modelCount,
- *     wargearOptionIds: string[], notes: string,
- *     shareToken, createdAt, updatedAt }
+ * Squad shape (in-memory, camelCased):
+ *
+ *   {
+ *     id, userId, name, factionId,
+ *     entries: [{ id, unitId, modelCount, wargearOptionIds: string[], notes }],
+ *     notes,                            // squad-level free text
+ *     shareToken, createdAt, updatedAt,
+ *   }
+ *
+ * A "squad" is a named preset of one or more units the user wants to
+ * drop into an army with one click — e.g. "Intercessor Squad + attached
+ * Lieutenant + Apothecary". The legal-composition rules of any single
+ * unit (size range, wargear options) still apply per entry; the squad
+ * itself is just a bundle of those entries.
+ *
+ * Backward compatibility: earlier rows stored a single (unit_id,
+ * model_count) directly on the row plus wargearOptionIds in `data`.
+ * `rowToSquad` migrates those to a single-entry array transparently —
+ * no data migration script needed.
  */
+function entryId() {
+  return 'e' + Math.random().toString(36).slice(2, 10);
+}
+
 function rowToSquad(r) {
   const data = r.data || {};
+  let entries;
+  if (Array.isArray(data.entries) && data.entries.length > 0) {
+    entries = data.entries.map(e => ({
+      id: e.id || entryId(),
+      unitId: e.unitId,
+      modelCount: Number(e.modelCount) || 1,
+      wargearOptionIds: Array.isArray(e.wargearOptionIds) ? e.wargearOptionIds : [],
+      notes: typeof e.notes === 'string' ? e.notes : '',
+    }));
+  } else if (r.unit_id) {
+    // Legacy single-unit row — synthesize one entry from the columns.
+    entries = [{
+      id: entryId(),
+      unitId: r.unit_id,
+      modelCount: r.model_count ?? 1,
+      wargearOptionIds: Array.isArray(data.wargearOptionIds) ? data.wargearOptionIds : [],
+      notes: '',
+    }];
+  } else {
+    entries = [];
+  }
   return {
     id: r.id,
     userId: r.user_id,
-    name: r.name || 'Unbenannter Trupp',
+    name: r.name || 'Unbenannter Squad',
     factionId: r.faction_id || null,
-    unitId: r.unit_id,
-    modelCount: r.model_count ?? 1,
-    wargearOptionIds: Array.isArray(data.wargearOptionIds) ? data.wargearOptionIds : [],
+    entries,
     notes: typeof data.notes === 'string' ? data.notes : '',
     shareToken: r.share_token || null,
     createdAt: r.created_at,
@@ -42,14 +80,24 @@ function rowToSquad(r) {
 }
 
 function squadToRow(s, userId) {
+  const entries = Array.isArray(s.entries) ? s.entries : [];
+  const first = entries[0] || null;
   return {
     user_id: userId,
-    name: s.name || 'Unbenannter Trupp',
+    name: s.name || 'Unbenannter Squad',
     faction_id: s.factionId || null,
-    unit_id: s.unitId,
-    model_count: Math.max(1, Math.floor(s.modelCount || 1)),
+    // unit_id / model_count are denormalized hints for legacy callers
+    // and the DB's NOT NULL constraint — truth lives in data.entries.
+    unit_id: first?.unitId || null,
+    model_count: first ? Math.max(1, Math.floor(first.modelCount || 1)) : 1,
     data: {
-      wargearOptionIds: Array.isArray(s.wargearOptionIds) ? s.wargearOptionIds : [],
+      entries: entries.map(e => ({
+        id: e.id || entryId(),
+        unitId: e.unitId,
+        modelCount: Math.max(1, Math.floor(e.modelCount || 1)),
+        wargearOptionIds: Array.isArray(e.wargearOptionIds) ? e.wargearOptionIds : [],
+        notes: e.notes || '',
+      })),
       notes: s.notes || '',
     },
     updated_at: new Date().toISOString(),
@@ -92,14 +140,17 @@ export function useWh40kSquads() {
 
   const create = useCallback(async (squad) => {
     if (!user) throw new Error('Nicht eingeloggt.');
-    if (!squad.unitId) throw new Error('Squad braucht eine Einheit.');
+    const entries = Array.isArray(squad.entries) ? squad.entries : [];
+    if (entries.length === 0) {
+      throw new Error('Squad braucht mindestens eine Einheit.');
+    }
     if (tableMissing) {
       // Session-only: keep the new squad in memory with a synthetic id.
       const tmp = {
         ...squad,
+        entries,
         id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         userId: user.id,
-        wargearOptionIds: squad.wargearOptionIds || [],
         notes: squad.notes || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -154,7 +205,10 @@ export function useWh40kSquads() {
     const src = squads.find(s => s.id === id);
     if (!src) return null;
     const { id: _id, createdAt: _c, updatedAt: _u, shareToken: _t, ...rest } = src;
-    return create({ ...rest, name: `${src.name} (Kopie)` });
+    // Mint fresh entry ids so React keys in the editor stay stable
+    // independent of the original squad.
+    const entries = (rest.entries || []).map(e => ({ ...e, id: entryId() }));
+    return create({ ...rest, entries, name: `${src.name} (Kopie)` });
   }, [squads, create]);
 
   return {
@@ -195,10 +249,12 @@ export function getSquadSizeRange(unit) {
 }
 
 /**
- * Compute the canonical point cost of a (unit, modelCount) pair using
- * the unit's `pointsCosts` cost table. Falls back to the legacy scalar
- * `points` value if no matching tier is found (units the canonical
- * dataset only prices at one size).
+ * Compute the canonical point cost of a single (unit, modelCount) pair
+ * using the unit's `pointsCosts` cost table. Falls back to the legacy
+ * scalar `points` value if no matching tier is found (units the
+ * canonical dataset only prices at one size). Named `squadPoints` for
+ * historical reasons; per-entry callers (e.g. the squad builder modal)
+ * still pass exactly one (unit, modelCount).
  */
 export function squadPoints(unit, modelCount) {
   if (!unit) return 0;
@@ -215,4 +271,27 @@ export function squadPoints(unit, modelCount) {
   }
   if (last) return last.cost;
   return unit.points || 0;
+}
+
+/**
+ * Sum the canonical point cost of every entry in a multi-unit squad.
+ */
+export function totalSquadPoints(squad, unitsById) {
+  if (!squad || !Array.isArray(squad.entries) || !unitsById) return 0;
+  let sum = 0;
+  for (const e of squad.entries) {
+    sum += squadPoints(unitsById[e.unitId], e.modelCount);
+  }
+  return sum;
+}
+
+/** Build a fresh, empty entry for the squad-editor UI. */
+export function emptySquadEntry(unitId) {
+  return {
+    id: entryId(),
+    unitId: unitId || null,
+    modelCount: 1,
+    wargearOptionIds: [],
+    notes: '',
+  };
 }

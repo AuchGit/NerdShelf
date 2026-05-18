@@ -16,7 +16,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '../../../shared/ui';
 import { SearchBar } from '../../../shared/search';
-import { squadPoints } from '../hooks/useWh40kSquads';
+import { totalSquadPoints } from '../hooks/useWh40kSquads';
 
 export default function SquadListPanel({
   squads,
@@ -48,22 +48,22 @@ export default function SquadListPanel({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <SearchBar value={query} onChange={setQuery} placeholder="Trupps durchsuchen…" />
+          <SearchBar value={query} onChange={setQuery} placeholder="Squads durchsuchen…" />
         </div>
         {onCreateNew && (
-          <Button size="sm" onClick={onCreateNew}>+ Neuer Trupp</Button>
+          <Button size="sm" onClick={onCreateNew}>+ Neuer Squad</Button>
         )}
       </div>
 
       {tableMissing && (
         <div style={hintStyle}>
-          Die <code>wh40k_squads</code>-Tabelle ist noch nicht migriert — Trupps werden
+          Die <code>wh40k_squads</code>-Tabelle ist noch nicht migriert — Squads werden
           nur in dieser Sitzung gespeichert (siehe <code>scripts/wh40k-squads-schema.sql</code>).
         </div>
       )}
 
       {loading ? (
-        <div style={{ ...hintStyle, textAlign: 'center' }}>Lade Trupps…</div>
+        <div style={{ ...hintStyle, textAlign: 'center' }}>Lade Squads…</div>
       ) : visible.length === 0 ? (
         <div
           style={{
@@ -79,7 +79,7 @@ export default function SquadListPanel({
           {squads.length === 0 ? (
             <>
               <div style={{ fontSize: 28, marginBottom: 6 }}>⛬</div>
-              <div>Noch keine Trupps gespeichert.</div>
+              <div>Noch keine Squads gespeichert.</div>
               {emptyHint && (
                 <div style={{ marginTop: 6, fontSize: 'var(--fs-xs)' }}>{emptyHint}</div>
               )}
@@ -91,10 +91,24 @@ export default function SquadListPanel({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {visible.map(s => {
-            const u = unitsById[s.unitId];
             const f = factionsById[s.factionId];
-            const pts = squadPoints(u, s.modelCount);
-            const stale = !u;
+            const entries = s.entries || [];
+            const pts = totalSquadPoints(s, unitsById);
+            const totalModels = entries.reduce((n, e) => n + (Number(e.modelCount) || 0), 0);
+            const missing = entries.filter(e => !unitsById[e.unitId]).length;
+            const stale = entries.length === 0 || missing === entries.length;
+            // Build a compact "5× Intercessors + 1 Lieutenant + 1 Apothecary"
+            // summary, truncated to keep narrow mobile rows readable.
+            const summaryParts = entries.map(e => {
+              const u = unitsById[e.unitId];
+              const name = u?.name || '?';
+              return `${e.modelCount}× ${name}`;
+            });
+            const summary = summaryParts.length === 0
+              ? '(leer)'
+              : summaryParts.length <= 3
+                ? summaryParts.join(' · ')
+                : `${summaryParts.slice(0, 2).join(' · ')} · +${summaryParts.length - 2} weitere`;
             return (
               <div
                 key={s.id}
@@ -122,6 +136,15 @@ export default function SquadListPanel({
                   >
                     {f?.icon && <span style={{ marginRight: 4 }}>{f.icon}</span>}
                     {s.name}
+                    <span style={{
+                      marginLeft: 6,
+                      fontSize: 'var(--fs-xs)',
+                      color: 'var(--color-accent)',
+                      fontVariantNumeric: 'tabular-nums',
+                      fontWeight: 'var(--fw-medium)',
+                    }}>
+                      {pts} Pkt
+                    </span>
                   </div>
                   <div
                     style={{
@@ -131,12 +154,12 @@ export default function SquadListPanel({
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                     }}
+                    title={summaryParts.join(' · ')}
                   >
-                    {u ? `${u.name} · ${s.modelCount} Mod. · ${pts} Pkt` : (
-                      <span style={{ color: 'var(--color-danger)' }}>Einheit fehlt im Datensatz</span>
-                    )}
-                    {s.wargearOptionIds?.length > 0 && (
-                      <> · {s.wargearOptionIds.length} Wargear</>
+                    {summary}
+                    {totalModels > 0 && <> · {totalModels} Modelle</>}
+                    {missing > 0 && missing < entries.length && (
+                      <> · <span style={{ color: 'var(--color-danger)' }}>{missing} fehlt</span></>
                     )}
                   </div>
                 </div>
@@ -154,7 +177,7 @@ export default function SquadListPanel({
                     <IconBtn
                       title="Löschen"
                       onClick={() => {
-                        if (window.confirm(`Trupp „${s.name}" wirklich löschen?`)) onDelete(s);
+                        if (window.confirm(`Squad „${s.name}" wirklich löschen?`)) onDelete(s);
                       }}
                       danger
                     >✕</IconBtn>

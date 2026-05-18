@@ -8,10 +8,23 @@
 //
 // Selection is mutually exclusive PER faction: picking "Salamanders"
 // while "Ultramarines" is active swaps the latter out, the same way
-// picking a Necron dynasty replaces the previous one. Non-subfaction
-// keywords the user has selected manually (e.g. "Infantry") are left
-// alone — only the keywords that belong to this faction's subfaction
-// set are touched.
+// picking a Necron dynasty replaces the previous one.
+//
+// Two `mode` values control filter semantics:
+//
+//   - 'chapter' (default for SM Chapters, CSM Marks, Daemon Gods):
+//     The picked subfaction follows the 10e army-list rule "your army
+//     can include datasheets with THIS chapter-keyword OR no
+//     chapter-keyword at all". So "Salamanders" matches Adrax Agatone
+//     and Vulkan He'stan PLUS every generic Space-Marines datasheet
+//     (Intercessor, Captain, Hellblaster…), but NOT Blood Angels or
+//     Dark Angels datasheets.
+//
+//   - 'category': strict AND. The picked keyword must literally
+//     appear on the unit. Used for keywords that name a unit category
+//     rather than a chapter — Necron Canoptek, Tyranid Synapse, T'au
+//     Battlesuit, Ork Speed Freeks, Sororitas Penitent etc. Picking
+//     such a category shows ONLY units carrying that keyword.
 //
 // What counts as a subfaction here is curated from the 10e Index +
 // what actually appears in `units.json`. Some factions don't have
@@ -20,19 +33,20 @@
 // get no picker. That's fine.
 
 export const SUBFACTIONS_BY_FACTION = {
-  // ─── Space Marines: Chapters ───────────────────────────────────
+  // ─── Space Marines: Chapters (mode: 'chapter' — includes chapter-
+  //     specific datasheets PLUS all generic SM datasheets) ─────────
   'space-marines': [
-    { id: 'ultramarines',   label: 'Ultramarines',    keyword: 'Ultramarines' },
-    { id: 'salamanders',    label: 'Salamanders',     keyword: 'Salamanders' },
-    { id: 'imperial-fists', label: 'Imperial Fists',  keyword: 'Imperial Fists' },
-    { id: 'iron-hands',     label: 'Iron Hands',      keyword: 'Iron Hands' },
-    { id: 'raven-guard',    label: 'Raven Guard',     keyword: 'Raven Guard' },
-    { id: 'white-scars',    label: 'White Scars',     keyword: 'White Scars' },
-    { id: 'blood-angels',   label: 'Blood Angels',    keyword: 'Blood Angels' },
-    { id: 'dark-angels',    label: 'Dark Angels',     keyword: 'Dark Angels' },
-    { id: 'black-templars', label: 'Black Templars',  keyword: 'Black Templars' },
-    { id: 'space-wolves',   label: 'Space Wolves',    keyword: 'Space Wolves' },
-    { id: 'deathwatch',     label: 'Deathwatch',      keyword: 'Deathwatch' },
+    { id: 'ultramarines',   label: 'Ultramarines',    keyword: 'Ultramarines',   mode: 'chapter' },
+    { id: 'salamanders',    label: 'Salamanders',     keyword: 'Salamanders',    mode: 'chapter' },
+    { id: 'imperial-fists', label: 'Imperial Fists',  keyword: 'Imperial Fists', mode: 'chapter' },
+    { id: 'iron-hands',     label: 'Iron Hands',      keyword: 'Iron Hands',     mode: 'chapter' },
+    { id: 'raven-guard',    label: 'Raven Guard',     keyword: 'Raven Guard',    mode: 'chapter' },
+    { id: 'white-scars',    label: 'White Scars',     keyword: 'White Scars',    mode: 'chapter' },
+    { id: 'blood-angels',   label: 'Blood Angels',    keyword: 'Blood Angels',   mode: 'chapter' },
+    { id: 'dark-angels',    label: 'Dark Angels',     keyword: 'Dark Angels',    mode: 'chapter' },
+    { id: 'black-templars', label: 'Black Templars',  keyword: 'Black Templars', mode: 'chapter' },
+    { id: 'space-wolves',   label: 'Space Wolves',    keyword: 'Space Wolves',   mode: 'chapter' },
+    { id: 'deathwatch',     label: 'Deathwatch',      keyword: 'Deathwatch',     mode: 'chapter' },
   ],
 
   // ─── Aeldari: Craftworlds path vs. Ynnari / Harlequin overlap ──
@@ -121,22 +135,23 @@ export const SUBFACTIONS_BY_FACTION = {
     { id: 'questoris', label: 'Questoris',  keyword: 'Questoris' },
   ],
 
-  // ─── Chaos Space Marines: Marks of Chaos ───────────────────────
+  // ─── Chaos Space Marines: Marks of Chaos (mode: 'chapter' —
+  //     a Khorne list includes Khorne-marked + unmarked datasheets) ─
   'chaos-space-marines': [
-    { id: 'undivided', label: 'Undivided', keyword: 'Chaos Undivided' },
-    { id: 'khorne',    label: 'Khorne',    keyword: 'Khorne' },
-    { id: 'nurgle',    label: 'Nurgle',    keyword: 'Nurgle' },
-    { id: 'tzeentch',  label: 'Tzeentch',  keyword: 'Tzeentch' },
-    { id: 'slaanesh',  label: 'Slaanesh',  keyword: 'Slaanesh' },
+    { id: 'undivided', label: 'Undivided', keyword: 'Chaos Undivided', mode: 'chapter' },
+    { id: 'khorne',    label: 'Khorne',    keyword: 'Khorne',          mode: 'chapter' },
+    { id: 'nurgle',    label: 'Nurgle',    keyword: 'Nurgle',          mode: 'chapter' },
+    { id: 'tzeentch',  label: 'Tzeentch',  keyword: 'Tzeentch',        mode: 'chapter' },
+    { id: 'slaanesh',  label: 'Slaanesh',  keyword: 'Slaanesh',        mode: 'chapter' },
   ],
 
-  // ─── Chaos Daemons: Gods ───────────────────────────────────────
+  // ─── Chaos Daemons: Gods (mode: 'chapter') ─────────────────────
   'chaos-daemons': [
-    { id: 'undivided', label: 'Undivided', keyword: 'Undivided' },
-    { id: 'khorne',    label: 'Khorne',    keyword: 'Khorne' },
-    { id: 'nurgle',    label: 'Nurgle',    keyword: 'Nurgle' },
-    { id: 'tzeentch',  label: 'Tzeentch',  keyword: 'Tzeentch' },
-    { id: 'slaanesh',  label: 'Slaanesh',  keyword: 'Slaanesh' },
+    { id: 'undivided', label: 'Undivided', keyword: 'Undivided', mode: 'chapter' },
+    { id: 'khorne',    label: 'Khorne',    keyword: 'Khorne',    mode: 'chapter' },
+    { id: 'nurgle',    label: 'Nurgle',    keyword: 'Nurgle',    mode: 'chapter' },
+    { id: 'tzeentch',  label: 'Tzeentch',  keyword: 'Tzeentch',  mode: 'chapter' },
+    { id: 'slaanesh',  label: 'Slaanesh',  keyword: 'Slaanesh',  mode: 'chapter' },
   ],
 
   // ─── Chaos Knights ─────────────────────────────────────────────
@@ -200,4 +215,24 @@ export function getSubfactionKeywords(factionId) {
   const list = SUBFACTIONS_BY_FACTION[factionId];
   if (!list) return new Set();
   return new Set(list.map(s => s.keyword));
+}
+
+/**
+ * Resolve a (factionId, keyword) pair to the full subfaction entry —
+ * needed by the filter so it knows whether to run chapter-OR or
+ * category-AND semantics, and which peer-keywords define the "other
+ * chapters" set for chapter mode.
+ */
+export function resolveSubfaction(factionId, keyword) {
+  if (!factionId || !keyword) return null;
+  const list = SUBFACTIONS_BY_FACTION[factionId];
+  if (!list) return null;
+  const entry = list.find(s => s.keyword === keyword);
+  if (!entry) return null;
+  return {
+    ...entry,
+    mode: entry.mode || 'category',
+    factionId,
+    peerKeywords: list.map(s => s.keyword),
+  };
 }

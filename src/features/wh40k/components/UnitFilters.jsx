@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react';
 import { SearchBar } from '../../../shared/search';
 import { FilterChip } from '../../../shared/filters';
-import { getSubfactions, getSubfactionKeywords } from '../services/subfactions';
+import { getSubfactions, resolveSubfaction } from '../services/subfactions';
 
 const ROLES = [
   { id: 'character',  label: 'Charakter' },
@@ -73,47 +73,51 @@ export default function UnitFilters({
 
   const set = (patch) => setFilters(prev => ({ ...prev, ...patch }));
 
-  // When the user switches faction, drop any subfaction-keyword that
-  // belonged to the previous faction set. Other keywords (Infantry,
-  // Grenades, …) the user added by hand stay put.
+  // When the user switches faction we also need to clear the subfaction
+  // picker — its peer-keywords list is bound to the old faction and
+  // wouldn't make sense for the new one.
   const toggleFaction = (id) => {
     const nextFactionIds = filters.factionIds.includes(id)
       ? filters.factionIds.filter(x => x !== id)
       : [...filters.factionIds, id];
-    // collect subfaction-keywords of factions that just got REMOVED
-    const removed = filters.factionIds.filter(fid => !nextFactionIds.includes(fid));
-    let nextKeywords = filters.keywords;
-    if (removed.length > 0) {
-      const stripSet = new Set();
-      for (const fid of removed) for (const k of getSubfactionKeywords(fid)) stripSet.add(k);
-      nextKeywords = nextKeywords.filter(k => !stripSet.has(k));
+    const patch = { factionIds: nextFactionIds };
+    if (filters.subfaction && (
+      nextFactionIds.length !== 1 ||
+      nextFactionIds[0] !== filters.subfaction.factionId
+    )) {
+      patch.subfaction = null;
     }
-    set({ factionIds: nextFactionIds, keywords: nextKeywords });
+    set(patch);
   };
 
   // Subfaction picker — visible only when exactly one faction is active
-  // and the curated lookup has entries for it. Mutually exclusive within
-  // that faction: picking "Salamanders" replaces "Ultramarines" but
-  // leaves the rest of the keyword filter alone.
+  // and the curated lookup has entries for it. The active subfaction
+  // lives in `filters.subfaction` (a structured object), not in the
+  // generic keyword filter, because chapter-style picks need an
+  // OR-rule that the keyword filter (which is strict AND) can't model.
   const subfactionFactionId = filters.factionIds.length === 1 ? filters.factionIds[0] : null;
   const subfactionOptions = subfactionFactionId ? getSubfactions(subfactionFactionId) : null;
-  const subfactionKeywordSet = subfactionFactionId
-    ? getSubfactionKeywords(subfactionFactionId)
-    : null;
-  const activeSubfactionKeyword = subfactionFactionId
-    ? filters.keywords.find(k => subfactionKeywordSet.has(k)) || null
-    : null;
+  const activeSubfactionKeyword =
+    filters.subfaction && filters.subfaction.factionId === subfactionFactionId
+      ? filters.subfaction.keyword
+      : null;
 
   const pickSubfaction = (keyword) => {
     if (!subfactionFactionId) return;
-    // Strip any other subfaction-keyword from THIS faction's set, leave
-    // every other selected keyword (manual picks like "Battleline")
-    // untouched. Toggle off when the same keyword is picked twice.
-    const stripped = filters.keywords.filter(k => !subfactionKeywordSet.has(k));
-    const next = activeSubfactionKeyword === keyword
-      ? stripped
-      : [...stripped, keyword];
-    set({ keywords: next });
+    if (activeSubfactionKeyword === keyword) {
+      set({ subfaction: null });
+      return;
+    }
+    const entry = resolveSubfaction(subfactionFactionId, keyword);
+    if (!entry) return;
+    set({
+      subfaction: {
+        factionId: subfactionFactionId,
+        keyword: entry.keyword,
+        mode: entry.mode,
+        peerKeywords: entry.peerKeywords,
+      },
+    });
   };
   const toggleRole = (id) => set({
     roles: filters.roles.includes(id)
@@ -134,7 +138,8 @@ export default function UnitFilters({
     filters.pointsMin != null ||
     filters.pointsMax != null ||
     filters.favoritesOnly ||
-    filters.ownedOnly;
+    filters.ownedOnly ||
+    filters.subfaction;
 
   const reset = () => setFilters(prev => ({
     ...prev,
@@ -146,6 +151,7 @@ export default function UnitFilters({
     pointsMax: null,
     favoritesOnly: false,
     ownedOnly: false,
+    subfaction: null,
   }));
 
   // Sort by usage frequency desc, then alphabetically. Active keywords are
@@ -284,16 +290,22 @@ export default function UnitFilters({
           >
             Alle
           </FilterChip>
-          {subfactionOptions.map(opt => (
-            <FilterChip
-              key={opt.id}
-              active={activeSubfactionKeyword === opt.keyword}
-              onClick={() => pickSubfaction(opt.keyword)}
-              title={`${opt.label} (Keyword „${opt.keyword}")`}
-            >
-              {opt.label}
-            </FilterChip>
-          ))}
+          {subfactionOptions.map(opt => {
+            const mode = opt.mode || 'category';
+            const hint = mode === 'chapter'
+              ? `${opt.label}-Armee: ${opt.keyword}-spezifische Datasheets + alle chapter-agnostischen`
+              : `${opt.label}: nur Einheiten mit Keyword „${opt.keyword}"`;
+            return (
+              <FilterChip
+                key={opt.id}
+                active={activeSubfactionKeyword === opt.keyword}
+                onClick={() => pickSubfaction(opt.keyword)}
+                title={hint}
+              >
+                {opt.label}
+              </FilterChip>
+            );
+          })}
         </div>
       )}
 

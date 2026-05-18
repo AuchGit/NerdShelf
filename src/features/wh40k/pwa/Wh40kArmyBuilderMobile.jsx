@@ -227,7 +227,7 @@ export default function Wh40kArmyBuilderMobile({
         <TabBtn
           id="squads"
           icon="⛬"
-          label="Trupps"
+          label="Squads"
           active={tab === 'squads'}
           onClick={() => setTab('squads')}
           badge={squadCount > 0 ? `${squadCount}` : null}

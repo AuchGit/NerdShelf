@@ -276,7 +276,7 @@ body[data-pwa-layouts='true'] [data-pwa-target='page-toolbar'] > div[style*='fle
   width: 100% !important;
 }
 
-/* Inventory tab bar (Einheiten / Trupps): claim full width on mobile and
+/* Inventory tab bar (Einheiten / Squads): claim full width on mobile and
    give the buttons equal share so the touch targets are easy to hit. */
 body[data-pwa-layouts='true'] [data-pwa-target='inventory-tabs'] {
   align-self: stretch !important;

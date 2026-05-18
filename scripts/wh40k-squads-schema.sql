@@ -17,7 +17,7 @@
 create table if not exists wh40k_squads (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references auth.users(id) on delete cascade,
-  name         text not null default 'Unbenannter Trupp',
+  name         text not null default 'Unbenannter Squad',
   faction_id   text,
   unit_id      text not null,
   model_count  integer not null default 1,
