@@ -126,6 +126,18 @@ export default function Wh40kArmyBuilderApp() {
     });
   }, [data, filters, favs.isFavorite, inv.isOwned]);
 
+  // Units passing every filter EXCEPT the keyword filter — gives the
+  // chip list accurate "how many units match this tag right now" counts
+  // and hides tags whose unit-set lies entirely outside the current
+  // faction / role / owned selection.
+  const unitsForKeywordCounts = useMemo(() => {
+    if (!data) return [];
+    return filterAndSortUnits(data.units, { ...filters, keywords: [] }, {
+      isFavorite: favs.isFavorite,
+      isOwned: inv.isOwned,
+    });
+  }, [data, filters, favs.isFavorite, inv.isOwned]);
+
   const selectedUnit = data && selectedUnitId ? data.unitsById[selectedUnitId] : null;
   const selectedFaction = selectedUnit ? data?.factionsById[selectedUnit.factionId] : null;
 
@@ -345,6 +357,7 @@ export default function Wh40kArmyBuilderApp() {
         factions={data.factions}
         allKeywords={data.allKeywords}
         keywordCounts={data.keywordCounts}
+        scopedUnits={unitsForKeywordCounts}
         totalCount={data.units.length}
         shownCount={filteredUnits.length}
         loading={dataLoading}

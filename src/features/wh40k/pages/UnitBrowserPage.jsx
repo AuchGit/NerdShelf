@@ -27,6 +27,17 @@ export default function UnitBrowserPage() {
     });
   }, [data, filters, favs.isFavorite, inv.isOwned]);
 
+  // Units passing every filter EXCEPT the keyword filter — used to
+  // compute per-keyword counts in the filter chip list so chips reflect
+  // the actual filter scope (not the whole dataset).
+  const unitsForKeywordCounts = useMemo(() => {
+    if (!data) return [];
+    return filterAndSortUnits(data.units, { ...filters, keywords: [] }, {
+      isFavorite: favs.isFavorite,
+      isOwned: inv.isOwned,
+    });
+  }, [data, filters, favs.isFavorite, inv.isOwned]);
+
   const selectedUnit = data && selectedId ? data.unitsById[selectedId] : null;
   const selectedFaction = selectedUnit ? data?.factionsById[selectedUnit.factionId] : null;
 
@@ -67,6 +78,7 @@ export default function UnitBrowserPage() {
         factions={data.factions}
         allKeywords={data.allKeywords}
         keywordCounts={data.keywordCounts}
+        scopedUnits={unitsForKeywordCounts}
         totalCount={data.units.length}
         shownCount={filtered.length}
         loading={loading}

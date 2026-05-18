@@ -64,7 +64,11 @@ export default function Wh40kDashboard() {
     if (!user) return;
     const baseName = army.name || 'Unbenannte Armee';
     const newName = `${baseName} (Kopie)`;
-    const { id: _id, created_at: _c, updated_at: _u, ...rest } = army;
+    // Strip share_token so the DB trigger mints a fresh one — the
+    // unique index would otherwise reject the insert. id / timestamps
+    // are stripped too so the row gets defaults rather than overwriting
+    // them with the source row's values.
+    const { id: _id, created_at: _c, updated_at: _u, share_token: _t, ...rest } = army;
     const payload = {
       ...rest,
       user_id: user.id,

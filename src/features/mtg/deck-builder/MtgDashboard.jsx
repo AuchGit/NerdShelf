@@ -66,7 +66,11 @@ export default function MtgDashboard() {
     if (!user) return;
     const baseName = deck.name || 'Unbenanntes Deck';
     const newName = `${baseName} (Kopie)`;
-    const { id: _ignore, created_at: _c, updated_at: _u, ...rest } = deck;
+    // Strip share_token so the DB trigger mints a fresh one — the
+    // unique index would otherwise reject the insert. id / timestamps
+    // are stripped too so the row gets defaults rather than overwriting
+    // them with the source row's values.
+    const { id: _ignore, created_at: _c, updated_at: _u, share_token: _t, ...rest } = deck;
     const payload = {
       ...rest,
       user_id: user.id,

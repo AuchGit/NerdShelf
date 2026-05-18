@@ -36,7 +36,13 @@ export default function UnitFilters({
   setFilters,
   factions,
   allKeywords,
-  keywordCounts,
+  keywordCounts,        // global counts across the whole dataset (used as fallback)
+  scopedUnits,          // units passing every filter EXCEPT keyword filter —
+                        // when provided, chip counts reflect "how many results
+                        // does this tag actually give me right now", which is
+                        // what the user usually means when they look at the
+                        // chip list (e.g. "Daemon" on an Astra Militarum army
+                        // should show 0, not the global 149)
   totalCount,
   shownCount,
   loading,
@@ -44,6 +50,25 @@ export default function UnitFilters({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [kwSearch, setKwSearch] = useState('');
   const [showAllKw, setShowAllKw] = useState(false);
+
+  // Per-scope keyword counts. If the caller passes `scopedUnits`, we
+  // recompute counts from that subset so empty-result chips disappear
+  // and the badge numbers match what the user will actually see if they
+  // click the chip. Falls back to the global `keywordCounts` from the
+  // data hook when no scope is provided.
+  const scopedCounts = useMemo(() => {
+    if (!Array.isArray(scopedUnits)) return null;
+    const m = Object.create(null);
+    for (const u of scopedUnits) {
+      for (const k of u.keywords || []) {
+        m[k] = (m[k] || 0) + 1;
+      }
+    }
+    return m;
+  }, [scopedUnits]);
+
+  const effectiveCounts = scopedCounts || keywordCounts || {};
+  const usingScope = !!scopedCounts;
 
   const set = (patch) => setFilters(prev => ({ ...prev, ...patch }));
 
@@ -87,15 +112,18 @@ export default function UnitFilters({
 
   // Sort by usage frequency desc, then alphabetically. Active keywords are
   // pinned to the top so users can always see / un-toggle their current
-  // selection regardless of search/common-filter state.
+  // selection regardless of search/common-filter state. Chips with a
+  // zero in-scope count are hidden unless they're the currently-selected
+  // tag (the user needs to be able to un-pick what they picked).
   const filteredKeywords = useMemo(() => {
-    const counts = keywordCounts || {};
     const q = kwSearch.trim().toLowerCase();
     const activeSet = new Set(filters.keywords);
 
     const base = allKeywords.filter(kw => {
       if (activeSet.has(kw)) return true;             // always keep active
-      if (!showAllKw && (counts[kw] || 0) < COMMON_KEYWORD_MIN) return false;
+      const count = effectiveCounts[kw] || 0;
+      if (usingScope && count === 0) return false;    // empty-result tag
+      if (!showAllKw && count < COMMON_KEYWORD_MIN) return false;
       if (q && !kw.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -103,22 +131,23 @@ export default function UnitFilters({
     base.sort((a, b) => {
       const aActive = activeSet.has(a), bActive = activeSet.has(b);
       if (aActive !== bActive) return aActive ? -1 : 1;
-      const ca = counts[a] || 0, cb = counts[b] || 0;
+      const ca = effectiveCounts[a] || 0, cb = effectiveCounts[b] || 0;
       if (ca !== cb) return cb - ca;
       return a.localeCompare(b);
     });
     return base;
-  }, [allKeywords, keywordCounts, kwSearch, showAllKw, filters.keywords]);
+  }, [allKeywords, effectiveCounts, usingScope, kwSearch, showAllKw, filters.keywords]);
 
   const hiddenKwCount = useMemo(() => {
     if (showAllKw) return 0;
-    const counts = keywordCounts || {};
     let n = 0;
     for (const kw of allKeywords) {
-      if ((counts[kw] || 0) < COMMON_KEYWORD_MIN) n++;
+      const count = effectiveCounts[kw] || 0;
+      if (usingScope && count === 0) continue;        // not a "hidden rare", just out of scope
+      if (count < COMMON_KEYWORD_MIN) n++;
     }
     return n;
-  }, [allKeywords, keywordCounts, showAllKw]);
+  }, [allKeywords, effectiveCounts, usingScope, showAllKw]);
 
   return (
     <div
@@ -309,13 +338,15 @@ export default function UnitFilters({
                   Keine passenden Tags{kwSearch ? ` für „${kwSearch}“` : ''}.
                 </div>
               ) : filteredKeywords.map(kw => {
-                const count = keywordCounts?.[kw];
+                const count = effectiveCounts[kw];
                 return (
                   <FilterChip
                     key={kw}
                     active={filters.keywords.includes(kw)}
                     onClick={() => toggleKeyword(kw)}
-                    title={count ? `${kw} — ${count} Einheit${count === 1 ? '' : 'en'}` : kw}
+                    title={count != null
+                      ? `${kw} — ${count} Einheit${count === 1 ? '' : 'en'}${usingScope ? ' im aktuellen Filter' : ''}`
+                      : kw}
                   >
                     {kw}
                     {count != null && (

@@ -19,15 +19,32 @@
 -- columns and unique indexes exist on the three entity tables).
 
 -- ─────────────────── imports table ───────────────────
+-- `source_id` is text, not uuid: `characters.id` is bigint while
+-- `mtg_decks.id` / `wh40k_armies.id` are uuid. Text is the common
+-- denominator that lets one column hold them all without forcing a
+-- per-domain schema split.
 create table if not exists nerdshelf_imports (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users(id) on delete cascade,
   domain        text not null check (domain in ('mtg_deck', 'wh40k_army', 'dnd_character')),
   source_token  text not null,
-  source_id     uuid,                       -- denormalized for fast joins
+  source_id     text,                       -- denormalized; text covers uuid+bigint
   imported_at   timestamptz not null default now(),
   unique (user_id, domain, source_token)
 );
+
+-- If an earlier (broken) revision of this migration created `source_id`
+-- as uuid, convert it in place — Postgres rejects re-running the CREATE
+-- with a mismatched column type otherwise.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'nerdshelf_imports' and column_name = 'source_id' and data_type = 'uuid'
+  ) then
+    alter table nerdshelf_imports alter column source_id type text using source_id::text;
+  end if;
+end $$;
 
 create index if not exists nerdshelf_imports_user_idx
   on nerdshelf_imports(user_id);
@@ -124,10 +141,14 @@ create policy "profiles public name via imports" on profiles
 -- it never returns the actual entity data, only minimal metadata so the
 -- user can confirm "yes, that's the right thing" before importing.
 
+-- Drop any prior signature first — Postgres won't replace a function
+-- whose return type has changed (uuid → text in the source_id column).
+drop function if exists lookup_share_token(text);
+
 create or replace function lookup_share_token(p_token text)
 returns table (
   domain      text,
-  source_id   uuid,
+  source_id   text,
   owner_id    uuid,
   owner_name  text,
   entity_name text
@@ -136,17 +157,17 @@ language sql
 security definer
 set search_path = public
 as $$
-  select 'mtg_deck'::text, d.id, d.user_id, p.player_name, d.name
+  select 'mtg_deck'::text, d.id::text, d.user_id, p.player_name, d.name
     from mtg_decks d
     left join profiles p on p.id = d.user_id
     where d.share_token = p_token
   union all
-  select 'wh40k_army'::text, a.id, a.user_id, p.player_name, a.name
+  select 'wh40k_army'::text, a.id::text, a.user_id, p.player_name, a.name
     from wh40k_armies a
     left join profiles p on p.id = a.user_id
     where a.share_token = p_token
   union all
-  select 'dnd_character'::text, c.id, c.user_id, p.player_name, c.name
+  select 'dnd_character'::text, c.id::text, c.user_id, p.player_name, c.name
     from characters c
     left join profiles p on p.id = c.user_id
     where c.share_token = p_token
