@@ -1,13 +1,13 @@
 // src/features/mtg/deck-builder/components/DeckAnalyzerModal.jsx
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Modal, Button } from '../../../../shared/ui';
 import {
-  suggestLands,
   MANA_MODES,
   getModeLabel,
   modeToConfig,
   DEFAULT_CONFIG,
 } from '../services/landSuggestion';
+import { suggestLandsWithBudget, detectExistingLands } from '../services/landBudgetPipeline';
 import { runSimulation } from '../services/consistencySim';
 import { applyLandBreakdown } from '../services/applyLandSuggestion';
 import { isLand } from '../services/deckAnalysis';
@@ -43,14 +43,14 @@ const DEFAULT_RULES = () => ([
   },
 ]);
 
-const SLIDERS = [
-  { key: 'tempo',     label: 'Tempo',      min: 'stabil',     max: 'schnell',
+// Trio sliders that shape the IDEAL landbase. Budget is handled
+// separately by its own step-swap slider below.
+const TUNING_SLIDERS = [
+  { key: 'tempo',     label: 'Tempo',      min: 'stabil', max: 'schnell',
     tip: 'Höher → weniger getappte Länder, weniger Land-Slots' },
-  { key: 'earlyGame', label: 'Early Game', min: 'late',       max: 'early',
+  { key: 'earlyGame', label: 'Early Game', min: 'late',   max: 'early',
     tip: 'Höher → frühere Curve, härtere Bestrafung getappter Länder' },
-  { key: 'budget',    label: 'Budget',     min: 'premium ok', max: 'budget only',
-    tip: 'Höher → Pathways/teure Duals werden gemieden, mehr Basics' },
-  { key: 'greed',     label: 'Greed',      min: 'strikt',     max: 'greedy',
+  { key: 'greed',     label: 'Greed',      min: 'strikt', max: 'greedy',
     tip: 'Höher → mehr Duals, höhere Quellen-Untergrenze pro Farbe' },
 ];
 
@@ -133,14 +133,48 @@ export default function DeckAnalyzerModal({
   onApplyLands,
 }) {
   const [tab, setTab] = useState('lands');
-  // Default preset is `stable` (no separate "standard" preset exists).
-  const [manaConfig, setManaConfig] = useState(() => modeToConfig('stable'));
-  const [utilityLands, setUtilityLands] = useState([]); // [{name, desiredCopies}]
+  // Trio sliders (tempo / earlyGame / greed) live separately from the
+  // budget axis. The trio shapes the IDEAL landbase; budget is a
+  // step-swap slider that walks away from premium toward cheaper picks
+  // one copy at a time. Both default to the `stable` preset values.
+  const [tuning, setTuning] = useState(() => {
+    const { tempo, earlyGame, greed } = modeToConfig('stable');
+    return { tempo, earlyGame, greed };
+  });
+  const [budgetValue, setBudgetValue] = useState(0.7); // 1 = premium ideal, 0 = stripped
+
+  // Detection runs ONCE per mainboard — separate from the suggestion
+  // pass so the user can toggle which detected lands to keep without
+  // re-detecting (and without the kept-set self-erasing each render).
+  const detected = useMemo(() => detectExistingLands(mainboard), [mainboard]);
+
+  // Kept set: which detected land names the suggester should treat as
+  // locked. Default heuristic when the modal first sees a mainboard:
+  // utility lands (Bojuka Bog, Reflecting Pool, anything not in our
+  // catalog) → checked; basics + catalog duals + catalog fixers →
+  // unchecked (let the suggester re-pick those slots fresh).
+  //
+  // We re-seed only when the *deck contents change*. If the user has
+  // already toggled some checkboxes, those choices stick for the rest
+  // of the modal session.
+  const initialKept = useMemo(() => {
+    const s = new Set();
+    for (const [name] of detected.utility) s.add(name);
+    return s;
+  }, [detected]);
+  const [keptLandNames, setKeptLandNames] = useState(initialKept);
+  // When the mainboard (and therefore `initialKept`) changes, reset.
+  useEffect(() => { setKeptLandNames(initialKept); }, [initialKept]);
 
   const suggestion = useMemo(() => {
     if (!open) return null;
-    return suggestLands(mainboard, { commander, config: manaConfig, utilityLands });
-  }, [open, mainboard, commander, manaConfig, utilityLands]);
+    return suggestLandsWithBudget(mainboard, {
+      commander,
+      sliders: tuning,
+      budget: budgetValue,
+      keptLandNames,
+    });
+  }, [open, mainboard, commander, tuning, budgetValue, keptLandNames]);
 
   const [applyStatus, setApplyStatus] = useState(null);
   const [applying, setApplying] = useState(false);
@@ -234,10 +268,12 @@ export default function DeckAnalyzerModal({
       {tab === 'lands' && suggestion && (
         <LandSuggestionView
           suggestion={suggestion}
-          config={manaConfig}
-          onChangeConfig={setManaConfig}
-          utilityLands={utilityLands}
-          onChangeUtilityLands={setUtilityLands}
+          tuning={tuning}
+          onChangeTuning={setTuning}
+          budgetValue={budgetValue}
+          onChangeBudget={setBudgetValue}
+          keptLandNames={keptLandNames}
+          onChangeKept={setKeptLandNames}
         />
       )}
 
@@ -259,25 +295,49 @@ export default function DeckAnalyzerModal({
 }
 
 function LandSuggestionView({
-  suggestion, config, onChangeConfig,
-  utilityLands, onChangeUtilityLands,
+  suggestion, tuning, onChangeTuning,
+  budgetValue, onChangeBudget,
+  keptLandNames, onChangeKept,
 }) {
-  const { totalLands, perColor, explanation, analysis, breakdownByCategory, cost } = suggestion;
+  const {
+    totalLands, perColor, explanation, analysis, breakdownByCategory, cost,
+    existing, swapsApplied, stepsApplied, totalSteps, lastSwap, score,
+  } = suggestion;
   const usedColors = analysis.colorsUsed;
 
   function setSlider(key, value) {
-    onChangeConfig({ ...config, [key]: Number(value) });
+    onChangeTuning({ ...tuning, [key]: Number(value) });
   }
 
   function applyPreset(mode) {
-    onChangeConfig(modeToConfig(mode));
+    const cfg = modeToConfig(mode);
+    onChangeTuning({ tempo: cfg.tempo, earlyGame: cfg.earlyGame, greed: cfg.greed });
   }
+
+  // ── Existing-land detection summary ─────────────────────
+  const detectedTotal = existing?.total || 0;
+  const detectedItems = (() => {
+    if (!existing) return [];
+    const items = [];
+    for (const [name, count] of existing.basics)       items.push({ name, count, kind: 'basic' });
+    for (const [name, info]  of existing.catalogPair)  items.push({ name, count: info.count, kind: `T${info.tier}` });
+    for (const [name, info]  of existing.catalogFixer) items.push({ name, count: info.count, kind: 'fixer' });
+    for (const [name, info]  of existing.utility)      items.push({ name, count: info.count, kind: 'utility' });
+    return items.sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   return (
     <div>
+      {/* Quality score — the single most important readout. Updates live
+          as the user moves any slider so they see immediately how much
+          quality they're trading away for budget. */}
+      {score && (
+        <ManabaseScoreGauge score={score} totalLands={totalLands} costEur={cost?.totalEur} />
+      )}
+
       <div className="dam-row" style={{ marginBottom: 8 }}>
         <span className="dam-section-title" style={{ margin: 0 }}>Presets:</span>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {MANA_MODES.map(m => (
             <button
               key={m}
@@ -292,17 +352,18 @@ function LandSuggestionView({
         </div>
       </div>
 
+      {/* Tempo / Early / Greed — shape the IDEAL landbase */}
       <div className="dam-sliders">
-        {SLIDERS.map(s => (
+        {TUNING_SLIDERS.map(s => (
           <div key={s.key} className="dam-slider-row" title={s.tip}>
             <label>
               <span className="dam-slider-label">{s.label}</span>
-              <span className="dam-slider-value">{config[s.key].toFixed(2)}</span>
+              <span className="dam-slider-value">{(tuning[s.key] ?? 0).toFixed(2)}</span>
             </label>
             <input
               type="range"
               min={0} max={1} step={0.05}
-              value={config[s.key]}
+              value={tuning[s.key] ?? 0}
               onChange={e => setSlider(s.key, e.target.value)}
             />
             <div className="dam-slider-ends">
@@ -311,6 +372,18 @@ function LandSuggestionView({
           </div>
         ))}
       </div>
+
+      {/* Budget slider — decoupled. Each step swaps one land for a
+          cheaper / pricier alternative; "least important" goes first
+          when going down. */}
+      <BudgetStepSlider
+        value={budgetValue}
+        onChange={onChangeBudget}
+        stepsApplied={stepsApplied}
+        totalSteps={totalSteps}
+        lastSwap={lastSwap}
+        costEur={cost?.totalEur}
+      />
 
       <div className="dam-summary">{explanation}</div>
 
@@ -347,9 +420,16 @@ function LandSuggestionView({
         </>
       )}
 
-      <UtilityLandsEditor
-        utilityLands={utilityLands}
-        onChange={onChangeUtilityLands}
+      {/* Existing lands detected in the deck — user picks which to
+          KEEP (checkbox); the rest are regenerated by the suggester.
+          By default utility lands are checked and catalog/basic ones
+          are not, so re-running the suggester after a first apply
+          gives a fresh manabase. */}
+      <ExistingLandsSection
+        items={detectedItems}
+        totalCount={detectedTotal}
+        keptLandNames={keptLandNames}
+        onChangeKept={onChangeKept}
       />
 
       <h3 className="dam-section-title">Aufschlüsselung &amp; Kosten</h3>
@@ -358,62 +438,414 @@ function LandSuggestionView({
         breakdownByCategory={breakdownByCategory}
         totalLands={totalLands}
       />
+
+      {swapsApplied && swapsApplied.length > 0 && (
+        <AppliedSwapsLog swaps={swapsApplied} />
+      )}
     </div>
   );
 }
 
-function UtilityLandsEditor({ utilityLands, onChange }) {
-  const [name, setName] = useState('');
-  const [copies, setCopies] = useState(1);
+/* ────────────────────────────────────────────────────────── */
 
-  function add() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const existing = utilityLands.find(u => u.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing) {
-      onChange(utilityLands.map(u => u.name.toLowerCase() === trimmed.toLowerCase()
-        ? { ...u, desiredCopies: u.desiredCopies + copies }
-        : u));
-    } else {
-      onChange([...utilityLands, { name: trimmed, desiredCopies: copies }]);
-    }
-    setName('');
-    setCopies(1);
-  }
-
-  function remove(n) {
-    onChange(utilityLands.filter(u => u.name !== n));
-  }
-
+function ManabaseScoreGauge({ score, totalLands, costEur }) {
+  const total = score?.total ?? 0;
+  const tone = total >= 80 ? 'good'
+             : total >= 60 ? 'mid'
+             : total >= 40 ? 'low'
+             : 'bad';
+  const COLOR = {
+    good: 'var(--color-success, #4ca36b)',
+    mid:  'var(--color-accent, #d4a017)',
+    low:  '#d98442',
+    bad:  'var(--color-danger, #e06a5a)',
+  };
+  const COMPONENT_LABELS = {
+    color: 'Farb-Quellen',
+    speed: 'Geschwindigkeit',
+    reach: 'Multi-Farb-Reach',
+    alignment: 'Slider-Match',
+  };
   return (
-    <div className="dam-add-rule" style={{ marginBottom: 14 }}>
-      <h4>Utility-Lands (hard-insert)</h4>
-      <div className="dam-row">
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="z.B. Bojuka Bog"
-          style={{ flex: 1, minWidth: 180 }}
-        />
-        <input
-          type="number" min={1} max={4}
-          value={copies}
-          onChange={e => setCopies(Math.max(1, Number(e.target.value) || 1))}
-          style={{ width: 60 }}
-        />
-        <button className="dam-link-btn" onClick={add} type="button">+ Hinzufügen</button>
+    <div style={{
+      display: 'flex',
+      alignItems: 'stretch',
+      gap: 12,
+      padding: 12,
+      marginBottom: 12,
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+    }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        minWidth: 90,
+        padding: '6px 8px',
+        background: `color-mix(in srgb, ${COLOR[tone]} 12%, transparent)`,
+        border: `2px solid ${COLOR[tone]}`,
+        borderRadius: 'var(--radius-md)',
+      }}>
+        <div style={{
+          fontSize: 28,
+          fontWeight: 'var(--fw-bold)',
+          color: COLOR[tone],
+          lineHeight: 1,
+          fontVariantNumeric: 'tabular-nums',
+        }}>{total}</div>
+        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>/ 100</div>
+        <div style={{
+          marginTop: 4,
+          fontSize: 10,
+          fontWeight: 'var(--fw-semibold)',
+          color: COLOR[tone],
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+        }}>{tone === 'good' ? 'optimal' : tone === 'mid' ? 'okay' : tone === 'low' ? 'mau' : 'kritisch'}</div>
       </div>
-      {utilityLands.length > 0 && (
-        <div className="dam-chip-row" style={{ marginTop: 6 }}>
-          {utilityLands.map(u => (
-            <span key={u.name} className="dam-chip">
-              {u.name} ×{u.desiredCopies}
-              <button className="dam-chip-x" onClick={() => remove(u.name)} type="button">×</button>
-            </span>
-          ))}
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={{
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--color-text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+          fontWeight: 'var(--fw-semibold)',
+        }}>Manabase-Qualität</div>
+        {score?.components && Object.entries(score.components).map(([k, c]) => {
+          const pct = Math.max(0, Math.min(100, (c.score / c.max) * 100));
+          const cTone = pct >= 80 ? 'good' : pct >= 50 ? 'mid' : 'bad';
+          return (
+            <div key={k} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 'var(--fs-xs)',
+            }}>
+              <span style={{ minWidth: 110, color: 'var(--color-text-muted)' }}>
+                {COMPONENT_LABELS[k] || k}
+              </span>
+              <div style={{
+                flex: 1,
+                height: 6,
+                background: 'var(--color-bg-sunken)',
+                borderRadius: 999,
+                overflow: 'hidden',
+                position: 'relative',
+              }}>
+                <div style={{
+                  width: `${pct}%`,
+                  height: '100%',
+                  background: COLOR[cTone],
+                  transition: 'width 200ms ease, background 200ms ease',
+                }} />
+              </div>
+              <span style={{
+                minWidth: 36,
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--color-text-muted)',
+              }}>
+                {c.score}/{c.max}
+              </span>
+            </div>
+          );
+        })}
+        <div style={{
+          display: 'flex',
+          gap: 'var(--space-2)',
+          marginTop: 2,
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--color-text-muted)',
+        }}>
+          <span>{totalLands} Länder</span>
+          {costEur != null && (
+            <>
+              <span>·</span>
+              <span style={{ color: 'var(--color-accent)', fontWeight: 'var(--fw-semibold)' }}>
+                ≈ {costEur.toFixed(2)} €
+              </span>
+            </>
+          )}
+          {score?.rawSpeed != null && (
+            <>
+              <span style={{ marginLeft: 'auto' }}>Untapped-Anteil</span>
+              <span style={{ color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
+                {score.rawSpeed}%
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BudgetStepSlider({ value, onChange, stepsApplied, totalSteps, lastSwap, costEur }) {
+  // Slider step: 1 / totalSteps so each notch corresponds to exactly
+  // one swap. Fallback: 0.05 if no swap chain yet (empty deck).
+  const stepSize = totalSteps > 0 ? 1 / totalSteps : 0.05;
+  return (
+    <div
+      className="dam-budget-slider"
+      style={{
+        padding: '10px 12px',
+        marginTop: 12,
+        marginBottom: 14,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 'var(--fs-sm)' }}>Budget</strong>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
+          Schritt {stepsApplied} / {totalSteps} · {value.toFixed(2)}
+        </span>
+        {costEur != null && (
+          <span style={{
+            marginLeft: 'auto',
+            color: 'var(--color-accent)',
+            fontWeight: 'var(--fw-semibold)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            ≈ {costEur.toFixed(2)} €
+          </span>
+        )}
+      </div>
+      <input
+        type="range"
+        min={0} max={1} step={stepSize}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <div className="dam-slider-ends">
+        <span>günstig (Basics &amp; Guildgates)</span>
+        <span>premium (Shocks &amp; Fast-Lands)</span>
+      </div>
+      {lastSwap && (
+        <div style={{
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--color-text-muted)',
+          paddingTop: 4,
+          borderTop: '1px dashed var(--color-border)',
+        }}>
+          Zuletzt getauscht: <strong style={{ color: 'var(--color-text)' }}>{lastSwap.from}</strong>
+          {' → '}
+          <strong style={{ color: 'var(--color-text)' }}>{lastSwap.to}</strong>
+          {' '}<span style={{ color: 'var(--color-success)' }}>(−{lastSwap.eurSaved.toFixed(2)} €)</span>
         </div>
       )}
     </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────── */
+
+function ExistingLandsSection({ items, totalCount, keptLandNames, onChangeKept }) {
+  if (!items || items.length === 0) {
+    return (
+      <div style={{
+        marginTop: 14,
+        marginBottom: 14,
+        padding: '8px 10px',
+        background: 'var(--color-bg-sunken)',
+        border: '1px dashed var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: 'var(--fs-xs)',
+        color: 'var(--color-text-muted)',
+      }}>
+        Tipp: Lege spezifische Länder (z.B. Bojuka Bog, Reflecting Pool) direkt im Deck an —
+        der Land-Suggest erkennt sie und nimmt sie als feste Plätze in die Berechnung mit auf.
+      </div>
+    );
+  }
+  const keptSet = keptLandNames || new Set();
+  const keptCount = items.reduce((s, it) => s + (keptSet.has(it.name) ? it.count : 0), 0);
+
+  const setAll = (keep) => {
+    const next = new Set(keptSet);
+    for (const it of items) {
+      if (keep) next.add(it.name);
+      else      next.delete(it.name);
+    }
+    onChangeKept?.(next);
+  };
+  const toggleOne = (name) => {
+    const next = new Set(keptSet);
+    if (next.has(name)) next.delete(name);
+    else                next.add(name);
+    onChangeKept?.(next);
+  };
+
+  const kindLabel = (k) =>
+    k === 'utility' ? 'Utility' :
+    k === 'fixer'   ? 'Fixer' :
+    k === 'basic'   ? 'Basic' :
+    k;
+  const kindColor = (k) =>
+    k === 'utility' ? 'var(--color-accent)' :
+    k === 'fixer'   ? '#6aa9d0' :
+    k === 'basic'   ? 'var(--color-text-muted)' :
+    'var(--color-text-muted)';
+
+  return (
+    <div style={{ marginTop: 14, marginBottom: 14 }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 8,
+        marginBottom: 6,
+        flexWrap: 'wrap',
+      }}>
+        <h3 className="dam-section-title" style={{ margin: 0 }}>
+          Bereits im Deck ({totalCount})
+        </h3>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
+          {keptCount} behalten · {totalCount - keptCount} werden ersetzt
+        </span>
+        <div style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={() => setAll(true)}
+          style={miniBtn}
+          title="Alle Lands aus dem Deck behalten — Suggester füllt nur fehlende Slots auf"
+        >Alle behalten</button>
+        <button
+          type="button"
+          onClick={() => setAll(false)}
+          style={miniBtn}
+          title="Alle ausschecken — Suggester baut die komplette Manabase neu"
+        >Alle ersetzen</button>
+      </div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        padding: 6,
+        background: 'var(--color-bg-sunken)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        maxHeight: 220,
+        overflowY: 'auto',
+      }}>
+        {items.map(it => {
+          const kept = keptSet.has(it.name);
+          return (
+            <label
+              key={it.name}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 8px',
+                background: kept ? 'var(--color-surface)' : 'transparent',
+                border: '1px solid',
+                borderColor: kept ? 'var(--color-accent)' : 'transparent',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                fontSize: 'var(--fs-sm)',
+                opacity: kept ? 1 : 0.7,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={kept}
+                onChange={() => toggleOne(it.name)}
+                style={{ margin: 0 }}
+              />
+              <span style={{ flex: 1, fontWeight: kept ? 'var(--fw-medium)' : 'var(--fw-regular)' }}>
+                {it.name}
+              </span>
+              <span style={{
+                color: kindColor(it.kind),
+                fontSize: 'var(--fs-xs)',
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+                fontWeight: 'var(--fw-semibold)',
+              }}>
+                {kindLabel(it.kind)}
+              </span>
+              <span style={{
+                minWidth: 28,
+                textAlign: 'right',
+                color: 'var(--color-text-muted)',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                ×{it.count}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const miniBtn = {
+  padding: '3px 8px',
+  fontSize: 'var(--fs-xs)',
+  background: 'transparent',
+  color: 'var(--color-text-muted)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
+/* ────────────────────────────────────────────────────────── */
+
+function AppliedSwapsLog({ swaps }) {
+  // Group adjacent swaps from→to with the same names into a single
+  // line "Shock × N → Painland" for compactness.
+  const groups = [];
+  for (const sw of swaps) {
+    const last = groups[groups.length - 1];
+    if (last && last.from === sw.from && last.to === sw.to) {
+      last.count++;
+      last.eurSaved += sw.eurSaved;
+    } else {
+      groups.push({ from: sw.from, to: sw.to, count: 1, eurSaved: sw.eurSaved });
+    }
+  }
+  return (
+    <details style={{ marginTop: 14 }}>
+      <summary style={{
+        cursor: 'pointer',
+        fontSize: 'var(--fs-sm)',
+        color: 'var(--color-text-muted)',
+        userSelect: 'none',
+      }}>
+        Budget-Tauschverlauf ({swaps.length} Schritte)
+      </summary>
+      <ul style={{
+        listStyle: 'none',
+        margin: '6px 0 0',
+        padding: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        fontSize: 'var(--fs-xs)',
+      }}>
+        {groups.map((g, i) => (
+          <li key={i} style={{
+            display: 'flex',
+            gap: 8,
+            padding: '2px 0',
+          }}>
+            <span style={{ flex: 1 }}>
+              {g.count > 1 && <strong style={{ marginRight: 4 }}>{g.count}×</strong>}
+              {g.from} → {g.to}
+            </span>
+            <span style={{ color: 'var(--color-success)', fontVariantNumeric: 'tabular-nums' }}>
+              −{g.eurSaved.toFixed(2)} €
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

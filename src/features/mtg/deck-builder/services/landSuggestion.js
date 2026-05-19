@@ -408,56 +408,147 @@ const COLOR_TO_BASIC = {
 
 const BASIC_PRICE_EUR = 0.10;
 
+// Catalog of two-color duals. Each pair includes a full ladder of modern
+// land cycles, sorted by ascending priceEur so the swap chain can walk
+// "next cheaper" by index. Keys are alphabetically sorted color pairs to
+// match what `pairKey(a,b)` produces (this previously had a latent bug
+// where Azorius/Dimir used non-alphabetical keys like 'WU'/'UB' which
+// pairKey would never look up).
+//
+// `style` is the role tag used by the trio-slider-aware within-tier
+// ranker — Shocks vs Fastlands vs Surveil lands compete in the same
+// tier and the "best" depends on tempo/early/greed.
+//
+// Modern cycles included (most-played in current formats):
+//   T1 budget:        Guildgate (~0.20€, tapped, no upside)
+//   T2 lower-mid:     Scryland (~0.80€, tapped, scry 1)
+//   T2 mid:           Slowland (~1.50€, tapped unless 2+ other lands)
+//   T2 mid:           Checkland (~3€, untapped if you control a basic of either color)
+//   T2 upper-mid:     Painland (~4€, untapped, pays 1 life for colored)
+//   T3 lower:         Surveil land (~7€, painland with surveil 1 ETB)
+//   T3 mid:           Fastland (~8€, untapped if you control ≤ 2 other lands)
+//   T3 premium:       Shock (~12€, untapped for 2 life, basic land types)
+
 const LAND_CATALOG = {
-  WU: [
-    { name: 'Azorius Guildgate',  priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Glacial Fortress',   priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 }, // check
-    { name: 'Hallowed Fountain',  priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 }, // shock
-  ],
-  UB: [
-    { name: 'Dimir Guildgate',    priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Drowned Catacomb',   priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Watery Grave',       priceTier: 3, priceEur: 14.00, tapped: false, fixesCount: 2 },
-  ],
-  BR: [
-    { name: 'Rakdos Guildgate',   priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Dragonskull Summit', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Blood Crypt',        priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 },
-  ],
-  GR: [
-    { name: 'Gruul Guildgate',    priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Rootbound Crag',     priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Stomping Ground',    priceTier: 3, priceEur: 11.00, tapped: false, fixesCount: 2 },
-  ],
-  GW: [
-    { name: 'Selesnya Guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Sunpetal Grove',     priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Temple Garden',      priceTier: 3, priceEur: 11.00, tapped: false, fixesCount: 2 },
-  ],
-  BW: [
-    { name: 'Orzhov Guildgate',   priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Isolated Chapel',    priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Godless Shrine',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 },
-  ],
-  RU: [
-    { name: 'Izzet Guildgate',    priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Sulfur Falls',       priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Steam Vents',        priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 },
-  ],
+  // ── BG (Golgari) ───────────────────────────────────────────
   BG: [
-    { name: 'Golgari Guildgate',  priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Woodland Cemetery',  priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Overgrown Tomb',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 },
+    { name: 'Golgari Guildgate', style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Malady',  style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Deathcap Glade',    style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Woodland Cemetery', style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Llanowar Wastes',   style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Undercity Sewers',  style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Blooming Marsh',    style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Overgrown Tomb',    style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Verdant Catacombs', style: 'fetch',     priceTier: 3, priceEur: 30.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
   ],
-  RW: [
-    { name: 'Boros Guildgate',    priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Clifftop Retreat',   priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Sacred Foundry',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2 },
+  // ── BR (Rakdos) ────────────────────────────────────────────
+  BR: [
+    { name: 'Rakdos Guildgate',   style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Malice',   style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Haunted Ridge',      style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Dragonskull Summit', style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Sulfurous Springs',  style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Raucous Theater',    style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Blackcleave Cliffs', style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Blood Crypt',        style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Bloodstained Mire',  style: 'fetch',     priceTier: 3, priceEur: 25.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
   ],
+  // ── BU (Dimir) ─────────────────────────────────────────────
+  BU: [
+    { name: 'Dimir Guildgate',     style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Deceit',    style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Shipwreck Marsh',     style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Drowned Catacomb',    style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Underground River',   style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Underground Mortuary',style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Darkslick Shores',    style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Watery Grave',        style: 'shock',     priceTier: 3, priceEur: 14.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Polluted Delta',      style: 'fetch',     priceTier: 3, priceEur: 40.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── BW (Orzhov) ────────────────────────────────────────────
+  BW: [
+    { name: 'Orzhov Guildgate',     style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Silence',    style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Shattered Sanctum',    style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Isolated Chapel',      style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Caves of Koilos',      style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Shadowy Backstreet',   style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Concealed Courtyard',  style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Godless Shrine',       style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Marsh Flats',          style: 'fetch',     priceTier: 3, priceEur: 30.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── GR (Gruul) ─────────────────────────────────────────────
+  GR: [
+    { name: 'Gruul Guildgate',     style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Abandon',   style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Rockfall Vale',       style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Rootbound Crag',      style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Karplusan Forest',    style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Commercial District', style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Copperline Gorge',    style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Stomping Ground',     style: 'shock',     priceTier: 3, priceEur: 11.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Wooded Foothills',    style: 'fetch',     priceTier: 3, priceEur: 25.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── GU (Simic) ─────────────────────────────────────────────
   GU: [
-    { name: 'Simic Guildgate',    priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2 },
-    { name: 'Hinterland Harbor',  priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2 },
-    { name: 'Breeding Pool',      priceTier: 3, priceEur: 14.00, tapped: false, fixesCount: 2 },
+    { name: 'Simic Guildgate',    style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Mystery',  style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Dreamroot Cascade',  style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Hinterland Harbor',  style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Yavimaya Coast',     style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Hedge Maze',         style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Botanical Sanctum',  style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Breeding Pool',      style: 'shock',     priceTier: 3, priceEur: 14.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Misty Rainforest',   style: 'fetch',     priceTier: 3, priceEur: 40.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── GW (Selesnya) ──────────────────────────────────────────
+  GW: [
+    { name: 'Selesnya Guildgate', style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Plenty',   style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Sundown Pass',       style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Sunpetal Grove',     style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Brushland',          style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Lush Portico',       style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Razorverge Thicket', style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple Garden',      style: 'shock',     priceTier: 3, priceEur: 11.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Windswept Heath',    style: 'fetch',     priceTier: 3, priceEur: 25.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── RU (Izzet) ─────────────────────────────────────────────
+  RU: [
+    { name: 'Izzet Guildgate',    style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Epiphany', style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Stormcarved Coast',  style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Sulfur Falls',       style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Shivan Reef',        style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Thundering Falls',   style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Spirebluff Canal',   style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Steam Vents',        style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Scalding Tarn',      style: 'fetch',     priceTier: 3, priceEur: 50.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── RW (Boros) ─────────────────────────────────────────────
+  RW: [
+    { name: 'Boros Guildgate',    style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Triumph',  style: 'scryland',  priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Sunlit Marsh',       style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Clifftop Retreat',   style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Battlefield Forge',  style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Elegant Parlor',     style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Inspiring Vantage',  style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Sacred Foundry',     style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Arid Mesa',          style: 'fetch',     priceTier: 3, priceEur: 22.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
+  ],
+  // ── UW (Azorius) ───────────────────────────────────────────
+  UW: [
+    { name: 'Azorius Guildgate',     style: 'guildgate', priceTier: 1, priceEur: 0.20, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Temple of Enlightenment',style: 'scryland', priceTier: 2, priceEur: 0.80, tapped: true,  fixesCount: 2, etbValue: 0.30 },
+    { name: 'Deserted Beach',        style: 'slowland',  priceTier: 2, priceEur: 1.50, tapped: true,  fixesCount: 2, etbValue: 0.0 },
+    { name: 'Glacial Fortress',      style: 'checkland', priceTier: 2, priceEur: 3.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Adarkar Wastes',        style: 'painland',  priceTier: 2, priceEur: 4.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Meticulous Archive',    style: 'surveil',   priceTier: 3, priceEur: 7.00, tapped: false, fixesCount: 2, etbValue: 0.30 },
+    { name: 'Seachrome Coast',       style: 'fastland',  priceTier: 3, priceEur: 8.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Hallowed Fountain',     style: 'shock',     priceTier: 3, priceEur: 12.00, tapped: false, fixesCount: 2, etbValue: 0.0 },
+    { name: 'Flooded Strand',        style: 'fetch',     priceTier: 3, priceEur: 35.00, tapped: false, fixesCount: 2, etbValue: 0.50 },
   ],
 };
 
@@ -1943,6 +2034,27 @@ export function suggestLands(mainboard, options = {}) {
 // ────────────────────────────────────────────────────────────────────────
 // COST CALCULATION
 // ────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────
+// SHARED LOOKUP / PRICING HELPERS
+// Exposed so the budget-step layer (landBudgetPipeline.js) can reuse them
+// without re-implementing tier / price knowledge.
+// ────────────────────────────────────────────────────────────────────────
+
+export const LAND_CATALOG_EXPORT = LAND_CATALOG;
+export const FIXING_LANDS_EXPORT = FIXING_LANDS;
+export const BASIC_PRICE_EUR_EXPORT = BASIC_PRICE_EUR;
+export const COLOR_TO_BASIC_EXPORT = COLOR_TO_BASIC;
+export const pairKeyOf = pairKey;
+export const findLandMetaExt = (name) => findLandMeta(name);
+export const buildCostReportExt = (breakdown, utilityAlloc, fixingAlloc) =>
+  buildCostReport(breakdown, utilityAlloc, fixingAlloc);
+export const buildCategorizedBreakdownExt = (ctx) => buildCategorizedBreakdown(ctx);
+export const analyzeStructureExt = (mainboard, analysis) => analyzeStructure(mainboard, analysis);
+export const deriveBaseLandCountExt = (analysis, structure, isCommander) =>
+  deriveBaseLandCount(analysis, structure, isCommander);
+export const deriveTargetsExt = (sliders, signals) => deriveTargets(sliders, signals);
+export const normalizeSlidersExt = (s) => normalizeSliders(s);
 
 function findLandMeta(name) {
   if (Object.values(COLOR_TO_BASIC).includes(name) || name === 'Wastes') {
