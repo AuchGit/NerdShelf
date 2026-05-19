@@ -9,7 +9,6 @@ import { Routes, Route } from 'react-router-dom';
 import Wh40kDashboard from './Wh40kDashboard';
 import Wh40kArmyBuilderApp from './Wh40kArmyBuilderApp';
 import UnitBrowserPage from './pages/UnitBrowserPage';
-import FavoritesPage from './pages/FavoritesPage';
 import InventoryPage from './pages/InventoryPage';
 import CombatDashboardPage from './pages/CombatDashboardPage';
 import CombatSessionPage from './pages/CombatSessionPage';
@@ -30,7 +29,6 @@ export default function Wh40kApp() {
     <Routes>
       <Route index            element={withSubNav(<Wh40kDashboard />)} />
       <Route path="units"     element={withSubNav(<UnitBrowserPage />)} />
-      <Route path="favorites" element={withSubNav(<FavoritesPage />)} />
       <Route path="inventory" element={withSubNav(<InventoryPage />)} />
       <Route path="combat"    element={withSubNav(<CombatDashboardPage />)} />
       {/* Army builder + combat session take the full content area (own header) */}

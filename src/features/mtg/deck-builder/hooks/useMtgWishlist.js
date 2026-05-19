@@ -107,6 +107,12 @@ export function useMtgWishlist(opts = {}) {
           bump(id, entry?.card, entry?.count || 0, src);
         }
       }
+      // Ideas are an unbounded "would like to test" pool — they DO
+      // contribute to the wishlist (the user wants to buy them) and
+      // their source is tagged so the user sees which deck wanted it.
+      for (const [id, entry] of Object.entries(data.ideas || {})) {
+        bump(id, entry?.card, entry?.count || 0, `${src} (Ideen)`);
+      }
       if (includeCommander && data.commander?.id) {
         bump(data.commander.id, data.commander, 1, src);
       }

@@ -173,28 +173,31 @@ function nextDowngrades(name, ctx = {}) {
   const out = [];
 
   // ── Pair-specific catalog dual (walks the per-pair ladder) ──
-  // The catalog is sorted by CATALOG priceEur ascending, but LIVE
-  // Scryfall prices can re-order things. We walk the ladder looking
-  // for the next-cheaper alternative under LIVE prices (skipping any
-  // catalog rung that is currently MORE expensive than `from`). The
-  // basic terminal swap is ALWAYS offered as a fallback so the chain
-  // can always go all the way down.
+  // Returns EVERY cheaper option on the ladder (under LIVE prices)
+  // plus the basic terminal. The swap-chain ranks them by score and
+  // also enforces 4-of caps, so by emitting the full set we let it
+  // gracefully fall back to the next-best option when the immediate
+  // next step is already at cap. (E.g. Shock → Fastland fails because
+  // 4× Fastland in deck → chain tries Shock → Painland → Checkland …
+  // until it finds something legal.)
   for (const [pkey, opts] of Object.entries(LAND_CATALOG)) {
     const idx = opts.findIndex(o => o.name === name);
     if (idx < 0) continue;
     const from = opts[idx];
     const fromPrice = priceOf(from.name, from.priceEur) ?? 0;
 
-    // Walk catalog ladder for the next strictly-cheaper option.
     for (let j = idx - 1; j >= 0; j--) {
       const candidate = opts[j];
       const candPrice = priceOf(candidate.name, candidate.priceEur) ?? 0;
       if (candPrice >= fromPrice) continue;   // skip — same or pricier in reality
       const tierDiff = (from.priceTier || 0) - (candidate.priceTier || 0);
+      const stepsDown = idx - j;                // how far we jumped on the ladder
+      // Quality loss grows with both the tier gap AND how far we
+      // skipped — going Shock → Guildgate is worse than Shock → Fastland.
       const qualityLoss =
-        tierDiff === 0 ? 0.22
-        : tierDiff === 1 ? 0.55
-        : 0.55 + tierDiff * 0.25;
+        tierDiff === 0 ? 0.22 + (stepsDown - 1) * 0.08
+        : tierDiff === 1 ? 0.55 + (stepsDown - 1) * 0.10
+        : 0.55 + tierDiff * 0.25 + (stepsDown - 1) * 0.10;
       const tierTag = tierDiff === 0
         ? `Tier ${from.priceTier}`
         : `Tier ${from.priceTier}→${candidate.priceTier}`;
@@ -205,13 +208,12 @@ function nextDowngrades(name, ctx = {}) {
         pairCode: pkey,
         reason: `${from.name} → ${candidate.name} (${tierTag})`,
       });
-      break;
     }
 
-    // Terminal basic swap — always offered (even if a ladder step also
-    // exists), so the chain can keep going once all duals are gone.
-    // Use the runtime-corrected pair so a miscategorised land
-    // terminates into the RIGHT basic colour.
+    // Terminal basic swap — always offered so the chain has a
+    // guaranteed exit even when all ladder rungs hit 4-of caps. Uses
+    // the runtime-corrected pair so a miscategorised land terminates
+    // into the RIGHT basic colour.
     const actualPair = corrections?.get(name) || pkey;
     const [cA, cB] = [actualPair[0], actualPair[1]];
     const pickColor = colorWeight(cA) >= colorWeight(cB) ? cA : cB;
@@ -315,6 +317,13 @@ function buildSwapChain(initialBreakdown, ctx) {
   const colorWeight = ctx.colorWeight || (() => 0.2);
   const priceOf = ctx.priceOf || ((n, fallback) => fallback);
   const corrections = ctx.corrections || null;
+  const isCommander = !!ctx.isCommander;
+
+  // 4-of legality rule (1-of in commander). Basics + Wastes are exempt.
+  // Without this guard, the chain happily creates a 5th copy of e.g.
+  // Blooming Marsh when swapping a Shock into the same pair.
+  const nameCap = (name) =>
+    BASIC_NAMES.has(name) ? Infinity : (isCommander ? 1 : 4);
 
   const pairImportance = (cand) => {
     if (cand.pairCode) {
@@ -336,6 +345,15 @@ function buildSwapChain(initialBreakdown, ctx) {
       if (lockedNames.has(name)) continue;
       const downs = nextDowngrades(name, { colorWeight, priceOf, corrections });
       for (const dg of downs) {
+        // Cap enforcement: skip any swap that would push the TARGET
+        // name above its legality cap. The chain then naturally finds
+        // a different downgrade (or a different source land) for that
+        // iteration.
+        const targetCount = working[dg.to] || 0;
+        if (targetCount + 1 > nameCap(dg.to)) continue;
+        // Eur-saved must be strictly positive — never accept a "swap"
+        // that costs more under live prices.
+        if (dg.eurSaved <= 0) continue;
         const imp = pairImportance(dg);
         const score = (dg.eurSaved + 0.05) / ((dg.qualityLoss + 0.10) * (1 + 0.6 * imp));
         if (
@@ -540,7 +558,7 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
   for (const [name] of existing.catalogFixer) if (shouldKeep(name)) lockedNames.add(name);
   for (const [name] of existing.utility)      if (shouldKeep(name)) lockedNames.add(name);
   const swapChain = buildSwapChain(ideal.breakdown, {
-    lockedNames, colorWeight, priceOf, corrections,
+    lockedNames, colorWeight, priceOf, corrections, isCommander,
   });
 
   // ── 6. Apply swaps per budget slider ─────────────────────
@@ -920,9 +938,13 @@ function buildLivePricedCost(breakdown, ctx) {
  *                          by Polluted-Delta-style fetches.
  *   painland  0.95         Same speed as shock, costs 1 life per use.
  *                          Slightly under shock for the life cost.
- *   surveil   0.95 (+0.10 if greed ≥ 0.55)
- *                          Painland + surveil 1 ETB. Greedy/value
- *                          decks edge it over shock.
+ *   surveil   0.65 default  ALWAYS enters tapped (despite the T3 price
+ *                          tag for the surveil 1 ETB).
+ *                          ‑0.15 if tempo+early ≥ 1.30 (aggro hates taps)
+ *                          +0.15 if tempo+early < 0.85 AND greed ≥ 0.55
+ *                                  (control-value decks profit from
+ *                                   the card selection)
+ *                          Never above shock.
  *   fastland  0.82 + up to +0.18 if VERY aggro
  *                          Only wins against shock for true aggro:
  *                          tempo+early ≥ 1.50 AND avgCmc ≤ 2.8.
@@ -950,8 +972,15 @@ function rankLandStyle(land, sliders, ctx = {}) {
       return 1.00;
     case 'painland':
       return 0.95;
-    case 'surveil':
-      return 0.95 + (greed >= 0.55 ? 0.10 : 0);
+    case 'surveil': {
+      // ALWAYS enters tapped. Score reflects the surveil-1 ETB value,
+      // gated by tempo: aggro hates taplands, control loves selection.
+      const fast = tempo + early;
+      let s = 0.65;
+      if (fast >= 1.30) s -= 0.15;                       // aggro penalty
+      if (fast < 0.85 && greed >= 0.55) s += 0.15;        // control-value bonus
+      return s;
+    }
     case 'fastland': {
       // Only beats shock when the deck is TRULY aggressive: high
       // tempo+early AND a low curve so games end before fastland's
@@ -984,17 +1013,22 @@ function rankLandStyle(land, sliders, ctx = {}) {
 const STYLE_SPEED = {
   fetch:     1.00,          // sac → untapped land, near-zero tempo loss
   shock:     1.00,
-  fastland:  0.95,          // untapped early, tapped after T3
-  surveil:   1.00,          // pain-style untapped
   painland:  1.00,
+  fastland:  0.95,          // untapped early, tapped after T3
   checkland: 0.85,          // untapped if you control matching basic
   slowland:  0.55,          // tapped early, fine late
-  scryland:  0.30,
-  guildgate: 0.30,
-  bondland:  1.00,
-  basic:     1.00,
-  triome:    0.35,          // tapped, 3-color reach
+  // Tapland cluster — ALL of these enter the battlefield tapped, full
+  // stop. Their tier-3 price tag (~7€ for surveil) reflects the ETB
+  // value, not the speed; the speed component must still count them
+  // as tapped or the score over-rewards expensive taplands.
+  surveil:   0.30,          // tapped + surveil 1 ETB
+  scryland:  0.30,          // tapped + scry 1 ETB
+  guildgate: 0.30,          // tapped, no upside
+  triome:    0.30,          // tapped, 3-color reach
   fixer:     0.30,          // basic-fetcher (Evolving Wilds / Fabled Passage)
+  // Untapped specials
+  bondland:  1.00,          // commander only — untapped with 2+ opponents
+  basic:     1.00,
 };
 
 /** Group a flat breakdown by category for the modal's breakdown panel. */

@@ -56,6 +56,11 @@ export default function MtgDeckBuilderApp() {
   const [deckFormat, setDeckFormat] = useState('');
   const [mainboard, setMainboard] = useState({});
   const [sideboard, setSideboard] = useState({});
+  // "Ideas" — an unlimited pool of candidate cards the player is
+  // considering for this deck. They DON'T count against the deck's
+  // 60/15 limits, but they DO feed the cross-deck wishlist so the
+  // user can buy them alongside their actual playable list.
+  const [ideas, setIdeas] = useState({});
   const [coverCardId, setCoverCardId] = useState(null);
   // Per-deck share token (see src/shared/tokens). Persists across saves;
   // we mint one only when the deck is created (or migrated from a row
@@ -222,6 +227,7 @@ export default function MtgDeckBuilderApp() {
       setDeckFormat(matchedFormat ? matchedFormat.value : '');
       setMainboard(data.data?.mainboard || {});
       setSideboard(data.data?.sideboard || {});
+      setIdeas(data.data?.ideas || {});
       setCoverCardId(data.data?.coverCardId || null);
       setCommander(data.data?.commander || null);
       setShareToken(data.share_token || null);
@@ -236,7 +242,7 @@ export default function MtgDeckBuilderApp() {
   useEffect(() => {
     if (skipDirtyRef.current) return;
     setDirty(true);
-  }, [mainboard, sideboard, deckName, deckFormat, coverCardId, commander]);
+  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander]);
 
   // ── Singleton helper ─────────────────────────────────
   // In Commander, every non-basic-land card is capped at 1 copy.
@@ -342,6 +348,39 @@ export default function MtgDeckBuilderApp() {
     });
   }, []);
 
+  // ── Ideas mutations (unlimited pool, no singleton rule) ──
+  // Ideas are NOT subject to the commander singleton rule — they're a
+  // scratchpad of cards the user wants to remember to buy/test.
+  const addToIdeas = useCallback((card) => {
+    setIdeas(prev => {
+      const existing = prev[card.id];
+      return {
+        ...prev,
+        [card.id]: existing
+          ? { ...existing, count: existing.count + 1 }
+          : { card, count: 1 },
+      };
+    });
+  }, []);
+  const updateIdeasCount = useCallback((cardId, delta) => {
+    setIdeas(prev => {
+      const entry = prev[cardId];
+      if (!entry) return prev;
+      const next = entry.count + delta;
+      if (next <= 0) {
+        const { [cardId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [cardId]: { ...entry, count: next } };
+    });
+  }, []);
+  const removeIdeas = useCallback((cardId) => {
+    setIdeas(prev => {
+      const { [cardId]: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
   // ── Transfer between main/side ───────────────────────
   const moveToSideboard = useCallback((cardId) => {
     setMainboard(prev => {
@@ -388,20 +427,50 @@ export default function MtgDeckBuilderApp() {
     });
   }, [isCommanderFormat, mainboard]);
 
+  // Move 1 copy out of ideas into the mainboard (respects commander singleton).
+  const moveIdeasToMainboard = useCallback((cardId) => {
+    setIdeas(prev => {
+      const entry = prev[cardId];
+      if (!entry) return prev;
+      const mainAlready = mainboard[cardId];
+      if (isCommanderFormat && mainAlready && !isBasicLand(entry.card)) return prev;
+      const newCount = entry.count - 1;
+      const nextIdeas = { ...prev };
+      if (newCount <= 0) delete nextIdeas[cardId];
+      else nextIdeas[cardId] = { ...entry, count: newCount };
+      setMainboard(main => {
+        const m = main[cardId];
+        return {
+          ...main,
+          [cardId]: m
+            ? { ...m, count: m.count + 1 }
+            : { card: entry.card, count: 1 },
+        };
+      });
+      return nextIdeas;
+    });
+  }, [isCommanderFormat, mainboard]);
+
   const clearDeck = useCallback(() => {
     setMainboard({});
     setSideboard({});
+    setIdeas({});
   }, []);
 
   // We still pass a deck-shaped object to CardList because CardItem reads deckCount from it.
-  // Combine main+side counts so the badge reflects total presence in the deck.
+  // Combine main+side+ideas counts so the badge reflects total presence in the deck.
   const combinedForCardList = {};
   for (const id of Object.keys(mainboard)) {
-    combinedForCardList[id] = { count: mainboard[id].count + (sideboard[id]?.count || 0) };
+    combinedForCardList[id] = { count: mainboard[id].count + (sideboard[id]?.count || 0) + (ideas[id]?.count || 0) };
   }
   for (const id of Object.keys(sideboard)) {
     if (!combinedForCardList[id]) {
-      combinedForCardList[id] = { count: sideboard[id].count };
+      combinedForCardList[id] = { count: sideboard[id].count + (ideas[id]?.count || 0) };
+    }
+  }
+  for (const id of Object.keys(ideas)) {
+    if (!combinedForCardList[id]) {
+      combinedForCardList[id] = { count: ideas[id].count };
     }
   }
 
@@ -436,7 +505,7 @@ export default function MtgDeckBuilderApp() {
       user_id: user.id,
       name: deckName.trim() || 'Unbenanntes Deck',
       format: deckFormat || null,
-      data: { mainboard, sideboard, coverCardId, commander },
+      data: { mainboard, sideboard, ideas, coverCardId, commander },
       share_token: tokenForSave,
       updated_at: new Date().toISOString(),
     };
@@ -510,14 +579,18 @@ export default function MtgDeckBuilderApp() {
     <DeckPanel
       mainboard={mainboard}
       sideboard={sideboard}
+      ideas={ideas}
       commander={commander}
       onUpdateMainCount={updateMainCount}
       onRemoveMain={removeMain}
       onClearDeck={clearDeck}
       onUpdateSideCount={updateSideCount}
       onRemoveSide={removeSide}
+      onUpdateIdeasCount={updateIdeasCount}
+      onRemoveIdeas={removeIdeas}
       onMoveToSideboard={moveToSideboard}
       onMoveToMainboard={moveToMainboard}
+      onMoveIdeasToMain={moveIdeasToMainboard}
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
       onExportDeck={handleExport}
@@ -585,6 +658,7 @@ export default function MtgDeckBuilderApp() {
       onLoadMore={loadMore}
       onAddCard={addToMain}
       onAddSideCard={addToSide}
+      onAddIdeasCard={addToIdeas}
       deck={combinedForCardList}
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
@@ -834,6 +908,7 @@ export default function MtgDeckBuilderApp() {
                   onLoadMore={loadMore}
                   onAddCard={addToMain}
                   onAddSideCard={addToSide}
+                  onAddIdeasCard={addToIdeas}
                   deck={combinedForCardList}
                   onHoverCard={setHoveredCard}
                   onPinCard={handlePin}

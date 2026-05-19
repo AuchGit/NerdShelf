@@ -8,7 +8,9 @@
 //   /mtg              Decks dashboard
 //   /mtg/wishlist     Auto-computed missing cards across decks
 //   /mtg/inventory    User-owned cards (shared inventory, domain='mtg')
-//   /mtg/favorites    Starred cards
+//
+// Favorites are filterable inside the deck-builder search; they don't
+// need their own page.
 //
 // Intentionally NOT rendered inside the deck builder route
 // (/mtg/deck/:id) — that page has its own header chrome.
@@ -19,7 +21,6 @@ const TABS = [
   { to: '/mtg',           label: 'Decks',     end: true },
   { to: '/mtg/wishlist',  label: 'Wunschliste' },
   { to: '/mtg/inventory', label: 'Sammlung' },
-  { to: '/mtg/favorites', label: 'Favoriten' },
   { to: '/mtg/match',     label: 'Match HUD' },
 ];
 

@@ -24,6 +24,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Button } from '../../../../shared/ui';
 import { getCardPriceEur, formatEur } from '../services/scryfall';
+import { isBasicLand } from '../services/deckAnalysis';
 
 export default function CardmarketExportModal({
   open,
@@ -135,6 +136,28 @@ export default function CardmarketExportModal({
               <span>
                 <strong>{includedCount}</strong> {includedCount === 1 ? 'Karte' : 'Karten'} ausgewählt
               </span>
+              <button
+                type="button"
+                onClick={() => {
+                  // Promote every included non-basic-land row to a full
+                  // playset (4 copies). Basics stay where they are —
+                  // nobody wants 4-of basics in their Cardmarket cart.
+                  setQty(prev => {
+                    const next = { ...prev };
+                    for (const r of rows) {
+                      if (!includeMap[r.cardId]) continue;
+                      if (isBasicLand(r.card)) continue;
+                      const cur = Number(prev[r.cardId] ?? r.qty) || 0;
+                      if (cur < 4) next[r.cardId] = 4;
+                    }
+                    return next;
+                  });
+                }}
+                style={miniBtnStyle}
+                title="Setzt alle ausgewählten Nicht-Basics auf 4 Kopien"
+              >
+                Alle → 4×
+              </button>
               <span style={{ marginLeft: 'auto' }}>
                 Gesamt:{' '}
                 <strong style={{ color: 'var(--color-accent)', fontVariantNumeric: 'tabular-nums' }}>
@@ -150,9 +173,18 @@ export default function CardmarketExportModal({
                 </div>
               ) : rows.map(r => {
                 const checked = !!includeMap[r.cardId];
-                const q = qtyMap[r.cardId] ?? r.qty;
+                const q = Number(qtyMap[r.cardId] ?? r.qty) || 0;
                 const eur = getCardPriceEur(r.card);
-                const line = eur != null ? eur * (Number(q) || 0) : null;
+                const line = eur != null ? eur * q : null;
+                const cardIsBasic = isBasicLand(r.card);
+                // Playset toggle: shows current state + delta cost if
+                // the user clicks "→ 4". A second click reverts to the
+                // original suggester quantity. Basics hide the button
+                // (4-of basics in a Cardmarket cart makes no sense).
+                const isPlayset = q >= 4;
+                const playsetDelta = eur != null && !isPlayset && q < 4
+                  ? eur * (4 - q)
+                  : null;
                 return (
                   <label
                     key={r.cardId}
@@ -182,6 +214,41 @@ export default function CardmarketExportModal({
                         )}
                       </div>
                     </div>
+                    {!cardIsBasic && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          // Toggle between current suggester quantity and 4.
+                          setQty(prev => {
+                            const cur = Number(prev[r.cardId] ?? r.qty) || 0;
+                            return {
+                              ...prev,
+                              [r.cardId]: cur >= 4 ? r.qty : 4,
+                            };
+                          });
+                        }}
+                        style={{
+                          ...playsetBtnStyle,
+                          background: isPlayset ? 'var(--color-accent)' : 'transparent',
+                          color: isPlayset ? 'var(--color-accent-contrast)' : 'var(--color-text-muted)',
+                          borderColor: isPlayset ? 'var(--color-accent)' : 'var(--color-border)',
+                        }}
+                        title={
+                          isPlayset
+                            ? `Volles Playset — auf ${r.qty} zurücksetzen`
+                            : playsetDelta != null
+                              ? `Auf 4 erhöhen (+${formatEur(playsetDelta)})`
+                              : 'Auf 4 erhöhen'
+                        }
+                      >
+                        4×{playsetDelta != null && (
+                          <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.85 }}>
+                            +{formatEur(playsetDelta)}
+                          </span>
+                        )}
+                      </button>
+                    )}
                     <input
                       type="number"
                       min={0}
@@ -357,6 +424,12 @@ function buildCandidates({ source, deckId, allowDups, decks, inventory, preselec
     for (const [id, entry] of Object.entries(data.sideboard || {})) {
       bump(id, entry?.card, entry?.count || 0, d.name);
     }
+    // Ideas pool: cards the user is considering. They go into the
+    // wishlist / Cardmarket list with the "(Ideen)" tag so it's clear
+    // why they're in the shopping cart.
+    for (const [id, entry] of Object.entries(data.ideas || {})) {
+      bump(id, entry?.card, entry?.count || 0, `${d.name} (Ideen)`);
+    }
     if (data.commander?.id) bump(data.commander.id, data.commander, 1, d.name);
   };
 
@@ -425,4 +498,24 @@ const qtyInputStyle = {
   fontSize: 'var(--fs-sm)',
   fontFamily: 'inherit',
   textAlign: 'center',
+};
+const playsetBtnStyle = {
+  border: '1px solid',
+  borderRadius: 'var(--radius-md)',
+  padding: '3px 8px',
+  fontSize: 'var(--fs-xs)',
+  fontWeight: 'var(--fw-semibold)',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+const miniBtnStyle = {
+  padding: '3px 8px',
+  fontSize: 'var(--fs-xs)',
+  background: 'transparent',
+  color: 'var(--color-text-muted)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
 };

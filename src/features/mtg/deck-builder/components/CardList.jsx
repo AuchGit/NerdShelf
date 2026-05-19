@@ -18,7 +18,7 @@ const COL_OPTS = [
 ];
 
 export default function CardList({
-  cards, loading, error, hasMore, onLoadMore, onAddCard, onAddSideCard, deck,
+  cards, loading, error, hasMore, onLoadMore, onAddCard, onAddSideCard, onAddIdeasCard, deck,
   onHoverCard, onPinCard, pinnedCard,
   viewMode, setViewMode,
   isFavorite, onToggleFavorite,
@@ -76,6 +76,7 @@ export default function CardList({
             card={card}
             onAdd={onAddCard}
             onAddSide={onAddSideCard}
+            onAddIdeas={onAddIdeasCard}
             deckCount={deck[card.id]?.count || 0}
             onHover={onHoverCard}
             onHoverEnd={() => onHoverCard?.(null)}

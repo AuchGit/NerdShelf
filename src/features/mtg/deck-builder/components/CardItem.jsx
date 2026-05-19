@@ -33,7 +33,7 @@ function FaceImage({ face, alt, onClick, className = '' }) {
 }
 
 export default function CardItem({
-  card, onAdd, onAddSide, deckCount, onHover, onHoverEnd, onPin,
+  card, onAdd, onAddSide, onAddIdeas, deckCount, onHover, onHoverEnd, onPin,
   isFavorite = false, onToggleFavorite,
   ownedQty = 0, onIncOwned, onDecOwned,
 }) {
@@ -64,6 +64,11 @@ export default function CardItem({
   const handleSideClick = (e) => {
     e.stopPropagation();
     onAddSide?.(card);
+  };
+
+  const handleIdeasClick = (e) => {
+    e.stopPropagation();
+    onAddIdeas?.(card);
   };
 
   const handleAddClick = (e) => {
@@ -105,6 +110,16 @@ export default function CardItem({
           title="Direkt ins Sideboard"
         >
           + Sideboard
+        </button>
+      )}
+      {onAddIdeas && (
+        <button
+          type="button"
+          className="card-hover-btn"
+          onClick={handleIdeasClick}
+          title="In die Ideen-Liste (Wunschpool ohne Limit)"
+        >
+          + Ideen
         </button>
       )}
       {onIncOwned && (

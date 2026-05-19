@@ -7,10 +7,10 @@ import './DeckCard.css';
 export default function DeckCard({
   card, count,
   onIncrease, onDecrease, onRemove,
-  onMove,          // optional: () => void — shows ↕ arrow
-  moveTitle,       // optional tooltip for the move button
-  onHover,         // optional: (card) => void
-  onPin,           // optional: (card) => void — right-click pins to preview
+  onMove,           // optional: () => void — shows ↕ arrow
+  moveTitle,        // optional tooltip for the move button
+  onHover,          // optional: (card) => void
+  onPin,            // optional: (card) => void — right-click pins to preview
 }) {
   const manaCost = getManaCost(card);
   const manaSyms = parseManaCost(manaCost);

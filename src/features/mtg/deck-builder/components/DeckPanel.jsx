@@ -148,14 +148,18 @@ function getManaStats(deck) {
 export default function DeckPanel({
   mainboard,
   sideboard,
+  ideas = {},
   commander,           // optional: full Scryfall card object | null
   onUpdateMainCount,
   onRemoveMain,
   onClearDeck,
   onUpdateSideCount,
   onRemoveSide,
+  onUpdateIdeasCount,
+  onRemoveIdeas,
   onMoveToSideboard,
   onMoveToMainboard,
+  onMoveIdeasToMain,    // ideas → main (from the Ideen tab)
   onHoverCard,
   onPinCard,
   onExportDeck,
@@ -168,10 +172,14 @@ export default function DeckPanel({
 
   const mainEntries = Object.values(mainboard);
   const sideEntries = Object.values(sideboard);
+  const ideaEntries = Object.values(ideas);
   const mainTotal   = mainEntries.reduce((s, e) => s + e.count, 0);
   const sideTotal   = sideEntries.reduce((s, e) => s + e.count, 0);
+  const ideaTotal   = ideaEntries.reduce((s, e) => s + e.count, 0);
 
-  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side
+  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side.
+  // Ideas DON'T contribute to the deck-price — they're a separate
+  // "would like to test" pool and live in the wishlist, not the deck.
   const sumEur = (entries) =>
     entries.reduce((s, e) => {
       const p = getCardPriceEur(e.card);
@@ -179,6 +187,7 @@ export default function DeckPanel({
     }, 0);
   const mainEur      = sumEur(mainEntries);
   const sideEur      = sumEur(sideEntries);
+  const ideasEur     = sumEur(ideaEntries);
   const commanderEur = commander ? (getCardPriceEur(commander) ?? 0) : 0;
   const totalEur     = mainEur + sideEur + commanderEur;
 
@@ -187,7 +196,9 @@ export default function DeckPanel({
     && priceSettings.deckThresholdEur > 0
     && totalEur > priceSettings.deckThresholdEur;
 
-  const activeDeck = tab === 'main' ? mainboard : sideboard;
+  const activeDeck = tab === 'main' ? mainboard
+                   : tab === 'side' ? sideboard
+                   : ideas;
   const organized  = organizeDeck(activeDeck, sortMode);
 
   const manaStats   = getManaStats(mainboard);
@@ -279,6 +290,13 @@ export default function DeckPanel({
         >
           Sideboard <span className="dp-tab-count">{sideTotal}/15</span>
         </button>
+        <button
+          className={`dp-tab ${tab === 'ideas' ? 'active' : ''}`}
+          onClick={() => setTab('ideas')}
+          title="Ideen — unbegrenzter Pool, fließt in die Wunschliste"
+        >
+          Ideen <span className="dp-tab-count">{ideaTotal}</span>
+        </button>
       </div>
 
       {/* Sort selector */}
@@ -295,14 +313,17 @@ export default function DeckPanel({
         </div>
       </div>
 
-      {/* Progress bar for active section */}
+      {/* Progress bar for active section — ideas pool has no cap so
+          show the relative-to-deck fill instead (capped at 100%). */}
       <div className="dp-progress-wrap">
         <div
           className="dp-progress-bar"
           style={{
             width: tab === 'main'
               ? `${Math.min((mainTotal / 60) * 100, 100)}%`
-              : `${Math.min((sideTotal / 15) * 100, 100)}%`,
+              : tab === 'side'
+                ? `${Math.min((sideTotal / 15) * 100, 100)}%`
+                : `${Math.min((ideaTotal / 30) * 100, 100)}%`,
           }}
         />
       </div>
@@ -336,16 +357,23 @@ export default function DeckPanel({
           onPin={onPinCard}
         />
       )}
-      {(tab === 'main' ? mainTotal : sideTotal) === 0 ? (
+      {(tab === 'main' ? mainTotal : tab === 'side' ? sideTotal : ideaTotal) === 0 ? (
         (tab === 'main' && commander) ? null : (
           <div className="dp-empty">
             <div className="dp-empty-icon">⊕</div>
-            <div>{tab === 'main'
-              ? 'Klicke Karten in der Suche, um sie hinzuzufügen'
-              : 'Leeres Sideboard'}</div>
+            <div>{
+              tab === 'main' ? 'Klicke Karten in der Suche, um sie hinzuzufügen' :
+              tab === 'side' ? 'Leeres Sideboard' :
+              'Noch keine Ideen'
+            }</div>
             {tab === 'side' && (
               <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
                 Über das ↕ Symbol bei einer Main-Karte verschieben
+              </div>
+            )}
+            {tab === 'ideas' && (
+              <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
+                Karten landen über das ↕ Symbol hier — fließen in die Wunschliste, zählen aber nicht zum 60/15-Limit.
               </div>
             )}
           </div>
@@ -365,25 +393,35 @@ export default function DeckPanel({
                   key={card.id}
                   card={card}
                   count={count}
-                  onIncrease={() =>
-                    tab === 'main'
-                      ? onUpdateMainCount(card.id, 1)
-                      : onUpdateSideCount(card.id, 1)
+                  onIncrease={() => {
+                    if (tab === 'main')  onUpdateMainCount(card.id, 1);
+                    else if (tab === 'side') onUpdateSideCount(card.id, 1);
+                    else                  onUpdateIdeasCount?.(card.id, 1);
+                  }}
+                  onDecrease={() => {
+                    if (tab === 'main')  onUpdateMainCount(card.id, -1);
+                    else if (tab === 'side') onUpdateSideCount(card.id, -1);
+                    else                  onUpdateIdeasCount?.(card.id, -1);
+                  }}
+                  onRemove={() => {
+                    if (tab === 'main')  onRemoveMain(card.id);
+                    else if (tab === 'side') onRemoveSide(card.id);
+                    else                  onRemoveIdeas?.(card.id);
+                  }}
+                  onMove={() => {
+                    // main → side (existing), side → main (existing),
+                    // ideas → main (new). Holding the alt key on main
+                    // moves to ideas instead of side; we keep the
+                    // primary move target the same for muscle memory.
+                    if (tab === 'main')  onMoveToSideboard(card.id);
+                    else if (tab === 'side') onMoveToMainboard(card.id);
+                    else                  onMoveIdeasToMain?.(card.id);
+                  }}
+                  moveTitle={
+                    tab === 'main' ? 'Ins Sideboard' :
+                    tab === 'side' ? 'Ins Mainboard' :
+                    'Ins Mainboard'
                   }
-                  onDecrease={() =>
-                    tab === 'main'
-                      ? onUpdateMainCount(card.id, -1)
-                      : onUpdateSideCount(card.id, -1)
-                  }
-                  onRemove={() =>
-                    tab === 'main' ? onRemoveMain(card.id) : onRemoveSide(card.id)
-                  }
-                  onMove={() =>
-                    tab === 'main'
-                      ? onMoveToSideboard(card.id)
-                      : onMoveToMainboard(card.id)
-                  }
-                  moveTitle={tab === 'main' ? 'Ins Sideboard' : 'Ins Mainboard'}
                   onHover={onHoverCard}
                   onPin={onPinCard}
                 />
