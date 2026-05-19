@@ -38,6 +38,12 @@ export default function CardmarketExportModal({
   const [source, setSource]       = useState(initialSource);
   const [deckId, setDeckId]       = useState(initialDeckId || '');
   const [allowDups, setAllowDups] = useState(false);
+  // When generating from a specific deck, the user can decide whether
+  // their "Ideen" pool feeds the shopping list. Default: include
+  // (ideas exist precisely to land on the wishlist), but a quick
+  // checkbox lets them stick to ONLY playable cards when they don't
+  // want to pay for speculative additions yet.
+  const [includeIdeas, setIncludeIdeas] = useState(true);
   const [rows, setRows]           = useState([]);     // editable preview rows
   const [includeMap, setInclude]  = useState({});     // cardId → bool
   const [qtyMap, setQty]          = useState({});     // cardId → number
@@ -57,7 +63,7 @@ export default function CardmarketExportModal({
   useEffect(() => {
     if (!open) return;
     const candidate = buildCandidates({
-      source, deckId, allowDups, decks, inventory, preselectedRows,
+      source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas,
     });
     setRows(candidate);
     const inc = {};
@@ -69,7 +75,7 @@ export default function CardmarketExportModal({
     setInclude(inc);
     setQty(qty);
     setGenerated(null);
-  }, [open, source, deckId, allowDups, decks, inventory, preselectedRows]);
+  }, [open, source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas]);
 
   const totalEur = useMemo(() => {
     let sum = 0;
@@ -129,6 +135,7 @@ export default function CardmarketExportModal({
               deckId={deckId} setDeckId={setDeckId}
               decks={decks}
               allowDups={allowDups} setAllowDups={setAllowDups}
+              includeIdeas={includeIdeas} setIncludeIdeas={setIncludeIdeas}
               hasPreselected={!!preselectedRows?.size}
             />
 
@@ -325,6 +332,7 @@ function SourceControls({
   deckId, setDeckId,
   decks,
   allowDups, setAllowDups,
+  includeIdeas, setIncludeIdeas,
   hasPreselected,
 }) {
   return (
@@ -365,6 +373,14 @@ function SourceControls({
         />
         Duplikate kaufen — auch Karten, die ich schon (in einem anderen Deck) habe
       </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+        <input
+          type="checkbox"
+          checked={!!includeIdeas}
+          onChange={(e) => setIncludeIdeas?.(e.target.checked)}
+        />
+        Ideen einbeziehen — Karten aus dem Ideen-Pool des Decks mit in die Liste
+      </label>
     </div>
   );
 }
@@ -404,7 +420,7 @@ function RadioPill({ name, value, current, onChange, children }) {
  * Build the candidate row list for the preview. Each candidate has:
  *   { cardId, card, qty, reason }
  */
-function buildCandidates({ source, deckId, allowDups, decks, inventory, preselectedRows }) {
+function buildCandidates({ source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas = true }) {
   // Aggregate "needed by source" per card.
   const need = new Map();   // cardId → { card, count, sources: [deckName] }
   const bump = (cardId, card, n, src) => {
@@ -426,9 +442,12 @@ function buildCandidates({ source, deckId, allowDups, decks, inventory, preselec
     }
     // Ideas pool: cards the user is considering. They go into the
     // wishlist / Cardmarket list with the "(Ideen)" tag so it's clear
-    // why they're in the shopping cart.
-    for (const [id, entry] of Object.entries(data.ideas || {})) {
-      bump(id, entry?.card, entry?.count || 0, `${d.name} (Ideen)`);
+    // why they're in the shopping cart. Skipped when the user
+    // unchecks the "Ideen einbeziehen" checkbox.
+    if (includeIdeas) {
+      for (const [id, entry] of Object.entries(data.ideas || {})) {
+        bump(id, entry?.card, entry?.count || 0, `${d.name} (Ideen)`);
+      }
     }
     if (data.commander?.id) bump(data.commander.id, data.commander, 1, d.name);
   };

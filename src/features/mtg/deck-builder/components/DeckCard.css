@@ -110,6 +110,18 @@
   font-size: 0.7rem;
 }
 
+/* ── Per-tab move arrows ──
+   .dc-move-arrow--left lives BEFORE the thumbnail so it visually
+   reads as "send this card OUT, left-ward". The right variant sits
+   at the end of the controls cluster mirroring that direction. */
+.dc-move-arrow {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.dc-move-arrow--left {
+  flex-shrink: 0;
+}
+
 .dc-remove:hover {
   background: #3a1818;
   color: #f07070;

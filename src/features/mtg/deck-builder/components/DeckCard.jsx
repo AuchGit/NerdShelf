@@ -7,8 +7,14 @@ import './DeckCard.css';
 export default function DeckCard({
   card, count,
   onIncrease, onDecrease, onRemove,
-  onMove,           // optional: () => void — shows ↕ arrow
-  moveTitle,        // optional tooltip for the move button
+  // Left-side arrow → "send card the OTHER way" (e.g. ← Ideen).
+  // Right-side arrow → "send card forward" (e.g. → Sideboard).
+  // Both are independent so the deck-panel can wire them per-tab and
+  // a card always has both shortcuts available.
+  onMoveLeft,
+  onMoveRight,
+  moveLeftTitle,
+  moveRightTitle,
   onHover,          // optional: (card) => void
   onPin,            // optional: (card) => void — right-click pins to preview
 }) {
@@ -46,6 +52,19 @@ export default function DeckCard({
         background: 'color-mix(in srgb, var(--color-danger, #e06a5a) 6%, transparent)',
       } : undefined}
     >
+      {/* Left-side move arrow — sits BEFORE the thumbnail so it reads
+          as "move this card LEFT (out of this zone)". Hidden when the
+          handler isn't supplied (e.g. for cards that have no logical
+          left-target like a CommanderRow). */}
+      {onMoveLeft && (
+        <button
+          type="button"
+          className="dc-btn dc-move-arrow dc-move-arrow--left"
+          onClick={onMoveLeft}
+          title={moveLeftTitle || 'Nach links verschieben'}
+        >←</button>
+      )}
+
       <div className="dc-thumb">
         {imageUrl && <img src={imageUrl} alt={card.name} loading="lazy" />}
         {!imageUrl && <div className="dc-thumb-fallback">?</div>}
@@ -81,8 +100,12 @@ export default function DeckCard({
         <button className="dc-btn" onClick={onDecrease} title="Eins weniger">−</button>
         <span className="dc-count">{count}</span>
         <button className="dc-btn" onClick={onIncrease} title="Eins mehr">+</button>
-        {onMove && (
-          <button className="dc-btn" onClick={onMove} title={moveTitle || 'Verschieben'}>↕</button>
+        {onMoveRight && (
+          <button
+            className="dc-btn dc-move-arrow dc-move-arrow--right"
+            onClick={onMoveRight}
+            title={moveRightTitle || 'Nach rechts verschieben'}
+          >→</button>
         )}
         <button className="dc-btn dc-remove" onClick={onRemove} title="Alle entfernen">✕</button>
       </div>

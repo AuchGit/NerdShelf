@@ -157,9 +157,18 @@ export default function DeckPanel({
   onRemoveSide,
   onUpdateIdeasCount,
   onRemoveIdeas,
-  onMoveToSideboard,
-  onMoveToMainboard,
-  onMoveIdeasToMain,    // ideas → main (from the Ideen tab)
+  // Six explicit movers — one per (from, to) pair. The deck panel
+  // chooses two per tab so the user gets a left- AND right-arrow on
+  // every card. Pattern (cyclic):
+  //   Mainboard ← Ideen   | → Sideboard
+  //   Sideboard ← Mainboard | → Ideen
+  //   Ideen     ← Sideboard | → Mainboard
+  onMainToIdeas,
+  onMainToSide,
+  onSideToMain,
+  onSideToIdeas,
+  onIdeasToSide,
+  onIdeasToMain,
   onHoverCard,
   onPinCard,
   onExportDeck,
@@ -388,44 +397,55 @@ export default function DeckPanel({
                   <span className="dp-group-count">{group.groupCount}</span>
                 </div>
               )}
-              {group.entries.map(({ card, count }) => (
-                <DeckCard
-                  key={card.id}
-                  card={card}
-                  count={count}
-                  onIncrease={() => {
-                    if (tab === 'main')  onUpdateMainCount(card.id, 1);
-                    else if (tab === 'side') onUpdateSideCount(card.id, 1);
-                    else                  onUpdateIdeasCount?.(card.id, 1);
-                  }}
-                  onDecrease={() => {
-                    if (tab === 'main')  onUpdateMainCount(card.id, -1);
-                    else if (tab === 'side') onUpdateSideCount(card.id, -1);
-                    else                  onUpdateIdeasCount?.(card.id, -1);
-                  }}
-                  onRemove={() => {
-                    if (tab === 'main')  onRemoveMain(card.id);
-                    else if (tab === 'side') onRemoveSide(card.id);
-                    else                  onRemoveIdeas?.(card.id);
-                  }}
-                  onMove={() => {
-                    // main → side (existing), side → main (existing),
-                    // ideas → main (new). Holding the alt key on main
-                    // moves to ideas instead of side; we keep the
-                    // primary move target the same for muscle memory.
-                    if (tab === 'main')  onMoveToSideboard(card.id);
-                    else if (tab === 'side') onMoveToMainboard(card.id);
-                    else                  onMoveIdeasToMain?.(card.id);
-                  }}
-                  moveTitle={
-                    tab === 'main' ? 'Ins Sideboard' :
-                    tab === 'side' ? 'Ins Mainboard' :
-                    'Ins Mainboard'
-                  }
-                  onHover={onHoverCard}
-                  onPin={onPinCard}
-                />
-              ))}
+              {group.entries.map(({ card, count }) => {
+                // Resolve the (left, right) handler pair + their
+                // tooltip labels based on the active tab.
+                let onLeft, onRight, leftLabel, rightLabel;
+                if (tab === 'main') {
+                  onLeft  = onMainToIdeas ? () => onMainToIdeas(card.id) : null;
+                  onRight = onMainToSide  ? () => onMainToSide(card.id)  : null;
+                  leftLabel  = 'In die Ideen';
+                  rightLabel = 'Ins Sideboard';
+                } else if (tab === 'side') {
+                  onLeft  = onSideToMain   ? () => onSideToMain(card.id)   : null;
+                  onRight = onSideToIdeas  ? () => onSideToIdeas(card.id)  : null;
+                  leftLabel  = 'Ins Mainboard';
+                  rightLabel = 'In die Ideen';
+                } else { // ideas
+                  onLeft  = onIdeasToSide  ? () => onIdeasToSide(card.id)  : null;
+                  onRight = onIdeasToMain  ? () => onIdeasToMain(card.id)  : null;
+                  leftLabel  = 'Ins Sideboard';
+                  rightLabel = 'Ins Mainboard';
+                }
+                return (
+                  <DeckCard
+                    key={card.id}
+                    card={card}
+                    count={count}
+                    onIncrease={() => {
+                      if (tab === 'main')  onUpdateMainCount(card.id, 1);
+                      else if (tab === 'side') onUpdateSideCount(card.id, 1);
+                      else                  onUpdateIdeasCount?.(card.id, 1);
+                    }}
+                    onDecrease={() => {
+                      if (tab === 'main')  onUpdateMainCount(card.id, -1);
+                      else if (tab === 'side') onUpdateSideCount(card.id, -1);
+                      else                  onUpdateIdeasCount?.(card.id, -1);
+                    }}
+                    onRemove={() => {
+                      if (tab === 'main')  onRemoveMain(card.id);
+                      else if (tab === 'side') onRemoveSide(card.id);
+                      else                  onRemoveIdeas?.(card.id);
+                    }}
+                    onMoveLeft={onLeft}
+                    onMoveRight={onRight}
+                    moveLeftTitle={leftLabel}
+                    moveRightTitle={rightLabel}
+                    onHover={onHoverCard}
+                    onPin={onPinCard}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>

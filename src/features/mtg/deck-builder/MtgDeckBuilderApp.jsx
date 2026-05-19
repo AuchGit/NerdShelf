@@ -451,6 +451,75 @@ export default function MtgDeckBuilderApp() {
     });
   }, [isCommanderFormat, mainboard]);
 
+  // ── Remaining 3 movers so every tab has both a left- and a right-
+  //    arrow target (the user wants the full 3-cycle: a card can hop
+  //    directly to any other zone without going through a sub-menu).
+  //    Pattern: each move pulls 1 copy from the source zone and pushes
+  //    it into the destination. Singleton rules apply to mainboard
+  //    only (ideas + sideboard have no singleton constraint).
+  const moveMainToIdeas = useCallback((cardId) => {
+    setMainboard(prev => {
+      const entry = prev[cardId];
+      if (!entry) return prev;
+      const newCount = entry.count - 1;
+      const nextMain = { ...prev };
+      if (newCount <= 0) delete nextMain[cardId];
+      else nextMain[cardId] = { ...entry, count: newCount };
+      setIdeas(ide => {
+        const i = ide[cardId];
+        return {
+          ...ide,
+          [cardId]: i
+            ? { ...i, count: i.count + 1 }
+            : { card: entry.card, count: 1 },
+        };
+      });
+      return nextMain;
+    });
+  }, []);
+
+  const moveSideToIdeas = useCallback((cardId) => {
+    setSideboard(prev => {
+      const entry = prev[cardId];
+      if (!entry) return prev;
+      const newCount = entry.count - 1;
+      const nextSide = { ...prev };
+      if (newCount <= 0) delete nextSide[cardId];
+      else nextSide[cardId] = { ...entry, count: newCount };
+      setIdeas(ide => {
+        const i = ide[cardId];
+        return {
+          ...ide,
+          [cardId]: i
+            ? { ...i, count: i.count + 1 }
+            : { card: entry.card, count: 1 },
+        };
+      });
+      return nextSide;
+    });
+  }, []);
+
+  const moveIdeasToSide = useCallback((cardId) => {
+    setIdeas(prev => {
+      const entry = prev[cardId];
+      if (!entry) return prev;
+      const newCount = entry.count - 1;
+      const nextIdeas = { ...prev };
+      if (newCount <= 0) delete nextIdeas[cardId];
+      else nextIdeas[cardId] = { ...entry, count: newCount };
+      setSideboard(side => {
+        const s = side[cardId];
+        return {
+          ...side,
+          [cardId]: s
+            ? { ...s, count: s.count + 1 }
+            : { card: entry.card, count: 1 },
+        };
+      });
+      return nextIdeas;
+    });
+  }, []);
+
   const clearDeck = useCallback(() => {
     setMainboard({});
     setSideboard({});
@@ -588,9 +657,16 @@ export default function MtgDeckBuilderApp() {
       onRemoveSide={removeSide}
       onUpdateIdeasCount={updateIdeasCount}
       onRemoveIdeas={removeIdeas}
-      onMoveToSideboard={moveToSideboard}
-      onMoveToMainboard={moveToMainboard}
-      onMoveIdeasToMain={moveIdeasToMainboard}
+      // ── per-tab arrow movers ────────────────────────
+      // Mainboard ← Ideen | → Sideboard
+      // Sideboard ← Mainboard | → Ideen
+      // Ideen     ← Sideboard | → Mainboard
+      onMainToIdeas={moveMainToIdeas}
+      onMainToSide={moveToSideboard}
+      onSideToMain={moveToMainboard}
+      onSideToIdeas={moveSideToIdeas}
+      onIdeasToSide={moveIdeasToSide}
+      onIdeasToMain={moveIdeasToMainboard}
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
       onExportDeck={handleExport}
