@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { loadSpellList, loadClassSpellNames } from '../../lib/dataLoader'
 import { parseTags } from '../../lib/tagParser'
+import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHOOL NORMALIZATION
@@ -360,6 +361,255 @@ function renderSpellEntries(entries, depth = 0) {
 // Now includes the full spell description below the metadata rows.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Mobile spell list — touch-first, expandable rows ──────────────────────
+// Renders the same data the desktop split-panel uses but in a single
+// column. Each row collapses to: level badge · name · school · +/✓ button.
+// Tap anywhere except the +/✓ button toggles inline-expansion that
+// reveals the full SpellDetail (description, components, source, etc.).
+// The +/✓ button is the explicit add/remove control so adding never
+// requires entering the detail view first.
+function MobileSpellList({
+  spells, fixedSpells, grantedSpells, selected, max, onToggle, isActive, label, search, setSearch,
+}) {
+  const [expanded, setExpanded] = useState(new Set())
+  const toggleExpanded = (key) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
+
+  const renderRow = (spell, { fixed = false, granted = false } = {}) => {
+    const key       = spell.id || spell.name
+    const isSel     = selected.includes(spell.name)
+    const active    = !fixed && !granted && isActive(spell)
+    const isOpen    = expanded.has(key)
+    const schoolCode = spell.school?.toUpperCase() || ''
+    const schoolColor = SCHOOL_COLORS[schoolCode] || 'var(--accent-blue)'
+
+    return (
+      <div
+        key={key}
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid',
+          borderColor: isSel ? 'var(--accent-green)' :
+                       isOpen ? 'var(--accent)' : 'var(--border)',
+          borderRadius: 8,
+          marginBottom: 6,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header row — always visible */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 10px',
+            minHeight: 44,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => toggleExpanded(key)}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              minWidth: 0,
+              textAlign: 'left',
+              color: 'inherit',
+              minHeight: 36,
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 22,
+                height: 22,
+                borderRadius: 4,
+                background: isSel ? 'var(--accent-green)' : 'var(--bg-elevated)',
+                color: isSel ? '#000' : 'var(--accent)',
+                fontWeight: 700,
+                fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              {spell.level === 0 ? 'C' : spell.level}
+            </span>
+            <span style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 14,
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              color: granted ? 'var(--accent-green)' : 'var(--text)',
+              opacity: granted ? 0.85 : 1,
+            }}>
+              {spell.name}
+            </span>
+            {spell.school && (
+              <span style={{
+                fontSize: 10,
+                color: schoolColor,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                flexShrink: 0,
+              }}>
+                {spell.school}
+              </span>
+            )}
+            <span style={{
+              color: 'var(--text-muted)',
+              fontSize: 13,
+              transition: 'transform 150ms',
+              transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+              display: 'inline-block',
+              width: 12,
+              textAlign: 'center',
+              flexShrink: 0,
+            }}>
+              ▸
+            </span>
+          </button>
+
+          {/* Add / remove control — always visible regardless of expanded state. */}
+          {fixed ? (
+            <span style={{
+              fontSize: 10,
+              padding: '4px 8px',
+              borderRadius: 12,
+              background: 'color-mix(in srgb, var(--accent-green) 20%, transparent)',
+              color: 'var(--accent-green)',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>AUTO</span>
+          ) : granted ? (
+            <span style={{
+              fontSize: 10,
+              padding: '4px 8px',
+              borderRadius: 12,
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-muted)',
+              flexShrink: 0,
+            }} title={grantedSpells[spell.name]}>BEREITS</span>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (active || isSel) onToggle(spell)
+              }}
+              disabled={!active && !isSel}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: isSel ? 'var(--accent-green)'
+                          : active ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: isSel ? '#000' : active ? '#000' : 'var(--text-dim)',
+                border: 'none',
+                fontSize: 18,
+                fontWeight: 700,
+                cursor: (active || isSel) ? 'pointer' : 'not-allowed',
+                flexShrink: 0,
+                opacity: (active || isSel) ? 1 : 0.5,
+              }}
+              title={isSel ? 'Entfernen' : active ? 'Hinzufügen' : 'Max. erreicht'}
+            >
+              {isSel ? '✓' : '+'}
+            </button>
+          )}
+        </div>
+
+        {/* Expanded detail — full SpellDetail inline */}
+        {isOpen && (
+          <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
+            <SpellDetail spell={spell} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Fixed first, then granted, then selectable. Mirrors desktop ordering.
+  const fixedRows = fixedSpells.map(name => {
+    const spell = spells.find(s => s.name === name)
+    return spell ? renderRow(spell, { fixed: true }) : null
+  }).filter(Boolean)
+
+  const grantedRows = spells
+    .filter(s => grantedSpells[s.name] && !fixedSpells.includes(s.name))
+    .map(s => renderRow(s, { granted: true }))
+
+  const selectableRows = spells
+    .filter(s => !fixedSpells.includes(s.name) && !grantedSpells[s.name])
+    .slice(0, 200)
+    .map(s => renderRow(s))
+
+  return (
+    <div>
+      {label && (
+        <div style={{
+          color: 'var(--text-secondary)',
+          fontWeight: 700,
+          fontSize: 14,
+          marginBottom: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <span>{label}</span>
+          {max !== Infinity && (
+            <span style={{
+              color: selected.length >= max ? 'var(--accent-green)' : 'var(--accent)',
+              fontWeight: 700,
+            }}>
+              {selected.length}/{max}
+            </span>
+          )}
+        </div>
+      )}
+      <input
+        type="text"
+        placeholder="Suchen…"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '10px 12px',
+          marginBottom: 10,
+          fontSize: 14,
+          background: 'var(--bg-input)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          color: 'var(--text)',
+          boxSizing: 'border-box',
+          minHeight: 44,
+        }}
+      />
+      {fixedRows}
+      {grantedRows}
+      {selectableRows}
+      {selectableRows.length === 0 && fixedRows.length === 0 && grantedRows.length === 0 && (
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
+          Keine Zauber gefunden.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SpellDetail({ spell }) {
   const schoolCode  = spell.school?.toUpperCase() || ''
   const schoolFull  = SCHOOL_CODE_TO_FULL[spell.school?.toLowerCase()] || spell.school || ''
@@ -444,6 +694,11 @@ export function UniversalSpellList({
   const [search,  setSearch]  = useState('')
   const [hovered, setHovered] = useState(null)
   const [pinned,  setPinned]  = useState(null)
+  // PWA-mobile gets an entirely different layout (see below): single
+  // column with each spell row expandable to its full description and
+  // an explicit "+ Hinzufügen" button. The desktop split-panel UI
+  // depends on hover, which doesn't exist on touch.
+  const { isPwaMobile } = usePwaMobile()
 
   // What the detail panel actually shows: hover preview takes priority,
   // but pinned persists so the panel stays visible (and scrollable) when
@@ -469,6 +724,27 @@ export function UniversalSpellList({
     if (isSel) return true                         // can always deselect
     if (canToggle) return canToggle(spell.name)
     return !done
+  }
+
+  // ── Mobile layout: collapsible-row list ─────────────────────
+  // Each row shows the spell name + a "+" button to add it. Tapping
+  // the row body (not the +) expands the inline detail. This works
+  // entirely on touch — no hover required.
+  if (isPwaMobile) {
+    return (
+      <MobileSpellList
+        spells={filtered}
+        fixedSpells={fixedSpells}
+        grantedSpells={grantedSpells}
+        selected={selected}
+        max={max}
+        onToggle={onToggle}
+        isActive={isActive}
+        label={label}
+        search={search}
+        setSearch={setSearch}
+      />
+    )
   }
 
   return (

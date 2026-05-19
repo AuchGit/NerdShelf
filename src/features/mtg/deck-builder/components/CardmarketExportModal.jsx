@@ -104,7 +104,7 @@ export default function CardmarketExportModal({
     const list = rows
       .filter(r => includeMap[r.cardId] && (Number(qtyMap[r.cardId]) || 0) > 0)
       .sort((a, b) => (a.card?.name || a.cardId).localeCompare(b.card?.name || b.cardId))
-      .map(r => `${qtyMap[r.cardId]} ${r.card?.name || r.cardId}`);
+      .map(r => `${qtyMap[r.cardId]} ${formatNameForCardmarket(r.card, r.cardId)}`);
     const text = list.join('\n');
     setGenerated(text);
     if (text) {
@@ -115,6 +115,20 @@ export default function CardmarketExportModal({
       } catch { /* clipboard blocked — user can still copy from the textarea */ }
     }
   };
+
+  // Cardmarket listet Tokens als eigene Produkte mit dem Suffix
+  // " Token" im Namen (z. B. "Goblin Token", "Treasure Token",
+  // "Scorpion Dragon Token"). Scryfalls all_parts liefert nur den
+  // Kreatur-/Artefakt-Typ ("Goblin", "Dragon") — wir hängen daher
+  // " Token" an, wenn das Suffix noch nicht da ist. Damit findet die
+  // Wants-Massenimport-Suche das richtige Produkt.
+  function formatNameForCardmarket(card, fallbackId) {
+    const name = card?.name || fallbackId || '';
+    if (card?._isToken && name && !/\btoken\b/i.test(name)) {
+      return `${name} Token`;
+    }
+    return name;
+  }
 
   const footer = (
     <>

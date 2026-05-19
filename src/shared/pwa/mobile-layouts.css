@@ -288,6 +288,26 @@ body[data-pwa-layouts='true'] [data-pwa-target='inventory-tabs'] > button {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   MTG card search: hover-overlay buttons (+ Sideboard / + Ideen /
+   + Sammlung) are normally gated behind :hover, which doesn't exist on
+   touch. On PWA mobile we force them visible at the bottom of every
+   card so the user can directly tap them. Tap targets get a 36px min
+   so they're easy to hit alongside the primary "+ Hinzufügen".
+   ───────────────────────────────────────────────────────────────────── */
+body[data-pwa-layouts='true'] .card-hover-overlay {
+  opacity: 1 !important;
+  position: static !important;
+  background: var(--color-bg-sunken) !important;
+  padding: 4px !important;
+  margin-top: 4px !important;
+  border-radius: 6px !important;
+}
+body[data-pwa-layouts='true'] .card-hover-overlay .card-hover-btn {
+  min-height: 36px;
+  font-size: 12px !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    4. Visual focus during gameplay HUDs
        The Match HUD and the WH40K Combat HUD set their own classes;
        these are accessibility / focus polish that complements them.
