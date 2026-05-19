@@ -163,46 +163,65 @@ export function detectExistingLands(mainboard) {
  */
 function nextDowngrades(name, ctx = {}) {
   const colorWeight = ctx.colorWeight || (() => 1);
+  // priceOf falls through to catalog `priceEur` for any name without a
+  // live cache entry, so all eurSaved calculations stay sane.
+  const priceOf = ctx.priceOf || ((n, fallback) => fallback);
+  // Runtime pair corrections override the catalog's nested key when
+  // Scryfall says otherwise. Used to pick the right basic-color for
+  // the terminal swap so a miscategorised land terminates correctly.
+  const corrections = ctx.corrections || null;
   const out = [];
 
   // ── Pair-specific catalog dual (walks the per-pair ladder) ──
-  // The catalog is sorted by ascending priceEur, so `idx-1` is always
-  // the next-cheaper alternative — could be same-tier (e.g. Shock →
-  // Fastland → Surveil within T3) or cross-tier (Surveil T3 → Painland
-  // T2). qualityLoss reflects the tier difference: within-tier swaps
-  // are cheap-quality (style swap), cross-tier ones cost more.
+  // The catalog is sorted by CATALOG priceEur ascending, but LIVE
+  // Scryfall prices can re-order things. We walk the ladder looking
+  // for the next-cheaper alternative under LIVE prices (skipping any
+  // catalog rung that is currently MORE expensive than `from`). The
+  // basic terminal swap is ALWAYS offered as a fallback so the chain
+  // can always go all the way down.
   for (const [pkey, opts] of Object.entries(LAND_CATALOG)) {
     const idx = opts.findIndex(o => o.name === name);
     if (idx < 0) continue;
     const from = opts[idx];
-    if (idx > 0) {
-      const to = opts[idx - 1];
-      const tierDiff = (from.priceTier || 0) - (to.priceTier || 0);
+    const fromPrice = priceOf(from.name, from.priceEur) ?? 0;
+
+    // Walk catalog ladder for the next strictly-cheaper option.
+    for (let j = idx - 1; j >= 0; j--) {
+      const candidate = opts[j];
+      const candPrice = priceOf(candidate.name, candidate.priceEur) ?? 0;
+      if (candPrice >= fromPrice) continue;   // skip — same or pricier in reality
+      const tierDiff = (from.priceTier || 0) - (candidate.priceTier || 0);
       const qualityLoss =
-        tierDiff === 0 ? 0.22                   // same tier, style swap (Shock → Fastland)
-        : tierDiff === 1 ? 0.55                  // one tier down (T3 → T2)
-        : 0.55 + tierDiff * 0.25;                // shouldn't happen with sorted catalog
+        tierDiff === 0 ? 0.22
+        : tierDiff === 1 ? 0.55
+        : 0.55 + tierDiff * 0.25;
       const tierTag = tierDiff === 0
         ? `Tier ${from.priceTier}`
-        : `Tier ${from.priceTier}→${to.priceTier}`;
+        : `Tier ${from.priceTier}→${candidate.priceTier}`;
       out.push({
-        to: to.name,
-        eurSaved: from.priceEur - to.priceEur,
+        to: candidate.name,
+        eurSaved: fromPrice - candPrice,
         qualityLoss,
         pairCode: pkey,
-        reason: `${from.name} → ${to.name} (${tierTag})`,
+        reason: `${from.name} → ${candidate.name} (${tierTag})`,
       });
-    } else {
-      // Cheapest dual in this pair → basic. Pick the color in this pair
-      // whose share of the deck is HIGHER → safer replacement (we keep
-      // more of the main color's source even after losing a 2-color land).
-      const [cA, cB] = [pkey[0], pkey[1]];
-      const pickColor = colorWeight(cA) >= colorWeight(cB) ? cA : cB;
-      const basicName = COLOR_TO_BASIC[pickColor];
+      break;
+    }
+
+    // Terminal basic swap — always offered (even if a ladder step also
+    // exists), so the chain can keep going once all duals are gone.
+    // Use the runtime-corrected pair so a miscategorised land
+    // terminates into the RIGHT basic colour.
+    const actualPair = corrections?.get(name) || pkey;
+    const [cA, cB] = [actualPair[0], actualPair[1]];
+    const pickColor = colorWeight(cA) >= colorWeight(cB) ? cA : cB;
+    const basicName = COLOR_TO_BASIC[pickColor];
+    const basicPrice = priceOf(basicName, BASIC_PRICE_EUR) ?? 0;
+    if (fromPrice > basicPrice) {
       out.push({
         to: basicName,
-        eurSaved: from.priceEur - BASIC_PRICE_EUR,
-        qualityLoss: 0.90,                       // losing the dual entirely is significant
+        eurSaved: fromPrice - basicPrice,
+        qualityLoss: 0.90,
         pairCode: pkey,
         reason: `${from.name} → ${basicName} (Tier ${from.priceTier} → Basic)`,
       });
@@ -213,53 +232,58 @@ function nextDowngrades(name, ctx = {}) {
   // ── Fixer (basic-fetcher / triome) ──────────────────────────
   const fixer = FIXING_LANDS.find(o => o.name === name);
   if (fixer) {
+    const fromPrice = priceOf(fixer.name, fixer.priceEur);
     if (fixer.fixesAny) {
       // Walk down through cheaper basic-fetchers first, then to a basic.
+      // Use LIVE prices for the "cheaper than" comparison so reality
+      // (Fabled Passage at 3.5€, Evolving Wilds at 0.25€) drives order.
       const cheaperFetchers = FIXING_LANDS
-        .filter(o => o.fixesAny && o.priceEur < fixer.priceEur)
-        .sort((a, b) => b.priceEur - a.priceEur);
+        .filter(o => o.fixesAny && o.name !== fixer.name)
+        .map(o => ({ land: o, price: priceOf(o.name, o.priceEur) ?? Infinity }))
+        .filter(({ price }) => price < (fromPrice ?? Infinity))
+        .sort((a, b) => b.price - a.price);
       if (cheaperFetchers.length > 0) {
-        const to = cheaperFetchers[0];
+        const to = cheaperFetchers[0].land;
+        const toPrice = cheaperFetchers[0].price;
         out.push({
           to: to.name,
-          eurSaved: fixer.priceEur - to.priceEur,
-          qualityLoss: 0.20,                     // same role, slightly slower
+          eurSaved: (fromPrice ?? 0) - (toPrice ?? 0),
+          qualityLoss: 0.20,
           reason: `${fixer.name} → ${to.name} (günstigerer Basic-Fetcher)`,
         });
       } else {
-        // Cheapest fetcher → swap to most-demanded basic
         const bestColor = COLORS
           .filter(c => colorWeight(c) > 0)
           .sort((a, b) => colorWeight(b) - colorWeight(a))[0];
         if (bestColor) {
           const basicName = COLOR_TO_BASIC[bestColor];
+          const basicPrice = priceOf(basicName, BASIC_PRICE_EUR);
           out.push({
             to: basicName,
-            eurSaved: fixer.priceEur - BASIC_PRICE_EUR,
-            qualityLoss: 0.60,                   // lose universal fix
+            eurSaved: (fromPrice ?? 0) - (basicPrice ?? 0),
+            qualityLoss: 0.60,
             reason: `${fixer.name} → ${basicName} (kein Fix mehr)`,
           });
         }
       }
       return out;
     }
-    // Triome → basic of its most-demanded color (we don't try to find
-    // a "cheaper triome" — they're all priced similarly).
+    // Triome → basic of its most-demanded color
     const triColors = fixer.fixes || [];
-    const bestColor = triColors.sort((a, b) => colorWeight(b) - colorWeight(a))[0];
+    const bestColor = triColors.slice().sort((a, b) => colorWeight(b) - colorWeight(a))[0];
     if (bestColor) {
       const basicName = COLOR_TO_BASIC[bestColor];
+      const basicPrice = priceOf(basicName, BASIC_PRICE_EUR);
       out.push({
         to: basicName,
-        eurSaved: fixer.priceEur - BASIC_PRICE_EUR,
-        qualityLoss: 1.10,                       // 3-color land → 1-color basic is heavy
+        eurSaved: (fromPrice ?? 0) - (basicPrice ?? 0),
+        qualityLoss: 1.10,
         reason: `${fixer.name} → ${basicName} (Triome → Basic)`,
       });
     }
     return out;
   }
 
-  // Basic / Wastes — already cheapest, no further downgrade.
   return out;
 }
 
@@ -289,6 +313,8 @@ function nextDowngrades(name, ctx = {}) {
 function buildSwapChain(initialBreakdown, ctx) {
   const lockedNames = ctx.lockedNames instanceof Set ? ctx.lockedNames : new Set();
   const colorWeight = ctx.colorWeight || (() => 0.2);
+  const priceOf = ctx.priceOf || ((n, fallback) => fallback);
+  const corrections = ctx.corrections || null;
 
   const pairImportance = (cand) => {
     if (cand.pairCode) {
@@ -308,7 +334,7 @@ function buildSwapChain(initialBreakdown, ctx) {
     for (const [name, count] of Object.entries(working)) {
       if (count <= 0) continue;
       if (lockedNames.has(name)) continue;
-      const downs = nextDowngrades(name, { colorWeight });
+      const downs = nextDowngrades(name, { colorWeight, priceOf, corrections });
       for (const dg of downs) {
         const imp = pairImportance(dg);
         const score = (dg.eurSaved + 0.05) / ((dg.qualityLoss + 0.10) * (1 + 0.6 * imp));
@@ -411,6 +437,15 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
     archetype,
     budget = 1.0,
     keptLandNames = null,
+    livePrices = null,    // Map<name, eurNumber> — live Scryfall prices
+                          // override the catalog's hardcoded priceEur.
+                          // When null, catalog prices are used (legacy).
+    pairCorrections = null, // Map<name, actualPairCode> — derived from
+                          // Scryfall color_identity. Lets the suggester
+                          // pick lands by their REAL pair even when
+                          // the static catalog has them in the wrong
+                          // nested key (e.g. Undercity Sewers listed
+                          // under BG but actually UB/Dimir).
   } = options;
 
   // Seed sliders from preset (if any) then override with caller values.
@@ -425,6 +460,46 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
     ? null
     : (keptLandNames instanceof Set ? keptLandNames : new Set(keptLandNames));
   const shouldKeep = (name) => kept == null ? true : kept.has(name);
+
+  // Price resolver: live Scryfall price first, catalog fallback.
+  // Returns a number in EUR or null if no price is known.
+  const priceMap = livePrices instanceof Map
+    ? livePrices
+    : (livePrices ? new Map(Object.entries(livePrices)) : null);
+  const priceOf = (name, catalogPrice = null) => {
+    if (priceMap && priceMap.has(name)) {
+      const v = priceMap.get(name);
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) return v;
+    }
+    if (typeof catalogPrice === 'number' && Number.isFinite(catalogPrice)) return catalogPrice;
+    // Last-resort fallback: look up in the catalog directly.
+    const meta = findLandMeta(name);
+    return meta.priceEur ?? null;
+  };
+
+  // Pair-code resolver: catalog says X, Scryfall might say Y. The
+  // correction map (built by landPriceCache) wins when it has an entry.
+  const corrections = pairCorrections instanceof Map
+    ? pairCorrections
+    : (pairCorrections ? new Map(Object.entries(pairCorrections)) : null);
+  /**
+   * Given a desired (a, b) color pair, return every catalog land that
+   * actually belongs to it according to Scryfall (with catalog as
+   * fallback). This replaces blind `LAND_CATALOG[pairKey(a,b)]`
+   * lookups so a miscategorised land surfaces in its true pair.
+   */
+  const landsForPair = (a, b) => {
+    const target = pairKey(a, b);
+    const out = [];
+    for (const [catalogKey, opts] of Object.entries(LAND_CATALOG)) {
+      for (const opt of opts) {
+        const corrected = corrections?.get(opt.name);
+        const actualPair = corrected || catalogKey;
+        if (actualPair === target) out.push(opt);
+      }
+    }
+    return out;
+  };
 
   // ── 2. Analyse the deck ──────────────────────────────────
   const isCommander = !!commander;
@@ -448,6 +523,7 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
     isCommander, targetDeckSize,
     existing,
     shouldKeep,
+    landsForPair,
   });
 
   // ── 4. Color-importance weights for swap prioritisation ──
@@ -457,12 +533,15 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
   // ── 5. Build the swap chain ──────────────────────────────
   // Locked names = only the user-confirmed "behalten" picks. Generated
   // lands stay swappable so the budget slider can keep moving them.
+  // Swap chain receives priceOf so its €-saved ranking is live-priced.
   const lockedNames = new Set();
   for (const [name] of existing.basics)       if (shouldKeep(name)) lockedNames.add(name);
   for (const [name] of existing.catalogPair)  if (shouldKeep(name)) lockedNames.add(name);
   for (const [name] of existing.catalogFixer) if (shouldKeep(name)) lockedNames.add(name);
   for (const [name] of existing.utility)      if (shouldKeep(name)) lockedNames.add(name);
-  const swapChain = buildSwapChain(ideal.breakdown, { lockedNames, colorWeight });
+  const swapChain = buildSwapChain(ideal.breakdown, {
+    lockedNames, colorWeight, priceOf, corrections,
+  });
 
   // ── 6. Apply swaps per budget slider ─────────────────────
   const applied = applyBudgetSwaps(ideal.breakdown, swapChain, budget);
@@ -470,12 +549,27 @@ export function suggestLandsWithBudget(mainboard, options = {}) {
   // ── 7. Cost report ───────────────────────────────────────
   // Only the user-kept utility lands tag the cost-report's "utility"
   // category; unchecked utility lands have been dropped from the
-  // breakdown by `buildIdealAllocation`.
+  // breakdown by `buildIdealAllocation`. Utility-land prices are read
+  // from the live mainboard card (already in `existing.utility`) so
+  // weird singletons like Bojuka Bog carry their real Cardmarket
+  // price instead of being treated as price-unknown.
   const utilityAlloc = new Map();
+  const utilityCardPrice = new Map();
   for (const [name, info] of existing.utility) {
-    if (shouldKeep(name)) utilityAlloc.set(name, info.count);
+    if (!shouldKeep(name)) continue;
+    utilityAlloc.set(name, info.count);
+    const card = info.card;
+    if (card) {
+      const liveCardPrice = card.prices?.eur ?? card.prices?.eur_foil;
+      const n = liveCardPrice == null ? null : Number(liveCardPrice);
+      if (Number.isFinite(n)) utilityCardPrice.set(name, n);
+    }
   }
-  const finalCost = buildCostReport(applied.final, utilityAlloc, new Map());
+  const finalCost = buildLivePricedCost(applied.final, {
+    priceOf,
+    utilityNames: new Set(utilityAlloc.keys()),
+    utilityCardPrice,
+  });
 
   // ── 8. Per-color source recount + explanation ────────────
   const perColor = recomputePerColor(applied.final);
@@ -538,7 +632,10 @@ function buildIdealAllocation({
   analysis, structure, signals, sliders,
   isCommander, targetDeckSize, existing,
   shouldKeep = () => true,
+  landsForPair = null,
 }) {
+  // Fallback when no Scryfall-aware resolver is provided (legacy callers).
+  const lookupPair = landsForPair || ((a, b) => LAND_CATALOG[pairKey(a, b)] || []);
   const landBreakdown = deriveBaseLandCount(analysis, structure, isCommander);
   let landTarget = landBreakdown.total;
 
@@ -663,17 +760,24 @@ function buildIdealAllocation({
       const n = Math.round(raw);
       used += n;
       if (n <= 0) return;
-      const opts = LAND_CATALOG[pairKey(p.a, p.b)] || [];
+      const opts = lookupPair(p.a, p.b);
       if (opts.length === 0) return;
       // Two-key sort: tier desc, then style-fit desc. Within tier, the
       // ranker decides whether (e.g.) Shock or Fastland or Surveil
-      // land suits the deck better. We then fill candidates in that
-      // order, capping each name at the singleton/4-of limit.
+      // land suits the deck better — context-aware via avgCmc and
+      // structure signals so fast aggro lists pick fastlands while
+      // mid/slow decks default to shocks.
+      const rankCtx = {
+        isCommander,
+        avgCmc: analysis.avgCmc || 0,
+        rampClass: signals?.rampClass,
+        treasureClass: signals?.treasureClass,
+      };
       const ranked = opts.slice().sort((x, y) => {
         const tierDiff = (y.priceTier || 0) - (x.priceTier || 0);
         if (tierDiff !== 0) return tierDiff;
-        return rankLandStyle(y, sliders, { isCommander })
-             - rankLandStyle(x, sliders, { isCommander });
+        return rankLandStyle(y, sliders, rankCtx)
+             - rankLandStyle(x, sliders, rankCtx);
       });
       let spill = n;
       for (const land of ranked) {
@@ -750,75 +854,127 @@ function buildIdealAllocation({
 }
 
 /**
+ * Build a cost report compatible with the legacy `buildCostReport` shape
+ * but using LIVE prices from `priceOf`. Same item categories so the
+ * categorised breakdown UI keeps working unchanged.
+ */
+function buildLivePricedCost(breakdown, ctx) {
+  const { priceOf, utilityNames, utilityCardPrice } = ctx;
+  const items = [];
+  let total = 0;
+  for (const [name, count] of Object.entries(breakdown)) {
+    if (count <= 0) continue;
+    const meta = findLandMeta(name);
+    let category;
+    if (utilityNames && utilityNames.has(name)) {
+      category = 'utility';
+    } else if (meta.source === 'fixing') {
+      category = 'fixing';
+    } else if (meta.source === 'basic') {
+      category = name === 'Wastes' ? 'colorless' : 'basic';
+    } else if (meta.priceTier === 1) {
+      category = 'dual_t1';
+    } else if (meta.priceTier === 2) {
+      category = 'dual_t2';
+    } else if (meta.priceTier === 3) {
+      category = 'dual_t3';
+    } else {
+      category = 'unknown';
+    }
+    // Price source priority for utility lands: their own card's
+    // Scryfall eur (we captured it in `utilityCardPrice`). For
+    // everything else: live cached price → fall back to catalog.
+    let unit = null;
+    if (category === 'utility' && utilityCardPrice && utilityCardPrice.has(name)) {
+      unit = utilityCardPrice.get(name);
+    } else {
+      unit = priceOf(name, meta.priceEur);
+    }
+    const subtotal = unit != null ? unit * count : null;
+    if (subtotal != null) total += subtotal;
+    items.push({
+      name, count,
+      priceTier: meta.priceTier,
+      unitPriceEur: unit,
+      subtotalEur: subtotal,
+      category,
+    });
+  }
+  return { items, totalEur: total };
+}
+
+/**
  * Within-tier style ranking — given multiple lands at the same priceTier
  * (Shock vs Fastland vs Surveil land …), which one fits this deck best?
- * Driven by the trio sliders so the ideal anchor reflects deck shape,
- * not a hard-coded preference for shocks.
  *
- * Scoring rationale:
+ *   Default winner is SHOCK / PAINLAND. They're untapped, fetchable,
+ *   universal — what any deckbuilder reaches for first when budget
+ *   isn't the constraint. Everything else has to EARN its slot via
+ *   slider context + deck-derived signals (avgCmc, ramp class).
  *
- *   shock     1.00         Always solid — unconditional fix, basic land
- *                          types (synergy with fetches, checklands).
- *   fastland  +0.45 if tempo+early ≥ 1.1; −0.20 if both < 0.5
- *                          Brilliant turn-1-3, dead late. So heavy
- *                          tempo/early decks prefer them over shocks.
- *   surveil   +0.30 if greed ≥ 0.55                Value over speed.
- *                          A surveil 1 ETB matters more for grindy
- *                          decks that scale on card selection.
- *   painland  0.85         Stable fallback when tempo is moderate.
- *                          Loses to shock at the top tier; wins over
- *                          checklands when CMC curve is fast.
- *   checkland +0.20 if greed ≥ 0.55                Pairs well with
- *                          dual-heavy lists; weaker as the only T2.
- *   slowland  +0.45 if tempo+early < 0.9            Stronger late-game.
- *                          Decks running counters, control, ramp.
- *   scryland  0.70 baseline                         Budget pick with
- *                          a small ETB upside.
- *   guildgate 0.50         The "we ran out of money" fallback.
- *   bondland  +0.50 in commander only               Free untapped in
- *                          multiplayer; not a thing in 60-card.
+ * Re-anchored 2026 because the previous (+0.45 fastland) bonus made
+ * fastlands win for almost every fast-leaning deck even when the curve
+ * extended into T5+ — by which point fastland is just a tapped land.
+ *
+ *   shock     1.00         Anchor. Untapped, has basic types, fetchable
+ *                          by Polluted-Delta-style fetches.
+ *   painland  0.95         Same speed as shock, costs 1 life per use.
+ *                          Slightly under shock for the life cost.
+ *   surveil   0.95 (+0.10 if greed ≥ 0.55)
+ *                          Painland + surveil 1 ETB. Greedy/value
+ *                          decks edge it over shock.
+ *   fastland  0.82 + up to +0.18 if VERY aggro
+ *                          Only wins against shock for true aggro:
+ *                          tempo+early ≥ 1.50 AND avgCmc ≤ 2.8.
+ *                          Mid-range / control: shock comfortably ahead.
+ *   checkland 0.82 (+0.10 if greed ≥ 0.55)
+ *   slowland  0.75 + up to +0.25 if (tempo+early < 0.85 AND avgCmc ≥ 3.0)
+ *                          Strong late-game; not worth it for fast lists.
+ *   scryland  0.65
+ *   guildgate 0.45
+ *   fetch     special: commander = 1.20 (premium); else greed ≥ 0.70 = 1.05; else excluded
+ *   bondland  +0.55 in commander only, else excluded
  */
 function rankLandStyle(land, sliders, ctx = {}) {
   const tempo = sliders.tempo ?? 0.5;
   const early = sliders.earlyGame ?? 0.5;
   const greed = sliders.greed ?? 0.5;
   const isCommander = !!ctx.isCommander;
+  const avgCmc = ctx.avgCmc || 0;
   switch (land.style) {
     case 'fetch':
-      // Eternal-only premium. Format-aware enabler: in commander always
-      // valuable; outside commander only when the player explicitly
-      // signals "I'm going greedy" (greed ≥ 0.70). Otherwise penalised
-      // hard so the ideal allocator skips it for Standard/Pioneer/etc.
-      if (isCommander) return 1.30;
-      if (greed >= 0.70) return 1.10;
+      if (isCommander) return 1.20;
+      if (greed >= 0.70) return 1.05;
       return -10;          // effectively excluded
     case 'shock':
       return 1.00;
-    case 'fastland': {
-      const fast = tempo + early;
-      if (fast >= 1.10) return 1.00 + 0.45;
-      if (fast < 0.50) return 1.00 - 0.20;
-      return 1.00;
-    }
-    case 'surveil':
-      return 1.00 + (greed >= 0.55 ? 0.30 : 0);
     case 'painland':
-      return 0.85;
+      return 0.95;
+    case 'surveil':
+      return 0.95 + (greed >= 0.55 ? 0.10 : 0);
+    case 'fastland': {
+      // Only beats shock when the deck is TRULY aggressive: high
+      // tempo+early AND a low curve so games end before fastland's
+      // tap-condition expires.
+      const veryAggro = (tempo + early) >= 1.50 && avgCmc <= 2.8;
+      if (veryAggro) return 1.00 + 0.18 * Math.min(1, (tempo + early - 1.50) / 0.50);
+      return 0.82;
+    }
     case 'checkland':
-      return 0.85 + (greed >= 0.55 ? 0.20 : 0);
+      return 0.82 + (greed >= 0.55 ? 0.10 : 0);
     case 'slowland': {
-      const fast = tempo + early;
-      if (fast < 0.90) return 0.85 + 0.45;
-      return 0.70;
+      const slowFavoured = (tempo + early) < 0.85 && avgCmc >= 3.0;
+      if (slowFavoured) return 0.75 + 0.25 * Math.min(1, (0.85 - (tempo + early)) / 0.50);
+      return 0.65;
     }
     case 'scryland':
-      return 0.70 + (early < 0.4 ? 0.10 : 0);
+      return 0.65 + (early < 0.4 ? 0.08 : 0);
     case 'guildgate':
-      return 0.50;
+      return 0.45;
     case 'bondland':
       return isCommander ? 1.10 : -100;
     default:
-      return 0.50;
+      return 0.45;
   }
 }
 

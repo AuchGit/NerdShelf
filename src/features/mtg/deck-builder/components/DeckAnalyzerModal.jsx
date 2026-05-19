@@ -8,6 +8,7 @@ import {
   DEFAULT_CONFIG,
 } from '../services/landSuggestion';
 import { suggestLandsWithBudget, detectExistingLands } from '../services/landBudgetPipeline';
+import { loadLandPrices, snapshotLivePrices, snapshotPairCorrections } from '../services/landPriceCache';
 import { runSimulation } from '../services/consistencySim';
 import { applyLandBreakdown } from '../services/applyLandSuggestion';
 import { isLand } from '../services/deckAnalysis';
@@ -166,6 +167,33 @@ export default function DeckAnalyzerModal({
   // When the mainboard (and therefore `initialKept`) changes, reset.
   useEffect(() => { setKeptLandNames(initialKept); }, [initialKept]);
 
+  // ── Live Scryfall prices for the suggester ──────────────
+  // Catalog `priceEur` numbers are coarse stable approximations; what
+  // the user sees in their deck and pays on Cardmarket is the actual
+  // current Scryfall EUR. We pre-warm a name → eur map once per modal
+  // open and pass it down so the suggester scores swaps, builds the
+  // ideal allocation and totals cost using real-world prices.
+  const [livePrices, setLivePrices] = useState(() => snapshotLivePrices());
+  const [pairCorrections, setPairCorrections] = useState(() => snapshotPairCorrections());
+  const [pricesLoading, setPricesLoading] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setPricesLoading(true);
+    loadLandPrices()
+      .then((map) => {
+        if (cancelled) return;
+        setLivePrices(map);
+        // Pair-correction map is also (re-)built during the same fetch.
+        // Refresh our snapshot so the suggester picks lands by their
+        // real color identity, not the catalog's nested key.
+        setPairCorrections(snapshotPairCorrections());
+      })
+      .catch(() => { /* error already logged; cache stays at last value */ })
+      .finally(() => { if (!cancelled) setPricesLoading(false); });
+    return () => { cancelled = true; };
+  }, [open]);
+
   const suggestion = useMemo(() => {
     if (!open) return null;
     return suggestLandsWithBudget(mainboard, {
@@ -173,8 +201,10 @@ export default function DeckAnalyzerModal({
       sliders: tuning,
       budget: budgetValue,
       keptLandNames,
+      livePrices,
+      pairCorrections,
     });
-  }, [open, mainboard, commander, tuning, budgetValue, keptLandNames]);
+  }, [open, mainboard, commander, tuning, budgetValue, keptLandNames, livePrices, pairCorrections]);
 
   const [applyStatus, setApplyStatus] = useState(null);
   const [applying, setApplying] = useState(false);
