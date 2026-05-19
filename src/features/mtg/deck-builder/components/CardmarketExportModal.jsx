@@ -44,6 +44,13 @@ export default function CardmarketExportModal({
   // checkbox lets them stick to ONLY playable cards when they don't
   // want to pay for speculative additions yet.
   const [includeIdeas, setIncludeIdeas] = useState(true);
+  // Tokens auto-resolved via Scryfall's `all_parts` array (every card
+  // that creates a token carries a reference to the token's printing
+  // there). When checked we walk every included card and append the
+  // tokens as extra rows in the preview — `1 Treasure`, `1 Goblin`
+  // etc. — in the same `<count> <name>` format Cardmarket's bulk
+  // wants-import expects, so the user can copy-paste once.
+  const [includeTokens, setIncludeTokens] = useState(true);
   const [rows, setRows]           = useState([]);     // editable preview rows
   const [includeMap, setInclude]  = useState({});     // cardId → bool
   const [qtyMap, setQty]          = useState({});     // cardId → number
@@ -63,7 +70,7 @@ export default function CardmarketExportModal({
   useEffect(() => {
     if (!open) return;
     const candidate = buildCandidates({
-      source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas,
+      source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas, includeTokens,
     });
     setRows(candidate);
     const inc = {};
@@ -75,7 +82,7 @@ export default function CardmarketExportModal({
     setInclude(inc);
     setQty(qty);
     setGenerated(null);
-  }, [open, source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas]);
+  }, [open, source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas, includeTokens]);
 
   const totalEur = useMemo(() => {
     let sum = 0;
@@ -136,6 +143,7 @@ export default function CardmarketExportModal({
               decks={decks}
               allowDups={allowDups} setAllowDups={setAllowDups}
               includeIdeas={includeIdeas} setIncludeIdeas={setIncludeIdeas}
+              includeTokens={includeTokens} setIncludeTokens={setIncludeTokens}
               hasPreselected={!!preselectedRows?.size}
             />
 
@@ -211,8 +219,35 @@ export default function CardmarketExportModal({
                       onChange={(e) => setInclude(m => ({ ...m, [r.cardId]: e.target.checked }))}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--fs-sm)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{
+                        fontWeight: 'var(--fw-medium)',
+                        fontSize: 'var(--fs-sm)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}>
                         {r.card?.name || r.cardId}
+                        {r.card?._isToken && (
+                          <span
+                            title="Automatisch aus Oracle-Text erkannt"
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 'var(--fw-bold)',
+                              letterSpacing: 0.5,
+                              padding: '1px 6px',
+                              borderRadius: 999,
+                              background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
+                              color: 'var(--color-accent)',
+                              border: '1px solid var(--color-accent)',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Token
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)' }}>
                         {r.reason}
@@ -333,6 +368,7 @@ function SourceControls({
   decks,
   allowDups, setAllowDups,
   includeIdeas, setIncludeIdeas,
+  includeTokens, setIncludeTokens,
   hasPreselected,
 }) {
   return (
@@ -381,6 +417,14 @@ function SourceControls({
         />
         Ideen einbeziehen — Karten aus dem Ideen-Pool des Decks mit in die Liste
       </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+        <input
+          type="checkbox"
+          checked={!!includeTokens}
+          onChange={(e) => setIncludeTokens?.(e.target.checked)}
+        />
+        Tokens einbeziehen — automatisch alle Tokens hinzufügen, die meine Karten erzeugen
+      </label>
     </div>
   );
 }
@@ -420,7 +464,10 @@ function RadioPill({ name, value, current, onChange, children }) {
  * Build the candidate row list for the preview. Each candidate has:
  *   { cardId, card, qty, reason }
  */
-function buildCandidates({ source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas = true }) {
+function buildCandidates({
+  source, deckId, allowDups, decks, inventory, preselectedRows,
+  includeIdeas = true, includeTokens = true,
+}) {
   // Aggregate "needed by source" per card.
   const need = new Map();   // cardId → { card, count, sources: [deckName] }
   const bump = (cardId, card, n, src) => {
@@ -483,6 +530,57 @@ function buildCandidates({ source, deckId, allowDups, decks, inventory, preselec
     });
   }
   candidates.sort((a, b) => (a.card?.name || a.cardId).localeCompare(b.card?.name || b.cardId));
+
+  // ── Token resolution via Scryfall's all_parts ──────────────
+  // Every card that creates a token carries a reference to the token
+  // printing in its `all_parts` array (component === 'token'). We
+  // dedupe by printing id (or name fallback), default each to qty 1,
+  // tag with the cards that produce it, and append at the END of the
+  // candidate list so they read as an addendum in the preview.
+  if (includeTokens) {
+    const tokens = new Map();  // key (id|name) → { card, sources: [name] }
+    for (const c of candidates) {
+      const parts = c.card?.all_parts;
+      if (!Array.isArray(parts)) continue;
+      for (const p of parts) {
+        if (p?.component !== 'token') continue;
+        if (!p.name) continue;
+        const key = p.id || `name:${p.name.toLowerCase()}`;
+        const existing = tokens.get(key) || {
+          card: {
+            id: p.id || `token-${p.name.toLowerCase().replace(/\s+/g, '-')}`,
+            name: p.name,
+            type_line: p.type_line || 'Token',
+            // Tokens don't have prices in the all_parts payload —
+            // leave undefined so the UI shows "—" rather than €0.
+            prices: undefined,
+            _isToken: true,
+          },
+          sources: [],
+        };
+        if (c.card?.name && !existing.sources.includes(c.card.name)) {
+          existing.sources.push(c.card.name);
+        }
+        tokens.set(key, existing);
+      }
+    }
+    // Deduplicate against any token-id that was ALREADY in the
+    // candidate list (e.g. user manually wishlisted a token).
+    const existingCardIds = new Set(candidates.map(c => c.cardId));
+    const tokenRows = [];
+    for (const [, t] of tokens) {
+      if (existingCardIds.has(t.card.id)) continue;
+      tokenRows.push({
+        cardId: t.card.id,
+        card: t.card,
+        qty: 1,
+        reason: `Token aus: ${t.sources.slice(0, 3).join(', ')}${t.sources.length > 3 ? ` …+${t.sources.length - 3}` : ''}`,
+      });
+    }
+    tokenRows.sort((a, b) => a.card.name.localeCompare(b.card.name));
+    candidates.push(...tokenRows);
+  }
+
   return candidates;
 }
 
