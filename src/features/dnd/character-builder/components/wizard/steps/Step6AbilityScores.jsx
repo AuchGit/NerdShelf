@@ -6,6 +6,7 @@ import AdditionalSpellPicker from '../AdditionalSpellPicker'
 import { parseFeatProficiencies } from '../../../lib/featParser'
 import { parseFeatChoices, setChoiceValue, getAllChoiceDescriptors, asArray } from '../../../lib/choiceParser'
 import ChoicePicker from '../../ui/ChoicePicker'
+import usePwaMobile from '../../../../../../shared/hooks/usePwaMobile'
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8]
@@ -949,6 +950,10 @@ function OriginFeatPicker({
   freeASI, setFreeASI, character, updateCharacter,
   showASI = true,  // set false when called from fixed mode — race already grants its own ASI
 }) {
+  // PWA mobile gets an expandable single-column list — the desktop
+  // 2-column layout has a fixed-height detail panel whose select
+  // button scrolls off-screen on a phone.
+  const { isPwaMobile } = usePwaMobile()
   return (
     <div style={{ marginTop: 12 }}>
       {/* +1/+1 ASI wählen — only shown in originFeat mode, not when used in fixed mode */}
@@ -990,6 +995,16 @@ function OriginFeatPicker({
 
       {loading ? (
         <div style={{ color: 'var(--accent)', padding: '20px', textAlign: 'center' }}>Lade Feats...</div>
+      ) : isPwaMobile ? (
+        <MobileFeatList
+          feats={feats}
+          featSearch={featSearch}
+          setFeatSearch={setFeatSearch}
+          selectedId={selectedId}
+          viewFeat={viewFeat}
+          setViewFeat={setViewFeat}
+          onSelect={onSelect}
+        />
       ) : (
         <div style={featStyles.layout}>
           {/* Liste */}
@@ -1089,6 +1104,111 @@ function OriginFeatPicker({
           </>
         )
       })()}
+    </div>
+  )
+}
+
+// ── Mobile feat list — touch-first, expandable rows ─────────
+// Single column. Each row collapses to name + source + badges; tap
+// expands an inline FeatDetail plus the "Feat wählen" button right
+// there — no off-screen footer. Selecting a feat still sets viewFeat
+// so the feat-choice pickers (Metamagic Adept etc.) render below the
+// list exactly as on desktop.
+function MobileFeatList({
+  feats, featSearch, setFeatSearch, selectedId, viewFeat, setViewFeat, onSelect,
+}) {
+  const [openId, setOpenId] = useState(viewFeat?.id ?? null)
+
+  return (
+    <div>
+      <input
+        placeholder="Suchen..."
+        value={featSearch}
+        onChange={e => setFeatSearch(e.target.value)}
+        style={{
+          width: '100%', boxSizing: 'border-box', marginBottom: 10,
+          padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)',
+          background: 'var(--bg-surface)', color: 'var(--text-primary)',
+          fontSize: 14, minHeight: 44,
+        }}
+      />
+      {feats.length === 0 && (
+        <div style={{ color: 'var(--text-dim)', padding: 16, textAlign: 'center', fontSize: 13 }}>
+          Keine Feats gefunden.
+        </div>
+      )}
+      {feats.map(feat => {
+        const isSelected = feat.id === selectedId
+        const isOpen     = feat.id === openId
+        return (
+          <div
+            key={feat.id}
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid',
+              borderColor: isSelected ? 'var(--accent)'
+                         : isOpen ? 'var(--accent-blue, var(--accent))' : 'var(--border)',
+              borderRadius: 8,
+              marginBottom: 6,
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header row */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = isOpen ? null : feat.id
+                setOpenId(next)
+                if (next) setViewFeat(feat)   // load detail + enable choice pickers
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                padding: '10px 12px', minHeight: 48, background: 'transparent',
+                border: 'none', cursor: 'pointer', textAlign: 'left', color: 'inherit',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
+                  fontWeight: 'bold', fontSize: 14,
+                }}>
+                  {isSelected && '✓ '}{feat.name}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 2 }}>
+                  {feat.source}
+                  {feat.ability?.length > 0 && ' · +ASI'}
+                  {feat.prerequisite && ' · Prerequisite'}
+                </div>
+              </div>
+              <span style={{
+                color: 'var(--text-muted)', fontSize: 13, flexShrink: 0,
+                transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 150ms', display: 'inline-block', width: 12, textAlign: 'center',
+              }}>▸</span>
+            </button>
+
+            {/* Expanded detail + select button */}
+            {isOpen && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '12px' }}>
+                <FeatDetail feat={feat} />
+                <button
+                  type="button"
+                  onClick={() => onSelect(feat)}
+                  style={{
+                    width: '100%', marginTop: 12, padding: 12, borderRadius: 8,
+                    border: '2px solid var(--accent)',
+                    background: isSelected ? 'var(--accent)' : 'transparent',
+                    color: isSelected ? 'var(--bg-deep)' : 'var(--accent)',
+                    fontSize: 15, fontWeight: 'bold', cursor: 'pointer', minHeight: 48,
+                  }}
+                >
+                  {isSelected ? '✓ Gewählt' : 'Feat wählen'}
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

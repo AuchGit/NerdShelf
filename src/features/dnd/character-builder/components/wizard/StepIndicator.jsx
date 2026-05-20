@@ -1,6 +1,19 @@
+import { useEffect, useRef } from 'react'
 import { useLanguage } from '../../lib/i18n'
 
 export default function StepIndicator({ steps, currentStep, onStepClick, completedSteps = [] }) {
+  // Keep the active step visible. On PWA mobile the step bar is a
+  // horizontal-scroll rail (see mobile-layouts.css); without this the
+  // user has to manually scroll to find their current step. On desktop
+  // the bar wraps and nothing scrolls, so this is a harmless no-op
+  // (`block: 'nearest'` prevents any vertical page jump).
+  const activeRef = useRef(null)
+  useEffect(() => {
+    const el = activeRef.current
+    if (!el) return
+    el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+  }, [currentStep])
+
   return (
     <div style={styles.container}>
       {steps.map((step, index) => {
@@ -10,7 +23,7 @@ export default function StepIndicator({ steps, currentStep, onStepClick, complet
         const isClickable = isDone || isActive || completedSteps.includes(index - 1)
 
         return (
-          <div key={index} style={styles.stepWrapper}>
+          <div key={index} style={styles.stepWrapper} ref={isActive ? activeRef : null}>
             <div
               style={{
                 ...styles.stepInner,

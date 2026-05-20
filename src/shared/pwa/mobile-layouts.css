@@ -186,20 +186,23 @@ body[data-pwa-layouts='true'] .dnd-wizard-title {
   text-overflow: ellipsis;
 }
 
-/* Step indicator: horizontal scroll-snap rail so all 7-11 steps fit on
-   any viewport without wrapping into 3 rows. */
+/* Step indicator: horizontal-scroll rail so all 7-11 steps fit on any
+   viewport without wrapping into 3 rows.
+   IMPORTANT: NO scroll-snap here. `scroll-snap-type: mandatory` forced
+   a re-snap to step 1 on every parent re-render (the user saw the bar
+   "jump back to the default position"). The active step is instead
+   auto-scrolled into view by StepIndicator.jsx via scrollIntoView. */
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar'] {
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap !important;
   white-space: nowrap;
-  scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
   padding: 10px 12px !important;
 }
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar']::-webkit-scrollbar { display: none; }
 body[data-pwa-layouts='true'] [data-pwa-target='dnd-wizard-stepbar'] > * {
-  scroll-snap-align: start;
   flex-shrink: 0;
 }
 /* The StepIndicator (CharacterCreate) is wrapped by us; its inner

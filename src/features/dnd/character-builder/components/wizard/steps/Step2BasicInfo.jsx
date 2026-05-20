@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import usePwaMobile from '../../../../../../shared/hooks/usePwaMobile'
 
 const ALIGNMENTS = [
   'Lawful Good', 'Neutral Good', 'Chaotic Good',
@@ -8,6 +9,17 @@ const ALIGNMENTS = [
 
 export default function Step2BasicInfo({ character, updateCharacter }) {
   const fileRef = useRef()
+  // On PWA mobile (portrait phone) the portrait + name columns can't sit
+  // side by side, and bare <input>s render at their ~20ch intrinsic
+  // width which overflows the viewport. Desktop is left exactly as it
+  // was; these overrides only apply when usePwaMobile reports a phone.
+  const { isPwaMobile } = usePwaMobile()
+  const topRowStyle = isPwaMobile
+    ? { ...styles.topRow, flexDirection: 'column', alignItems: 'stretch', gap: 16 }
+    : styles.topRow
+  const inputStyle = isPwaMobile
+    ? { ...styles.input, width: '100%', boxSizing: 'border-box' }
+    : styles.input
 
   function handlePortraitUpload(e) {
     const file = e.target.files[0]
@@ -23,7 +35,7 @@ export default function Step2BasicInfo({ character, updateCharacter }) {
       <h2 style={styles.title}>Grundinformationen</h2>
 
       {/* Portrait + Name Row */}
-      <div style={styles.topRow}>
+      <div style={topRowStyle}>
         {/* Portrait */}
         <div style={styles.portraitBox}>
           {character.appearance.portrait ? (
@@ -48,13 +60,13 @@ export default function Step2BasicInfo({ character, updateCharacter }) {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={styles.field}>
             <label style={styles.label}>Character-Name *</label>
-            <input style={styles.input} type="text" placeholder="z.B. Aldric Sturmmantel"
+            <input style={inputStyle} type="text" placeholder="z.B. Aldric Sturmmantel"
               value={character.info.name}
               onChange={e => updateCharacter('info.name', e.target.value)} />
           </div>
           <div style={styles.field}>
             <label style={styles.label}>Spieler-Name</label>
-            <input style={styles.input} type="text" placeholder="Dein Name"
+            <input style={inputStyle} type="text" placeholder="Dein Name"
               value={character.info.player}
               onChange={e => updateCharacter('info.player', e.target.value)} />
           </div>
@@ -77,22 +89,31 @@ export default function Step2BasicInfo({ character, updateCharacter }) {
 
       {/* Appearance Row */}
       <div style={styles.row}>
-        <FieldSmall label="Alter" value={character.appearance.age} onChange={v => updateCharacter('appearance.age', v)} />
-        <FieldSmall label="Größe" value={character.appearance.height} onChange={v => updateCharacter('appearance.height', v)} />
-        <FieldSmall label="Gewicht" value={character.appearance.weight} onChange={v => updateCharacter('appearance.weight', v)} />
-        <FieldSmall label="Augen" value={character.appearance.eyes} onChange={v => updateCharacter('appearance.eyes', v)} />
-        <FieldSmall label="Haare" value={character.appearance.hair} onChange={v => updateCharacter('appearance.hair', v)} />
-        <FieldSmall label="Haut" value={character.appearance.skin} onChange={v => updateCharacter('appearance.skin', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Alter" value={character.appearance.age} onChange={v => updateCharacter('appearance.age', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Größe" value={character.appearance.height} onChange={v => updateCharacter('appearance.height', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Gewicht" value={character.appearance.weight} onChange={v => updateCharacter('appearance.weight', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Augen" value={character.appearance.eyes} onChange={v => updateCharacter('appearance.eyes', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Haare" value={character.appearance.hair} onChange={v => updateCharacter('appearance.hair', v)} />
+        <FieldSmall mobile={isPwaMobile} label="Haut" value={character.appearance.skin} onChange={v => updateCharacter('appearance.skin', v)} />
       </div>
     </div>
   )
 }
 
-function FieldSmall({ label, value, onChange }) {
+function FieldSmall({ label, value, onChange, mobile = false }) {
+  // On mobile each field is half-width (2-up grid) with the input
+  // filling its column; on desktop the original intrinsic-width
+  // behaviour is kept.
+  const wrapStyle = mobile
+    ? { display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 calc(50% - 6px)', minWidth: 0 }
+    : { display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 90 }
+  const inputStyle = mobile
+    ? { ...styles.inputSmall, width: '100%', boxSizing: 'border-box' }
+    : styles.inputSmall
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 90 }}>
+    <div style={wrapStyle}>
       <label style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 'bold' }}>{label}</label>
-      <input style={styles.inputSmall} type="text" value={value || ''}
+      <input style={inputStyle} type="text" value={value || ''}
         onChange={e => onChange(e.target.value)} />
     </div>
   )
