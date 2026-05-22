@@ -151,7 +151,7 @@ export default function FeaturesTab({ character }) {
                   {Object.entries(character.background.abilityScoreImprovements)
                     .filter(([, v]) => v !== 0)
                     .map(([k, v]) => (
-                      <span key={k} style={{ ...S.asiBadge, background: 'var(--accent-purple)', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>
+                      <span key={k} style={{ ...S.asiBadge, background: 'var(--bg-hover)', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>
                         {v > 0 ? '+' : ''}{v} {k.toUpperCase()}
                       </span>
                     ))}
@@ -218,7 +218,7 @@ export default function FeaturesTab({ character }) {
               <div key={feat._id} style={S.featCard}>
                 <div style={S.featCardHeader} onClick={() => setExpandedFeat(isExpanded ? null : `custom_${feat._id}`)}>
                   <div style={S.featCardName}>
-                    <span style={{ ...S.originTag, background: 'var(--accent-purple)' }}>CUSTOM</span>
+                    <span style={S.originTag}>CUSTOM</span>
                     {feat.name}
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>

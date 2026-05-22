@@ -1,7 +1,8 @@
 // components/sheet/SpellsTab.jsx
 // Complete spell list (every spell the character knows, not just level 1),
 // spell preparation for prepared casters, interactive spell slots, casting
-// with up-casting, and concentration tracking.
+// with up-casting, and concentration tracking. Every spell row — in the main
+// list and in the prepare dialog — expands inline to show full details.
 
 import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
@@ -29,8 +30,15 @@ const LEVEL_COLORS = ['var(--accent-blue)', 'var(--accent)', 'var(--accent)', 'v
 
 function levelColor(lvl) { return LEVEL_COLORS[Math.min(9, lvl)] || 'var(--accent)' }
 
-// Build a reusable spell enricher (level / school / description from the
-// loaded spell list, custom spells, or stored spellMetadata).
+// Shared expand-panel style so spell rows look identical everywhere.
+const EXPAND_PANEL = {
+  background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderTop: 'none',
+  borderBottomLeftRadius: 8, borderBottomRightRadius: 8, padding: '12px 14px',
+}
+const rowWhenOpen = { marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+
+// Reusable spell enricher (level / school / description from the loaded
+// spell list, custom spells, or stored spellMetadata).
 function makeEnricher(spellMap, character) {
   const customByName = {}
   for (const c of (character.custom?.spells || [])) {
@@ -57,9 +65,115 @@ function makeEnricher(spellMap, character) {
   }
 }
 
+// ── Full spell detail block — shared by the list and the prepare dialog ──
+function SpellDetails({ spell }) {
+  const entries = spell.entries || []
+  const entriesHL = spell.entriesHigherLevel || []
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>Level: </span><span style={S.detailChipValue}>{spell.level ? spell.level : 'Cantrip'}</span></div>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>School: </span><span style={S.detailChipValue}>{SCHOOL_NAMES[spell.school] || spell.school || '—'}</span></div>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>Cast: </span><span style={S.detailChipValue}>{spell.castingTime || '—'}</span></div>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>Range: </span><span style={S.detailChipValue}>{spell.range || '—'}</span></div>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>Duration: </span><span style={S.detailChipValue}>{spell.duration || '—'}</span></div>
+        <div style={S.detailChip}><span style={S.detailChipLabel}>Components: </span><span style={S.detailChipValue}>{formatComponents(spell.components)}</span></div>
+      </div>
+      {(spell.concentration || spell.ritual) && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {spell.concentration && <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Concentration</span>}
+          {spell.ritual && <span style={{ ...S.tag, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>Ritual</span>}
+        </div>
+      )}
+      {entries.length > 0 ? (
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+          <EntryRenderer entries={entries} />
+          {entriesHL.length > 0 && <div style={{ marginTop: 10 }}><EntryRenderer entries={entriesHL} /></div>}
+        </div>
+      ) : (
+        <div style={{ color: 'var(--text-dim)', fontSize: 13, fontStyle: 'italic' }}>
+          No description available for this spell.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Spell row in the main list — expands to details + cast actions ──
+function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast }) {
+  const [open, setOpen] = useState(false)
+  const level = spell.level
+  const lc = levelColor(level)
+
+  const castOptions = []
+  if (level === 0) {
+    castOptions.push({ label: 'Cast (cantrip)', fn: () => onCast(spell, 0, false) })
+  } else {
+    for (let lvl = level; lvl <= 9; lvl++) {
+      const rem = slotRemaining(lvl)
+      if (rem > 0) castOptions.push({
+        label: lvl === level ? `Cast at Level ${lvl} (${rem} left)` : `Up-cast at Level ${lvl} (${rem} left)`,
+        fn: () => onCast(spell, lvl, false),
+      })
+    }
+    if (warlockSlots && warlockSlots.level >= level && pactRemaining() > 0) {
+      castOptions.push({
+        label: `Cast with Pact Slot (Level ${warlockSlots.level}, ${pactRemaining()} left)`,
+        fn: () => onCast(spell, warlockSlots.level, true),
+      })
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ ...S.spellRow, ...(open ? rowWhenOpen : {}) }}>
+        <div style={{ ...S.spellLevelBadge, background: lc + '22', color: lc }}>
+          {level === 0 ? 'C' : level}
+        </div>
+        <div style={S.spellRowMain} onClick={() => setOpen(o => !o)}>
+          <div style={S.spellName}>
+            {spell.name}
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{open ? '▲' : '▼'}</span>
+          </div>
+          <div style={S.spellMeta}>
+            {SCHOOL_NAMES[spell.school] || spell.school}
+            {spell.castingTime && spell.castingTime !== '—' ? ` · ${spell.castingTime}` : ''}
+            {spell.range && spell.range !== '—' ? ` · ${spell.range}` : ''}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {spell.status === 'prepared' && (
+            <span style={{ ...S.tag, borderColor: 'var(--accent)', color: 'var(--accent)' }}>Prepared</span>
+          )}
+          {spell.concentration && (
+            <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Conc</span>
+          )}
+          {spell.ritual && (
+            <span style={{ ...S.tag, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>Ritual</span>
+          )}
+        </div>
+      </div>
+      {open && (
+        <div style={EXPAND_PANEL}>
+          <SpellDetails spell={spell} />
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ ...S.formLabel, marginBottom: 8 }}>{level === 0 ? 'Cast' : 'Cast at slot level'}</div>
+            {castOptions.length === 0 ? (
+              <div style={{ color: 'var(--accent-red)', fontSize: 13 }}>No spell slots available.</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {castOptions.map((opt, i) => <Btn key={i} variant="primary" onClick={opt.fn}>{opt.label}</Btn>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SpellsTab({ character, computed, updateCharacter, applyCharacter }) {
   const [allSpells, setAllSpells] = useState(null)
-  const [detail, setDetail] = useState(null)
   const [prepareFor, setPrepareFor] = useState(null)  // classId currently being prepared
   const edition = character.meta?.edition || '5e'
 
@@ -109,16 +223,13 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
   }, [character.classes, computed])
 
   // ── Build the castable spell view ──────────────────────────
-  // A leveled spell is castable when it is prepared, granted, innate, or
-  // belongs to a known-caster class. Un-prepared prepared-caster spells
-  // live in the Prepare dialog, not in this list.
   const { byLevel, hasAny, alwaysNames } = useMemo(() => {
     const enrich = makeEnricher(spellMap, character)
     const collected = collectCharacterSpells(character)
     const infoByClass = {}
     for (const c of casterClasses) infoByClass[c.classId] = c.info
 
-    const castable = new Map()   // lowerName -> enriched spell + status
+    const castable = new Map()
     const always = new Set()
     function add(name, status) {
       const key = name.toLowerCase()
@@ -130,32 +241,26 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
     for (const c of collected) {
       const lvl = enrich(c.name).level
       if (lvl === 0) { add(c.name, 'always'); always.add(c.name.toLowerCase()); continue }
-      // Race / feat / custom spells are innate and always available.
       if (c.origins.includes('race') || c.origins.includes('feat') || c.origins.includes('custom')) {
         add(c.name, 'always'); always.add(c.name.toLowerCase()); continue
       }
-      // Class-origin leveled spell.
       let resolved = false
       for (const sc of c.sourceClasses) {
         const info = infoByClass[sc]
         if (!info) continue
         if (info.type === 'known') {
-          // Known casters can cast everything they know.
           add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
         } else if (info.type === 'prepared') {
           if (c.granted) {
-            // Domain / subclass grant — always available, no preparation needed.
             add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
           } else {
-            // Preparable pool spell — castable only once prepared (added below).
-            resolved = true
+            resolved = true  // preparable pool spell — castable only once prepared
           }
         }
       }
       if (!resolved) { add(c.name, 'always'); always.add(c.name.toLowerCase()) }
     }
 
-    // Explicitly prepared spells.
     for (const names of Object.values(preparedByClass)) {
       for (const name of (names || [])) add(name, 'prepared')
     }
@@ -169,7 +274,6 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
     return { byLevel: groups, hasAny: castable.size > 0, alwaysNames: always }
   }, [character, spellMap, casterClasses, preparedByClass])
 
-  // Prepared-caster sections (one Prepare button per prepared class).
   const prepSections = useMemo(() => {
     if (maxSpellLvl < 1) return []
     return casterClasses
@@ -216,15 +320,6 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         d.status.concentration = { name: spell.name, level: usePact ? warlockSlots?.level : slotLevel }
       }
     })
-    setDetail(null)
-  }
-
-  function hasCastableSlot(spell) {
-    for (let lvl = spell.level; lvl <= 9; lvl++) {
-      if (slotRemaining(lvl) > 0) return true
-    }
-    if (warlockSlots && warlockSlots.level >= spell.level && pactRemaining() > 0) return true
-    return false
   }
 
   if (!hasSpellcasting && !hasAny) {
@@ -350,59 +445,15 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
 
       {levels.map(level => (
         <Section key={level} title={`${spellLevelLabel(level)} (${byLevel[level].length})`}>
-          {byLevel[level].map(spell => {
-            const canCast = hasCastableSlot(spell)
-            return (
-              <div key={spell.name} style={S.spellRow}>
-                <div style={{ ...S.spellLevelBadge, background: levelColor(level) + '22', color: levelColor(level) }}>
-                  {level === 0 ? 'C' : level}
-                </div>
-                <div style={S.spellRowMain} onClick={() => setDetail(spell)}>
-                  <div style={S.spellName}>{spell.name}</div>
-                  <div style={S.spellMeta}>
-                    {SCHOOL_NAMES[spell.school] || spell.school}
-                    {spell.castingTime !== '—' ? ` · ${spell.castingTime}` : ''}
-                    {spell.range !== '—' ? ` · ${spell.range}` : ''}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                  {spell.status === 'prepared' && (
-                    <span style={{ ...S.tag, borderColor: 'var(--accent)', color: 'var(--accent)' }}>Prepared</span>
-                  )}
-                  {spell.concentration && (
-                    <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Conc</span>
-                  )}
-                  {spell.ritual && (
-                    <span style={{ ...S.tag, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>Ritual</span>
-                  )}
-                  {level === 0 ? (
-                    <Btn variant="ghost" style={{ padding: '5px 12px', fontSize: 12 }}
-                      onClick={() => setDetail(spell)}>
-                      Cast
-                    </Btn>
-                  ) : (
-                    <Btn variant="primary" disabled={!canCast} style={{ padding: '5px 12px', fontSize: 12 }}
-                      onClick={() => setDetail(spell)}
-                      title={canCast ? 'Choose a slot level to cast' : 'No spell slots available'}>
-                      Cast
-                    </Btn>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          {byLevel[level].map(spell => (
+            <SpellRow
+              key={spell.name} spell={spell}
+              slotRemaining={slotRemaining} pactRemaining={pactRemaining}
+              warlockSlots={warlockSlots} onCast={castSpell}
+            />
+          ))}
         </Section>
       ))}
-
-      {/* ── Spell detail / cast modal ── */}
-      <SpellDetailModal
-        spell={detail}
-        onClose={() => setDetail(null)}
-        slotRemaining={slotRemaining}
-        pactRemaining={pactRemaining}
-        warlockSlots={warlockSlots}
-        onCast={castSpell}
-      />
 
       {/* ── Prepare modal ── */}
       {prepareFor && (
@@ -427,6 +478,41 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
 // PREPARE MODAL
 // ═══════════════════════════════════════════════════════════════
 
+// One preparable spell — expands inline to show full details.
+function PrepareRow({ spell, isPrep, note, atLimit, onToggle }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ ...S.spellRow, ...(open ? rowWhenOpen : {}) }}>
+        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+          <div style={S.spellName}>
+            {spell.name}
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{open ? '▲' : '▼'}</span>
+          </div>
+          <div style={S.spellMeta}>
+            {SCHOOL_NAMES[spell.school] || spell.school}
+            {note && <span style={{ color: 'var(--accent-green)' }}> · {note}</span>}
+          </div>
+        </div>
+        <Btn
+          variant={isPrep ? 'accent' : 'primary'}
+          disabled={atLimit}
+          style={{ padding: '5px 12px', fontSize: 12 }}
+          onClick={onToggle}
+          title={atLimit ? 'Preparation limit reached' : ''}
+        >
+          {isPrep ? 'Prepared' : 'Prepare'}
+        </Btn>
+      </div>
+      {open && (
+        <div style={EXPAND_PANEL}>
+          <SpellDetails spell={spell} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PrepareModal({
   classId, section, maxSpellLvl, allSpells, spellMap, character,
   preparedByClass, alwaysNames, onClose, onChange,
@@ -437,7 +523,8 @@ function PrepareModal({
   const prepared = preparedByClass[classId] || []
   const preparedSet = new Set(prepared.map(n => n.toLowerCase()))
 
-  // The pool of spells this class may prepare.
+  // Pool of preparable spells — stored as full spell objects so each row
+  // can expand to its complete description.
   const pool = useMemo(() => {
     const byName = new Map()
     if (hasSpellbook) {
@@ -449,7 +536,7 @@ function PrepareModal({
         const level = sp?.level ?? 0
         if (level < 1 || level > maxSpellLvl) continue
         const k = c.name.toLowerCase()
-        if (!byName.has(k)) byName.set(k, { name: c.name, level, school: sp?.school || 'U' })
+        if (!byName.has(k)) byName.set(k, sp || { name: c.name, level, school: 'U' })
       }
     } else {
       // Cleric / Druid / Paladin / Artificer prepare from the whole class list.
@@ -458,7 +545,7 @@ function PrepareModal({
         if (!(s.classes || []).some(cn => String(cn).toLowerCase() === want)) continue
         if (s.level < 1 || s.level > maxSpellLvl) continue
         const k = s.name.toLowerCase()
-        if (!byName.has(k)) byName.set(k, { name: s.name, level: s.level, school: s.school })
+        if (!byName.has(k)) byName.set(k, s)
       }
     }
     return [...byName.values()].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
@@ -540,119 +627,18 @@ function PrepareModal({
             </div>
             {groups[lvl].map(s => {
               const isPrep = preparedSet.has(s.name.toLowerCase())
-              const note = otherSource(s.name)
-              const atLimit = !isPrep && prepared.length >= max
               return (
-                <div key={s.name} style={S.spellRow}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={S.spellName}>{s.name}</div>
-                    <div style={S.spellMeta}>
-                      {SCHOOL_NAMES[s.school] || s.school}
-                      {note && <span style={{ color: 'var(--accent-green)' }}> · {note}</span>}
-                    </div>
-                  </div>
-                  <Btn
-                    variant={isPrep ? 'accent' : 'primary'}
-                    disabled={atLimit}
-                    style={{ padding: '5px 12px', fontSize: 12 }}
-                    onClick={() => toggle(s.name)}
-                    title={atLimit ? 'Preparation limit reached' : ''}
-                  >
-                    {isPrep ? 'Prepared' : 'Prepare'}
-                  </Btn>
-                </div>
+                <PrepareRow
+                  key={s.name} spell={s} isPrep={isPrep}
+                  note={otherSource(s.name)}
+                  atLimit={!isPrep && prepared.length >= max}
+                  onToggle={() => toggle(s.name)}
+                />
               )
             })}
           </div>
         ))}
       </div>
-    </SheetModal>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SPELL DETAIL MODAL
-// ═══════════════════════════════════════════════════════════════
-
-function SpellDetailModal({ spell, onClose, slotRemaining, pactRemaining, warlockSlots, onCast }) {
-  if (!spell) return null
-
-  const castOptions = []
-  if (spell.level === 0) {
-    castOptions.push({ label: 'Cast (cantrip)', fn: () => onCast(spell, 0, false) })
-  } else {
-    for (let lvl = spell.level; lvl <= 9; lvl++) {
-      const rem = slotRemaining(lvl)
-      if (rem > 0) {
-        castOptions.push({
-          label: lvl === spell.level ? `Cast at Level ${lvl} (${rem} left)` : `Up-cast at Level ${lvl} (${rem} left)`,
-          fn: () => onCast(spell, lvl, false),
-        })
-      }
-    }
-    if (warlockSlots && warlockSlots.level >= spell.level && pactRemaining() > 0) {
-      castOptions.push({
-        label: `Cast with Pact Slot (Level ${warlockSlots.level}, ${pactRemaining()} left)`,
-        fn: () => onCast(spell, warlockSlots.level, true),
-      })
-    }
-  }
-
-  return (
-    <SheetModal
-      open={!!spell}
-      onClose={onClose}
-      title={spell.name}
-      width={620}
-      footer={<Btn variant="ghost" onClick={onClose}>Close</Btn>}
-    >
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>Level: </span><span style={S.detailChipValue}>{spell.level === 0 ? 'Cantrip' : spell.level}</span></div>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>School: </span><span style={S.detailChipValue}>{SCHOOL_NAMES[spell.school] || spell.school}</span></div>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>Cast: </span><span style={S.detailChipValue}>{spell.castingTime}</span></div>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>Range: </span><span style={S.detailChipValue}>{spell.range}</span></div>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>Duration: </span><span style={S.detailChipValue}>{spell.duration}</span></div>
-        <div style={S.detailChip}><span style={S.detailChipLabel}>Components: </span><span style={S.detailChipValue}>{formatComponents(spell.components)}</span></div>
-      </div>
-
-      {(spell.concentration || spell.ritual) && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {spell.concentration && <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Concentration</span>}
-          {spell.ritual && <span style={{ ...S.tag, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>Ritual</span>}
-        </div>
-      )}
-
-      {/* Cast actions — choose the slot level (base level or up-cast) */}
-      <div style={{
-        marginBottom: 14, padding: '12px 14px', borderRadius: 8,
-        background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-      }}>
-        <div style={{ ...S.formLabel, marginBottom: 8 }}>
-          {spell.level === 0 ? 'Cast' : 'Cast at slot level'}
-        </div>
-        {castOptions.length === 0 ? (
-          <div style={{ color: 'var(--accent-red)', fontSize: 13 }}>No spell slots available.</div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {castOptions.map((opt, i) => (
-              <Btn key={i} variant="primary" onClick={opt.fn}>{opt.label}</Btn>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {spell.entries?.length > 0 ? (
-        <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-          <EntryRenderer entries={spell.entries} />
-          {spell.entriesHigherLevel?.length > 0 && (
-            <div style={{ marginTop: 10 }}><EntryRenderer entries={spell.entriesHigherLevel} /></div>
-          )}
-        </div>
-      ) : (
-        <div style={{ color: 'var(--text-dim)', fontSize: 13, fontStyle: 'italic' }}>
-          No description available for this spell.
-        </div>
-      )}
     </SheetModal>
   )
 }

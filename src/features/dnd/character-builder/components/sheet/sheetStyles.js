@@ -359,11 +359,11 @@ export const S = {
   asiLabel: { color: 'var(--text-muted)', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
   asiValues: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   asiBadge: {
-    background: 'var(--accent-green)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)',
+    background: 'var(--bg-hover)', border: '1px solid var(--accent-green)', color: 'var(--accent-green)',
     borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 'bold',
   },
   skillBadge: {
-    background: 'var(--border-subtle)', border: '1px solid var(--accent-green)', borderRadius: 6,
+    background: 'var(--bg-hover)', border: '1px solid var(--accent-green)', borderRadius: 6,
     padding: '4px 10px', color: 'var(--accent-green)', fontSize: 12,
   },
   featCard: {
@@ -379,7 +379,8 @@ export const S = {
     padding: '2px 8px', color: 'var(--accent-purple)', fontSize: 12,
   },
   originTag: {
-    background: 'var(--accent-purple)', color: 'var(--accent-purple)', fontSize: 9, fontWeight: 'bold',
+    background: 'var(--bg-hover)', border: '1px solid var(--accent-purple)', color: 'var(--accent-purple)',
+    fontSize: 9, fontWeight: 'bold',
     padding: '1px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.5,
   },
 
