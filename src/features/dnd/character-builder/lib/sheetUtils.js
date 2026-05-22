@@ -64,14 +64,19 @@ export function isFakeSpellName(name) {
 export function collectCharacterSpells(character) {
   const map = new Map()  // lowercase name -> entry
 
-  const add = (raw, origin, sourceClass) => {
+  // `granted` marks spells handed out automatically (domain / subclass /
+  // optional-feature grants) — they are always castable. The plain class
+  // pools (knownSpells / preparedSpells) are NOT granted: for prepared
+  // casters those still need to be prepared before they can be cast.
+  const add = (raw, origin, sourceClass, granted = false) => {
     const name = typeof raw === 'string' ? raw : raw?.name
     if (!name || isFakeSpellName(name)) return
     const key = name.toLowerCase()
     let e = map.get(key)
-    if (!e) { e = { name, origins: new Set(), sourceClasses: new Set() }; map.set(key, e) }
+    if (!e) { e = { name, origins: new Set(), sourceClasses: new Set(), granted: false }; map.set(key, e) }
     e.origins.add(origin)
     if (sourceClass) e.sourceClasses.add(sourceClass)
+    if (granted) e.granted = true
   }
 
   for (const cls of (character.classes || [])) {
@@ -80,8 +85,9 @@ export function collectCharacterSpells(character) {
       for (const s of (ch.startingSpells || [])) add(s, 'class', cls.classId)
       for (const s of (ch.knownSpells || []))    add(s, 'class', cls.classId)
       for (const s of (ch.preparedSpells || [])) add(s, 'class', cls.classId)
+      // optFeatureSpells = subclass / feature grants → always castable.
       for (const arr of Object.values(ch.optFeatureSpells || {}))
-        for (const s of (arr || [])) add(s, 'class', cls.classId)
+        for (const s of (arr || [])) add(s, 'class', cls.classId, true)
     }
     for (const s of (cls.knownSpells || []))    add(s, 'class', cls.classId)
     for (const s of (cls.preparedSpells || [])) add(s, 'class', cls.classId)
@@ -102,6 +108,7 @@ export function collectCharacterSpells(character) {
     name: e.name,
     origins: [...e.origins],
     sourceClasses: [...e.sourceClasses],
+    granted: e.granted,
   }))
 }
 

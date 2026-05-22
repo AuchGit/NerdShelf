@@ -1,14 +1,16 @@
 // components/sheet/SpellsTab.jsx
 // Complete spell list (every spell the character knows, not just level 1),
-// interactive spell slots, casting with up-casting, and concentration tracking.
+// spell preparation for prepared casters, interactive spell slots, casting
+// with up-casting, and concentration tracking.
 
 import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
-import { Section, EmptyState, Btn, SheetModal } from './SheetKit'
+import { Section, EmptyState, Btn, SheetModal, TextInput } from './SheetKit'
 import { S } from './sheetStyles'
 import {
   collectCharacterSpells, computeSpellSlots, ordinal, spellLevelLabel, SCHOOL_NAMES,
 } from '../../lib/sheetUtils'
+import { getSpellcastingInfo } from '../../lib/spellcastingRules'
 
 function formatComponents(c = {}) {
   const parts = []
@@ -27,9 +29,38 @@ const LEVEL_COLORS = ['var(--accent-blue)', 'var(--accent)', 'var(--accent)', 'v
 
 function levelColor(lvl) { return LEVEL_COLORS[Math.min(9, lvl)] || 'var(--accent)' }
 
+// Build a reusable spell enricher (level / school / description from the
+// loaded spell list, custom spells, or stored spellMetadata).
+function makeEnricher(spellMap, character) {
+  const customByName = {}
+  for (const c of (character.custom?.spells || [])) {
+    if (c?.name) customByName[c.name.toLowerCase()] = c
+  }
+  const meta = character.spellMetadata || {}
+  return function enrich(name) {
+    const loaded = spellMap?.get(name.toLowerCase())
+    const custom = customByName[name.toLowerCase()]
+    const m = meta[name] || {}
+    return {
+      name,
+      level: loaded?.level ?? custom?.level ?? m.level ?? 0,
+      school: loaded?.school || custom?.school || m.school || 'U',
+      concentration: loaded?.concentration ?? custom?.concentration ?? m.concentration ?? false,
+      ritual: loaded?.ritual ?? custom?.ritual ?? m.ritual ?? false,
+      castingTime: loaded?.castingTime || custom?.castingTime || m.castingTime || '—',
+      range: loaded?.range || custom?.range || m.range || '—',
+      duration: loaded?.duration || custom?.duration || m.duration || '—',
+      components: loaded?.components || {},
+      entries: loaded?.entries || custom?.entries || (custom?.description ? [custom.description] : []),
+      entriesHigherLevel: loaded?.entriesHigherLevel || custom?.entriesHigherLevel || [],
+    }
+  }
+}
+
 export default function SpellsTab({ character, computed, updateCharacter, applyCharacter }) {
-  const [spellMap, setSpellMap] = useState(null)
+  const [allSpells, setAllSpells] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [prepareFor, setPrepareFor] = useState(null)  // classId currently being prepared
   const edition = character.meta?.edition || '5e'
 
   useEffect(() => {
@@ -37,58 +68,119 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
     async function load() {
       const { loadSpellList } = await import('../../lib/dataLoader')
       const list = await loadSpellList(edition)
-      if (cancelled) return
-      const m = new Map()
-      for (const s of list) m.set(s.name.toLowerCase(), s)
-      setSpellMap(m)
+      if (!cancelled) setAllSpells(list)
     }
     load()
     return () => { cancelled = true }
   }, [edition])
 
-  // ── Enrich every collected spell with level / school / description ──
-  const { byLevel, hasAny } = useMemo(() => {
-    const collected = collectCharacterSpells(character)
-    const customByName = {}
-    for (const c of (character.custom?.spells || [])) customByName[c.name?.toLowerCase()] = c
-    const meta = character.spellMetadata || {}
-
-    const enriched = collected.map(c => {
-      const loaded = spellMap?.get(c.name.toLowerCase())
-      const custom = customByName[c.name.toLowerCase()]
-      const m = meta[c.name] || {}
-      const level = loaded?.level ?? custom?.level ?? m.level ?? 0
-      return {
-        name: c.name,
-        origins: c.origins,
-        sourceClasses: c.sourceClasses,
-        level,
-        school: loaded?.school || custom?.school || m.school || 'U',
-        concentration: loaded?.concentration ?? custom?.concentration ?? m.concentration ?? false,
-        ritual: loaded?.ritual ?? custom?.ritual ?? m.ritual ?? false,
-        castingTime: loaded?.castingTime || custom?.castingTime || m.castingTime || '—',
-        range: loaded?.range || custom?.range || m.range || '—',
-        duration: loaded?.duration || custom?.duration || m.duration || '—',
-        components: loaded?.components || {},
-        entries: loaded?.entries || custom?.entries || (custom?.description ? [custom.description] : []),
-        entriesHigherLevel: loaded?.entriesHigherLevel || custom?.entriesHigherLevel || [],
-      }
-    })
-
-    const groups = {}
-    for (const sp of enriched) {
-      if (!groups[sp.level]) groups[sp.level] = []
-      groups[sp.level].push(sp)
-    }
-    for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.name.localeCompare(b.name))
-    return { byLevel: groups, hasAny: enriched.length > 0 }
-  }, [character, spellMap])
+  const spellMap = useMemo(() => {
+    const m = new Map()
+    for (const s of (allSpells || [])) m.set(s.name.toLowerCase(), s)
+    return m
+  }, [allSpells])
 
   const { slots, warlockSlots } = computeSpellSlots(character)
   const usedSlots = character.status?.usedSpellSlots || {}
   const usedPact = character.status?.usedPactSlots || 0
   const concentration = character.status?.concentration || null
   const hasSpellcasting = character.classes.some(c => c.spellcastingAbility)
+  const preparedByClass = useMemo(
+    () => character.status?.preparedSpells || {},
+    [character.status?.preparedSpells],
+  )
+
+  // Highest spell level the character can prepare / cast.
+  const maxSpellLvl = useMemo(() => {
+    let mx = 0
+    if (slots) for (let i = 0; i < 9; i++) if (slots[i] > 0) mx = i + 1
+    if (warlockSlots && warlockSlots.level > mx) mx = warlockSlots.level
+    return mx
+  }, [slots, warlockSlots])
+
+  // Per-class spellcasting classification (prepared vs known vs spellbook).
+  const casterClasses = useMemo(() => {
+    return (character.classes || []).map(cls => {
+      const sub = cls.subclassId?.split('__')[0] || null
+      const mod = computed?.spellcasting?.[cls.classId]?.modifier ?? 0
+      const info = getSpellcastingInfo(cls.classId, cls.level, mod, sub)
+      return info ? { classId: cls.classId, info } : null
+    }).filter(Boolean)
+  }, [character.classes, computed])
+
+  // ── Build the castable spell view ──────────────────────────
+  // A leveled spell is castable when it is prepared, granted, innate, or
+  // belongs to a known-caster class. Un-prepared prepared-caster spells
+  // live in the Prepare dialog, not in this list.
+  const { byLevel, hasAny, alwaysNames } = useMemo(() => {
+    const enrich = makeEnricher(spellMap, character)
+    const collected = collectCharacterSpells(character)
+    const infoByClass = {}
+    for (const c of casterClasses) infoByClass[c.classId] = c.info
+
+    const castable = new Map()   // lowerName -> enriched spell + status
+    const always = new Set()
+    function add(name, status) {
+      const key = name.toLowerCase()
+      const ex = castable.get(key)
+      if (ex) { if (status === 'always') ex.status = 'always'; return }
+      castable.set(key, { ...enrich(name), status })
+    }
+
+    for (const c of collected) {
+      const lvl = enrich(c.name).level
+      if (lvl === 0) { add(c.name, 'always'); always.add(c.name.toLowerCase()); continue }
+      // Race / feat / custom spells are innate and always available.
+      if (c.origins.includes('race') || c.origins.includes('feat') || c.origins.includes('custom')) {
+        add(c.name, 'always'); always.add(c.name.toLowerCase()); continue
+      }
+      // Class-origin leveled spell.
+      let resolved = false
+      for (const sc of c.sourceClasses) {
+        const info = infoByClass[sc]
+        if (!info) continue
+        if (info.type === 'known') {
+          // Known casters can cast everything they know.
+          add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
+        } else if (info.type === 'prepared') {
+          if (c.granted) {
+            // Domain / subclass grant — always available, no preparation needed.
+            add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
+          } else {
+            // Preparable pool spell — castable only once prepared (added below).
+            resolved = true
+          }
+        }
+      }
+      if (!resolved) { add(c.name, 'always'); always.add(c.name.toLowerCase()) }
+    }
+
+    // Explicitly prepared spells.
+    for (const names of Object.values(preparedByClass)) {
+      for (const name of (names || [])) add(name, 'prepared')
+    }
+
+    const groups = {}
+    for (const sp of castable.values()) {
+      if (!groups[sp.level]) groups[sp.level] = []
+      groups[sp.level].push(sp)
+    }
+    for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.name.localeCompare(b.name))
+    return { byLevel: groups, hasAny: castable.size > 0, alwaysNames: always }
+  }, [character, spellMap, casterClasses, preparedByClass])
+
+  // Prepared-caster sections (one Prepare button per prepared class).
+  const prepSections = useMemo(() => {
+    if (maxSpellLvl < 1) return []
+    return casterClasses
+      .filter(c => c.info.type === 'prepared')
+      .map(c => ({
+        classId: c.classId,
+        hasSpellbook: !!c.info.hasSpellbook,
+        max: c.info.maxPrepared || 0,
+        count: (preparedByClass[c.classId] || []).length,
+      }))
+  }, [casterClasses, preparedByClass, maxSpellLvl])
 
   // ── Slot helpers ──────────────────────────────────────────
   function slotRemaining(level) {
@@ -98,7 +190,6 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
   function pactRemaining() {
     return warlockSlots ? Math.max(0, warlockSlots.slots - usedPact) : 0
   }
-
   function setSlotUsed(level, used) {
     const max = slots?.[level - 1] || 0
     updateCharacter(`status.usedSpellSlots.${level}`, Math.max(0, Math.min(max, used)))
@@ -128,9 +219,6 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
     setDetail(null)
   }
 
-  // True if at least one slot (regular or pact) could cast this spell —
-  // only controls whether the Cast button is enabled. The actual slot
-  // level is always chosen by the player in the cast dialog.
   function hasCastableSlot(spell) {
     for (let lvl = spell.level; lvl <= 9; lvl++) {
       if (slotRemaining(lvl) > 0) return true
@@ -230,8 +318,35 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         </Section>
       )}
 
+      {/* ── Spell preparation ── */}
+      {prepSections.length > 0 && (
+        <Section title="Spell Preparation">
+          <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 8 }}>
+            Prepared casters choose which spells are ready each day. Only prepared spells can be cast.
+          </div>
+          {prepSections.map(ps => (
+            <div key={ps.classId} style={{
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8,
+              padding: '10px 14px', marginBottom: 6,
+            }}>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 14, flex: 1, minWidth: 100 }}>
+                {ps.classId}
+              </span>
+              <span style={{ fontSize: 13 }}>
+                Prepared{' '}
+                <b style={{ color: ps.count > ps.max ? 'var(--accent-red)' : 'var(--accent)' }}>
+                  {ps.count} / {ps.max}
+                </b>
+              </span>
+              <Btn variant="accent" onClick={() => setPrepareFor(ps.classId)}>Prepare</Btn>
+            </div>
+          ))}
+        </Section>
+      )}
+
       {/* ── Spells by level ── */}
-      {!hasAny && <EmptyState title="No spells known" desc="Spells chosen at level-up will appear here." />}
+      {!hasAny && <EmptyState title="No spells ready" desc="Use Prepare to choose your spells, or learn spells at level-up." />}
 
       {levels.map(level => (
         <Section key={level} title={`${spellLevelLabel(level)} (${byLevel[level].length})`}>
@@ -251,17 +366,14 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+                  {spell.status === 'prepared' && (
+                    <span style={{ ...S.tag, borderColor: 'var(--accent)', color: 'var(--accent)' }}>Prepared</span>
+                  )}
                   {spell.concentration && (
                     <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Conc</span>
                   )}
                   {spell.ritual && (
                     <span style={{ ...S.tag, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}>Ritual</span>
-                  )}
-                  {spell.origins.includes('race') && (
-                    <span style={{ ...S.tag, borderColor: 'var(--accent-green)', color: 'var(--accent-green)' }}>Race</span>
-                  )}
-                  {spell.origins.includes('feat') && (
-                    <span style={{ ...S.tag, borderColor: 'var(--accent-yellow)', color: 'var(--accent-yellow)' }}>Feat</span>
                   )}
                   {level === 0 ? (
                     <Btn variant="ghost" style={{ padding: '5px 12px', fontSize: 12 }}
@@ -291,7 +403,170 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         warlockSlots={warlockSlots}
         onCast={castSpell}
       />
+
+      {/* ── Prepare modal ── */}
+      {prepareFor && (
+        <PrepareModal
+          classId={prepareFor}
+          section={prepSections.find(p => p.classId === prepareFor)}
+          maxSpellLvl={maxSpellLvl}
+          allSpells={allSpells}
+          spellMap={spellMap}
+          character={character}
+          preparedByClass={preparedByClass}
+          alwaysNames={alwaysNames}
+          onClose={() => setPrepareFor(null)}
+          onChange={arr => updateCharacter(`status.preparedSpells.${prepareFor}`, arr)}
+        />
+      )}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PREPARE MODAL
+// ═══════════════════════════════════════════════════════════════
+
+function PrepareModal({
+  classId, section, maxSpellLvl, allSpells, spellMap, character,
+  preparedByClass, alwaysNames, onClose, onChange,
+}) {
+  const [search, setSearch] = useState('')
+  const hasSpellbook = section?.hasSpellbook
+  const max = section?.max || 0
+  const prepared = preparedByClass[classId] || []
+  const preparedSet = new Set(prepared.map(n => n.toLowerCase()))
+
+  // The pool of spells this class may prepare.
+  const pool = useMemo(() => {
+    const byName = new Map()
+    if (hasSpellbook) {
+      // Wizard prepares from the spellbook (the spells actually learned).
+      for (const c of collectCharacterSpells(character)) {
+        if (c.granted) continue
+        if (!c.sourceClasses.includes(classId)) continue
+        const sp = spellMap?.get(c.name.toLowerCase())
+        const level = sp?.level ?? 0
+        if (level < 1 || level > maxSpellLvl) continue
+        const k = c.name.toLowerCase()
+        if (!byName.has(k)) byName.set(k, { name: c.name, level, school: sp?.school || 'U' })
+      }
+    } else {
+      // Cleric / Druid / Paladin / Artificer prepare from the whole class list.
+      const want = classId.toLowerCase()
+      for (const s of (allSpells || [])) {
+        if (!(s.classes || []).some(cn => String(cn).toLowerCase() === want)) continue
+        if (s.level < 1 || s.level > maxSpellLvl) continue
+        const k = s.name.toLowerCase()
+        if (!byName.has(k)) byName.set(k, { name: s.name, level: s.level, school: s.school })
+      }
+    }
+    return [...byName.values()].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  }, [allSpells, spellMap, character, classId, hasSpellbook, maxSpellLvl])
+
+  const filtered = search.trim()
+    ? pool.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
+    : pool
+
+  const groups = {}
+  for (const s of filtered) {
+    if (!groups[s.level]) groups[s.level] = []
+    groups[s.level].push(s)
+  }
+  const groupLevels = Object.keys(groups).map(Number).sort((a, b) => a - b)
+
+  function toggle(name) {
+    const lower = name.toLowerCase()
+    if (preparedSet.has(lower)) {
+      onChange(prepared.filter(n => n.toLowerCase() !== lower))
+    } else {
+      if (prepared.length >= max) return
+      onChange([...prepared, name])
+    }
+  }
+
+  // If a spell is already available through another class / source, say so.
+  function otherSource(name) {
+    const lower = name.toLowerCase()
+    for (const [cid, names] of Object.entries(preparedByClass)) {
+      if (cid === classId) continue
+      if ((names || []).some(n => n.toLowerCase() === lower)) return `Prepared as ${cid}`
+    }
+    if (alwaysNames.has(lower)) return 'Already known'
+    return null
+  }
+
+  const overLimit = prepared.length > max
+
+  return (
+    <SheetModal open onClose={onClose} title={`Prepare ${classId} Spells`} width={640}
+      footer={<Btn variant="primary" onClick={onClose}>Done</Btn>}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 10, flexWrap: 'wrap', marginBottom: 10,
+      }}>
+        <span style={{ fontSize: 14 }}>
+          Prepared:{' '}
+          <b style={{ color: overLimit ? 'var(--accent-red)' : 'var(--accent)' }}>{prepared.length} / {max}</b>
+        </span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+          {hasSpellbook ? 'From your spellbook' : `Full ${classId} spell list`}
+        </span>
+      </div>
+      {overLimit && (
+        <div style={{ color: 'var(--accent-red)', fontSize: 12, marginBottom: 8 }}>
+          Over the preparation limit — un-prepare a spell.
+        </div>
+      )}
+
+      <TextInput value={search} onChange={setSearch} placeholder="Search spells..." autoFocus />
+
+      <div style={{ marginTop: 10, maxHeight: 440, overflowY: 'auto' }}>
+        {allSpells === null && (
+          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Loading spells...</div>
+        )}
+        {allSpells !== null && pool.length === 0 && (
+          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>
+            {maxSpellLvl < 1 ? 'No spell slots available yet.' : 'No preparable spells found.'}
+          </div>
+        )}
+        {groupLevels.map(lvl => (
+          <div key={lvl}>
+            <div style={{
+              color: 'var(--accent)', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase',
+              letterSpacing: 0.6, margin: '10px 2px 6px',
+            }}>
+              {ordinal(lvl)} Level
+            </div>
+            {groups[lvl].map(s => {
+              const isPrep = preparedSet.has(s.name.toLowerCase())
+              const note = otherSource(s.name)
+              const atLimit = !isPrep && prepared.length >= max
+              return (
+                <div key={s.name} style={S.spellRow}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={S.spellName}>{s.name}</div>
+                    <div style={S.spellMeta}>
+                      {SCHOOL_NAMES[s.school] || s.school}
+                      {note && <span style={{ color: 'var(--accent-green)' }}> · {note}</span>}
+                    </div>
+                  </div>
+                  <Btn
+                    variant={isPrep ? 'accent' : 'primary'}
+                    disabled={atLimit}
+                    style={{ padding: '5px 12px', fontSize: 12 }}
+                    onClick={() => toggle(s.name)}
+                    title={atLimit ? 'Preparation limit reached' : ''}
+                  >
+                    {isPrep ? 'Prepared' : 'Prepare'}
+                  </Btn>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </SheetModal>
   )
 }
 
