@@ -75,6 +75,25 @@ function lookupIcon(name, ...maps) {
   return null
 }
 
+/**
+ * Build a list of Foundry items defensively: if a single source entry is
+ * malformed and its builder throws, that one entry is skipped and logged
+ * instead of aborting the entire export. Guarantees an importable actor.
+ */
+function safeMap(arr, fn, label) {
+  const out = []
+  const list = Array.isArray(arr) ? arr : []
+  for (let i = 0; i < list.length; i++) {
+    try {
+      const r = fn(list[i], i)
+      if (r != null) out.push(r)
+    } catch (e) {
+      console.warn(`[Export] skipped ${label}[${i}]:`, e)
+    }
+  }
+  return out
+}
+
 async function ensureIndexes() {
   if (CLASS_INDEX) return   // bereits geladen → nichts tun
 
@@ -2212,12 +2231,12 @@ export async function exportToFoundry(character) {
   // ════════════════════════════════════════════════════
 
   // 1. Klassen
-  const classItems = (character.classes || []).map(cls => makeClassItem(cls, character))
+  const classItems = safeMap(character.classes, cls => makeClassItem(cls, character), 'class')
 
   // 2. Subklassen
-  const subclassItems = (character.classes || [])
-    .filter(cls => cls.subclassId)
-    .map(cls => makeSubclassItem(cls, character))
+  const subclassItems = safeMap(
+    (character.classes || []).filter(cls => cls.subclassId),
+    cls => makeSubclassItem(cls, character), 'subclass')
 
   // 3. Klassen-Features
   // Source of truth: CLASS_FEATURES_MAP (5etools) — all features per class/subclass.
@@ -2265,22 +2284,26 @@ export async function exportToFoundry(character) {
       seenFeatures.add(dedupKey)
 
       const patch = patchMap.get(feat.name) || {}
-      classFeatureItems.push(makeClassFeatureItem({
-        name:              feat.name,
-        level:             feat.level,
-        source:            feat.source,
-        className:         cls.classId,
-        subclassShortName: feat.subclassShortName || null,
-        img:               patch.img        || null,
-        effects:           patch.effects    || [],
-        activities:        patch.activities || [],
-        system:            patch.system     || {},
-      }, cls, character))
+      try {
+        classFeatureItems.push(makeClassFeatureItem({
+          name:              feat.name,
+          level:             feat.level,
+          source:            feat.source,
+          className:         cls.classId,
+          subclassShortName: feat.subclassShortName || null,
+          img:               patch.img        || null,
+          effects:           patch.effects    || [],
+          activities:        patch.activities || [],
+          system:            patch.system     || {},
+        }, cls, character))
+      } catch (e) {
+        console.warn(`[Export] skipped class feature "${feat.name}":`, e)
+      }
     }
   }
 
   // 4. Feats
-  const featItems = (character.feats || []).map(feat => makeFeatItem(feat, character))
+  const featItems = safeMap(character.feats, feat => makeFeatItem(feat, character), 'feat')
 
   // 5. Zauber (dedupliziert)
   // ─────────────────────────────────────────────────────────────────────
@@ -2302,7 +2325,11 @@ export async function exportToFoundry(character) {
     const key = `${name}__${cleanSrcClass || 'g'}`
     if (addedSpells.has(key)) return
     addedSpells.add(key)
-    spellItems.push(makeSpellItem(name, level, mode, cleanSrcClass, character))
+    try {
+      spellItems.push(makeSpellItem(name, level, mode, cleanSrcClass, character))
+    } catch (e) {
+      console.warn(`[Export] skipped spell "${name}":`, e)
+    }
   }
 
   for (const cls of (character.classes || [])) {
@@ -2353,10 +2380,10 @@ export async function exportToFoundry(character) {
 
   // 6. Inventar (regular + custom items)
   const inventoryItems = [
-    ...(character.inventory?.items || []).map(item => makeInventoryItem(item, edition)),
-    ...(character.custom?.items || []).map(item => makeInventoryItem({
+    ...safeMap(character.inventory?.items, item => makeInventoryItem(item, edition), 'item'),
+    ...safeMap(character.custom?.items, item => makeInventoryItem({
       ...item, id: item._id, grantedBy: 'custom',
-    }, edition)),
+    }, edition), 'custom item'),
   ]
 
   // ── Stow only loose loot/consumables/tools in the first Backpack ──
@@ -2402,13 +2429,19 @@ export async function exportToFoundry(character) {
   }
 
   // 7. Race Item
-  const raceItem = raceName ? makeRaceItem(character) : null
+  let raceItem = null
+  try { raceItem = raceName ? makeRaceItem(character) : null }
+  catch (e) { console.warn('[Export] skipped race item:', e) }
 
   // 8. Background Item
-  const backgroundItem = bgName ? makeBackgroundItem(character) : null
+  let backgroundItem = null
+  try { backgroundItem = bgName ? makeBackgroundItem(character) : null }
+  catch (e) { console.warn('[Export] skipped background item:', e) }
 
   // 9. Racial Trait Items (Darkvision, Fey Ancestry, etc.)
-  const racialTraitItems = raceName ? makeRacialTraitItems(character) : []
+  let racialTraitItems = []
+  try { racialTraitItems = raceName ? makeRacialTraitItems(character) : [] }
+  catch (e) { console.warn('[Export] skipped racial traits:', e) }
 
   // ── prototypeToken ─────────────────────────────────────
   const prototypeToken = {
@@ -2656,58 +2689,76 @@ export async function exportToFoundry(character) {
 
 // ═══════════════════════════════════════════════════════════════════════
 // DOWNLOAD HELPER
-// Löst einen Browser-Download des Foundry Actor JSON aus.
+// Speichert das Foundry Actor JSON. In Tauri über einen Speichern-Dialog,
+// im Browser / PWA über einen Blob-Download. Fehler werden immer sichtbar
+// gemeldet — nichts schlägt mehr stillschweigend fehl.
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function downloadFoundryJSON(character) {
-  const actor    = await exportToFoundry(character)
-  const json     = JSON.stringify(actor, null, 2)
-  const filename = `${(character.info.name || 'character')
-    .replace(/[^a-z0-9]/gi, '_')}_foundry.json`
-
-  // In Tauri: save to configured export path
-  if (window.__TAURI_INTERNALS__) {
-    try {
-      const { writeTextFile, mkdir, exists } = await import('@tauri-apps/plugin-fs')
-      const { appDataDir, resolve } = await import('@tauri-apps/api/path')
-
-      let exportDir = localStorage.getItem('dndbuilder_export_path')
-      if (!exportDir) {
-        // Default: exe directory / export / foundry
-        const { resourceDir } = await import('@tauri-apps/api/path')
-        try {
-          exportDir = await resolve(await resourceDir(), '..', 'export', 'foundry')
-        } catch {
-          exportDir = await resolve(await appDataDir(), 'export', 'foundry')
-        }
-      }
-
-      // Create directory if it doesn't exist
-      try {
-        const dirExists = await exists(exportDir)
-        if (!dirExists) await mkdir(exportDir, { recursive: true })
-      } catch {
-        await mkdir(exportDir, { recursive: true }).catch(() => {})
-      }
-
-      const filePath = await resolve(exportDir, filename)
-      await writeTextFile(filePath, json)
-      alert(`Exportiert nach:\n${filePath}`)
-      return
-    } catch (e) {
-      console.warn('[Export] Tauri filesystem failed, falling back to browser download:', e)
-      // Fall through to browser download
-    }
+  // ── 1. Actor-JSON bauen ──────────────────────────────────────────────
+  let json
+  try {
+    const actor = await exportToFoundry(character)
+    json = JSON.stringify(actor, null, 2)
+  } catch (e) {
+    console.error('[Export] Actor build failed:', e)
+    alert('FoundryVTT-Export fehlgeschlagen beim Erzeugen des Charakters:\n\n' +
+          (e?.message || String(e)))
+    return
   }
 
-  // Browser fallback
-  const blob     = new Blob([json], { type: 'application/json' })
-  const url      = URL.createObjectURL(blob)
-  const a        = document.createElement('a')
-  a.href         = url
-  a.download     = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  const filename = `${(character.info?.name || 'character')
+    .replace(/[^a-z0-9]/gi, '_')}_foundry.json`
+
+  // ── 2. Tauri-Desktop: Speichern-Dialog → Datei schreiben ─────────────
+  if (window.__TAURI_INTERNALS__) {
+    try {
+      const { save }          = await import('@tauri-apps/plugin-dialog')
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+
+      // Letzten Ordner als Vorschlag wiederverwenden.
+      let defaultPath = filename
+      const lastDir = localStorage.getItem('dndbuilder_export_path')
+      if (lastDir) defaultPath = `${lastDir.replace(/[\\/]+$/, '')}/${filename}`
+
+      const target = await save({
+        title: 'FoundryVTT Actor speichern',
+        defaultPath,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (!target) return  // Nutzer hat abgebrochen
+
+      await writeTextFile(target, json)
+
+      // Ordner für den nächsten Export merken.
+      try {
+        const dir = target.replace(/[\\/][^\\/]*$/, '')
+        if (dir && dir !== target) localStorage.setItem('dndbuilder_export_path', dir)
+      } catch { /* ignore */ }
+
+      alert('Erfolgreich exportiert nach:\n' + target)
+    } catch (e) {
+      console.error('[Export] Tauri save failed:', e)
+      alert('Speichern fehlgeschlagen:\n\n' + (e?.message || String(e)) +
+            '\n\nFalls hier eine fehlende Berechtigung steht, muss die App ' +
+            'nach diesem Update neu gebaut werden.')
+    }
+    return
+  }
+
+  // ── 3. Browser / PWA: Blob-Download ──────────────────────────────────
+  try {
+    const blob = new Blob([json], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('[Export] Browser download failed:', e)
+    alert('Download fehlgeschlagen:\n\n' + (e?.message || String(e)))
+  }
 }

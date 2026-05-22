@@ -1,11 +1,30 @@
-/* CharacterSheetPage mobile responsive layer.
-   These rules ONLY fire at ≤768px; desktop (incl. default Tauri 1280×800)
-   sees zero CSS from this file. Inline styles in the .jsx remain canonical
-   for desktop. */
+/* CharacterSheetPage — layout + responsive layer.
+   Inline styles in the .jsx remain canonical for desktop; this file
+   patches missing theme variables and adds the mobile / landscape rules. */
 
+/* ─── Theme variable bridge ────────────────────────────────────────────
+   The DnD theme compat shim (lib/theme.jsx) maps most legacy variables,
+   but the sheet also uses a handful it never defined — so those cards
+   rendered with no background. Define them here, scoped to the sheet,
+   in terms of the canonical --color-* tokens so they adapt to the theme. */
+.dnd-sheet-root {
+  --bg-panel: var(--color-bg-sunken);
+  --bg-card: var(--color-bg-elevated);
+  --bg-elevated: var(--color-surface);
+  --bg-hover: var(--color-surface-hover);
+  --border-subtle: var(--color-border);
+  --text-secondary: var(--color-text-muted);
+  --accent-blue: #5b8cff;
+  --accent-purple: #a684ff;
+}
+
+.dnd-sheet-root *,
+.dnd-sheet-root *::before,
+.dnd-sheet-root *::after { box-sizing: border-box; }
+
+/* ═══ TABLET / PHONE (portrait & narrow windows) ═══════════════════════ */
 @media (max-width: 768px) {
-  /* Body: stack sidebar above main instead of side-by-side. Allow normal
-     page scrolling instead of internal sidebar/main double-scroll. */
+  /* Stack sidebar above main; let the page scroll normally. */
   .dnd-sheet-body {
     flex-direction: column !important;
     overflow: visible !important;
@@ -18,23 +37,26 @@
     border-bottom: 1px solid var(--border) !important;
     padding: 10px 12px !important;
   }
-  .dnd-sheet-main {
-    overflow: visible !important;
-  }
-  /* The portrait at 150×150 dominates the small-screen accordion stack — shrink. */
-  .dnd-sheet-sidebar .dnd-sheet-portrait {
-    width: 96px !important;
-    height: 96px !important;
-  }
-  /* Tab body padding eats horizontal space on phones. */
-  .dnd-sheet-tab-body {
-    padding: 14px 12px !important;
-  }
+  .dnd-sheet-main { overflow: visible !important; }
+  .dnd-sheet-sidebar .dnd-sheet-portrait { width: 110px !important; height: 110px !important; }
+  .dnd-sheet-tab-body { padding: 14px 12px !important; }
+}
+
+/* ═══ SMALL PHONE ═══════════════════════════════════════════════════════ */
+@media (max-width: 520px) {
+  .dnd-sheet-tab-body { padding: 12px 10px !important; }
+}
+
+/* ═══ LANDSCAPE PHONE — compress vertical chrome ════════════════════════ */
+@media (orientation: landscape) and (max-height: 540px) {
+  /* Header, combat bar, play bar and tabs eat scarce vertical space —
+     shrink their padding / fonts so the actual sheet stays usable. */
+  .dnd-sheet-root [data-pwa-target="dnd-sheet-header"] { padding-top: 5px; padding-bottom: 5px; }
+  .dnd-sheet-root .dnd-sheet-tab-body { padding-top: 12px !important; padding-bottom: 12px !important; }
 }
 
 /* ─── Mobile-only collapsible SideSection ──────────────────────────────
-   Rendered as <details> only on mobile (see CharacterSheetPage.jsx).
-   Desktop uses the original <div> path and never sees these styles. */
+   Rendered as <details> only on phones (see SheetKit.SideSection). */
 .dnd-side-acc {
   margin-bottom: 10px;
   border: 1px solid var(--border-subtle, var(--border));
@@ -66,6 +88,11 @@
   transition: transform 150ms ease;
 }
 .dnd-side-acc[open] > summary::after { transform: rotate(180deg); }
-.dnd-side-acc-body {
-  padding: 4px 14px 14px;
-}
+.dnd-side-acc-body { padding: 4px 14px 14px; }
+
+/* ─── Interactive affordances ──────────────────────────────────────────*/
+.dnd-sheet-root button { -webkit-tap-highlight-color: transparent; }
+.dnd-sheet-root input,
+.dnd-sheet-root textarea,
+.dnd-sheet-root select { font-family: inherit; }
+.dnd-sheet-root textarea { font-size: 13px; }

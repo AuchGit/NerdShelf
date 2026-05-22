@@ -173,8 +173,8 @@ function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerNam
                 fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {primaryClass.classId} Lv.{totalLevel}
-                {classes.length > 1 && ` (+${classes.length - 1})`}
+                {classes.map(c => `${c.classId} ${c.level}`).join(' / ')}
+                {classes.length > 1 && ` · Lv.${totalLevel}`}
               </div>
             )}
           </div>
