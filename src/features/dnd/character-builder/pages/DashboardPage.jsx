@@ -6,6 +6,7 @@ import { Panel } from '../../../../shared/ui'
 import DashboardLayout from '../../../../shared/dashboard/DashboardLayout'
 import { ShareTokenBadge } from '../../../../shared/tokens'
 import { ImportedSection, useImports } from '../../../../shared/imports'
+import DndSubNav from '../components/ui/DndSubNav'
 
 const EDITION_ORDER = ['5e', '5.5e']
 const EDITION_LABEL = { '5e': '5e', '5.5e': '5.5e' }
@@ -21,7 +22,7 @@ export default function DashboardPage({ session }) {
     if (!session?.user?.id) return
     setLoading(true)
     const { data, error: err } = await supabase
-      .from('characters')
+      .from('dnd_characters')
       .select('id, name, created_at, data, share_token')
       .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
@@ -35,7 +36,7 @@ export default function DashboardPage({ session }) {
   async function handleDelete(charId, name) {
     if (!window.confirm(`Charakter "${name}" wirklich löschen?`)) return
     const { error: err } = await supabase
-      .from('characters').delete()
+      .from('dnd_characters').delete()
       .eq('id', charId)
       .eq('user_id', session.user.id)
     if (err) alert(`Löschen fehlgeschlagen: ${err.message}`)
@@ -44,6 +45,7 @@ export default function DashboardPage({ session }) {
 
   return (
     <>
+      <DndSubNav active="characters" />
       {error && (
         <div style={{
           maxWidth: 1200, margin: '0 auto',

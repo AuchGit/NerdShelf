@@ -171,12 +171,14 @@ async function ensureIndexes() {
         subclassIdentityNames.add(sub.name + '||' + sn)   // "War Magic||War", "Eldritch Knight||Eldritch Knight"
       }
 
-      // Class features: skip ASI and class-feature-variants
+      // Class features: skip ASI and class-feature-variants.
+      // `entries` is kept so the feature item gets a real description even
+      // when the class-feature-desc index misses it.
       const classFeatures = (data.classFeature || [])
         .filter(f => f.className === cls.name && !f.isClassFeatureVariant)
         .filter(f => !f.name.startsWith('Ability Score Improvement'))
         .sort((a, b) => a.level - b.level)
-        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB' }))
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', entries: f.entries || [] }))
 
       // Subclass features: skip ASI, variants, and identity entries
       const subclassFeatures = (data.subclassFeature || [])
@@ -184,7 +186,7 @@ async function ensureIndexes() {
         .filter(f => !f.name.startsWith('Ability Score Improvement'))
         .filter(f => !subclassIdentityNames.has(f.name + '||' + f.subclassShortName))
         .sort((a, b) => a.level - b.level)
-        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', subclassShortName: f.subclassShortName }))
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', subclassShortName: f.subclassShortName, entries: f.entries || [] }))
 
       CLASS_FEATURES_MAP.set(cls.name, { classFeatures, subclassFeatures, subclassShortNames })
     }
@@ -295,33 +297,36 @@ const WEAPON_PROP_MAP = {
 }
 
 // Foundry magic school icons (core Foundry icon paths, always present)
+// Spell school → Foundry core icon fallback. Every path here is verified to
+// exist in the Foundry v13 core icon set.
 const SCHOOL_ICONS = {
   abj: 'icons/magic/defensive/shield-barrier-flaming-diamond-teal.webp',
-  con: 'icons/magic/nature/wolf-paw-glow-small-teal.webp',
+  con: 'icons/magic/nature/beam-hand-leaves-green.webp',
   div: 'icons/magic/perception/eye-ringed-glow-angry-small-teal.webp',
-  enc: 'icons/magic/control/hypnosis-spiral-purple.webp',
+  enc: 'icons/magic/control/buff-flight-wings-purple.webp',
   evo: 'icons/magic/fire/flame-burning-hand-orange.webp',
   ill: 'icons/magic/movement/trail-streak-zigzag-yellow.webp',
-  nec: 'icons/magic/death/undead-skeleton-rags-brown.webp',
-  trs: 'icons/magic/air/wind-tornado-gray.webp',
+  nec: 'icons/magic/death/bones-crossed-gray.webp',
+  trs: 'icons/magic/air/air-burst-spiral-blue-gray.webp',
 }
 
-// Item type → Foundry core icon fallback
+// Item type → Foundry core icon fallback. All paths verified against the
+// Foundry v13 core icon set.
 const ITEM_TYPE_ICONS = {
   // Weapons
-  M:   'icons/weapons/swords/sword-broad-silver.webp',
-  R:   'icons/weapons/bows/shortbow-recurve-orange.webp',
+  M:   'icons/weapons/swords/greatsword-crossguard-blue.webp',
+  R:   'icons/weapons/bows/bow-ornamental-carved-brown.webp',
   // Armor
   LA:  'icons/equipment/chest/breastplate-banded-steel.webp',
   MA:  'icons/equipment/chest/breastplate-banded-steel.webp',
-  HA:  'icons/equipment/chest/breastplate-metal.webp',
-  S:   'icons/equipment/shield/heater-crystal-steel-blue.webp',
+  HA:  'icons/equipment/chest/breastplate-banded-blue.webp',
+  S:   'icons/equipment/shield/buckler-iron-cross-gray.webp',
   // Consumables
-  P:   'icons/consumables/potions/potion-round-blue.webp',
-  SC:  'icons/sundries/scrolls/scroll-runed-brown-yellow.webp',
+  P:   'icons/consumables/potions/bottle-bulb-corked-green.webp',
+  SC:  'icons/sundries/scrolls/scroll-bound-blue-brown.webp',
   // Gear
-  G:   'icons/sundries/misc/backpack-brown.webp',
-  AT:  'icons/tools/hand/chisel-steel-grey.webp',
+  G:   'icons/containers/bags/case-leather-tan.webp',
+  AT:  'icons/tools/hand/awl-steel-brown.webp',
 }
 
 // Which casters get mode="prepared" (can swap spells on long rest) vs "always"
@@ -1068,6 +1073,78 @@ function resolveSourceClass(sourceClass, character) {
   return known.has(sourceClass.toLowerCase()) ? slug : ''
 }
 
+const SAVE_ABBR = {
+  strength: 'str', dexterity: 'dex', constitution: 'con',
+  intelligence: 'int', wisdom: 'wis', charisma: 'cha',
+  str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha',
+}
+
+// Pull the first dice expression ({@damage 1d10}, {@dice 1d8}, …) from a
+// 5etools entries array.
+function firstSpellDice(entries) {
+  const m = JSON.stringify(entries || [])
+    .match(/\{@(?:damage|dice|scaledamage|scaledice) (\d+)d(\d+)/)
+  return m ? { number: parseInt(m[1], 10), denomination: parseInt(m[2], 10) } : null
+}
+
+// Build a rollable spell activity (attack / save / heal) from live 5etools
+// spell data, so damage can actually be rolled in Foundry. Falls back to a
+// plain utility activity when the spell has no damage / save / healing.
+function buildDefaultSpellActivity(live, levelNum, baseActivity) {
+  const isCantrip  = levelNum === 0
+  const dice       = firstSpellDice(live.entries)
+  const damageType = (live.damageType || [])[0] || ''
+  const attackKind = (live.spellAttack || [])[0]    // 'R' | 'M'
+  const saveRaw    = (live.savingThrow || [])[0]    // 'dexterity', …
+  const scaling    = isCantrip
+    ? { mode: 'whole', number: 1, formula: '' }
+    : { mode: '', number: null, formula: '' }
+  const damagePart = dice ? {
+    number: dice.number, denomination: dice.denomination, bonus: '',
+    types: damageType ? [damageType] : [],
+    custom: { enabled: false, formula: '' },
+    scaling,
+  } : null
+
+  // Attack spell (Eldritch Blast, Fire Bolt, …)
+  if (attackKind && damagePart) {
+    return {
+      ...baseActivity, type: 'attack',
+      attack: {
+        ability: 'spellcasting', bonus: '', critical: {}, flat: false,
+        type: { value: attackKind === 'M' ? 'melee' : 'ranged', classification: 'spell' },
+      },
+      damage: { critical: {}, includeBase: true, parts: [damagePart] },
+    }
+  }
+
+  // Saving-throw spell (Fireball, Frostbite, …)
+  if (saveRaw) {
+    const act = {
+      ...baseActivity, type: 'save',
+      save: {
+        ability: [SAVE_ABBR[String(saveRaw).toLowerCase()] || 'dex'],
+        dc: { formula: '', calculation: 'spellcasting' },
+      },
+    }
+    if (damagePart) act.damage = { parts: [damagePart], onSave: 'half' }
+    return act
+  }
+
+  // Healing spell (Cure Wounds, Healing Word, …)
+  if (dice && !damageType && /regain|hit point/i.test(JSON.stringify(live.entries || []))) {
+    return {
+      ...baseActivity, type: 'heal',
+      healing: {
+        number: dice.number, denomination: dice.denomination, bonus: '@mod',
+        types: ['healing'], custom: { enabled: false, formula: '' }, scaling,
+      },
+    }
+  }
+
+  return { ...baseActivity, type: 'utility', roll: { prompt: false, visible: false } }
+}
+
 function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
   const edition    = character.meta?.edition || '5e'
   const charMeta   = (character.spellMetadata || {})[name] || {}
@@ -1144,11 +1221,11 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
       activities[actId] = buildSpellActivity(actId, patch.activities[i], meta, effectIdMap)
     }
   } else {
-    // Default: eine utility-Activity (ermöglicht zumindest das Rollen)
+    // Default activity generated from live spell data — a rollable attack /
+    // save / heal where the spell deals damage or heals, otherwise utility.
     const actId = makeId(`act_${name}_default`)
-    activities[actId] = {
+    const baseActivity = {
       _id:  actId,
-      type: 'utility',
       sort: 0,
       activation: {
         type:      actType,
@@ -1183,8 +1260,8 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
         prompt:   true,
       },
       uses: { spent: 0, recovery: [] },
-      roll: { prompt: false, visible: false },
     }
+    activities[actId] = buildDefaultSpellActivity(live, levelNum, baseActivity)
   }
 
   // ── Icon & Description vor system-Objekt deklarieren (TDZ-Fix) ──────────
@@ -1251,9 +1328,49 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
 // CLASS ITEM BUILDER
 // ───────────────────────────────────────────────────────────────────────
 
+const CLASS_PRIMARY_ABILITY = {
+  Barbarian: 'str', Bard: 'cha', Cleric: 'wis', Druid: 'wis', Fighter: 'str',
+  Monk: 'dex', Paladin: 'str', Ranger: 'dex', Rogue: 'dex', Sorcerer: 'cha',
+  Warlock: 'cha', Wizard: 'int', Artificer: 'int',
+}
+
+// dnd5e prepared-spell formula, e.g. "max(@abilities.int.mod + @classes.wizard.levels, 1)".
+// Foundry needs this on prepared-caster class items to compute the prepared limit.
+function buildPreparationFormula(cls) {
+  const ability = cls.spellcastingAbility
+  if (!ability) return null
+  const id = cls.classId.toLowerCase().replace(/\s+/g, '-')
+  const isHalf = cls.casterProgression === 'half' || cls.casterProgression === '1/2'
+  const lvlExpr = isHalf ? `floor(@classes.${id}.levels / 2)` : `@classes.${id}.levels`
+  return `max(@abilities.${ability}.mod + ${lvlExpr}, 1)`
+}
+
+// Class items have no description in the 5etools class data — build a concise
+// summary (hit die, saves, casting ability) plus a feature list.
+function buildClassDescription(cls) {
+  const lines = [`<p><strong>Hit Die:</strong> 1d${cls.hitDie || 8}</p>`]
+  const saves = (cls.proficiency?.length ? cls.proficiency : CLASS_SAVES[cls.classId]) || []
+  if (saves.length) {
+    lines.push(`<p><strong>Saving Throws:</strong> ${saves.map(s => String(s).toUpperCase()).join(', ')}</p>`)
+  }
+  if (cls.spellcastingAbility) {
+    lines.push(`<p><strong>Spellcasting Ability:</strong> ${cls.spellcastingAbility.toUpperCase()}</p>`)
+  }
+  const feats = (CLASS_FEATURES_MAP?.get(cls.classId)?.classFeatures || [])
+    .filter(f => f.level <= (cls.level || 1))
+  if (feats.length) {
+    lines.push('<h3>Class Features</h3><ul>')
+    for (const f of feats) lines.push(`<li><strong>Level ${f.level}:</strong> ${f.name}</li>`)
+    lines.push('</ul>')
+  }
+  return lines.join('\n')
+}
+
 function makeClassItem(cls, character) {
   const edition  = character.meta?.edition || '5e'
   const classKey = `class_${cls.classId}`
+  const prepFormula = PREPARED_CASTERS.has(cls.classId) && cls.spellcastingAbility
+    ? buildPreparationFormula(cls) : null
 
   // ── HP Advancement ────────────────────────────────────
   // Every level from 1..cls.level must have a value — Foundry uses this to
@@ -1385,7 +1502,7 @@ function makeClassItem(cls, character) {
     system: {
       description:       {
         value: CLASS_INDEX.classes[cls.classId]?.class?.[0]?.system?.description?.value
-               || CF_DESC?.[`_class||${cls.classId}`] || '',
+               || CF_DESC?.[`_class||${cls.classId}`] || buildClassDescription(cls),
         chat: ''
       },
       identifier:        cls.classId.toLowerCase().replace(/\s+/g, '-'),
@@ -1393,15 +1510,19 @@ function makeClassItem(cls, character) {
       startingEquipment: [],
       wealth:            '',
       levels:            cls.level,
-      primaryAbility:    { value: [], all: false },
+      primaryAbility:    {
+        value: [CLASS_PRIMARY_ABILITY[cls.classId] || cls.spellcastingAbility || 'str'],
+        all:   false,
+      },
       hd: {
         denomination: `d${cls.hitDie || 8}`,
         spent:        0,
         additional:   '',
       },
       spellcasting: {
-        progression: cls.casterProgression || 'none',
+        progression: normFoundryProg(cls.casterProgression),
         ability:     cls.spellcastingAbility || '',
+        preparation: prepFormula ? { formula: prepFormula } : {},
       },
       advancement,
     },
@@ -1434,6 +1555,20 @@ function buildSubclassSpellcasting(subclassName) {
   return { progression: 'none' }
 }
 
+// Fallback subclass description: a list of the subclass's features by level.
+function buildSubclassDescription(cls, subclassName) {
+  const fmap = CLASS_FEATURES_MAP?.get(cls.classId)
+  if (!fmap) return ''
+  const short = fmap.subclassShortNames?.get(subclassName) || subclassName
+  const feats = (fmap.subclassFeatures || [])
+    .filter(f => f.subclassShortName === short && f.level <= (cls.level || 1))
+  if (!feats.length) return ''
+  const lines = ['<h3>Subclass Features</h3><ul>']
+  for (const f of feats) lines.push(`<li><strong>Level ${f.level}:</strong> ${f.name}</li>`)
+  lines.push('</ul>')
+  return lines.join('\n')
+}
+
 function makeSubclassItem(cls, character) {
   const edition      = character.meta?.edition || '5e'
   const subclassName = cls.subclassId.split('__')[0]
@@ -1458,7 +1593,8 @@ function makeSubclassItem(cls, character) {
       description: {
         value: subEntry?.system?.description?.value
           || CLASS_INDEX.classes[cls.classId]?.subclass?.find(s => s.name === subclassName)?.system?.description?.value
-          || CF_DESC?.[`_subclass||${subclassName}||${cls.classId}`] || '',
+          || CF_DESC?.[`_subclass||${subclassName}||${cls.classId}`]
+          || buildSubclassDescription(cls, subclassName),
         chat: ''
       },
       identifier:      subclassName.toLowerCase().replace(/\s+/g, '-'),
@@ -2291,6 +2427,7 @@ export async function exportToFoundry(character) {
           source:            feat.source,
           className:         cls.classId,
           subclassShortName: feat.subclassShortName || null,
+          entries:           feat.entries     || [],
           img:               patch.img        || null,
           effects:           patch.effects    || [],
           activities:        patch.activities || [],
@@ -2707,8 +2844,13 @@ export async function downloadFoundryJSON(character) {
     return
   }
 
-  const filename = `${(character.info?.name || 'character')
-    .replace(/[^a-z0-9]/gi, '_')}_foundry.json`
+  // Filename: "<Player>_<Character>_foundry.json" — the player name is
+  // prepended so exports group by player. Falls back to just the character
+  // name when no player is set.
+  const slug = s => String(s || '').replace(/[^a-z0-9]/gi, '_').replace(/^_+|_+$/g, '')
+  const playerPart = slug(character.info?.player)
+  const namePart = slug(character.info?.name) || 'character'
+  const filename = `${playerPart ? playerPart + '_' : ''}${namePart}_foundry.json`
 
   // ── 2. Tauri-Desktop: Speichern-Dialog → Datei schreiben ─────────────
   if (window.__TAURI_INTERNALS__) {

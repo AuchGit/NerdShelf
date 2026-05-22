@@ -33,8 +33,10 @@ const TABS = [
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export default function CharacterSheetPage({ session }) {
-  const { id } = useParams()
+export default function CharacterSheetPage({ session, readOnly = false, characterId, campaignId }) {
+  const params = useParams()
+  const id = characterId || params.id
+  const backTo = readOnly && campaignId ? `/campaign/${campaignId}` : '/'
   const navigate = useNavigate()
   const { t } = useLanguage()
   const [character, setCharacter] = useState(null)
@@ -54,9 +56,20 @@ export default function CharacterSheetPage({ session }) {
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
   async function loadCharacter() {
-    const { data, error } = await supabase
-      .from('characters').select('*').eq('id', id).eq('user_id', session.user.id).single()
-    if (error || !data) { navigate('/'); return }
+    // Read-only (GM) load relies on RLS: the GM may SELECT member characters
+    // but never filters by user_id. The owner path keeps the user_id filter.
+    let query = supabase.from('dnd_characters').select('*').eq('id', id)
+    if (!readOnly) query = query.eq('user_id', session.user.id)
+    const { data, error } = await query.single()
+    if (error || !data) { navigate(backTo); return }
+
+    // Read-only viewers never touch the level-up backup machinery.
+    if (readOnly) {
+      setCharacter(data.data)
+      setComputed(computeCharacter(data.data))
+      setLoading(false)
+      return
+    }
 
     // Restore an unsaved level-up backup if one is newer than the saved data.
     try {
@@ -74,7 +87,7 @@ export default function CharacterSheetPage({ session }) {
               `Gespeichert: Level ${savedLevel}\nBackup: Level ${backupLevel}\n\nBackup wiederherstellen?`
             )
             if (restore) {
-              const { error: restoreErr } = await supabase.from('characters')
+              const { error: restoreErr } = await supabase.from('dnd_characters')
                 .update({ data: backup.updated, name: backup.updated.info.name })
                 .eq('id', id).eq('user_id', session.user.id)
               if (!restoreErr) {
@@ -104,7 +117,7 @@ export default function CharacterSheetPage({ session }) {
   function queueSave(next) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
-      supabase.from('characters')
+      supabase.from('dnd_characters')
         .update({ data: next, name: next.info?.name || '' })
         .eq('id', id).eq('user_id', session.user.id)
         .then(({ error }) => { if (error) console.error('[Sheet Save]', error) })
@@ -112,7 +125,9 @@ export default function CharacterSheetPage({ session }) {
   }
 
   // Apply an arbitrary mutation to a fresh draft, recompute, persist.
+  // In read-only (GM) mode every mutation is a no-op — nothing is editable.
   function applyCharacter(mutator) {
+    if (readOnly) return
     setCharacter(prev => {
       const next = structuredClone(prev)
       mutator(next)
@@ -204,7 +219,7 @@ export default function CharacterSheetPage({ session }) {
     try { localStorage.setItem(`dndbuilder_backup_${id}`, JSON.stringify({ timestamp: new Date().toISOString(), previous: character, updated: restored })) } catch { /* ignore */ }
     let saved = false
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const { error: e } = await supabase.from('characters').update({ data: restored, name: restored.info.name })
+      const { error: e } = await supabase.from('dnd_characters').update({ data: restored, name: restored.info.name })
         .eq('id', id).eq('user_id', session.user.id)
       if (!e) { saved = true; break }
       if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1500))
@@ -248,17 +263,17 @@ export default function CharacterSheetPage({ session }) {
       {/* ═══ HEADER ═══ */}
       {isPwaMobile ? (
         <div data-pwa-target="dnd-sheet-header" style={S.headerMobile}>
-          <button type="button" style={S.headerIconBtn} onClick={() => navigate('/')} aria-label="Zurück" title="Zurück">←</button>
+          <button type="button" style={S.headerIconBtn} onClick={() => navigate(backTo)} aria-label="Zurück" title="Zurück">←</button>
           <div style={S.headerMobileTitle}>
             {portrait
-              ? <img src={portrait} style={S.headerMobilePortrait} alt="" onClick={() => portraitRef.current?.click()} />
-              : <div style={{ ...S.headerMobilePortrait, ...S.headerPortraitEmpty, width: 34, height: 34, fontSize: 14 }} onClick={() => portraitRef.current?.click()}>+</div>}
+              ? <img src={portrait} style={S.headerMobilePortrait} alt="" onClick={readOnly ? undefined : () => portraitRef.current?.click()} />
+              : <div style={{ ...S.headerMobilePortrait, ...S.headerPortraitEmpty, width: 34, height: 34, fontSize: 14 }} onClick={readOnly ? undefined : () => portraitRef.current?.click()}>+</div>}
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ ...S.headerName, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {character.info.name || 'Unbenannt'}
               </div>
               <div style={{ ...S.headerSubline, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {className} · L{totalLevel}
+                {className} · L{totalLevel}{readOnly ? ' · Nur Lesen' : ''}
               </div>
             </div>
           </div>
@@ -266,14 +281,20 @@ export default function CharacterSheetPage({ session }) {
         </div>
       ) : (
         <div data-pwa-target="dnd-sheet-header" style={S.header}>
-          <button style={S.headerBackBtn} onClick={() => navigate('/')}>← Dashboard</button>
+          <button style={S.headerBackBtn} onClick={() => navigate(backTo)}>
+            {readOnly && campaignId ? '← Campaign' : '← Dashboard'}
+          </button>
 
           <div style={S.headerCenter}>
             {portrait
-              ? <img src={portrait} style={S.headerPortrait} alt="Portrait" title="Portrait ändern" onClick={() => portraitRef.current?.click()} />
-              : <div style={S.headerPortraitEmpty} title="Portrait hinzufügen" onClick={() => portraitRef.current?.click()}>+</div>}
+              ? <img src={portrait} style={S.headerPortrait} alt="Portrait" title={readOnly ? '' : 'Portrait ändern'} onClick={readOnly ? undefined : () => portraitRef.current?.click()} />
+              : (readOnly
+                  ? <div style={S.headerPortraitEmpty}>—</div>
+                  : <div style={S.headerPortraitEmpty} title="Portrait hinzufügen" onClick={() => portraitRef.current?.click()}>+</div>)}
             <div style={{ minWidth: 0 }}>
-              {editingName ? (
+              {readOnly ? (
+                <div style={S.headerName}>{character.info.name || 'Unbenannt'}</div>
+              ) : editingName ? (
                 <input
                   autoFocus value={nameDraft}
                   onChange={e => setNameDraft(e.target.value)}
@@ -290,6 +311,7 @@ export default function CharacterSheetPage({ session }) {
               <div style={S.headerSubline}>
                 {speciesDisplay} · {className} · Level {totalLevel}
                 {character.info.alignment && ` · ${character.info.alignment}`}
+                {readOnly && <span style={{ color: 'var(--accent-yellow)' }}> · Spielleiter-Ansicht (Nur Lesen)</span>}
               </div>
             </div>
           </div>
@@ -306,15 +328,19 @@ export default function CharacterSheetPage({ session }) {
                 </div>
               )}
             </div>
-            <button style={S.levelUpBtn} onClick={() => navigate(`/character/${id}/levelup`)}>Level Up</button>
-            <button style={{ ...S.headerBtn, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
-              onClick={() => setShowCustomEdit(true)}>Custom</button>
-            {totalLevel === 1 && (
-              <button style={S.headerBtn} onClick={() => navigate(`/character/${id}/edit`)}>Bearbeiten</button>
-            )}
-            {(character.levelHistory || []).length > 0 && (
-              <button style={{ ...S.headerBtn, borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
-                onClick={levelDown}>Level Down</button>
+            {!readOnly && (
+              <>
+                <button style={S.levelUpBtn} onClick={() => navigate(`/character/${id}/levelup`)}>Level Up</button>
+                <button style={{ ...S.headerBtn, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
+                  onClick={() => setShowCustomEdit(true)}>Custom</button>
+                {totalLevel === 1 && (
+                  <button style={S.headerBtn} onClick={() => navigate(`/character/${id}/edit`)}>Bearbeiten</button>
+                )}
+                {(character.levelHistory || []).length > 0 && (
+                  <button style={{ ...S.headerBtn, borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
+                    onClick={levelDown}>Level Down</button>
+                )}
+              </>
             )}
             <HeaderButtons session={session} />
           </div>
@@ -326,7 +352,10 @@ export default function CharacterSheetPage({ session }) {
         open={showMobileMenu}
         onClose={() => setShowMobileMenu(false)}
         title={character.info.name || 'Charakter'}
-        items={[
+        items={readOnly ? [
+          { id: 'export', label: 'Foundry-Export', icon: '⬇',
+            onSelect: async () => { await downloadFoundryJSON(character) } },
+        ] : [
           { id: 'rename', label: 'Name ändern', icon: 'Aa',
             onSelect: () => {
               const v = window.prompt('Charaktername:', character.info.name || '')
@@ -371,19 +400,25 @@ export default function CharacterSheetPage({ session }) {
       </div>
 
       {/* ═══ PLAY TOOLBAR ═══ */}
-      <div style={S.playBar}>
-        <button type="button" style={S.playBtn} onClick={shortRest}>Short Rest</button>
-        <button type="button" style={S.playBtn} onClick={longRest}>Long Rest</button>
-        <button type="button"
-          style={{
-            ...S.playBtn,
-            borderColor: inspiration ? 'var(--accent-yellow)' : 'var(--border)',
-            color: inspiration ? 'var(--accent-yellow)' : 'var(--text-secondary)',
-          }}
-          onClick={() => updateCharacter('status.inspiration', !inspiration)}>
-          Inspiration: {inspiration ? 'On' : 'Off'}
-        </button>
-      </div>
+      {readOnly ? (
+        <div style={{ ...S.playBar, color: 'var(--accent-yellow)', fontSize: 12 }}>
+          Spielleiter-Ansicht — schreibgeschützt. Änderungen werden nicht gespeichert.
+        </div>
+      ) : (
+        <div style={S.playBar}>
+          <button type="button" style={S.playBtn} onClick={shortRest}>Short Rest</button>
+          <button type="button" style={S.playBtn} onClick={longRest}>Long Rest</button>
+          <button type="button"
+            style={{
+              ...S.playBtn,
+              borderColor: inspiration ? 'var(--accent-yellow)' : 'var(--border)',
+              color: inspiration ? 'var(--accent-yellow)' : 'var(--text-secondary)',
+            }}
+            onClick={() => updateCharacter('status.inspiration', !inspiration)}>
+            Inspiration: {inspiration ? 'On' : 'Off'}
+          </button>
+        </div>
+      )}
 
       {/* ═══ BODY ═══ */}
       <div className="dnd-sheet-body" style={S.body}>

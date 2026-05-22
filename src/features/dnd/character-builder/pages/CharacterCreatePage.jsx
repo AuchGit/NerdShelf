@@ -283,7 +283,7 @@ export default function CharacterCreatePage({ session }) {
   async function handleFinish() {
     setSaving(true)
     setError(null)
-    const { error } = await supabase.from('characters').insert({
+    const { error } = await supabase.from('dnd_characters').insert({
       user_id: session.user.id,
       name:    character.info.name,
       data:    character,

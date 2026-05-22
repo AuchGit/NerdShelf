@@ -13,7 +13,7 @@ const NAV = [
  * variant: 'full' | 'compact'
  * onNavigate: optional callback fired when a nav link is clicked (used to close overlay).
  */
-export default function Sidebar({ onOpenSettings, onOpenBugReport, variant = 'full', onNavigate }) {
+export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalendar, calendarNotif, variant = 'full', onNavigate }) {
   const { user, signOut } = useAuth();
   const compact = variant === 'compact';
 
@@ -119,6 +119,22 @@ export default function Sidebar({ onOpenSettings, onOpenBugReport, variant = 'fu
           gap: 'var(--space-1)',
           flexDirection: compact ? 'column' : 'row',
         }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <IconButton onClick={onOpenCalendar} title="Kalender" style={{ width: '100%' }}>▦</IconButton>
+            {(calendarNotif?.today || calendarNotif?.tomorrow) && (
+              <span
+                aria-hidden="true"
+                title={calendarNotif.today ? 'Heute ist ein Termin' : 'Morgen ist ein Termin'}
+                style={{
+                  position: 'absolute', top: 4, right: 4,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: calendarNotif.today ? 'var(--color-danger)' : 'var(--color-warning)',
+                  boxShadow: '0 0 0 1.5px var(--color-bg-elevated)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+          </div>
           <IconButton onClick={onOpenSettings} title="Einstellungen" style={{ flex: 1 }}>⚙</IconButton>
           <IconButton onClick={onOpenBugReport} title="Bug melden" style={{ flex: 1 }}>⚐</IconButton>
           <DangerIconButton onClick={signOut} title="Abmelden" style={{ flex: 1 }}>⎋</DangerIconButton>

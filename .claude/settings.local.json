@@ -28,7 +28,12 @@
       "Bash(node -e \"const u=require\\('./public/data/wh40k/10e/v1/units.json'\\); const count=new Map\\(\\); for\\(const x of u\\){ for\\(const k of \\(x.keywords||[]\\)\\) count.set\\(k, \\(count.get\\(k\\)||0\\)+1\\); } const sorted=[...count.entries\\(\\)].sort\\(\\(a,b\\) => b[1]-a[1]\\); console.log\\('Top 30 most-used keywords:'\\); sorted.slice\\(0,30\\).forEach\\(\\([k,c]\\) => console.log\\(c.toString\\(\\).padStart\\(4\\), k\\)\\); console.log\\(''\\); console.log\\('Bottom \\(unit-specific\\):'\\); sorted.slice\\(-10\\).forEach\\(\\([k,c]\\) => console.log\\(c.toString\\(\\).padStart\\(4\\), k\\)\\); console.log\\(''\\); console.log\\('keywords used by 5+ units:', sorted.filter\\(x => x[1]>=5\\).length\\); console.log\\('keywords used by only 1 unit:', sorted.filter\\(x => x[1]===1\\).length\\);\")",
       "Bash(node -e \"const fs=require\\('fs'\\);const u=JSON.parse\\(fs.readFileSync\\('public/data/wh40k/10e/v1/units.json','utf8'\\)\\);console.log\\('total units:',u.length\\);console.log\\('sample keys:',Object.keys\\(u[0]\\)\\);console.log\\('sample unit 0 keywords:',JSON.stringify\\(u[0].keywords\\)\\);console.log\\('sample unit 0 factionKeywords:',JSON.stringify\\(u[0].factionKeywords\\)\\);\")",
       "Bash(node -e \"const fs=require\\('fs'\\);const f='src/features/dnd/character-builder/components/sheet/SheetKit.jsx';let lines=fs.readFileSync\\(f,'utf8'\\).split\\('\\\\n'\\);lines=lines.slice\\(0,282\\);fs.writeFileSync\\(f,lines.join\\('\\\\n'\\).replace\\(/\\\\n+$/,'\\\\n'\\)\\);console.log\\('SheetKit.jsx now',lines.length,'lines, ends:',JSON.stringify\\(lines[281]\\)\\)\")",
-      "Bash(grep -E \"error|warning|\\\\.jsx|\\\\.js$\")"
+      "Bash(grep -E \"error|warning|\\\\.jsx|\\\\.js$\")",
+      "Bash(sed -n '1,60p' src/features/dnd/character-builder/pages/CharacterViewPage.jsx)",
+      "Bash(sed -n '108,122p' src/core/bug-report/collector.js)",
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(sed -n '1,100p' _reference/src/pages/dashboard/DashboardPage.jsx)",
+      "Bash(sed -n '1,80p' _reference/src/pages/database/DatabasePage.jsx)"
     ]
   }
 }

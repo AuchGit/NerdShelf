@@ -10,6 +10,8 @@ import CharacterSheetPage from './pages/CharacterSheetPage'
 import LevelUpPage from './pages/LevelUpPage'
 import CharacterEditPage from './pages/CharacterEditPage'
 import CharacterViewPage from './pages/CharacterViewPage'
+import CampaignsPage from './pages/CampaignsPage'
+import CampaignDetailPage from './pages/CampaignDetailPage'
 
 setupErrorCollector()
 
@@ -61,6 +63,14 @@ function matchRoute(route) {
   // /character/:id/edit
   m = route.match(/^\/character\/([^/]+)\/edit\/?$/)
   if (m) return { page: 'edit', id: m[1] }
+  // ── Campaigns ──
+  if (route === '/campaigns' || route === '/campaigns/') return { page: 'campaigns' }
+  // /campaign/:id/character/:charId  (GM read-only character sheet)
+  m = route.match(/^\/campaign\/([^/]+)\/character\/([^/]+)\/?$/)
+  if (m) return { page: 'gmsheet', campaignId: m[1], charId: m[2] }
+  // /campaign/:id
+  m = route.match(/^\/campaign\/([^/]+)\/?$/)
+  if (m) return { page: 'campaign', campaignId: m[1] }
   // /character/:id
   m = route.match(/^\/character\/([^/]+)\/?$/)
   if (m) return { page: 'sheet', id: m[1] }
@@ -78,6 +88,10 @@ function DndRoutes({ session }) {
     case 'levelup':   return <LevelUpPage session={session} />
     case 'edit':      return <CharacterEditPage session={session} />
     case 'view':      return <CharacterViewPage />
+    case 'campaigns': return <CampaignsPage session={session} />
+    case 'campaign':  return <CampaignDetailPage session={session} campaignId={match.campaignId} />
+    case 'gmsheet':   return <CharacterSheetPage session={session} readOnly
+                               characterId={match.charId} campaignId={match.campaignId} />
     case 'dashboard':
     default:          return <DashboardPage session={session} />
   }

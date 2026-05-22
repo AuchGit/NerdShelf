@@ -317,7 +317,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                         const snap = structuredClone(entry.snapshot)
                         if (character.appearance?.portrait)
                           snap.appearance = { ...(snap.appearance || {}), portrait: character.appearance.portrait }
-                        await supabase.from('characters').update({ data: snap, name: snap.info.name })
+                        await supabase.from('dnd_characters').update({ data: snap, name: snap.info.name })
                           .eq('id', charId).eq('user_id', session.user.id)
                         onReload()
                       }}>Undo</Btn>

@@ -24,7 +24,7 @@ const TABLE = 'nerdshelf_imports';
 const DOMAIN_TO_TABLE = {
   mtg_deck:      'mtg_decks',
   wh40k_army:    'wh40k_armies',
-  dnd_character: 'characters',
+  dnd_character: 'dnd_characters',
 };
 
 /**

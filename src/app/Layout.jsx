@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import SettingsModal from './settings/SettingsModal';
 import BugReportModal from '../core/bug-report/BugReportModal';
+import CalendarModal from './calendar/CalendarModal';
+import useCalendarNotification from './calendar/useCalendarNotification';
 import { BottomNav } from '../shared/ui';
 import useWindowWidth from '../shared/hooks/useWindowWidth';
 import usePwaMobile from '../shared/hooks/usePwaMobile';
@@ -11,7 +13,10 @@ import usePwaMobile from '../shared/hooks/usePwaMobile';
 export default function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarReloadKey, setCalendarReloadKey] = useState(0);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const calendarNotif = useCalendarNotification(calendarReloadKey);
   const { mode } = useWindowWidth();
   const { isPwaMobile } = usePwaMobile();
 
@@ -32,7 +37,11 @@ export default function Layout() {
   const sidebarProps = {
     onOpenSettings: () => { setSettingsOpen(true); if (overlayOpen) setOverlayOpen(false); },
     onOpenBugReport: () => { setBugOpen(true); if (overlayOpen) setOverlayOpen(false); },
+    onOpenCalendar: () => { setCalendarOpen(true); if (overlayOpen) setOverlayOpen(false); },
+    calendarNotif,
   };
+
+  const closeCalendar = () => { setCalendarOpen(false); setCalendarReloadKey(k => k + 1); };
 
   // Layout selection:
   //   - PWA on a phone → bottom tab bar, no sidebar. One-handed native feel.
@@ -47,6 +56,7 @@ export default function Layout() {
         <BottomNav {...sidebarProps} />
         <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         <BugReportModal open={bugOpen} onClose={() => setBugOpen(false)} />
+        <CalendarModal open={calendarOpen} onClose={closeCalendar} />
       </div>
     );
   }
@@ -130,6 +140,7 @@ export default function Layout() {
       </main>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <BugReportModal open={bugOpen} onClose={() => setBugOpen(false)} />
+      <CalendarModal open={calendarOpen} onClose={closeCalendar} />
     </div>
   );
 }

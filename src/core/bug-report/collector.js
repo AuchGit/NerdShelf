@@ -112,7 +112,7 @@ async function loadDndContext() {
   if (!id) return null
   try {
     const { data } = await supabase
-      .from('characters')
+      .from('dnd_characters')
       .select('name, data')
       .eq('id', id)
       .single()

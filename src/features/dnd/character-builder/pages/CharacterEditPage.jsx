@@ -70,7 +70,7 @@ export default function CharacterEditPage({ session }) {
   useEffect(() => {
     async function load() {
       const { data, error: err } = await supabase
-        .from('characters').select('*').eq('id', id).eq('user_id', session.user.id).single()
+        .from('dnd_characters').select('*').eq('id', id).eq('user_id', session.user.id).single()
       if (err || !data) { navigate('/'); return }
       setCharacter(data.data)
       setLoading(false)
@@ -168,12 +168,12 @@ export default function CharacterEditPage({ session }) {
     // a NULL token — mint one on first edit so every row reaches a
     // tokenised steady state without a one-off migration script.
     const { data: existing } = await supabase
-      .from('characters').select('share_token')
+      .from('dnd_characters').select('share_token')
       .eq('id', id).eq('user_id', session.user.id).maybeSingle()
     const update = { data: character, name: character.info.name }
     if (!existing?.share_token) update.share_token = newShareToken()
     const { error: err } = await supabase
-      .from('characters')
+      .from('dnd_characters')
       .update(update)
       .eq('id', id).eq('user_id', session.user.id)
     if (err) { setError('Speichern fehlgeschlagen'); setSaving(false); return }

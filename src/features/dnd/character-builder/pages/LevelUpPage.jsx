@@ -88,7 +88,7 @@ export default function LevelUpPage({ session }) {
 
   async function loadData() {
     setLoading(true)
-    const { data, error: e } = await supabase.from('characters').select('*').eq('id', id).eq('user_id', session.user.id).single()
+    const { data, error: e } = await supabase.from('dnd_characters').select('*').eq('id', id).eq('user_id', session.user.id).single()
     if (e || !data) { nav('/'); return }
     setChar(data.data); const ed = data.data.meta?.edition || '5e'
     const [cl, fl, of, sl] = await Promise.all([loadClassList(ed), loadFeatList(ed), loadOptionalFeatureList(ed), loadSpellList(ed)])
@@ -206,7 +206,7 @@ export default function LevelUpPage({ session }) {
     // Retry logic: up to 3 attempts with increasing delay
     let saved = false
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const { error: e } = await supabase.from('characters')
+      const { error: e } = await supabase.from('dnd_characters')
         .update({ data: updated, name: updated.info.name })
         .eq('id', id).eq('user_id', session.user.id)
       if (!e) { saved = true; break }
@@ -221,14 +221,14 @@ export default function LevelUpPage({ session }) {
     }
 
     // Verify save: read back and confirm level matches
-    const { data: verify } = await supabase.from('characters').select('data').eq('id', id).single()
+    const { data: verify } = await supabase.from('dnd_characters').select('data').eq('id', id).single()
     if (verify?.data) {
       const savedLevel = (verify.data.classes || []).reduce((s, c) => s + (c.level || 0), 0)
       const expectedLevel = (updated.classes || []).reduce((s, c) => s + (c.level || 0), 0)
       if (savedLevel !== expectedLevel) {
         // Verification failed — retry once more
         console.warn('[LevelUp] Verify mismatch, retrying save...')
-        const { error: e2 } = await supabase.from('characters')
+        const { error: e2 } = await supabase.from('dnd_characters')
           .update({ data: updated, name: updated.info.name })
           .eq('id', id).eq('user_id', session.user.id)
         if (e2) {
@@ -268,7 +268,7 @@ async function handleUndo() {
 
   let saved = false
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const { error: e } = await supabase.from('characters').update({data:snap,name:snap.info.name}).eq('id',id).eq('user_id',session.user.id)
+    const { error: e } = await supabase.from('dnd_characters').update({data:snap,name:snap.info.name}).eq('id',id).eq('user_id',session.user.id)
     if (!e) { saved = true; break }
     console.warn(`[LevelUp] Undo attempt ${attempt} failed:`, e.message)
     if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1500))
@@ -276,7 +276,7 @@ async function handleUndo() {
   if (!saved) { setErr('Undo fehlgeschlagen nach 3 Versuchen. Dein Charakter ist lokal gesichert.'); return }
 
   try { localStorage.removeItem(`dndbuilder_backup_${id}`) } catch (_) {}
-  const { data: reloaded } = await supabase.from('characters').select('*').eq('id',id).eq('user_id',session.user.id).single()
+  const { data: reloaded } = await supabase.from('dnd_characters').select('*').eq('id',id).eq('user_id',session.user.id).single()
   if (reloaded) { setChar(reloaded.data); setInfo(null); setStepIdx(0) }
 }
 

@@ -11,8 +11,22 @@
     "process:default",
     "dialog:default",
     "dialog:allow-save",
+    "dialog:allow-open",
     {
       "identifier": "fs:allow-write-text-file",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$RESOURCE/**" },
+        { "path": "$TEMP/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$DESKTOP/**" },

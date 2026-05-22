@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base layer ──────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --sidebar-width: 240px;
+  }
+
+  * {
+    @apply border-slate-200 dark:border-slate-700;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply font-sans antialiased;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-1.5 h-1.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300 dark:bg-slate-600;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400 dark:bg-slate-500;
+  }
+}
+
+/* ─── Component layer ─────────────────────────────────────────────────────── */
+@layer components {
+  /* Focus rings */
+  .focus-ring {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-surface-dark;
+  }
+
+  /* Glass card effect */
+  .glass {
+    @apply bg-white/80 dark:bg-slate-800/80 backdrop-blur-md;
+  }
+
+  /* Sidebar nav link base */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+           text-slate-600 dark:text-slate-400
+           hover:bg-slate-100 dark:hover:bg-slate-800
+           hover:text-slate-900 dark:hover:text-slate-100
+           transition-all duration-150;
+  }
+  .nav-link.active {
+    @apply bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300;
+  }
+
+  /* Page section heading */
+  .page-title {
+    @apply font-display text-2xl font-extrabold text-slate-900 dark:text-white;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-slate-200 dark:border-slate-700;
+  }
+}
+
+/* ─── Utility layer ───────────────────────────────────────────────────────── */
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-500 to-brand-700;
+  }
+}

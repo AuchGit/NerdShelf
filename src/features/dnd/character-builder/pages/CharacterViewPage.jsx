@@ -25,7 +25,7 @@ export default function CharacterViewPage() {
     ;(async () => {
       setLoading(true)
       const { data: r, error: err } = await supabase
-        .from('characters')
+        .from('dnd_characters')
         .select('*')
         .eq('share_token', token)
         .maybeSingle()

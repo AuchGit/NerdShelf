@@ -20,7 +20,7 @@ const NAV = [
   { to: '/wh40k', label: 'WH40k', icon: 'Ω' },
 ];
 
-export default function BottomNav({ onOpenSettings, onOpenBugReport }) {
+export default function BottomNav({ onOpenSettings, onOpenBugReport, onOpenCalendar, calendarNotif }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const { signOut, user } = useAuth();
   const location = useLocation();
@@ -52,9 +52,22 @@ export default function BottomNav({ onOpenSettings, onOpenBugReport }) {
           className="pwa-bottom-nav-item"
           onClick={() => setMoreOpen(true)}
           aria-label="Mehr Optionen"
+          style={{ position: 'relative' }}
         >
           <span className="pwa-bn-icon" aria-hidden="true">⋯</span>
           <span>Mehr</span>
+          {(calendarNotif?.today || calendarNotif?.tomorrow) && (
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute', top: 6, right: 'calc(50% - 14px)',
+                width: 8, height: 8, borderRadius: '50%',
+                background: calendarNotif.today ? 'var(--color-danger)' : 'var(--color-warning)',
+                boxShadow: '0 0 0 1.5px var(--color-bg-elevated)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
         </button>
       </nav>
 
@@ -63,6 +76,8 @@ export default function BottomNav({ onOpenSettings, onOpenBugReport }) {
         onClose={() => setMoreOpen(false)}
         title={user?.email || 'Optionen'}
         items={[
+          { id: 'calendar', label: 'Kalender', icon: '▦',
+            onSelect: () => { setMoreOpen(false); onOpenCalendar?.(); } },
           { id: 'settings', label: 'Einstellungen', icon: '⚙',
             onSelect: () => { setMoreOpen(false); onOpenSettings?.(); } },
           { id: 'bug', label: 'Bug melden', icon: '⚐',
