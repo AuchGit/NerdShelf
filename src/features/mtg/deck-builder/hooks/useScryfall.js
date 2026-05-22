@@ -20,21 +20,35 @@ export function useScryfall({
   const [totalCards,  setTotalCards]  = useState(0);
 
   const timerRef  = useRef(null);
+  // Monotonic request counter. Every fetch (and every "clear" caused by
+  // emptying all inputs) bumps it. An async result only commits to
+  // state if its captured id still equals the current counter — this
+  // discards results from superseded requests. Without it, fast typing
+  // or rapid filter changes let an OLDER request resolve last and
+  // overwrite the current results (notably: an intermediate query with
+  // 0 hits returns null and would wipe the list back to the empty
+  // base view).
+  const reqIdRef  = useRef(0);
   const colorsKey = colors.join(',');
   const ciKey     = commanderIdentity ? commanderIdentity.join(',') : '';
   const cpKey     = commanderPick ? '1' : '0';
 
   const fetchCards = useCallback(async (params, append = false) => {
+    const myId = ++reqIdRef.current;
     setLoading(true);
     if (!append) setError(null);
 
     try {
       const result = await searchCards(params);
+      // Superseded by a newer request/clear — drop this result entirely.
+      if (myId !== reqIdRef.current) return;
       if (!result) {
-        setCards([]);
-        setHasMore(false);
-        setNextPageUrl(null);
-        setTotalCards(0);
+        if (!append) {
+          setCards([]);
+          setHasMore(false);
+          setNextPageUrl(null);
+          setTotalCards(0);
+        }
         return;
       }
       const data = result.data || [];
@@ -43,6 +57,7 @@ export function useScryfall({
       setNextPageUrl(result.next_page || null);
       setTotalCards(result.total_cards || 0);
     } catch (err) {
+      if (myId !== reqIdRef.current) return;   // stale error — ignore
       setError(err.message);
       if (!append) {
         setCards([]);
@@ -51,7 +66,9 @@ export function useScryfall({
         setTotalCards(0);
       }
     } finally {
-      setLoading(false);
+      // Only the latest request controls the loading flag, so a stale
+      // request finishing doesn't flip it off while a newer one runs.
+      if (myId === reqIdRef.current) setLoading(false);
     }
   }, []);
 
@@ -64,11 +81,17 @@ export function useScryfall({
       commanderIdentity || commanderPick;
 
     if (!hasInput) {
+      // Bump the request id so any fetch still in flight (from before
+      // the user cleared everything) is discarded when it resolves
+      // instead of re-populating the now-empty base view.
+      reqIdRef.current++;
+      clearTimeout(timerRef.current);
       setCards([]);
       setHasMore(false);
       setNextPageUrl(null);
       setTotalCards(0);
       setError(null);
+      setLoading(false);
       return;
     }
 
