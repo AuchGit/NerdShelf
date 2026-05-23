@@ -140,6 +140,18 @@ export default function MtgDeckBuilderApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showFavoritesOnly, favs.favoriteCards]);
 
+  // Same idea for "Karten aus Sammlung": when the toggle flips on, bulk-
+  // resolve every owned id to its full Scryfall card so the user can
+  // browse their collection without an active search. inv.ownedCards is
+  // a cache that survives toggling off/on; it's invalidated when the
+  // collection itself changes (add/remove a card).
+  useEffect(() => {
+    if (showOwnedOnly && inv.ownedCards === null) {
+      inv.loadOwnedCards();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showOwnedOnly, inv.ownedCards]);
+
   // Effective format passed to Scryfall: explicit CardSearch override wins,
   // otherwise the deck-level format (unless it's a non-filterable value like "limited").
   const deckFormatForFilter = FORMATS_WITHOUT_FILTER.has(deckFormat) ? '' : deckFormat;
@@ -159,12 +171,29 @@ export default function MtgDeckBuilderApp() {
     commanderPick: commanderPickMode,
   });
 
-  // When "favorites only" is active, replace Scryfall search results with a
-  // client-side filtered view of the user's favorite cards.
-  const showingFavs = showFavoritesOnly;
+  // When "favorites only" / "owned only" is active, replace Scryfall
+  // search results with a client-side filtered view backed by data we
+  // hold locally (favs.favoriteCards / inv.ownedCards). Both lists are
+  // bulk-resolved from Scryfall on first toggle and cached.
+  //
+  // When BOTH toggles are on, the source is the intersection (owned ∩
+  // favorited) so the filter composes the same way it did before.
+  const showingFavs  = showFavoritesOnly;
+  const showingOwned = showOwnedOnly;
   const favCardsBase = favs.favoriteCards || [];
-  const favoritesFiltered = showingFavs
-    ? filterFavorites(favCardsBase, {
+  const ownCardsBase = inv.ownedCards     || [];
+
+  let clientSource = null;
+  if (showingFavs && showingOwned) {
+    clientSource = favCardsBase.filter(c => inv.isOwned(c.id));
+  } else if (showingFavs) {
+    clientSource = favCardsBase;
+  } else if (showingOwned) {
+    clientSource = ownCardsBase;
+  }
+
+  const clientFiltered = clientSource
+    ? filterFavorites(clientSource, {
         query, searchMode, colors, colorMode, cardType, showLands,
         rarity, cmcMin, cmcMax, subtype, format: effectiveFormat, setCode,
         priceMin, priceMax,
@@ -174,24 +203,17 @@ export default function MtgDeckBuilderApp() {
       })
     : null;
 
-  // Owned-only is a final client-side filter applied on top of either the
-  // Scryfall results or the favorites view. It composes with both modes —
-  // toggling both "favorites" and "owned" yields owned + favorited cards.
-  // TODO(mtg-collection): a dedicated /mtg/collection page that fetches the
-  // full Scryfall data for every owned card (mirroring useFavorites's
-  // loadFavoriteCards) would let users browse their collection without an
-  // active Scryfall search.
-  const baseCards  = showingFavs ? favoritesFiltered : scryfall.cards;
-  const cards      = showOwnedOnly
-    ? (baseCards || []).filter(c => inv.isOwned(c.id))
-    : baseCards;
-  const loading    = showingFavs ? favs.loading      : scryfall.loading;
-  const error      = showingFavs ? favs.error        : scryfall.error;
-  const hasMore    = showingFavs || showOwnedOnly ? false : scryfall.hasMore;
-  const totalCards = showOwnedOnly
-    ? (cards?.length ?? 0)
-    : (showingFavs ? (favoritesFiltered?.length ?? 0) : scryfall.totalCards);
-  const loadMore   = scryfall.loadMore;
+  const usingClient = showingFavs || showingOwned;
+  const cards       = usingClient ? clientFiltered : scryfall.cards;
+  const loading     = showingFavs ? favs.loading
+                    : showingOwned ? (inv.ownedCardsLoading || inv.loading)
+                    : scryfall.loading;
+  const error       = showingFavs ? favs.error
+                    : showingOwned ? (inv.ownedCardsError || inv.error)
+                    : scryfall.error;
+  const hasMore     = usingClient ? false : scryfall.hasMore;
+  const totalCards  = usingClient ? (clientFiltered?.length ?? 0) : scryfall.totalCards;
+  const loadMore    = scryfall.loadMore;
 
   const previewCard = pinnedCard || hoveredCard;
   useEffect(() => {

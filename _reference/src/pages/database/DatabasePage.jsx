@@ -1,25 +1,35 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Database, RefreshCw, ChevronLeft, ChevronRight,
-  Search, Download, AlertCircle, Hash
+  Search, Download, AlertCircle, Hash, Trash2, FileJson,
+  Copy, Check,
 } from 'lucide-react';
-import { getSupabase } from '@/lib/supabase';
-import { groupTables } from '@/lib/tableRegistry';
-import PageHeader  from '@/components/ui/PageHeader';
-import Card        from '@/components/ui/Card';
-import Button      from '@/components/ui/Button';
-import Input       from '@/components/ui/Input';
-import Badge       from '@/components/ui/Badge';
-import Spinner     from '@/components/ui/Spinner';
-import EmptyState  from '@/components/ui/EmptyState';
+import { getSupabase }  from '@/lib/supabase';
+import { groupTables }  from '@/lib/tableRegistry';
+import useStore         from '@/store/useStore';
+import PageHeader       from '@/components/ui/PageHeader';
+import Card             from '@/components/ui/Card';
+import Button           from '@/components/ui/Button';
+import Input            from '@/components/ui/Input';
+import Badge            from '@/components/ui/Badge';
+import Spinner          from '@/components/ui/Spinner';
+import EmptyState       from '@/components/ui/EmptyState';
+import ConfirmDialog    from '@/components/ui/ConfirmDialog';
 import { cn, truncate } from '@/utils/helpers';
 
 const PAGE_SIZE = 25;
 
+// Tables we know have a non-`id` primary key — used by the row-delete button
+// to pick the right filter column. Defaults to `id` for anything not listed.
+const PK_BY_TABLE = {
+  profiles: 'id',
+};
+
 export default function DatabasePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedTable = searchParams.get('table') ?? '';
+  const { addToast } = useStore();
 
   const [groups,    setGroups]    = useState([]);   // grouped table list
   const [allTables, setAllTables] = useState([]);   // flat list with row counts
@@ -31,16 +41,22 @@ export default function DatabasePage() {
   const [loading,   setLoading]   = useState(false);
   const [tblLoad,   setTblLoad]   = useState(true);
   const [error,     setError]     = useState(null);
-  const [cellModal, setCellModal] = useState(null);
+  const [cellModal, setCellModal] = useState(null);  // { col, raw, isJson }
+  const [rowModal,  setRowModal]  = useState(null);  // entire row inspector
+  const [confirmDelete, setConfirmDelete] = useState(null); // { row, pk }
+  const [deleting,  setDeleting]  = useState(false);
+  const [copied,    setCopied]    = useState(false);
 
   // ── Load table list via RPC ────────────────────────────────────────────────
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       setTblLoad(true);
       try {
         const supabase = getSupabase();
         const { data, error: err } = await supabase.rpc('get_public_tables');
         if (err) throw err;
+        if (cancelled) return;
         const names  = (data ?? []).map(r => r.table_name);
         const counts = Object.fromEntries((data ?? []).map(r => [r.table_name, r.row_estimate]));
         setAllTables(data ?? []);
@@ -53,11 +69,12 @@ export default function DatabasePage() {
           setSearchParams({ table: names[0] }, { replace: true });
         }
       } catch (e) {
-        setError(`Tabellen konnten nicht geladen werden: ${e.message}. Stelle sicher dass du supabase-extras.sql ausgeführt hast.`);
+        if (!cancelled) setError(`Tabellen konnten nicht geladen werden: ${e.message}. Stelle sicher dass du supabase-extras.sql ausgeführt hast.`);
       } finally {
-        setTblLoad(false);
+        if (!cancelled) setTblLoad(false);
       }
     })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -92,12 +109,22 @@ export default function DatabasePage() {
   useEffect(() => { setPage(0); setSearch(''); }, [selectedTable]);
   useEffect(() => { loadRows(); }, [loadRows]);
 
+  // ── Pick a sensible PK column for delete/inspect ──────────────────────────
+  const pkColumn = useMemo(() => {
+    if (PK_BY_TABLE[selectedTable]) return PK_BY_TABLE[selectedTable];
+    if (columns.includes('id')) return 'id';
+    return columns[0];
+  }, [columns, selectedTable]);
+
   // ── CSV Export ────────────────────────────────────────────────────────────
   const exportCSV = async () => {
     try {
       const supabase = getSupabase();
       const { data } = await supabase.from(selectedTable).select('*');
-      if (!data?.length) return;
+      if (!data?.length) {
+        addToast({ type: 'warning', message: 'Tabelle ist leer.' });
+        return;
+      }
       const cols = Object.keys(data[0]);
       const csv  = [
         cols.join(','),
@@ -107,13 +134,45 @@ export default function DatabasePage() {
           return `"${s.replace(/"/g, '""')}"`;
         }).join(','))
       ].join('\n');
-      const a    = Object.assign(document.createElement('a'), {
-        href:     URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
-        download: `${selectedTable}.csv`,
-      });
-      a.click();
+      triggerDownload(`${selectedTable}.csv`, csv, 'text/csv');
+      addToast({ type: 'success', message: `${data.length} Zeilen als CSV exportiert.` });
     } catch (e) {
-      console.error(e);
+      addToast({ type: 'error', message: `CSV-Export: ${e.message}` });
+    }
+  };
+
+  // ── JSON Export ───────────────────────────────────────────────────────────
+  const exportJSON = async () => {
+    try {
+      const supabase = getSupabase();
+      const { data } = await supabase.from(selectedTable).select('*');
+      if (!data?.length) {
+        addToast({ type: 'warning', message: 'Tabelle ist leer.' });
+        return;
+      }
+      triggerDownload(`${selectedTable}.json`, JSON.stringify(data, null, 2), 'application/json');
+      addToast({ type: 'success', message: `${data.length} Zeilen als JSON exportiert.` });
+    } catch (e) {
+      addToast({ type: 'error', message: `JSON-Export: ${e.message}` });
+    }
+  };
+
+  // ── Row delete ────────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    const { row, pk } = confirmDelete;
+    setDeleting(true);
+    try {
+      const supabase = getSupabase();
+      const { error: err } = await supabase.from(selectedTable).delete().eq(pk, row[pk]);
+      if (err) throw err;
+      addToast({ type: 'success', message: 'Zeile gelöscht.' });
+      setConfirmDelete(null);
+      setRowModal(null);
+      loadRows();
+    } catch (e) {
+      addToast({ type: 'error', message: `Löschen: ${e.message}` });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -125,6 +184,28 @@ export default function DatabasePage() {
   const selectTable = (name) => {
     setSearchParams({ table: name });
     setSearch('');
+  };
+
+  // ── Open the right modal for a cell ───────────────────────────────────────
+  const openCell = (col, val) => {
+    if (val === null || val === undefined) return;
+    const isObj = typeof val === 'object';
+    setCellModal({
+      col,
+      raw: isObj ? JSON.stringify(val, null, 2) : String(val),
+      isJson: isObj,
+    });
+  };
+
+  const copyCell = async () => {
+    if (!cellModal) return;
+    try {
+      await navigator.clipboard.writeText(cellModal.raw);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      addToast({ type: 'error', message: 'Konnte nicht kopiert werden.' });
+    }
   };
 
   return (
@@ -214,10 +295,18 @@ export default function DatabasePage() {
                 <Badge variant="default" size="sm">
                   <Hash size={10} /> {count} Zeilen
                 </Badge>
+                {pkColumn && (
+                  <Badge variant="info" size="sm" title="Primary key column">
+                    pk: {pkColumn}
+                  </Badge>
+                )}
               </div>
               <div className="flex gap-2 shrink-0">
                 <Button variant="outline" size="sm" leftIcon={<Download size={13} />} onClick={exportCSV}>
                   CSV
+                </Button>
+                <Button variant="outline" size="sm" leftIcon={<FileJson size={13} />} onClick={exportJSON}>
+                  JSON
                 </Button>
                 <Button variant="outline" size="sm" leftIcon={<RefreshCw size={13} />} onClick={loadRows} loading={loading}>
                   Refresh
@@ -259,8 +348,10 @@ export default function DatabasePage() {
                       {columns.map(col => (
                         <th key={col} className="px-3 py-2.5 text-left font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap font-mono">
                           {col}
+                          {col === pkColumn && <span className="ml-1 text-brand-500" title="Primary key">★</span>}
                         </th>
                       ))}
+                      <th className="px-3 py-2.5 text-right font-semibold text-slate-400 dark:text-slate-600 whitespace-nowrap w-20">Aktion</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -281,7 +372,7 @@ export default function DatabasePage() {
                                 <span className="text-slate-300 dark:text-slate-700 italic">null</span>
                               ) : isObj ? (
                                 <button
-                                  onClick={() => setCellModal({ col, val: JSON.stringify(val, null, 2) })}
+                                  onClick={() => openCell(col, val)}
                                   className="text-violet-500 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 hover:underline transition-colors"
                                 >
                                   {Array.isArray(val) ? `[${val.length}]` : '{…}'}
@@ -289,13 +380,34 @@ export default function DatabasePage() {
                               ) : isBool ? (
                                 <Badge variant={val ? 'success' : 'danger'} size="sm">{val ? 'true' : 'false'}</Badge>
                               ) : (
-                                <span className="text-slate-700 dark:text-slate-300">
+                                <button
+                                  onClick={() => openCell(col, val)}
+                                  className="text-left text-slate-700 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
+                                  title="Vollwert anzeigen"
+                                >
                                   {truncate(String(val), 80)}
-                                </span>
+                                </button>
                               )}
                             </td>
                           );
                         })}
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => setRowModal(row)}
+                            title="Zeile inspizieren"
+                            className="p-1 rounded-md text-slate-400 hover:bg-brand-100 dark:hover:bg-brand-950 hover:text-brand-700 transition-all"
+                          >
+                            <FileJson size={12} />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete({ row, pk: pkColumn })}
+                            disabled={!pkColumn}
+                            title={pkColumn ? 'Zeile löschen' : 'Kein PK erkannt'}
+                            className="p-1 rounded-md text-slate-400 hover:bg-red-100 dark:hover:bg-red-950 hover:text-red-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -323,29 +435,153 @@ export default function DatabasePage() {
         )}
       </div>
 
-      {/* ── JSON Cell Modal ───────────────────────────────────────────────── */}
+      {/* ── Cell viewer modal ─────────────────────────────────────────────── */}
       {cellModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setCellModal(null)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div
-            className="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-              <p className="font-mono font-bold text-slate-900 dark:text-white">{cellModal.col}</p>
-              <div className="flex gap-2">
-                <Button size="xs" variant="outline" onClick={() => navigator.clipboard.writeText(cellModal.val)}>
-                  Kopieren
-                </Button>
-                <Button size="xs" variant="ghost" onClick={() => setCellModal(null)}>✕</Button>
-              </div>
-            </div>
-            <pre className="flex-1 overflow-auto p-5 text-xs font-mono text-slate-700 dark:text-slate-300 leading-relaxed">
-              {cellModal.val}
-            </pre>
+        <CellViewer
+          cell={cellModal}
+          onClose={() => setCellModal(null)}
+          onCopy={copyCell}
+          copied={copied}
+        />
+      )}
+
+      {/* ── Row inspector modal ───────────────────────────────────────────── */}
+      {rowModal && (
+        <RowInspector
+          row={rowModal}
+          tableName={selectedTable}
+          pk={pkColumn}
+          onClose={() => setRowModal(null)}
+          onDelete={() => setConfirmDelete({ row: rowModal, pk: pkColumn })}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Zeile löschen?"
+        description={confirmDelete
+          ? `Löscht ${selectedTable}.${confirmDelete.pk} = "${String(confirmDelete.row?.[confirmDelete.pk] ?? '').slice(0, 60)}". Cascade-Beziehungen folgen.`
+          : ''}
+        confirmLabel="Löschen"
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function triggerDownload(filename, text, mime) {
+  const a = Object.assign(document.createElement('a'), {
+    href:     URL.createObjectURL(new Blob([text], { type: mime })),
+    download: filename,
+  });
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cell viewer — pretty-printed JSON or full-length string
+// ─────────────────────────────────────────────────────────────────────────────
+function CellViewer({ cell, onClose, onCopy, copied }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-3xl max-h-[80vh] flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-mono font-bold text-slate-900 dark:text-white truncate">{cell.col}</p>
+            {cell.isJson && <Badge variant="info" size="sm">JSON</Badge>}
+            <span className="text-[10px] text-slate-400">{cell.raw.length.toLocaleString()} Zeichen</span>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="xs" variant="outline" leftIcon={copied ? <Check size={11} /> : <Copy size={11} />} onClick={onCopy}>
+              {copied ? 'Kopiert' : 'Kopieren'}
+            </Button>
+            <Button size="xs" variant="ghost" onClick={onClose}>✕</Button>
           </div>
         </div>
-      )}
+        <pre className="flex-1 overflow-auto p-5 text-xs font-mono text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-all">
+          {cell.raw}
+        </pre>
+      </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Row inspector — every column at a glance, plus copy / delete actions
+// ─────────────────────────────────────────────────────────────────────────────
+function RowInspector({ row, tableName, pk, onClose, onDelete }) {
+  const json = JSON.stringify(row, null, 2);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(json); } catch { /* ignore */ }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+          <div className="min-w-0">
+            <p className="font-mono font-bold text-slate-900 dark:text-white truncate">{tableName}</p>
+            {pk && (
+              <p className="text-[10px] text-slate-400 font-mono truncate">
+                {pk} = {String(row[pk] ?? '')}
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="xs" variant="outline" leftIcon={<Copy size={11} />} onClick={copy}>Kopieren</Button>
+            <Button size="xs" variant="danger" leftIcon={<Trash2 size={11} />} onClick={onDelete}>Löschen</Button>
+            <Button size="xs" variant="ghost" onClick={onClose}>✕</Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-5">
+          <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-y-2 gap-x-4 text-xs">
+            {Object.entries(row).map(([k, v]) => {
+              const isObj = v !== null && typeof v === 'object';
+              const isNull = v === null || v === undefined;
+              return (
+                <RowField key={k} k={k} v={v} isObj={isObj} isNull={isNull} />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RowField({ k, v, isObj, isNull }) {
+  return (
+    <>
+      <div className="font-mono font-semibold text-slate-500 dark:text-slate-400 break-all">{k}</div>
+      <div className="font-mono text-slate-700 dark:text-slate-300 break-all min-w-0">
+        {isNull ? (
+          <span className="text-slate-400 italic">null</span>
+        ) : isObj ? (
+          <pre className="text-[11px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+            {JSON.stringify(v, null, 2)}
+          </pre>
+        ) : typeof v === 'boolean' ? (
+          <Badge variant={v ? 'success' : 'danger'} size="sm">{v ? 'true' : 'false'}</Badge>
+        ) : (
+          String(v)
+        )}
+      </div>
+    </>
   );
 }

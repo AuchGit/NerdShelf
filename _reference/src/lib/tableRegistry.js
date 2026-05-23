@@ -22,7 +22,6 @@ export const TOOL_GROUPS = [
     tables: [
       'profiles',
       'bug_reports',
-      'nerdshelf_imports',     // cross-domain share-token imports
     ],
   },
   {
@@ -35,6 +34,7 @@ export const TOOL_GROUPS = [
       'dnd_campaigns',
       'dnd_campaign_members',
       'dnd_events',
+      'dnd_imports',
     ],
   },
   {
@@ -45,6 +45,9 @@ export const TOOL_GROUPS = [
     tables: [
       'mtg_decks',
       'mtg_matches',
+      'mtg_favorites',
+      'mtg_inventory',
+      'mtg_imports',
     ],
   },
   {
@@ -55,6 +58,9 @@ export const TOOL_GROUPS = [
     tables: [
       'wh40k_armies',
       'wh40k_squads',
+      'wh40k_favorites',
+      'wh40k_inventory',
+      'wh40k_imports',
     ],
   },
 ]

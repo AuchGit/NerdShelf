@@ -3,7 +3,7 @@
 // Browse / edit the user's MTG card collection. Mirrors the WH40k
 // inventory page in layout philosophy but uses MTG-native primitives:
 // each row is keyed by a Scryfall card id and the labels persisted into
-// `nerdshelf_inventory` come from the inventory hook's own writes.
+// `mtg_inventory` come from the inventory hook's own writes.
 //
 // Cards in the inventory table store only id+label+quantity. To show
 // rich card detail (image, mana cost, set) we lazy-fetch from Scryfall in
@@ -104,8 +104,8 @@ export default function MtgInventoryPage() {
         {inv.tableMissing && (
           <Panel style={{ borderColor: 'var(--color-warning)', marginBottom: 'var(--space-3)' }}>
             <div style={{ color: 'var(--color-warning)', fontSize: 'var(--fs-sm)' }}>
-              Supabase-Tabelle <code>nerdshelf_inventory</code> noch nicht migriert — die Sammlung wird nur in dieser Session gespeichert.
-              Migration: <code>scripts/wh40k-schema.sql</code>.
+              Supabase-Tabelle <code>mtg_inventory</code> noch nicht migriert — die Sammlung wird nur in dieser Session gespeichert.
+              Migration: <code>scripts/split-nerdshelf-tables.sql</code>.
             </div>
           </Panel>
         )}

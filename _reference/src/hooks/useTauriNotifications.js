@@ -4,16 +4,23 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 // ─── Tauri detection + invoke helper ─────────────────────────────────────────
 
 export function isTauri() {
-  return typeof window !== 'undefined' && !!window.__TAURI__;
+  return typeof window !== 'undefined' && (
+    !!window.__TAURI__ ||
+    !!window.__TAURI_INTERNALS__ ||      // Tauri v2
+    !!window.__TAURI_IPC__
+  );
 }
 
+// Tauri v2 moved `invoke` from `@tauri-apps/api/tauri` to `@tauri-apps/api/core`.
+// The old import path silently throws on v2 → every command returned null,
+// which is why set_autostart/get_autostart appeared to do nothing.
 async function invoke(cmd, args = {}) {
   if (!isTauri()) return null;
   try {
-    const { invoke: fn } = await import('@tauri-apps/api/tauri');
-    return await fn(cmd, args);
+    const mod = await import('@tauri-apps/api/core');
+    return await mod.invoke(cmd, args);
   } catch (e) {
-    console.warn('[Tauri]', cmd, e.message);
+    console.warn('[Tauri]', cmd, e?.message ?? e);
     return null;
   }
 }
@@ -33,11 +40,14 @@ export async function clearTrayBadge() {
 }
 
 export async function setAutostart(enabled) {
-  return await invoke('set_autostart', { enabled });
+  // Rust signature returns the new state (true|false) or throws — we forward
+  // it so the UI can confirm what actually got written to the registry.
+  const result = await invoke('set_autostart', { enabled });
+  return result == null ? false : !!result;
 }
 
 export async function getAutostart() {
-  return (await invoke('get_autostart')) ?? false;
+  return !!(await invoke('get_autostart'));
 }
 
 export async function hideToTray() {

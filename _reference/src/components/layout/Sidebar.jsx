@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, Database, Settings,
-  LogOut, ChevronLeft, ChevronRight, Shield, Bug
+  LayoutDashboard, Users, Database, Settings, Activity,
+  LogOut, ChevronLeft, ChevronRight, Shield, Bug, Swords,
+  Stethoscope,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import useStore from '@/store/useStore';
@@ -9,10 +10,17 @@ import Avatar from '@/components/ui/Avatar';
 import { cn } from '@/utils/helpers';
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/database',  label: 'Datenbank',  icon: Database },
+  { to: '/dashboard', label: 'Dashboard',   icon: LayoutDashboard },
+  { to: '/activity',  label: 'Activity',    icon: Activity },
+  { to: '/database',  label: 'Datenbank',   icon: Database },
   { to: '/users',     label: 'Users',       icon: Users },
   { to: '/bugreports',label: 'Bug Reports', icon: Bug },
+];
+
+const ADMIN_ITEMS = [
+  { to: '/admin',     label: 'User Admin', icon: Shield },
+  { to: '/campaigns', label: 'Campaigns',  icon: Swords },
+  { to: '/health',    label: 'Health',     icon: Stethoscope },
 ];
 
 const BOTTOM_ITEMS = [
@@ -61,7 +69,9 @@ export default function Sidebar() {
                   ? <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-600 px-2">Admin</p>
                   : <div className="border-t border-slate-200 dark:border-slate-800 my-1" />}
               </div>
-              <SidebarLink to="/admin" label="Admin Panel" icon={Shield} collapsed={!sidebarOpen} />
+              {ADMIN_ITEMS.map(({ to, label, icon: Icon }) => (
+                <SidebarLink key={to} to={to} label={label} icon={Icon} collapsed={!sidebarOpen} />
+              ))}
             </>
           )}
         </nav>

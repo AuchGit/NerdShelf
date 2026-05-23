@@ -20,9 +20,9 @@
 //     foil-aware bookkeeping can layer on without changing this hook.
 //
 //   - Manual entries (a card the user wants but isn't yet in a deck) are
-//     persisted to a dedicated `nerdshelf_inventory`-style ad-hoc list
-//     under domain `mtg-wishlist-manual` so they survive sessions
-//     without inflating the auto-computed bucket. We expose `manual` +
+//     persisted to `mtg_inventory` under kind='wishlist-manual' so they
+//     coexist with the user's real collection (kind='collection') without
+//     either polluting the other's row counts. We expose `manual` +
 //     `addManual` / `removeManual` for that path.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -30,8 +30,8 @@ import { supabase } from '../../../../core/supabase/client';
 import { useAuth } from '../../../../core/auth/AuthContext';
 import { useMtgInventory } from './useMtgInventory';
 
-const MANUAL_DOMAIN = 'mtg-wishlist-manual';
-const TABLE = 'nerdshelf_inventory';
+const TABLE = 'mtg_inventory';
+const MANUAL_KIND = 'wishlist-manual';
 
 /**
  * @param {object} opts
@@ -74,7 +74,7 @@ export function useMtgWishlist(opts = {}) {
         .from(TABLE)
         .select('item_id, item_label, quantity')
         .eq('user_id', user.id)
-        .eq('domain', MANUAL_DOMAIN);
+        .eq('kind', MANUAL_KIND);
       if (cancelled) return;
       if (err) { /* table-missing soft-degrades */ return; }
       setManualRows((data || []).map(r => ({
@@ -174,10 +174,10 @@ export function useMtgWishlist(opts = {}) {
     const nextQty = (existing?.quantity || 0) + quantity;
     if (existing) {
       await supabase.from(TABLE).update({ quantity: nextQty, updated_at: new Date().toISOString() })
-        .eq('user_id', user.id).eq('domain', MANUAL_DOMAIN).eq('item_id', card.id);
+        .eq('user_id', user.id).eq('kind', MANUAL_KIND).eq('item_id', card.id);
     } else {
       await supabase.from(TABLE).insert({
-        user_id: user.id, domain: MANUAL_DOMAIN, item_id: card.id,
+        user_id: user.id, kind: MANUAL_KIND, item_id: card.id,
         item_label: card.name || '', quantity,
       });
     }
@@ -187,7 +187,7 @@ export function useMtgWishlist(opts = {}) {
     if (!user) return;
     setManualRows(rows => rows.filter(r => r.cardId !== cardId));
     await supabase.from(TABLE).delete()
-      .eq('user_id', user.id).eq('domain', MANUAL_DOMAIN).eq('item_id', cardId);
+      .eq('user_id', user.id).eq('kind', MANUAL_KIND).eq('item_id', cardId);
   }, [user]);
 
   return {

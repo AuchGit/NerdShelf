@@ -54,6 +54,10 @@ export default function DashboardPage() {
   const [bugs,         setBugs]         = useState([]);
   const [tables,       setTables]       = useState([]);
   const [chars,        setChars]        = useState([]);
+  const [campaigns,    setCampaigns]    = useState([]);
+  const [events,       setEvents]       = useState([]);
+  const [mtgDecks,     setMtgDecks]     = useState([]);
+  const [wh40kArmies,  setWh40kArmies]  = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [approving,    setApproving]    = useState({});
   const [closingBug,   setClosingBug]   = useState({});
@@ -66,17 +70,25 @@ export default function DashboardPage() {
     setLoading(true);
     const supabase = getSupabase();
 
-    const [p, b, t, c] = await Promise.all([
+    const [p, b, t, c, ca, ev, dk, ar] = await Promise.all([
       safeQuery(() => supabase.from('profiles').select('*').order('created_at', { ascending: false })),
       safeQuery(() => supabase.from('bug_reports').select('*').order('created_at', { ascending: false })),
       safeQuery(() => supabase.rpc('get_public_tables')),
-      safeQuery(() => supabase.from('characters').select('id, user_id, created_at')),
+      safeQuery(() => supabase.from('dnd_characters').select('id, user_id, created_at')),
+      safeQuery(() => supabase.from('dnd_campaigns').select('id, gm_id, name, join_token, created_at')),
+      safeQuery(() => supabase.from('dnd_events').select('id, campaign_id, title, starts_at').order('starts_at', { ascending: true })),
+      safeQuery(() => supabase.from('mtg_decks').select('id, user_id')),
+      safeQuery(() => supabase.from('wh40k_armies').select('id, user_id')),
     ]);
 
     setProfiles(p);
     setBugs(b);
     setTables(t.map(r => (typeof r === 'string' ? r : r.table_name)));
     setChars(c);
+    setCampaigns(ca);
+    setEvents(ev);
+    setMtgDecks(dk);
+    setWh40kArmies(ar);
     setLoading(false);
   }, []);
 
@@ -353,7 +365,9 @@ export default function DashboardPage() {
                       { label: 'Bug Reports',      icon: Bug,       to: '/bugreports', badge: openBugs.length,    bColor: 'bg-red-500'    },
                       { label: 'User freigeben',   icon: UserCheck, to: '/users',      badge: pendingUsers.length, bColor: 'bg-amber-500'  },
                       { label: 'Datenbank Browser',icon: Database,  to: '/database',   badge: 0,                   bColor: ''              },
-                      { label: 'Alle User',        icon: Users,     to: '/users',      badge: 0,                   bColor: ''              },
+                      { label: 'Campaigns',        icon: Shield,    to: '/campaigns',  badge: campaigns.length,   bColor: 'bg-brand-500'  },
+                      { label: 'Activity Feed',    icon: Activity,  to: '/activity',   badge: 0,                   bColor: ''              },
+                      { label: 'Health Check',     icon: Wrench,    to: '/health',     badge: 0,                   bColor: ''              },
                     ].map(({ label, icon: Icon, to, badge, bColor }) => (
                       <button key={to + label} onClick={() => navigate(to)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-all group text-left">
@@ -446,10 +460,14 @@ export default function DashboardPage() {
                 <Card.Content>
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {[
-                      { label: 'Charaktere',    value: chars.length,                                                              icon: Shield,    to: '/database?table=dnd_characters' },
-                      { label: 'Bug Reports',   value: bugs.length,                                                               icon: Bug,       to: '/bugreports'                },
-                      { label: 'Davon gelöst',  value: bugs.filter(b => b.status === 'resolved' || b.status === 'closed').length, icon: CheckCircle2, to: '/bugreports'             },
-                      { label: 'DB-Tabellen',   value: tables.length,                                                             icon: Database,  to: '/database'                  },
+                      { label: 'D&D Charaktere', value: chars.length,                                                                                  icon: Shield,       to: '/database?table=dnd_characters' },
+                      { label: 'D&D Campaigns',  value: campaigns.length,                                                                              icon: Shield,       to: '/database?table=dnd_campaigns'  },
+                      { label: 'Termine',        value: events.length,                                                                                 icon: Clock,        to: '/database?table=dnd_events'     },
+                      { label: 'MTG Decks',      value: mtgDecks.length,                                                                               icon: Database,     to: '/database?table=mtg_decks'      },
+                      { label: 'WH40k Armeen',   value: wh40kArmies.length,                                                                            icon: Database,     to: '/database?table=wh40k_armies'   },
+                      { label: 'Bug Reports',    value: bugs.length,                                                                                   icon: Bug,          to: '/bugreports'                    },
+                      { label: 'Davon gelöst',   value: bugs.filter(b => b.status === 'resolved' || b.status === 'closed').length,                     icon: CheckCircle2, to: '/bugreports'                    },
+                      { label: 'DB-Tabellen',    value: tables.length,                                                                                 icon: Database,     to: '/database'                      },
                     ].map(({ label, value, icon: Icon, to }) => (
                       <button key={label} onClick={() => navigate(to)}
                         className="w-full flex items-center gap-3 py-2 hover:opacity-75 transition-opacity text-left">

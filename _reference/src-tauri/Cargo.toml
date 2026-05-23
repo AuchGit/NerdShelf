@@ -1,0 +1,26 @@
+[package]
+name = "supa-manager"
+version = "1.0.0"
+description = "SupaManager — Supabase Management Desktop App"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.5.6", features = [] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+tauri-plugin-notification = "2"
+tauri-plugin-autostart    = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Used to clean up stale Run-key entries left behind by the old (broken)
+# autostart registration that pointed at the dev URL / npm command.
+winreg = "0.52"
+
+[features]
+custom-protocol = []

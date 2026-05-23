@@ -121,8 +121,8 @@ export default function ImportedSection({
             borderRadius: 'var(--radius-md)',
           }}
         >
-          Import-Tabelle <code>nerdshelf_imports</code> nicht migriert — bitte
-          <code> scripts/nerdshelf-imports-schema.sql</code> in Supabase einspielen.
+          Import-Tabellen (mtg_imports / wh40k_imports / dnd_imports) nicht migriert — bitte
+          <code> scripts/split-nerdshelf-tables.sql</code> in Supabase einspielen.
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Check, X, Trash2, Shield, ShieldOff, Search, RefreshCw } from 'lucide-react';
+import { Users, Check, X, Trash2, Shield, ShieldOff, Search, RefreshCw, Eye } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import useStore from '@/store/useStore';
@@ -12,6 +12,7 @@ import Input from '@/components/ui/Input';
 import EmptyState from '@/components/ui/EmptyState';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import Spinner from '@/components/ui/Spinner';
+import UserDetailModal from './UserDetailModal';
 import { formatDate } from '@/utils/helpers';
 
 const FILTERS = ['all', 'pending', 'approved'];
@@ -26,6 +27,7 @@ export default function AdminPage() {
   const [search,  setSearch]  = useState('');
   const [busy,    setBusy]    = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [detailUser,    setDetailUser]    = useState(null);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -175,13 +177,19 @@ export default function AdminPage() {
                   return (
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setDetailUser(user)}
+                          className="flex items-center gap-3 group cursor-pointer text-left"
+                          title="Vollständige Details anzeigen"
+                        >
                           <Avatar name={user.email} size="sm" />
                           <div>
-                            <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">{user.email}</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px] group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                              {user.email}
+                            </p>
                             {isMe && <p className="text-[10px] text-brand-500 font-semibold">Du</p>}
                           </div>
-                        </div>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">{formatDate(user.created_at)}</td>
                       <td className="px-4 py-3">
@@ -196,6 +204,7 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
+                          <ActionBtn label="Details ansehen" icon={<Eye size={13} />} onClick={() => setDetailUser(user)} disabled={isBusy} hover="hover:bg-brand-100 dark:hover:bg-brand-950 hover:text-brand-700" />
                           {user.approved
                             ? <ActionBtn label="Zugang entziehen" icon={<X size={13} />} onClick={() => handleRevoke(user)} disabled={isMe || isBusy} hover="hover:bg-amber-100 dark:hover:bg-amber-950 hover:text-amber-700" />
                             : <ActionBtn label="Freigeben" icon={<Check size={13} />} onClick={() => handleApprove(user)} disabled={isBusy} hover="hover:bg-emerald-100 dark:hover:bg-emerald-950 hover:text-emerald-700" />
@@ -227,6 +236,10 @@ export default function AdminPage() {
         description="Löscht das Profil. Der Auth-Account bleibt im Supabase Dashboard erhalten."
         confirmLabel="Löschen"
       />
+
+      {detailUser && (
+        <UserDetailModal user={detailUser} onClose={() => setDetailUser(null)} />
+      )}
     </div>
   );
 }

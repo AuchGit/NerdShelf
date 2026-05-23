@@ -1,30 +1,29 @@
 // src/shared/imports/useImports.js
 //
-// Domain-scoped hook for managing share-token imports — decks / armies /
-// characters that another player shared with the current user via their
-// share token. Each import is a row in `nerdshelf_imports` that records
-// "user X imported source_token Y of domain Z"; the actual entity data
-// stays in its native table, gated by the public-by-import RLS policy
-// from scripts/nerdshelf-imports-schema.sql.
+// Domain-scoped hook for share-token imports. Each domain has its own
+// imports table (split from the legacy single `nerdshelf_imports` —
+// see scripts/split-nerdshelf-tables.sql):
 //
-// Read-only by design: this hook only ever performs SELECT on the source
-// table. There is no update/delete path because the importer can't
-// mutate someone else's data.
+//   'mtg_deck'      → mtg_imports     → mtg_decks
+//   'wh40k_army'    → wh40k_imports   → wh40k_armies
+//   'dnd_character' → dnd_imports     → dnd_characters
 //
-// Soft-degrades when the import table hasn't been migrated yet — calls
-// just resolve to empty so the dashboards still render their owned items
-// without crashing.
+// Read-only by design: the hook only SELECTs from the source entity table
+// (the public-by-import RLS policy on each entity table lets that
+// SELECT through for any token the importer has on file).
+//
+// Soft-degrades when the imports table hasn't been migrated yet so the
+// dashboards still render owned items without crashing.
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../core/supabase/client';
 import { useAuth } from '../../core/auth/AuthContext';
 
-const TABLE = 'nerdshelf_imports';
-
-const DOMAIN_TO_TABLE = {
-  mtg_deck:      'mtg_decks',
-  wh40k_army:    'wh40k_armies',
-  dnd_character: 'dnd_characters',
+// Domain → { imports table, source entity table }.
+const DOMAIN_CONFIG = {
+  mtg_deck:      { importsTable: 'mtg_imports',   srcTable: 'mtg_decks'      },
+  wh40k_army:    { importsTable: 'wh40k_imports', srcTable: 'wh40k_armies'   },
+  dnd_character: { importsTable: 'dnd_imports',   srcTable: 'dnd_characters' },
 };
 
 /**
@@ -39,9 +38,8 @@ export async function lookupShareToken(token) {
   if (!cleaned || cleaned.length < 8) return null;
   const { data, error } = await supabase.rpc('lookup_share_token', { p_token: cleaned });
   if (error) {
-    // RPC missing → SQL migration not applied yet
     if (/function|does not exist|schema cache/i.test(error.message)) {
-      throw new Error('Token-Lookup nicht verfügbar (Migration scripts/nerdshelf-imports-schema.sql noch nicht eingespielt).');
+      throw new Error('Token-Lookup nicht verfügbar (Migration scripts/split-nerdshelf-tables.sql noch nicht eingespielt).');
     }
     throw error;
   }
@@ -64,27 +62,32 @@ export async function lookupShareToken(token) {
  */
 export function useImports({ domain, select = '*' }) {
   const { user } = useAuth();
-  const [imports, setImports]   = useState([]);   // raw import records
-  const [entities, setEntities] = useState([]);   // hydrated source rows
-  const [owners, setOwners]     = useState({});   // userId -> player_name
+  const [imports, setImports]   = useState([]);
+  const [entities, setEntities] = useState([]);
+  const [owners, setOwners]     = useState({});
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
   const [tableMissing, setTableMissing] = useState(false);
+
+  const cfg = DOMAIN_CONFIG[domain];
 
   const reload = useCallback(async () => {
     if (!user) {
       setImports([]); setEntities([]); setOwners({});
       return;
     }
+    if (!cfg) {
+      setError(`Unbekannte Import-Domäne: ${domain}`);
+      return;
+    }
     setLoading(true);
     setError(null);
 
-    // 1. List my imports for this domain.
+    // 1. List my imports for this domain (one row per imported share token).
     const { data: rows, error: err1 } = await supabase
-      .from(TABLE)
+      .from(cfg.importsTable)
       .select('*')
       .eq('user_id', user.id)
-      .eq('domain', domain)
       .order('imported_at', { ascending: false });
     if (err1) {
       if (/does not exist|relation|schema cache/i.test(err1.message)) {
@@ -104,12 +107,11 @@ export function useImports({ domain, select = '*' }) {
       return;
     }
 
-    // 2. Fetch the actual source rows by share_token. The RLS policy
-    //    added by nerdshelf-imports-schema.sql lets the SELECT through
-    //    for any token the importer has on file.
-    const srcTable = DOMAIN_TO_TABLE[domain];
+    // 2. Fetch the actual source rows by share_token. The RLS policy on
+    //    each entity table lets the SELECT through for any token the
+    //    importer has on file (scripts/split-nerdshelf-tables.sql).
     const { data: src, error: err2 } = await supabase
-      .from(srcTable)
+      .from(cfg.srcTable)
       .select(select)
       .in('share_token', tokens);
     if (err2) {
@@ -133,12 +135,13 @@ export function useImports({ domain, select = '*' }) {
       setOwners({});
     }
     setLoading(false);
-  }, [user, domain, select]);
+  }, [user, domain, select, cfg]);
 
   useEffect(() => { reload(); }, [reload]);
 
   const add = useCallback(async (token) => {
     if (!user) throw new Error('Nicht eingeloggt.');
+    if (!cfg)  throw new Error(`Unbekannte Import-Domäne: ${domain}`);
     const cleaned = (token || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
     if (!cleaned) throw new Error('Token ist leer.');
 
@@ -152,10 +155,9 @@ export function useImports({ domain, select = '*' }) {
     }
 
     const { error: err } = await supabase
-      .from(TABLE)
+      .from(cfg.importsTable)
       .insert({
         user_id:      user.id,
-        domain,
         source_token: cleaned,
         source_id:    lookup.sourceId,
       });
@@ -167,20 +169,19 @@ export function useImports({ domain, select = '*' }) {
     }
     await reload();
     return lookup;
-  }, [user, domain, reload]);
+  }, [user, domain, cfg, reload]);
 
   const remove = useCallback(async (token) => {
-    if (!user) return;
+    if (!user || !cfg) return;
     setEntities(prev => prev.filter(e => e.share_token !== token));
     setImports(prev => prev.filter(i => i.source_token !== token));
     const { error: err } = await supabase
-      .from(TABLE)
+      .from(cfg.importsTable)
       .delete()
       .eq('user_id', user.id)
-      .eq('domain', domain)
       .eq('source_token', token);
     if (err) setError(err.message);
-  }, [user, domain]);
+  }, [user, cfg]);
 
   /** Find an imported entity by id (for read-only view routes). */
   const findById = useCallback((id) => entities.find(e => e.id === id) || null, [entities]);

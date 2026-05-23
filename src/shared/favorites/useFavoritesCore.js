@@ -1,37 +1,38 @@
 // src/shared/favorites/useFavoritesCore.js
 //
-// Generic, domain-agnostic favorites hook. Used by features (wh40k, future
-// systems) that need a per-user favorites set persisted to Supabase. The
-// existing MTG favorites hook (`features/mtg/deck-builder/hooks/useFavorites.js`)
-// keeps its Scryfall-specific bulk-fetch behaviour and is intentionally not
-// rewritten here — but new features should use this shared core.
+// Generic, per-domain favorites hook. Each domain stores its favorites in
+// its own table (mtg_favorites, wh40k_favorites). The hook is parameterised
+// by table name + the SQL columns the table uses (mtg_favorites kept its
+// historical `scryfall_id`/`card_name` shape; wh40k_favorites uses the
+// generic `item_id`/`item_label`).
 //
-// Required Supabase table (see scripts/wh40k-schema.sql):
-//   create table nerdshelf_favorites (
-//     id          bigserial primary key,
-//     user_id     uuid not null references auth.users(id) on delete cascade,
-//     domain      text not null,         -- e.g. 'wh40k'
-//     item_id     text not null,         -- normalized id within the domain
-//     item_label  text default '',       -- denormalized for offline display
-//     created_at  timestamptz default now(),
-//     unique (user_id, domain, item_id)
-//   );
+// Required Supabase tables (see scripts/split-nerdshelf-tables.sql):
+//   wh40k_favorites(user_id, item_id, item_label, created_at, UNIQUE(user_id, item_id))
+//   mtg_favorites  (user_id, scryfall_id, card_name)
 //
-// If the table doesn't exist (e.g. before the migration is applied), the hook
-// degrades gracefully — favorites become an in-memory-only set for the session.
+// If the table doesn't exist (migration not yet applied), the hook
+// degrades gracefully — favorites become an in-memory-only set for the
+// session.
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../core/supabase/client';
 import { useAuth } from '../../core/auth/AuthContext';
 
-const TABLE = 'nerdshelf_favorites';
-
 /**
  * @param {object} options
- * @param {string} options.domain        e.g. 'wh40k'
+ * @param {string} options.table              SQL table name, e.g. 'wh40k_favorites'.
+ * @param {string} [options.idColumn='item_id']     column that stores the favorited id
+ * @param {string} [options.labelColumn='item_label']
  * @param {(item: any) => string} options.extractId
  * @param {(item: any) => string} [options.extractLabel]
  */
-export function useFavoritesCore({ domain, extractId, extractLabel }) {
+export function useFavoritesCore({
+  table,
+  idColumn = 'item_id',
+  labelColumn = 'item_label',
+  extractId,
+  extractLabel,
+}) {
   const { user } = useAuth();
   const [ids, setIds] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
@@ -51,10 +52,9 @@ export function useFavoritesCore({ domain, extractId, extractLabel }) {
       setLoading(true);
       setError(null);
       const { data, error: err } = await supabase
-        .from(TABLE)
-        .select('item_id, item_label')
-        .eq('user_id', user.id)
-        .eq('domain', domain);
+        .from(table)
+        .select(`${idColumn}, ${labelColumn}`)
+        .eq('user_id', user.id);
       if (cancelled) return;
       if (err) {
         // Treat "table does not exist" as a soft degrade rather than a hard
@@ -69,16 +69,16 @@ export function useFavoritesCore({ domain, extractId, extractLabel }) {
       }
       const next = new Set();
       for (const row of data || []) {
-        next.add(row.item_id);
-        if (row.item_label) {
-          itemCacheRef.current.set(row.item_id, { id: row.item_id, label: row.item_label });
-        }
+        const id = row[idColumn];
+        const label = row[labelColumn];
+        next.add(id);
+        if (label) itemCacheRef.current.set(id, { id, label });
       }
       setIds(next);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [user, domain]);
+  }, [user, table, idColumn, labelColumn]);
 
   const isFavorite = useCallback((id) => ids.has(id), [ids]);
 
@@ -103,19 +103,17 @@ export function useFavoritesCore({ domain, extractId, extractLabel }) {
     let result;
     if (wasFavorite) {
       result = await supabase
-        .from(TABLE)
+        .from(table)
         .delete()
         .eq('user_id', user.id)
-        .eq('domain', domain)
-        .eq('item_id', id);
+        .eq(idColumn, id);
     } else {
       result = await supabase
-        .from(TABLE)
+        .from(table)
         .insert({
           user_id: user.id,
-          domain,
-          item_id: id,
-          item_label: extractLabel ? (extractLabel(item) || '') : '',
+          [idColumn]: id,
+          [labelColumn]: extractLabel ? (extractLabel(item) || '') : '',
         });
     }
 
@@ -131,7 +129,7 @@ export function useFavoritesCore({ domain, extractId, extractLabel }) {
       else itemCacheRef.current.delete(id);
       setError(result.error.message);
     }
-  }, [user, ids, domain, extractId, extractLabel, tableMissing]);
+  }, [user, ids, table, idColumn, labelColumn, extractId, extractLabel, tableMissing]);
 
   return {
     ids,
