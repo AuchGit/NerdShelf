@@ -1,5 +1,13 @@
 // Spellcasting-Regeln pro Klasse
 // Arrays sind 0-indexed (Index 0 = Level 1)
+//
+// `ritualCasting` mirrors the matching class feature in the 5e SRD:
+//   'spellbook' → cast any ritual spell in the spellbook, prepared or not (Wizard)
+//   'known'     → cast any known ritual spell without preparation (Bard)
+//   'prepared'  → must have the ritual prepared to ritual-cast it (Cleric, Druid, Artificer)
+//   omitted     → no class-level ritual casting
+// (Warlock can gain it via the Book of Ancient Secrets invocation — handled
+// per-character, not here.)
 
 export const SPELLCASTING_RULES = {
   Wizard: {
@@ -10,6 +18,7 @@ export const SPELLCASTING_RULES = {
     preparedFormula: (level, mod) => Math.max(1, mod + level),
     spellListKey: 'Wizard',
     spellcastingAbility: 'int',
+    ritualCasting: 'spellbook',
   },
   Cleric: {
     type: 'prepared',
@@ -18,6 +27,7 @@ export const SPELLCASTING_RULES = {
     preparedFormula: (level, mod) => Math.max(1, mod + level),
     spellListKey: 'Cleric',
     spellcastingAbility: 'wis',
+    ritualCasting: 'prepared',
   },
   Druid: {
     type: 'prepared',
@@ -26,6 +36,7 @@ export const SPELLCASTING_RULES = {
     preparedFormula: (level, mod) => Math.max(1, mod + level),
     spellListKey: 'Druid',
     spellcastingAbility: 'wis',
+    ritualCasting: 'prepared',
   },
   Paladin: {
     type: 'prepared',
@@ -41,6 +52,7 @@ export const SPELLCASTING_RULES = {
     spellsKnown:    [4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,16,16,16,16],
     spellListKey: 'Bard',
     spellcastingAbility: 'cha',
+    ritualCasting: 'known',
   },
   Sorcerer: {
     type: 'known',
@@ -70,6 +82,7 @@ export const SPELLCASTING_RULES = {
     preparedFormula: (level, mod) => Math.max(1, mod + Math.floor(level / 2)),
     spellListKey: 'Artificer',
     spellcastingAbility: 'int',
+    ritualCasting: 'prepared',
   },
 
   // ── Subclass-based casters (1/3 progression, gain spellcasting at class level 3) ──
@@ -111,6 +124,7 @@ export function getSpellcastingInfo(classId, level, abilityMod = 0, subclassId =
       spellcastingAbility: rules.spellcastingAbility,
       schoolRestriction: rules.schoolRestriction || null,
       canSwapSpell: true, // Known casters can swap 1 spell per level-up (RAW)
+      ritualCasting: rules.ritualCasting || null,
     }
   }
   return {
@@ -123,6 +137,7 @@ export function getSpellcastingInfo(classId, level, abilityMod = 0, subclassId =
     spellcastingAbility: rules.spellcastingAbility,
     schoolRestriction: null,
     canSwapSpell: false,
+    ritualCasting: rules.ritualCasting || null,
   }
 }
 

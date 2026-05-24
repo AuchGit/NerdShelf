@@ -45,7 +45,9 @@
       "Bash(node -e \"fetch\\('https://wahapedia.ru/wh40k10ed/factions/space-marines/no-supplements', { headers: { 'User-Agent': 'Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/120.0.0.0 Safari/537.36' } }\\).then\\(r => r.text\\(\\)\\).then\\(t => { console.log\\(t.slice\\(0, 4000\\)\\); }\\)\")",
       "Bash(rm -f scripts/wh40k-fetch-faction-icons.mjs)",
       "Bash(rm -rf public/wh40k/factions)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(ls -la \"C:/Users/Miles/.claude/projects/c--Coding-NerdShelf-shell-nerdshelf/memory/\" 2>&1)",
+      "Read(//c/Users/Miles/.claude/projects/c--Coding-NerdShelf-shell-nerdshelf/memory/**)"
     ]
   }
 }

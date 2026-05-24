@@ -180,50 +180,54 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       >
         {items.length === 0 && <EmptyState title="No items" desc="Add an item or browse the database." />}
 
-        {/* Containers */}
-        {containers.map(container => {
-          const contents = itemsIn(container._key)
-          return (
-            <div key={container._key} style={S.containerGroup}>
-              <div style={S.containerHead}>
-                <span style={{ color: 'var(--accent-yellow)', fontSize: 13 }}>▣</span>
-                <span style={S.containerTitle}>{container.customName || container.name}</span>
-                <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{contents.length} items</span>
-                <ItemActions
-                  item={container} moveOptions={moveOptions(container)}
-                  onMove={k => moveItem(container, k)} onPatch={patchItem}
-                  onEdit={() => setEditing({ item: container, isNew: false })}
-                  onRemove={() => removeItem(container)}
-                />
-              </div>
-              {contents.length === 0 ? (
-                <div style={{ padding: '8px 12px', color: 'var(--text-dim)', fontSize: 12, background: 'var(--bg-elevated)' }}>
-                  Empty — use the move dropdown on an item to place it here.
+        {/* Multi-column grid: each container group + the "Carried" bucket tile
+            side-by-side on wide viewports (auto-fit at ~360px min). On phones
+            this collapses to a single column — same look as before. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
+          {containers.map(container => {
+            const contents = itemsIn(container._key)
+            return (
+              <div key={container._key} style={{ ...S.containerGroup, marginBottom: 0 }}>
+                <div style={S.containerHead}>
+                  <span style={{ color: 'var(--accent-yellow)', fontSize: 13 }}>▣</span>
+                  <span style={S.containerTitle}>{container.customName || container.name}</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{contents.length} items</span>
+                  <ItemActions
+                    item={container} moveOptions={moveOptions(container)}
+                    onMove={k => moveItem(container, k)} onPatch={patchItem}
+                    onEdit={() => setEditing({ item: container, isNew: false })}
+                    onRemove={() => removeItem(container)}
+                  />
                 </div>
-              ) : contents.map(it => (
+                {contents.length === 0 ? (
+                  <div style={{ padding: '8px 12px', color: 'var(--text-dim)', fontSize: 12, background: 'var(--bg-elevated)' }}>
+                    Empty — use the move dropdown on an item to place it here.
+                  </div>
+                ) : contents.map(it => (
+                  <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
+                    onMove={k => moveItem(it, k)} onPatch={patchItem}
+                    onEdit={() => setEditing({ item: it, isNew: false })}
+                    onRemove={() => removeItem(it)} />
+                ))}
+              </div>
+            )
+          })}
+
+          {/* Carried (loose) */}
+          {carried.length > 0 && (
+            <div style={{ ...S.containerGroup, marginBottom: 0 }}>
+              <div style={S.containerHead}>
+                <span style={S.containerTitle}>Carried</span>
+              </div>
+              {carried.map(it => (
                 <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
                   onMove={k => moveItem(it, k)} onPatch={patchItem}
                   onEdit={() => setEditing({ item: it, isNew: false })}
                   onRemove={() => removeItem(it)} />
               ))}
             </div>
-          )
-        })}
-
-        {/* Carried (loose) */}
-        {carried.length > 0 && (
-          <div style={S.containerGroup}>
-            <div style={S.containerHead}>
-              <span style={S.containerTitle}>Carried</span>
-            </div>
-            {carried.map(it => (
-              <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
-                onMove={k => moveItem(it, k)} onPatch={patchItem}
-                onEdit={() => setEditing({ item: it, isNew: false })}
-                onRemove={() => removeItem(it)} />
-            ))}
-          </div>
-        )}
+          )}
+        </div>
       </Section>
 
       {/* ── Attunement ── */}

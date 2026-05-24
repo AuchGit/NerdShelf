@@ -99,6 +99,51 @@ function SpellDetails({ spell }) {
   )
 }
 
+// ── Ritual row — same look as a SpellRow, but the only cast option is
+//    "Cast as Ritual (+10 min)" since rituals don't consume a slot ──
+function RitualRow({ spell, onCastRitual }) {
+  const [open, setOpen] = useState(false)
+  const lc = levelColor(spell.level)
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ ...S.spellRow, ...(open ? rowWhenOpen : {}) }}>
+        <div style={{ ...S.spellLevelBadge, background: lc + '22', color: lc }}>{spell.level}</div>
+        <div style={S.spellRowMain} onClick={() => setOpen(o => !o)}>
+          <div style={S.spellName}>
+            {spell.name}
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{open ? '▲' : '▼'}</span>
+          </div>
+          <div style={S.spellMeta}>
+            {SCHOOL_NAMES[spell.school] || spell.school}
+            {spell.range && spell.range !== '—' ? ` · ${spell.range}` : ''}
+            {' · via '}{spell.viaClasses.join(', ')}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {spell.prepared && (
+            <span style={{ ...S.tag, borderColor: 'var(--accent)', color: 'var(--accent)' }}>Prepared</span>
+          )}
+          {spell.concentration && (
+            <span style={{ ...S.tag, borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}>Conc</span>
+          )}
+        </div>
+      </div>
+      {open && (
+        <div style={EXPAND_PANEL}>
+          <SpellDetails spell={spell} />
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ ...S.formLabel, marginBottom: 8 }}>Ritual</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Btn variant="primary" onClick={() => onCastRitual(spell)}>Cast as Ritual (+10 min)</Btn>
+              <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>No slot consumed.</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Spell row in the main list — expands to details + cast actions ──
 function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast }) {
   const [open, setOpen] = useState(false)
@@ -286,6 +331,59 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
       }))
   }, [casterClasses, preparedByClass, maxSpellLvl])
 
+  // ── Ritual spells the character can cast as rituals ────────
+  // Per-class rules (info.ritualCasting from spellcastingRules):
+  //   'spellbook' (Wizard): any ritual in spellbook, prepared or not
+  //   'known'    (Bard):    any known ritual
+  //   'prepared' (Cleric/Druid/Artificer): only currently prepared rituals
+  // Rituals known via race/feat/etc. don't count — the ritual feature is
+  // class-bound. Output is deduped + sorted by level then name.
+  const rituals = useMemo(() => {
+    const enrich = makeEnricher(spellMap, character)
+    const infoByClass = {}
+    for (const c of casterClasses) infoByClass[c.classId] = c.info
+    const anyRitualClass = casterClasses.some(c => c.info.ritualCasting)
+    if (!anyRitualClass) return []
+
+    const out = new Map()
+    const accept = (name, classId, prepared) => {
+      const key = name.toLowerCase()
+      const e = out.get(key)
+      const existing = e || { ...enrich(name), viaClasses: new Set(), prepared: false }
+      existing.viaClasses.add(classId)
+      if (prepared) existing.prepared = true
+      out.set(key, existing)
+    }
+
+    for (const c of collectCharacterSpells(character)) {
+      const sp = enrich(c.name)
+      if (!sp.ritual) continue
+      if (sp.level === 0) continue   // cantrips have no ritual variant
+      for (const sourceClass of c.sourceClasses) {
+        const info = infoByClass[sourceClass]
+        if (!info?.ritualCasting) continue
+        const mode = info.ritualCasting
+        if (mode === 'spellbook') {
+          // Wizard rule: must be in spellbook (collectCharacterSpells gives
+          // us spellbook contents already; granted spells don't count).
+          if (c.granted) continue
+          accept(c.name, sourceClass, false)
+        } else if (mode === 'known') {
+          accept(c.name, sourceClass, false)
+        } else if (mode === 'prepared') {
+          const prep = preparedByClass[sourceClass] || []
+          if (prep.some(n => n.toLowerCase() === c.name.toLowerCase())) {
+            accept(c.name, sourceClass, true)
+          }
+        }
+      }
+    }
+
+    return [...out.values()]
+      .map(r => ({ ...r, viaClasses: [...r.viaClasses] }))
+      .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  }, [character, spellMap, casterClasses, preparedByClass])
+
   // ── Slot helpers ──────────────────────────────────────────
   function slotRemaining(level) {
     if (!slots || !slots[level - 1]) return 0
@@ -320,6 +418,19 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         d.status.concentration = { name: spell.name, level: usePact ? warlockSlots?.level : slotLevel }
       }
     })
+  }
+
+  // Ritual casts: no slot consumed, but concentration still applies.
+  function castRitual(spell) {
+    if (spell.concentration && concentration && concentration.name !== spell.name) {
+      if (!window.confirm(`You are concentrating on ${concentration.name}. Replace it with ${spell.name}?`)) return
+    }
+    if (spell.concentration) {
+      applyCharacter(d => {
+        if (!d.status) d.status = {}
+        d.status.concentration = { name: spell.name, level: spell.level }
+      })
+    }
   }
 
   if (!hasSpellcasting && !hasAny) {
@@ -440,20 +551,37 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         </Section>
       )}
 
+      {/* ── Rituals (only if the character has class-level ritual casting) ── */}
+      {rituals.length > 0 && (
+        <Section title={`Rituals (${rituals.length})`}>
+          <div style={{ color: 'var(--text-dim)', fontSize: 12, marginBottom: 8 }}>
+            Cast any of these as a ritual (+10 minutes, no slot consumed).
+          </div>
+          {rituals.map(spell => (
+            <RitualRow key={spell.name} spell={spell} onCastRitual={castRitual} />
+          ))}
+        </Section>
+      )}
+
       {/* ── Spells by level ── */}
       {!hasAny && <EmptyState title="No spells ready" desc="Use Prepare to choose your spells, or learn spells at level-up." />}
 
-      {levels.map(level => (
-        <Section key={level} title={`${spellLevelLabel(level)} (${byLevel[level].length})`}>
-          {byLevel[level].map(spell => (
-            <SpellRow
-              key={spell.name} spell={spell}
-              slotRemaining={slotRemaining} pactRemaining={pactRemaining}
-              warlockSlots={warlockSlots} onCast={castSpell}
-            />
-          ))}
-        </Section>
-      ))}
+      {/* Multi-column grid on desktop: auto-fit packs as many level columns as
+          the viewport allows (1 column ≈ 320px wide). On phones the minmax
+          collapses to a single column, identical to the old stacked layout. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '0 20px' }}>
+        {levels.map(level => (
+          <Section key={level} title={`${spellLevelLabel(level)} (${byLevel[level].length})`}>
+            {byLevel[level].map(spell => (
+              <SpellRow
+                key={spell.name} spell={spell}
+                slotRemaining={slotRemaining} pactRemaining={pactRemaining}
+                warlockSlots={warlockSlots} onCast={castSpell}
+              />
+            ))}
+          </Section>
+        ))}
+      </div>
 
       {/* ── Prepare modal ── */}
       {prepareFor && (
