@@ -26,7 +26,7 @@ import {
 import { computeCharacter } from '../lib/rulesEngine'
 import { modStr, ABILITY_KEYS } from '../lib/sheetUtils'
 
-const wrap = { maxWidth: 1300, margin: '0 auto', padding: 'var(--space-5)' }
+const wrap = { maxWidth: 1500, margin: '0 auto', padding: '12px 16px' }
 
 export default function SessionPage({ session, campaignId }) {
   const navigate = useNavigate()
@@ -36,7 +36,8 @@ export default function SessionPage({ session, campaignId }) {
   const [members,  setMembers]  = useState([])
   const [chars,    setChars]    = useState({})   // characterId → { data, name } | undefined while loading
   const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
+  const [error,    setError]    = useState(null)         // fatal load error → full-page replace
+  const [transientError, setTransientError] = useState(null)  // brief patch / RPC error → toast
   const [showPrefs, setShowPrefs] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const refresh = () => setReloadKey(k => k + 1)
@@ -76,7 +77,8 @@ export default function SessionPage({ session, campaignId }) {
 
   // ── Realtime: live updates from players (and our own RPC writes) ──
   // Subscribe once the members are known. Two channels:
-  //   • dnd_characters UPDATE  → patch the chars map in place
+  //   • dnd_characters UPDATE  → MERGE the row (don't replace) so a
+  //     partial payload missing `data` doesn't blank the card.
   //   • dnd_campaign_members UPDATE (this campaign only) → patch members
   //     so GM-notes typed in another tab show up here too.
   // Requires the realtime publication in dnd-session-schema.sql.
@@ -95,7 +97,20 @@ export default function SessionPage({ session, campaignId }) {
           (payload) => {
             const row = payload.new
             if (!row || !charSet.has(Number(row.id))) return
-            setChars(prev => ({ ...prev, [row.id]: { id: row.id, name: row.name, data: row.data } }))
+            // Merge against the previous entry so an UPDATE payload that
+            // omits some columns (or comes through with data=null during
+            // a partial broadcast) doesn't wipe the character.
+            setChars(prev => {
+              const existing = prev[row.id] || {}
+              return {
+                ...prev,
+                [row.id]: {
+                  id:   row.id,
+                  name: row.name ?? existing.name,
+                  data: row.data ?? existing.data,
+                },
+              }
+            })
           })
       .on('postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'dnd_campaign_members',
@@ -110,26 +125,51 @@ export default function SessionPage({ session, campaignId }) {
     return () => { supabase.removeChannel(channel) }
   }, [campaignId, characterIds])
 
+  // ── Combat-state writer (shared by every card) ──
+  // Lives in the parent so it can do optimistic local updates on the
+  // chars map — clicks feel instant even if realtime is slow / not yet
+  // configured. Reverts on RPC error and surfaces the message inline.
+  async function patchChar(charId, patchObj) {
+    if (!charId) return
+    // Snapshot for rollback.
+    let snapshot
+    setChars(prev => {
+      snapshot = prev[charId]
+      if (!snapshot?.data) return prev
+      const nextStatus = { ...(snapshot.data.status || {}), ...patchObj }
+      return { ...prev, [charId]: { ...snapshot, data: { ...snapshot.data, status: nextStatus } } }
+    })
+    try {
+      await patchCombatState(charId, patchObj)
+    } catch (e) {
+      // Revert and surface the error as a non-fatal toast (the page
+      // stays interactive, unlike a fatal load error).
+      setChars(prev => snapshot ? { ...prev, [charId]: snapshot } : prev)
+      setTransientError(e.message || String(e))
+      setTimeout(() => setTransientError(null), 3500)
+    }
+  }
+
   if (loading) return <Shell><Loading>Lade Session…</Loading></Shell>
   if (error)   return <Shell><Loading style={{ color: 'var(--color-danger)' }}>{error}</Loading></Shell>
 
   return (
     <Shell>
       <div style={wrap}>
-        {/* ── Header ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
-          <Button variant="ghost" onClick={() => navigate(`/campaign/${campaignId}`)}>← Campaign</Button>
-          <h1 style={{ margin: 0, fontSize: 'var(--fs-xl)', fontWeight: 'var(--fw-bold)', flex: 1, minWidth: 0 }}>
+        {/* ── Header — compact so it doesn't eat vertical space ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/campaign/${campaignId}`)}>← Campaign</Button>
+          <h1 style={{ margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 'var(--fw-bold)', flex: 1, minWidth: 0 }}>
             Session · {campaign.name}
           </h1>
-          <Button variant="ghost" onClick={refresh} title="Stand aller Charaktere neu laden">↻ Aktualisieren</Button>
-          <Button variant="secondary" onClick={() => setShowPrefs(v => !v)}>
-            {showPrefs ? 'Einstellungen schließen' : '⚙ Anzeige'}
+          <Button size="sm" variant="ghost" onClick={refresh} title="Stand aller Charaktere neu laden">↻</Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowPrefs(v => !v)}>
+            ⚙ Anzeige
           </Button>
         </div>
 
         {showPrefs && (
-          <Panel padding="md" style={{ marginBottom: 'var(--space-4)' }}>
+          <Panel padding="md" style={{ marginBottom: 'var(--space-3)' }}>
             <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginBottom: 8 }}>
               Änderungen werden sofort übernommen und gelten auch für zukünftige Sessions
               (gleiche Einstellung wie in den DnD-Settings → Spielleiter).
@@ -138,7 +178,17 @@ export default function SessionPage({ session, campaignId }) {
           </Panel>
         )}
 
-        {/* ── Character grid ── */}
+        {transientError && (
+          <div style={{
+            padding: '6px 12px', marginBottom: 8,
+            background: 'color-mix(in srgb, var(--color-danger) 15%, transparent)',
+            color: 'var(--color-danger)', fontSize: 'var(--fs-sm)',
+            border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-sm)',
+          }}>⚠ {transientError}</div>
+        )}
+
+        {/* ── Character grid — tighter minmax so more cards fit before
+            scroll on typical desktops (1366+) ── */}
         {members.length === 0 ? (
           <Panel padding="lg" style={{ color: 'var(--color-text-muted)', textAlign: 'center' }}>
             Keine Charaktere in dieser Campaign.
@@ -146,14 +196,15 @@ export default function SessionPage({ session, campaignId }) {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
-            gap: 'var(--space-4)',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 10,
           }}>
             {members.map(m => (
               <SessionCard
                 key={m.id}
                 member={m}
                 row={chars[m.character_id]}
+                onPatch={patchChar}
                 onOpenSheet={() => navigate(`/campaign/${campaignId}/session/character/${m.character_id}`)}
               />
             ))}
@@ -182,8 +233,12 @@ function Loading({ children, style }) {
 }
 
 // ── Card ────────────────────────────────────────────────────
+// Compact layout: aimed to fit ~4 cards side-by-side at 1366×768 without
+// vertical scroll for a typical 4-player party.
 
-function SessionCard({ member, row, onOpenSheet }) {
+const PAD = 8
+
+function SessionCard({ member, row, onPatch, onOpenSheet }) {
   const { prefs } = useSessionPrefs()
   const card = member.card || {}
   const character = row?.data
@@ -194,11 +249,8 @@ function SessionCard({ member, row, onOpenSheet }) {
     try { return computeCharacter(character) } catch { return null }
   }, [character])
 
-  // ── Notes (debounced autosave) ──
-  // Notes initialise from the row at first mount and stay local thereafter
-  // — a server reload mid-edit shouldn't clobber what the GM is typing.
-  // If they navigate away and come back, the component remounts and picks
-  // up the latest persisted value via this initial state.
+  // ── Notes (debounced autosave). Initialised once from the member row;
+  //    server reloads mid-edit don't clobber what the GM is typing.
   const [notes, setNotes] = useState(member.gm_notes ?? '')
   const [savedAt, setSavedAt] = useState(null)
   const [saveErr, setSaveErr] = useState(null)
@@ -229,119 +281,99 @@ function SessionCard({ member, row, onOpenSheet }) {
   const deathSaves = status.deathSaves || { successes: 0, failures: 0 }
   const charId = row?.id
 
-  // ── GM combat-state writes (RPC) ──
-  // Optimistic: patch the cards map immediately so the UI feels live; the
-  // realtime echo re-confirms the same shape a moment later.
-  async function patch(patchObj) {
-    if (!charId) return
-    // (state setter is in the SessionPage closure — but the card doesn't
-    // have direct access. We rely on realtime to broadcast; if Supabase
-    // realtime is slow, the player or another GM tab will still catch up.)
-    try {
-      await patchCombatState(charId, patchObj)
-    } catch (e) {
-      // Surface in console; the card stays unchanged until the next realtime
-      // event so the UI doesn't lie about the state.
-      console.warn('[session] patchCombatState failed:', e.message || e)
-    }
-  }
+  // Combat-state writes go through the parent (optimistic local update +
+  // RPC + revert on failure). No-op if we don't have a char id yet.
+  const patch = (obj) => onPatch?.(charId, obj)
 
   function bumpHP(delta) {
     if (currentHP == null || maxHP == null) return
-    const next = Math.max(0, Math.min(maxHP, currentHP + delta))
-    patch({ currentHp: next })
+    patch({ currentHp: Math.max(0, Math.min(maxHP, currentHP + delta)) })
   }
   function setDeathSave(kind, n) {
     patch({ deathSaves: { ...deathSaves, [kind]: Math.max(0, Math.min(3, n)) } })
   }
   function toggleCondition(id, on) {
-    const next = on
-      ? [...conditions.filter(x => x !== id), id]
-      : conditions.filter(x => x !== id)
+    const next = on ? [...conditions.filter(x => x !== id), id] : conditions.filter(x => x !== id)
     patch({ conditions: next })
   }
 
+  const tone = hpTone(currentHP, maxHP)
+
   return (
     <Panel padding="none" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Top: portrait + identity */}
-      <div style={{ display: 'flex', gap: 'var(--space-3)', padding: 'var(--space-3)' }}>
+      {/* Top: portrait + identity (compact, 44px portrait) */}
+      <div style={{ display: 'flex', gap: PAD, padding: PAD, alignItems: 'center' }}>
         <div style={{
-          width: 64, height: 64, borderRadius: 'var(--radius-md)', flexShrink: 0, overflow: 'hidden',
+          width: 44, height: 44, borderRadius: 'var(--radius-sm)', flexShrink: 0, overflow: 'hidden',
           background: 'var(--color-bg-sunken)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {card.portrait
             ? <img src={card.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : <span style={{ fontSize: 28, opacity: 0.4 }}>⚔</span>}
+            : <span style={{ fontSize: 20, opacity: 0.4 }}>⚔</span>}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: 'var(--fw-semibold)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {card.name || row?.name || 'Unbenannt'}
           </div>
-          <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {classLine(card)}
+            {card.race ? <span style={{ color: 'var(--color-text-dim)' }}> · {card.race}</span> : null}
           </div>
-          {(card.race || member.player_name) && (
-            <div style={{ color: 'var(--color-text-dim)', fontSize: 'var(--fs-xs)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {[card.race, member.player_name].filter(Boolean).join(' · ')}
+          {member.player_name && (
+            <div style={{ color: 'var(--color-text-dim)', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {member.player_name}
             </div>
           )}
         </div>
       </div>
 
-      {/* HP edit row — always visible if we know the HP */}
+      {/* HP row — value + ±1/±5 buttons on one line */}
       {character && maxHP != null && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '0 var(--space-3) var(--space-3)',
-        }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, padding: `0 ${PAD}px ${PAD}px` }}>
           <div style={{
-            flex: 1, padding: '6px 10px', borderRadius: 'var(--radius-md)',
-            background: hpTone(currentHP, maxHP) === 'danger' ? 'color-mix(in srgb, var(--color-danger) 18%, transparent)'
-                      : hpTone(currentHP, maxHP) === 'warning' ? 'color-mix(in srgb, var(--color-warning, #d98e00) 18%, transparent)'
+            flex: 1, padding: '4px 8px', borderRadius: 'var(--radius-sm)',
+            background: tone === 'danger' ? 'color-mix(in srgb, var(--color-danger) 18%, transparent)'
+                      : tone === 'warning' ? 'color-mix(in srgb, var(--color-warning, #d98e00) 18%, transparent)'
                       : 'var(--color-bg-sunken)',
-            border: `1px solid ${hpTone(currentHP, maxHP) === 'danger' ? 'var(--color-danger)'
-                                 : hpTone(currentHP, maxHP) === 'warning' ? 'var(--color-warning, #d98e00)'
-                                 : 'var(--color-border)'}`,
+            border: `1px solid ${tone === 'danger' ? 'var(--color-danger)'
+                                : tone === 'warning' ? 'var(--color-warning, #d98e00)'
+                                : 'var(--color-border)'}`,
+            display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
           }}>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>HP</div>
-            <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 'var(--fw-bold)' }}>
-              {currentHP}/{maxHP}
-              {tempHP > 0 && <span style={{ marginLeft: 6, color: 'var(--accent-green, #2d8a2d)', fontSize: 12 }}>+{tempHP} temp</span>}
-            </div>
+            <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>HP</span>
+            <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-md)' }}>{currentHP}/{maxHP}</span>
+            {tempHP > 0 && <span style={{ color: 'var(--accent-green, #2d8a2d)', fontSize: 10 }}>+{tempHP}</span>}
           </div>
-          <HpBtn onClick={() => bumpHP(-1)}>−1</HpBtn>
           <HpBtn onClick={() => bumpHP(-5)}>−5</HpBtn>
+          <HpBtn onClick={() => bumpHP(-1)}>−1</HpBtn>
           <HpBtn onClick={() => bumpHP(+1)}>+1</HpBtn>
           <HpBtn onClick={() => bumpHP(+5)}>+5</HpBtn>
         </div>
       )}
 
-      {/* Death saves — only when down */}
+      {/* Death saves — only when down. Two compact pip rows. */}
       {character && isDown && (
-        <div style={{
-          padding: '0 var(--space-3) var(--space-3)',
-          display: 'flex', flexDirection: 'column', gap: 4,
-        }}>
+        <div style={{ padding: `0 ${PAD}px ${PAD}px`, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)',
+            fontSize: 9, color: 'var(--color-text-muted)',
             textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 'var(--fw-semibold)',
           }}>
             <span>Death Saves</span>
             <DeathSaveSummary s={deathSaves} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', width: 60 }}>Successes</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 48 }}>Success</span>
             <Pips n={3} filled={deathSaves.successes} color="var(--accent-green, #2d8a2d)" onSet={n => setDeathSave('successes', n)} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', width: 60 }}>Failures</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 48 }}>Failure</span>
             <Pips n={3} filled={deathSaves.failures} color="var(--color-danger)" onSet={n => setDeathSave('failures', n)} />
           </div>
         </div>
       )}
 
-      {/* Stats strip */}
+      {/* Stats strip — compact 70px min so 3 fit per card column */}
       {!character ? (
         <StatsHint>Charakterdaten konnten nicht geladen werden.</StatsHint>
       ) : !computed ? (
@@ -349,8 +381,8 @@ function SessionCard({ member, row, onOpenSheet }) {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))',
-          gap: 6, padding: '0 var(--space-3) var(--space-3)',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
+          gap: 4, padding: `0 ${PAD}px ${PAD}px`,
         }}>
           {prefs.stats.map(id => {
             const v = renderStat(id, computed, character)
@@ -366,21 +398,16 @@ function SessionCard({ member, row, onOpenSheet }) {
 
       {/* Conditions */}
       {character && (
-        <div style={{ padding: '0 var(--space-3) var(--space-3)' }}>
-          <div style={{
-            fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)',
-            textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 'var(--fw-semibold)',
-            marginBottom: 4,
-          }}>Conditions</div>
+        <div style={{ padding: `0 ${PAD}px ${PAD}px` }}>
           <ConditionChips active={conditions} onToggle={toggleCondition} compact />
         </div>
       )}
 
-      {/* Notes */}
-      <div style={{ padding: 'var(--space-3)', borderTop: '1px solid var(--color-border)' }}>
+      {/* Notes — single-line label, 2-row textarea, no resize handle */}
+      <div style={{ padding: PAD, borderTop: '1px solid var(--color-border)' }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginBottom: 4,
+          fontSize: 9, color: 'var(--color-text-muted)', marginBottom: 2,
         }}>
           <span style={{ fontWeight: 'var(--fw-semibold)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
             DM-Notizen
@@ -394,20 +421,20 @@ function SessionCard({ member, row, onOpenSheet }) {
         <textarea
           value={notes}
           onChange={onNotesChange}
-          rows={3}
-          placeholder="Notizen für diesen Charakter…"
+          rows={2}
+          placeholder="Notizen…"
           style={{
-            width: '100%', boxSizing: 'border-box', resize: 'vertical',
+            width: '100%', boxSizing: 'border-box', resize: 'none',
             background: 'var(--color-surface)', color: 'var(--color-text)',
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-            padding: '8px 10px', fontSize: 'var(--fs-sm)', fontFamily: 'inherit',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+            padding: '4px 8px', fontSize: 11, fontFamily: 'inherit', lineHeight: 1.4,
           }}
         />
       </div>
 
-      {/* View-sheet button */}
-      <div style={{ display: 'flex', padding: 'var(--space-2)', borderTop: '1px solid var(--color-border)' }}>
-        <Button size="sm" variant="ghost" style={{ flex: 1 }} onClick={onOpenSheet} disabled={!character}>
+      {/* View-sheet button — small footer */}
+      <div style={{ display: 'flex', padding: 4, borderTop: '1px solid var(--color-border)' }}>
+        <Button size="sm" variant="ghost" style={{ flex: 1, height: 28 }} onClick={onOpenSheet} disabled={!character}>
           Sheet öffnen
         </Button>
       </div>
@@ -420,8 +447,8 @@ function SessionCard({ member, row, onOpenSheet }) {
 function StatsHint({ children }) {
   return (
     <div style={{
-      padding: 'var(--space-3)', color: 'var(--color-text-muted)',
-      fontSize: 'var(--fs-sm)', fontStyle: 'italic',
+      padding: `0 ${PAD}px ${PAD}px`, color: 'var(--color-text-muted)',
+      fontSize: 11, fontStyle: 'italic',
     }}>{children}</div>
   )
 }
@@ -430,15 +457,15 @@ function Stat({ label, value, tone }) {
   return (
     <div style={{
       background: 'var(--color-bg-sunken)', borderRadius: 'var(--radius-sm)',
-      padding: '6px 8px', textAlign: 'center',
+      padding: '3px 6px', textAlign: 'center',
       border: tone === 'danger'  ? '1px solid var(--color-danger)'
             : tone === 'warning' ? '1px solid var(--color-warning, #d98e00)'
             : '1px solid var(--color-border)',
     }}>
-      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+      <div style={{ fontSize: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {label}
       </div>
-      <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-md)' }}>
+      <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 12 }}>
         {value}
       </div>
     </div>
@@ -459,11 +486,11 @@ function HpBtn({ children, onClick }) {
     <button
       type="button" onClick={onClick}
       style={{
-        minWidth: 36, padding: '6px 8px',
+        minWidth: 28, padding: '0 6px',
         border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-sm)',
         background: 'var(--color-surface)', color: 'var(--color-text)',
-        cursor: 'pointer', fontSize: 11, fontFamily: 'inherit',
+        cursor: 'pointer', fontSize: 10, fontFamily: 'inherit',
         fontWeight: 'var(--fw-semibold)',
       }}
     >{children}</button>
