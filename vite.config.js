@@ -39,14 +39,24 @@ export default defineConfig(async ({ mode }) => {
               options: { cacheName: 'nerdshelf-data' },
             },
             {
-              // Supabase REST/Realtime should always go to network, but cache
-              // last successful GET so the shell still loads offline.
-              urlPattern: ({ url }) => url.hostname.endsWith('.supabase.co'),
-              handler: 'NetworkFirst',
+              // Supabase REST GETs use StaleWhileRevalidate so the UI gets
+              // an instant response from cache and the network update lands
+              // silently in the background. Writes (POST/PATCH/DELETE) +
+              // realtime always bypass the cache (workbox SWR only matches
+              // GETs by default).
+              //
+              // Trade-off: on first paint after data has changed on the
+              // server, the user sees the previous response for one
+              // request-cycle before the background fetch updates the
+              // cache. Acceptable for dashboards / lists; realtime
+              // subscriptions catch HP / conditions / notes updates
+              // separately and react in-app.
+              urlPattern: ({ url, request }) =>
+                url.hostname.endsWith('.supabase.co') && request.method === 'GET',
+              handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'supabase-api',
-                networkTimeoutSeconds: 5,
-                expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
               },
             },
           ],
