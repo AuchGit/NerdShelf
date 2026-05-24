@@ -8,6 +8,7 @@ import { useAuth } from '../../../../core/auth/AuthContext'
 import { supabase } from '../lib/supabase'
 import { downloadFoundryJSON, exportToFoundry } from '../lib/foundryExport'
 import { Panel, Button, Modal, Input } from '../../../../shared/ui'
+import { ShareButton } from '../../../../shared/sharing'
 import DndSubNav from '../components/ui/DndSubNav'
 import {
   getCampaign, listMembers, listCampaignEvents, updateCampaign, deleteCampaign,
@@ -263,6 +264,13 @@ export default function CampaignDetailPage({ session, campaignId }) {
               fontSize: 'var(--fs-md)', fontWeight: 'var(--fw-bold)', letterSpacing: 2,
               background: 'var(--color-bg-sunken)', padding: '4px 10px', borderRadius: 'var(--radius-sm)',
             }}>{campaign.join_token}</code>
+            {isGm && (
+              <ShareButton
+                kind="dnd_campaign"
+                token={campaign.join_token}
+                name={campaign.name}
+              />
+            )}
             <span style={{
               fontSize: 'var(--fs-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)',
               background: isGm ? 'var(--color-accent)' : 'var(--color-surface)',

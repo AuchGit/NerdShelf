@@ -14,6 +14,7 @@ import { useWh40kData } from './hooks/useWh40kData';
 import { totalArmyPoints } from './services/points';
 import { ShareTokenBadge } from '../../shared/tokens';
 import { ImportedSection, useImports } from '../../shared/imports';
+import { ShareButton, useDeepLinkImport } from '../../shared/sharing';
 
 export default function Wh40kDashboard() {
   const navigate = useNavigate();
@@ -21,8 +22,23 @@ export default function Wh40kDashboard() {
   const [armies, setArmies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [importStatus, setImportStatus] = useState(null);
   const { data } = useWh40kData();
   const imports = useImports({ domain: 'wh40k_army' });
+
+  // Deep link: `<APP>/wh40k/?import=<token>` → auto-add the shared army.
+  useDeepLinkImport({
+    param: 'import',
+    onToken: async (token) => {
+      try {
+        const r = await imports.add(token);
+        setImportStatus({ ok: true, msg: `„${r.entityName}" hinzugefügt.` });
+      } catch (e) {
+        setImportStatus({ ok: false, msg: e.message || String(e) });
+      }
+      setTimeout(() => setImportStatus(null), 4000);
+    },
+  });
 
   const loadArmies = useCallback(async () => {
     if (!user) return;
@@ -99,6 +115,16 @@ export default function Wh40kDashboard() {
           }}
         >
           {error}
+        </div>
+      )}
+      {importStatus && (
+        <div style={{
+          maxWidth: 1200, margin: '0 auto',
+          padding: 'var(--space-2) var(--space-5)',
+          fontSize: 'var(--fs-sm)',
+          color: importStatus.ok ? 'var(--color-success)' : 'var(--color-danger)',
+        }}>
+          {importStatus.ok ? '✓ ' : '⚠ '}{importStatus.msg}
         </div>
       )}
       <DashboardLayout
@@ -276,7 +302,12 @@ function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate, rea
       >
         <span>Aktualisiert: {new Date(army.updated_at).toLocaleDateString('de-DE')}</span>
         <span style={{ flex: 1 }} />
-        {army.share_token && <ShareTokenBadge token={army.share_token} label="Armee-Token" compact />}
+        {army.share_token && (
+          <>
+            <ShareTokenBadge token={army.share_token} label="Armee-Token" compact />
+            <ShareButton kind="wh40k_army" token={army.share_token} name={army.name} compact />
+          </>
+        )}
       </div>
     </Panel>
   );

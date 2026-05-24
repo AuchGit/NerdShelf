@@ -52,6 +52,25 @@ function useHashRoute() {
   return route
 }
 
+// Shared deep links target /dnd/?join=<token> (campaign) or
+// /dnd/?import=<token> (character). The default landing page is the
+// character dashboard, which is fine for ?import (DashboardPage consumes
+// it there). For ?join we want the user on /campaigns instead — bounce
+// once at startup so CampaignsPage's useDeepLinkImport picks it up.
+function useDeepLinkBounce() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const q = new URL(window.location.href).searchParams
+      const isJoin   = q.has('join')
+      const hash     = window.location.hash.replace(/^#/, '') || '/'
+      if (isJoin && hash !== '/campaigns') {
+        window.location.hash = '/campaigns'
+      }
+    } catch { /* ignore */ }
+  }, [])
+}
+
 function matchRoute(route) {
   // /character/new
   if (route === '/character/new') return { page: 'create' }
@@ -86,6 +105,7 @@ function matchRoute(route) {
 }
 
 function DndRoutes({ session }) {
+  useDeepLinkBounce()
   const route = useHashRoute()
   const match = matchRoute(route)
 

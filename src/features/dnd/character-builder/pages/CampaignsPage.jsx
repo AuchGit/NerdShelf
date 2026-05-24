@@ -6,10 +6,12 @@ import { useNavigate } from '../lib/hashNav'
 import { useAuth } from '../../../../core/auth/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Panel, Button, Modal, Input } from '../../../../shared/ui'
+import { ShareButton, useDeepLinkImport } from '../../../../shared/sharing'
+import { ShareTokenBadge } from '../../../../shared/tokens'
 import DndSubNav from '../components/ui/DndSubNav'
 import {
   listMyCampaigns, memberCounts, nextEventByCampaign,
-  createCampaign, joinCampaign, formatDate, countdownLabel,
+  createCampaign, joinCampaign, formatDate, countdownLabel, classLine,
 } from '../lib/campaigns'
 
 const wrap = { maxWidth: 1200, margin: '0 auto', padding: 'var(--space-5)' }
@@ -26,6 +28,15 @@ export default function CampaignsPage({ session }) {
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
+  const [joinTokenSeed, setJoinTokenSeed] = useState('')
+
+  // Deep link: `<APP>/dnd/?join=<token>` → pop the join modal with the
+  // token pre-filled. We're already on /dnd/ when the user lands here
+  // since the campaigns route lives inside DndCharacterApp.
+  useDeepLinkImport({
+    param: 'join',
+    onToken: (token) => { setJoinTokenSeed(token); setShowJoin(true) },
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -95,8 +106,9 @@ export default function CampaignsPage({ session }) {
         <JoinCampaignModal
           userId={uid}
           playerName={playerName}
-          onClose={() => setShowJoin(false)}
-          onJoined={(id) => { setShowJoin(false); navigate(`/campaign/${id}`) }}
+          initialToken={joinTokenSeed}
+          onClose={() => { setShowJoin(false); setJoinTokenSeed('') }}
+          onJoined={(id) => { setShowJoin(false); setJoinTokenSeed(''); navigate(`/campaign/${id}`) }}
         />
       )}
       </div>
@@ -151,6 +163,17 @@ function CampaignCard({ campaign, isGm, memberCount, nextEvent, onOpen }) {
             <span style={{ color: 'var(--color-text-dim)' }}>Kein Termin geplant</span>
           )}
         </div>
+        {/* GM-only: token + share. Players don't need to share their own
+            invite — they're not the inviter. */}
+        {isGm && campaign.join_token && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+            marginTop: 'var(--space-2)', flexWrap: 'wrap',
+          }} onClick={e => e.stopPropagation()}>
+            <ShareTokenBadge token={campaign.join_token} label="Join-Token" compact />
+            <ShareButton kind="dnd_campaign" token={campaign.join_token} name={campaign.name} compact />
+          </div>
+        )}
       </div>
     </Panel>
   )
@@ -208,8 +231,10 @@ function CreateCampaignModal({ gmId, onClose, onCreated }) {
 
 // ── Join modal ──────────────────────────────────────────────
 
-function JoinCampaignModal({ userId, playerName, onClose, onJoined }) {
-  const [token, setToken] = useState('')
+function JoinCampaignModal({ userId, playerName, initialToken = '', onClose, onJoined }) {
+  // Initial token comes from a shared deep link (`?join=<token>`) when the
+  // user lands here from outside the app. Otherwise they type it.
+  const [token, setToken] = useState(initialToken.toUpperCase())
   const [characters, setCharacters] = useState([])
   const [charId, setCharId] = useState('')
   const [busy, setBusy] = useState(false)
@@ -250,7 +275,8 @@ function JoinCampaignModal({ userId, playerName, onClose, onJoined }) {
       </>}>
       <Field label="Campaign-Token">
         <Input value={token} onChange={e => setToken(e.target.value.toUpperCase())}
-          placeholder="z.B. K7QM2F" autoCapitalize="characters" autoFocus
+          placeholder="z.B. K7QM2F" autoCapitalize="characters"
+          autoFocus={!initialToken}
           style={{ letterSpacing: 2, fontWeight: 'var(--fw-semibold)' }} />
       </Field>
       <Field label="Charakter">
@@ -259,15 +285,77 @@ function JoinCampaignModal({ userId, playerName, onClose, onJoined }) {
             Du hast noch keine Charaktere. Erstelle zuerst einen.
           </div>
         ) : (
-          <select value={charId} onChange={e => setCharId(e.target.value)} style={selectStyle}>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr', gap: 6,
+            maxHeight: 340, overflowY: 'auto', padding: 2,
+          }}>
             {characters.map(c => (
-              <option key={c.id} value={c.id}>{c.name || c.data?.info?.name || 'Unbenannt'}</option>
+              <CharacterPickRow
+                key={c.id}
+                character={c}
+                selected={String(c.id) === String(charId)}
+                onSelect={() => setCharId(String(c.id))}
+              />
             ))}
-          </select>
+          </div>
         )}
       </Field>
       {err && <div style={{ color: 'var(--color-danger)', fontSize: 'var(--fs-sm)' }}>{err}</div>}
     </Modal>
+  )
+}
+
+// Compact row for the join character picker: portrait + name + class/level
+// in one line. Same data the campaign-member "card" snapshot derives from,
+// so what the player sees here matches what the GM will see in the campaign.
+function CharacterPickRow({ character, selected, onSelect }) {
+  const d = character.data || {}
+  const portrait = d.appearance?.portrait
+  const name = character.name || d.info?.name || 'Unbenannt'
+  // Reuse the same classLine helper the campaign card uses → guaranteed
+  // identical wording across the join flow + the campaign view.
+  const line = classLine({ classes: (d.classes || []).map(c => ({ classId: c.classId, level: c.level || 1 })) })
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '6px 8px',
+        border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+        background: selected ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'var(--color-surface)',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer', textAlign: 'left',
+        fontFamily: 'inherit', color: 'var(--color-text)',
+        transition: 'all 120ms',
+      }}
+    >
+      <div style={{
+        width: 36, height: 36, flexShrink: 0, borderRadius: 'var(--radius-sm)',
+        background: 'var(--color-bg-sunken)', overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {portrait
+          ? <img src={portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontSize: 18, opacity: 0.4 }}>⚔</span>}
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{
+          fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{name}</div>
+        <div style={{
+          fontSize: 11, color: 'var(--color-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{line}</div>
+      </div>
+      <span aria-hidden="true" style={{
+        width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+        background: selected ? 'var(--color-accent)' : 'transparent',
+      }} />
+    </button>
   )
 }
 

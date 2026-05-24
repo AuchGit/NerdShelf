@@ -6,6 +6,7 @@ import { Panel } from '../../../../shared/ui'
 import DashboardLayout from '../../../../shared/dashboard/DashboardLayout'
 import { ShareTokenBadge } from '../../../../shared/tokens'
 import { ImportedSection, useImports } from '../../../../shared/imports'
+import { ShareButton, useDeepLinkImport } from '../../../../shared/sharing'
 import DndSubNav from '../components/ui/DndSubNav'
 
 const EDITION_ORDER = ['5e', '5.5e']
@@ -16,7 +17,24 @@ export default function DashboardPage({ session }) {
   const [characters, setCharacters] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [importStatus, setImportStatus] = useState(null)
   const imports = useImports({ domain: 'dnd_character' })
+
+  // Deep link: `<APP>/dnd/?import=<token>` (when the link is a character —
+  // the route already lands on the character dashboard so this is the
+  // right place to consume it). `?join=` is handled in CampaignsPage.
+  useDeepLinkImport({
+    param: 'import',
+    onToken: async (token) => {
+      try {
+        const r = await imports.add(token)
+        setImportStatus({ ok: true, msg: `„${r.entityName}" hinzugefügt.` })
+      } catch (e) {
+        setImportStatus({ ok: false, msg: e.message || String(e) })
+      }
+      setTimeout(() => setImportStatus(null), 4000)
+    },
+  })
 
   const loadCharacters = useCallback(async () => {
     if (!session?.user?.id) return
@@ -53,6 +71,16 @@ export default function DashboardPage({ session }) {
           color: 'var(--color-danger)',
         }}>
           Fehler beim Laden: {error}
+        </div>
+      )}
+      {importStatus && (
+        <div style={{
+          maxWidth: 1200, margin: '0 auto',
+          padding: 'var(--space-2) var(--space-5)',
+          fontSize: 'var(--fs-sm)',
+          color: importStatus.ok ? 'var(--color-success)' : 'var(--color-danger)',
+        }}>
+          {importStatus.ok ? '✓ ' : '⚠ '}{importStatus.msg}
         </div>
       )}
       <DashboardLayout
@@ -227,8 +255,11 @@ function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerNam
         }}>
           <span>Erstellt: {new Date(character.created_at).toLocaleDateString('de-DE')}</span>
           <span style={{ flex: 1 }} />
-          {character.share_token && (
-            <ShareTokenBadge token={character.share_token} label="Charakter-Token" compact />
+          {character.share_token && !readOnly && (
+            <>
+              <ShareTokenBadge token={character.share_token} label="Charakter-Token" compact />
+              <ShareButton kind="dnd_character" token={character.share_token} name={character.name} compact />
+            </>
           )}
         </div>
       </div>
