@@ -11,7 +11,7 @@ import { ShareTokenBadge } from '../../../../shared/tokens'
 import { readList, writeList, invalidate, subscribe } from '../../../../shared/cache/listCache'
 import DndSubNav from '../components/ui/DndSubNav'
 import {
-  listMyCampaigns, memberCounts, nextEventByCampaign,
+  listMyCampaigns, memberCounts, nextEventByCampaign, listMyMemberships,
   createCampaign, joinCampaign, formatDate, countdownLabel, classLine,
 } from '../lib/campaigns'
 
@@ -31,11 +31,15 @@ export default function CampaignsPage({ session }) {
   const [campaigns, setCampaigns] = useState(() => cached?.campaigns ?? [])
   const [counts, setCounts] = useState(() => cached?.counts ?? {})
   const [nextEvents, setNextEvents] = useState(() => cached?.nextEvents ?? {})
+  // membersByCampaign[campaignId] = [{ id, character_id, card, ... }] — only
+  // memberships belonging to the current user (campaigns they play in).
+  const [myMembers, setMyMembers] = useState(() => cached?.myMembers ?? {})
   const [loading, setLoading] = useState(() => !cached)
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [joinTokenSeed, setJoinTokenSeed] = useState('')
+  const [joinSessionFor, setJoinSessionFor] = useState(null) // campaign with multiple chars → picker
 
   // Deep link: `<APP>/dnd/?join=<token>` → pop the join modal with the
   // token pre-filled. We're already on /dnd/ when the user lands here
@@ -50,9 +54,14 @@ export default function CampaignsPage({ session }) {
     try {
       const cs = await listMyCampaigns()
       const ids = cs.map(c => c.id)
-      const [mc, ne] = await Promise.all([memberCounts(ids), nextEventByCampaign(ids)])
-      setCampaigns(cs); setCounts(mc); setNextEvents(ne); setError(null)
-      writeList(`dnd_campaigns_dashboard:${uid}`, { campaigns: cs, counts: mc, nextEvents: ne })
+      const [mc, ne, mine] = await Promise.all([
+        memberCounts(ids), nextEventByCampaign(ids), listMyMemberships(uid),
+      ])
+      const mm = {}
+      for (const m of mine) (mm[m.campaign_id] = mm[m.campaign_id] || []).push(m)
+      setCampaigns(cs); setCounts(mc); setNextEvents(ne); setMyMembers(mm); setError(null)
+      writeList(`dnd_campaigns_dashboard:${uid}`,
+        { campaigns: cs, counts: mc, nextEvents: ne, myMembers: mm })
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -69,8 +78,61 @@ export default function CampaignsPage({ session }) {
       if (next.campaigns) setCampaigns(next.campaigns)
       if (next.counts) setCounts(next.counts)
       if (next.nextEvents) setNextEvents(next.nextEvents)
+      if (next.myMembers) setMyMembers(next.myMembers)
     })
   }, [cacheKey, reload])
+
+  // Live: GM flips `session_active` on dnd_campaigns → patch the in-memory
+  // list so the "Session beitreten" call-to-action appears / disappears
+  // without a reload. Requires the realtime publication in
+  // scripts/dnd-session-active.sql.
+  useEffect(() => {
+    if (!uid) return
+    const channel = supabase
+      .channel(`dnd-campaigns:${uid}`)
+      .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'dnd_campaigns' },
+          (payload) => {
+            const row = payload.new
+            if (!row) return
+            setCampaigns(prev => {
+              const next = prev.map(c => c.id === row.id ? { ...c, ...row } : c)
+              // keep the cache in sync so a nav-away & back doesn't show a stale flag
+              if (cacheKey) {
+                const cur = readList(cacheKey) || {}
+                writeList(cacheKey, { ...cur, campaigns: next })
+              }
+              return next
+            })
+          })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [uid, cacheKey])
+
+  // Sort: active session in which I'm a player → top.
+  // Everything else keeps the existing API order (created_at desc).
+  const sortedCampaigns = (() => {
+    const active = []
+    const rest = []
+    for (const c of campaigns) {
+      const iAmPlayer = (myMembers[c.id] || []).length > 0
+      if (c.session_active && iAmPlayer && c.gm_id !== uid) active.push(c)
+      else rest.push(c)
+    }
+    return [...active, ...rest]
+  })()
+
+  // Player Join-Session entry-point: 1 character → straight to sheet,
+  // multiple → open the picker.
+  function handleJoinSession(campaign) {
+    const mine = myMembers[campaign.id] || []
+    if (mine.length === 0) return
+    if (mine.length === 1) {
+      navigate(`/character/${mine[0].character_id}`)
+      return
+    }
+    setJoinSessionFor(campaign)
+  }
 
   return (
     <>
@@ -99,16 +161,22 @@ export default function CampaignsPage({ session }) {
         </Panel>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
-          {campaigns.map(c => (
-            <CampaignCard
-              key={c.id}
-              campaign={c}
-              isGm={c.gm_id === uid}
-              memberCount={counts[c.id] || 0}
-              nextEvent={nextEvents[c.id]}
-              onOpen={() => navigate(`/campaign/${c.id}`)}
-            />
-          ))}
+          {sortedCampaigns.map(c => {
+            const isGm = c.gm_id === uid
+            const liveForMe = c.session_active && !isGm && (myMembers[c.id] || []).length > 0
+            return (
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                isGm={isGm}
+                memberCount={counts[c.id] || 0}
+                nextEvent={nextEvents[c.id]}
+                liveSessionForPlayer={liveForMe}
+                onOpen={() => navigate(`/campaign/${c.id}`)}
+                onJoinSession={() => handleJoinSession(c)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -128,6 +196,14 @@ export default function CampaignsPage({ session }) {
           onJoined={(id) => { setShowJoin(false); setJoinTokenSeed(''); if (cacheKey) invalidate(cacheKey); navigate(`/campaign/${id}`) }}
         />
       )}
+      {joinSessionFor && (
+        <SessionCharacterPicker
+          campaign={joinSessionFor}
+          memberships={myMembers[joinSessionFor.id] || []}
+          onClose={() => setJoinSessionFor(null)}
+          onPick={(characterId) => { setJoinSessionFor(null); navigate(`/character/${characterId}`) }}
+        />
+      )}
       </div>
     </>
   )
@@ -135,15 +211,51 @@ export default function CampaignsPage({ session }) {
 
 // ── Campaign card ───────────────────────────────────────────
 
-function CampaignCard({ campaign, isGm, memberCount, nextEvent, onOpen }) {
+function CampaignCard({ campaign, isGm, memberCount, nextEvent, liveSessionForPlayer = false, onOpen, onJoinSession }) {
   return (
     <Panel
       padding="sm"
       onClick={onOpen}
-      style={{ cursor: 'pointer', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}
+      style={{
+        cursor: 'pointer', overflow: 'hidden', padding: 0,
+        display: 'flex', flexDirection: 'column',
+        // Pulse the border for active sessions where the user is a player.
+        borderColor: liveSessionForPlayer ? 'var(--color-accent)' : undefined,
+        boxShadow: liveSessionForPlayer ? '0 0 0 1px var(--color-accent)' : undefined,
+      }}
       onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = liveSessionForPlayer ? 'var(--color-accent)' : 'var(--color-border)')}
     >
+      {/* Live-session banner — only when the user is a PLAYER (not GM)
+          and the GM has flipped session_active. Click cascades from
+          the panel's onOpen, so we stopPropagation on the button. */}
+      {liveSessionForPlayer && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+            padding: 'var(--space-2) var(--space-3)',
+            background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)',
+            borderBottom: '1px solid var(--color-accent)',
+            fontSize: 'var(--fs-sm)',
+          }}
+        >
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--color-accent)',
+            boxShadow: '0 0 0 3px color-mix(in srgb, var(--color-accent) 30%, transparent)',
+            flexShrink: 0,
+          }} aria-hidden="true" />
+          <span style={{ color: 'var(--color-accent)', fontWeight: 'var(--fw-semibold)', flex: 1, minWidth: 0 }}>
+            Session läuft
+          </span>
+          <Button
+            size="sm"
+            onClick={(e) => { e.stopPropagation(); onJoinSession?.() }}
+          >
+            Beitreten
+          </Button>
+        </div>
+      )}
       <div style={{
         height: 120, background: 'var(--color-bg-sunken)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -376,6 +488,77 @@ function CharacterPickRow({ character, selected, onSelect }) {
   )
 }
 
+// Active-session character picker. Only shown when the player has more
+// than one character in the campaign — single-character case skips
+// straight to the sheet.
+function SessionCharacterPicker({ campaign, memberships, onClose, onPick }) {
+  return (
+    <Modal open onClose={onClose} title={`Session: ${campaign.name}`}
+      footer={<Button variant="ghost" onClick={onClose}>Abbrechen</Button>}>
+      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+        Mit welchem Charakter willst du der Session beitreten?
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
+        {memberships.map(m => (
+          <MembershipPickRow
+            key={m.id}
+            card={m.card || {}}
+            onSelect={() => onPick(m.character_id)}
+          />
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+// Same visual style as CharacterPickRow but reads from the denormalized
+// `card` snapshot stored on dnd_campaign_members — we don't refetch the
+// full character row just to render the picker.
+function MembershipPickRow({ card, onSelect }) {
+  const portrait = card?.portrait
+  const name = card?.name || 'Unbenannt'
+  const line = classLine(card)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '6px 8px',
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface)',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer', textAlign: 'left',
+        fontFamily: 'inherit', color: 'var(--color-text)',
+        transition: 'border-color 120ms',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+    >
+      <div style={{
+        width: 36, height: 36, flexShrink: 0, borderRadius: 'var(--radius-sm)',
+        background: 'var(--color-bg-sunken)', overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {portrait
+          ? <img src={portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <span style={{ fontSize: 18, opacity: 0.4 }}>⚔</span>}
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{
+          fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{name}</div>
+        <div style={{
+          fontSize: 11, color: 'var(--color-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{line}</div>
+      </div>
+      <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-accent)' }}>→</span>
+    </button>
+  )
+}
+
 // ── Shared bits ─────────────────────────────────────────────
 
 function Field({ label, children }) {
@@ -393,9 +576,4 @@ const textareaStyle = {
   width: '100%', background: 'var(--color-surface)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px',
   fontSize: 'var(--fs-md)', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box',
-}
-const selectStyle = {
-  width: '100%', background: 'var(--color-surface)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px',
-  fontSize: 'var(--fs-md)', fontFamily: 'inherit', minHeight: 36,
 }

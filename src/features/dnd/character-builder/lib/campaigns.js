@@ -88,6 +88,28 @@ export async function deleteCampaign(id) {
   if (error) throw error
 }
 
+/** GM-only: flip the live-session flag on the campaign. RLS only lets
+ *  the GM update (existing dnd_campaigns_update policy). */
+export async function setSessionActive(campaignId, active) {
+  const { error } = await supabase
+    .from('dnd_campaigns')
+    .update({ session_active: !!active })
+    .eq('id', campaignId)
+  if (error) throw error
+}
+
+/** All membership rows belonging to the current user, across every
+ *  campaign they're in. Used by the campaigns dashboard to render the
+ *  "Session beitreten" entry-point for active sessions. */
+export async function listMyMemberships(userId) {
+  const { data, error } = await supabase
+    .from('dnd_campaign_members')
+    .select('id, campaign_id, character_id, player_name, card')
+    .eq('user_id', userId)
+  if (error) throw error
+  return data || []
+}
+
 // ── Members ─────────────────────────────────────────────────
 
 /** All members of a campaign (RLS: visible to GM + fellow members). */

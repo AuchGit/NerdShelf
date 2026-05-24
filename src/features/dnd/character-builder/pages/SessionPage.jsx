@@ -19,9 +19,11 @@ import DndSubNav from '../components/ui/DndSubNav'
 import GmSessionPrefsEditor from '../components/ui/GmSessionPrefsEditor'
 import ConditionChips from '../components/ui/ConditionChips'
 import { useSessionPrefs } from '../lib/useSessionPrefs'
-import { PASSIVE_OPTIONS, STAT_OPTIONS } from '../lib/sessionPrefs'
+// PASSIVE_OPTIONS / STAT_OPTIONS still drive the prefs editor; tile
+// labels here use the short PASSIVE_CODE / STAT_CODE maps below.
 import {
   getCampaign, listMembers, updateMemberGmNotes, classLine, patchCombatState,
+  setSessionActive,
 } from '../lib/campaigns'
 import { computeCharacter } from '../lib/rulesEngine'
 import { modStr, ABILITY_KEYS } from '../lib/sheetUtils'
@@ -165,6 +167,18 @@ export default function SessionPage({ session, campaignId }) {
           <Button size="sm" variant="ghost" onClick={refresh} title="Stand aller Charaktere neu laden">↻</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowPrefs(v => !v)}>
             ⚙ Anzeige
+          </Button>
+          <Button
+            size="sm" variant="danger"
+            onClick={async () => {
+              if (!window.confirm('Session beenden? Spieler verlieren ihren „Beitreten"-Button.')) return
+              try { await setSessionActive(campaignId, false) }
+              catch (e) { setTransientError(e.message || String(e)); return }
+              navigate(`/campaign/${campaignId}`)
+            }}
+            title="Markiert die Session als beendet — Spieler sehen den Beitreten-Button nicht mehr."
+          >
+            Session beenden
           </Button>
         </div>
 
@@ -373,30 +387,39 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
         </div>
       )}
 
-      {/* Stats strip — compact 70px min so 3 fit per card column */}
+      {/* Stats strip — fixed 4-col grid for consistent alignment; tiles
+          use short uppercase codes (PER/INS/INV/STL/AC/INIT/SPD/HD/DC)
+          so labels never wrap. Saves is rendered as its own 6-col band
+          below since it can't fit in one tile. */}
       {!character ? (
         <StatsHint>Charakterdaten konnten nicht geladen werden.</StatsHint>
       ) : !computed ? (
         <StatsHint>Charakter unvollständig — kein Level vergeben?</StatsHint>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))',
-          gap: 4, padding: `0 ${PAD}px ${PAD}px`,
-        }}>
-          {prefs.stats.map(id => {
-            const v = renderStat(id, computed, character)
-            return v == null ? null : <Stat key={id} label={v.label} value={v.value} />
-          })}
-          {prefs.passives.map(id => {
-            const total = passiveTotal(id, computed)
-            if (total == null) return null
-            return <Stat key={id} label={passiveLabel(id)} value={total} />
-          })}
-        </div>
+        <>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 4, padding: `0 ${PAD}px ${PAD}px`,
+          }}>
+            {prefs.stats.filter(id => id !== 'saves').map(id => {
+              const v = renderStat(id, computed, character)
+              return v == null ? null : <Stat key={id} label={v.label} value={v.value} />
+            })}
+            {prefs.passives.map(id => {
+              const total = passiveTotal(id, computed)
+              if (total == null) return null
+              return <Stat key={id} label={passiveLabel(id)} value={total} />
+            })}
+          </div>
+          {prefs.stats.includes('saves') && computed?.savingThrows && (
+            <SavesBand st={computed.savingThrows} />
+          )}
+        </>
       )}
 
-      {/* Conditions */}
+      {/* Conditions — chips don't break mid-word; container wraps to a
+          new row only between full chips. */}
       {character && (
         <div style={{ padding: `0 ${PAD}px ${PAD}px` }}>
           <ConditionChips active={conditions} onToggle={toggleCondition} compact />
@@ -457,15 +480,19 @@ function Stat({ label, value, tone }) {
   return (
     <div style={{
       background: 'var(--color-bg-sunken)', borderRadius: 'var(--radius-sm)',
-      padding: '3px 6px', textAlign: 'center',
+      padding: '3px 4px', textAlign: 'center', minWidth: 0,
       border: tone === 'danger'  ? '1px solid var(--color-danger)'
             : tone === 'warning' ? '1px solid var(--color-warning, #d98e00)'
             : '1px solid var(--color-border)',
     }}>
-      <div style={{ fontSize: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <div style={{
+        fontSize: 9, color: 'var(--color-text-muted)',
+        textTransform: 'uppercase', letterSpacing: 0.5,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>
         {label}
       </div>
-      <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 12 }}>
+      <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {value}
       </div>
     </div>
@@ -529,13 +556,28 @@ function DeathSaveSummary({ s }) {
 }
 
 // ── PASSIVE_OPTIONS / STAT_OPTIONS → renderers ──
-// Keeping the label↔id mapping centralised here so the editor catalog
-// stays the single source of truth and renderers can be added without
-// touching the editor.
+// Short codes shown in the tile labels so they never wrap. The full
+// label still lives in the prefs editor catalog so a new option only
+// needs an entry here (PASSIVE_CODE / STAT_CODE) to flip to a 3–4
+// letter abbreviation at render time.
+
+const PASSIVE_CODE = {
+  perception:    'PER',
+  insight:       'INS',
+  investigation: 'INV',
+  stealth:       'STL',
+}
+
+const STAT_CODE = {
+  ac:         'AC',
+  speed:      'SPD',
+  initiative: 'INIT',
+  hitDice:    'HD',
+  spellSave:  'DC',
+}
 
 function passiveLabel(id) {
-  const o = PASSIVE_OPTIONS.find(x => x.id === id)
-  return o ? `Pas. ${capitalize(id)}` : capitalize(id)
+  return PASSIVE_CODE[id] || id.slice(0, 3).toUpperCase()
 }
 
 function passiveTotal(id, computed) {
@@ -545,33 +587,56 @@ function passiveTotal(id, computed) {
 }
 
 function renderStat(id, computed, character) {
-  const opt = STAT_OPTIONS.find(o => o.id === id)
-  const label = opt ? opt.label : id
+  const label = STAT_CODE[id] || id.slice(0, 3).toUpperCase()
   switch (id) {
-    case 'ac':         return { label: 'AC',   value: computed?.ac?.total ?? '—' }
-    case 'speed':      return { label: 'Speed', value: (computed?.speed?.walk ?? computed?.speed ?? '—') + (typeof computed?.speed?.walk === 'number' ? ' ft' : '') }
-    case 'initiative': return { label: 'Init', value: modStr(computed?.initiative ?? 0) }
-    case 'saves': {
-      const st = computed?.savingThrows
-      if (!st) return null
-      // Compact: STR/DEX/CON/INT/WIS/CHA on one line, modifier each.
-      const txt = ABILITY_KEYS.map(k => `${k.toUpperCase()} ${modStr(st[k]?.total ?? 0)}`).join('  ')
-      return { label: 'Saves', value: <span style={{ fontSize: 11, fontWeight: 'var(--fw-medium)' }}>{txt}</span> }
-    }
+    case 'ac':         return { label, value: computed?.ac?.total ?? '—' }
+    case 'speed':      return { label, value: typeof computed?.speed?.walk === 'number' ? computed.speed.walk : (computed?.speed ?? '—') }
+    case 'initiative': return { label, value: modStr(computed?.initiative ?? 0) }
     case 'hitDice': {
       const total = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
       const used = character?.status?.hitDiceUsed || 0
       if (total <= 0) return null
-      return { label: 'Hit Dice', value: `${total - used}/${total}` }
+      return { label, value: `${total - used}/${total}` }
     }
     case 'spellSave': {
       const sc = computed?.spellcasting
       const dcs = sc ? Object.values(sc).map(x => x.spellSaveDC).filter(v => v != null) : []
       if (!dcs.length) return null
-      return { label: 'Spell DC', value: dcs.join(' / ') }
+      return { label, value: dcs.join('/') }
     }
+    // 'saves' is rendered by the dedicated SavesBand outside the tile grid.
+    case 'saves': return null
     default: return { label, value: '—' }
   }
 }
 
-function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : s }
+// Dedicated saving-throw row — 6 mini-cells, one per ability. Fixed
+// equal-width columns + nowrap content guarantees clean alignment
+// regardless of card width.
+function SavesBand({ st }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+      gap: 3, padding: `0 ${PAD}px ${PAD}px`,
+    }}>
+      {ABILITY_KEYS.map(k => (
+        <div key={k} style={{
+          background: 'var(--color-bg-sunken)', borderRadius: 'var(--radius-sm)',
+          padding: '2px 0', textAlign: 'center',
+          border: '1px solid var(--color-border)',
+          minWidth: 0,
+        }}>
+          <div style={{
+            fontSize: 8, color: 'var(--color-text-muted)',
+            textTransform: 'uppercase', letterSpacing: 0.5,
+            whiteSpace: 'nowrap',
+          }}>{k}</div>
+          <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 11, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            {modStr(st[k]?.total ?? 0)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}

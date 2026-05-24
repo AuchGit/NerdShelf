@@ -7,6 +7,7 @@ import { getProficiencyBonus, getTotalLevel } from '../lib/characterModel'
 import { downloadFoundryJSON } from '../lib/foundryExport'
 import { parseTags } from '../lib/tagParser'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
+import { patchCombatState } from '../lib/campaigns'
 import HeaderButtons from '../components/ui/HeaderButtons'
 import CustomEditModal from '../components/ui/CustomEditModal'
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
@@ -116,8 +117,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   }
 
   // ── Persistence ───────────────────────────────────────────
-  // Debounced so rapid in-play edits (HP ticks, slot pips) collapse
-  // into a single Supabase write.
+  // Debounced so rapid in-play edits collapse into a single Supabase
+  // write. The whole `data` jsonb (10–50KB) goes up — fine for one-off
+  // edits, but combat-state ticks (HP / conditions / death-saves) take
+  // a much slimmer path below via the dnd_patch_combat_state RPC.
   function queueSave(next) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
@@ -128,30 +131,52 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     }, 700)
   }
 
+  // Keys that go through the slim RPC path instead of saving the whole
+  // character row. Same whitelist the SQL function enforces — keeps the
+  // two ends in lock-step.
+  const COMBAT_STATE_KEYS = ['currentHp', 'temporaryHp', 'conditions', 'deathSaves']
+
   // Apply an arbitrary mutation to a fresh draft, recompute, persist.
-  // In read-only (GM) mode every mutation is a no-op — nothing is editable.
-  function applyCharacter(mutator) {
+  // In read-only (GM) mode every mutation is a no-op.
+  // `opts.skipFullSave: true` is used by updateCharacter() when the
+  // change is a single combat-state key — the RPC takes over persistence.
+  function applyCharacter(mutator, opts = {}) {
     if (readOnly) return
     setCharacter(prev => {
       const next = structuredClone(prev)
       mutator(next)
       setComputed(computeCharacter(next))
-      queueSave(next)
+      if (!opts.skipFullSave) queueSave(next)
       return next
     })
   }
 
-  // Set a single dotted path (creates intermediate objects as needed).
+  // Set a single dotted path. For status.{currentHp|temporaryHp|conditions
+  // |deathSaves} the change is sent via the slim combat-state RPC
+  // (<500 bytes) instead of re-uploading the whole character data
+  // (10-50KB). Any pending full-row save is cancelled — it'd race with
+  // the RPC and the RPC is more authoritative for these keys.
   function updateCharacter(path, value) {
+    const parts = path.split('.')
+    const isCombatKey =
+      parts.length === 2 &&
+      parts[0] === 'status' &&
+      COMBAT_STATE_KEYS.includes(parts[1])
+
     applyCharacter(d => {
-      const parts = path.split('.')
       let obj = d
       for (let i = 0; i < parts.length - 1; i++) {
         if (obj[parts[i]] == null || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {}
         obj = obj[parts[i]]
       }
       obj[parts[parts.length - 1]] = value
-    })
+    }, { skipFullSave: isCombatKey })
+
+    if (isCombatKey) {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      patchCombatState(id, { [parts[1]]: value })
+        .catch(e => console.warn('[combat patch]', e?.message || e))
+    }
   }
 
   // ── Rests ─────────────────────────────────────────────────

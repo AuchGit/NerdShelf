@@ -33,6 +33,11 @@ export default function ConditionChips({ active = [], onToggle, compact = false 
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'all 120ms',
+              // Keep the label on a single line — long names like
+              // "Incapacitated" / "Unconscious" otherwise break mid-word
+              // when the flex container has limited width.
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             <span style={{ fontSize: compact ? 10 : 12 }}>{c.symbol}</span>

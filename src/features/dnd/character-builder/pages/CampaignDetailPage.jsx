@@ -13,7 +13,7 @@ import DndSubNav from '../components/ui/DndSubNav'
 import {
   getCampaign, listMembers, listCampaignEvents, updateCampaign, deleteCampaign,
   removeMember, createEvent, updateEvent, deleteEvent, refreshMemberCard,
-  classLine, formatDateTime, countdownLabel,
+  classLine, formatDateTime, countdownLabel, setSessionActive,
 } from '../lib/campaigns'
 
 const wrap = { maxWidth: 1100, margin: '0 auto', padding: 'var(--space-5)' }
@@ -240,7 +240,14 @@ export default function CampaignDetailPage({ session, campaignId }) {
         </h1>
         {isGm ? (
           <>
-            <Button onClick={() => navigate(`/campaign/${campaign.id}/session`)} disabled={!members.length}>
+            <Button
+              onClick={async () => {
+                try { await setSessionActive(campaign.id, true) }
+                catch { /* fire-and-navigate — flag flip is best-effort */ }
+                navigate(`/campaign/${campaign.id}/session`)
+              }}
+              disabled={!members.length}
+            >
               ▶ Session starten
             </Button>
             <Button variant="secondary" onClick={handleExportAll} disabled={!members.length}>Alle exportieren</Button>
