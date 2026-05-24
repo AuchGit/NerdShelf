@@ -12,6 +12,18 @@ dist
 dist-ssr
 *.local
 
+# Claude Code project config (per-machine personal settings).
+.claude/
+
+# Reference / scratch — not shipped with the app. Includes the admin-tool
+# Tauri project source and one-off notes (Supabase warnings dump, etc.).
+_reference/
+
+# WH40K dataset pipeline workspace — `npm run wh40k:import` clones
+# BSData here and writes audit reports. Everything under this path is
+# regenerable, large (~50MB) and noisy in diffs.
+vendor/
+
 # Tauri build artifacts
 src-tauri/target/
 
@@ -33,6 +45,8 @@ src-tauri/gen/apple/
 nerdshelf.key
 *.key
 *.key.pub
+*.keystore
+*.keystore.b64
 
 # Environment variables
 .env

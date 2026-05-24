@@ -31,12 +31,14 @@ export const PASSIVE_OPTIONS = [
 ]
 
 export const STAT_OPTIONS = [
-  { id: 'ac',         label: 'Armor Class',     default: true  },
-  { id: 'speed',      label: 'Speed',           default: false },
-  { id: 'initiative', label: 'Initiative',      default: false },
-  { id: 'saves',      label: 'Saving Throws',   default: false },
-  { id: 'hitDice',    label: 'Hit Dice',        default: false },
-  { id: 'spellSave',  label: 'Spell Save DC',   default: false },
+  { id: 'ac',          label: 'Armor Class',       default: true  },
+  { id: 'speed',       label: 'Speed',             default: false },
+  { id: 'initiative',  label: 'Initiative',        default: false },
+  { id: 'saves',       label: 'Saving Throws',     default: false },
+  { id: 'hitDice',     label: 'Hit Dice',          default: false },
+  { id: 'spellSave',   label: 'Spell Save DC',     default: false },
+  { id: 'spellAttack', label: 'Spell Attack Mod',  default: false },
+  { id: 'currency',    label: 'Currency / Coins',  default: false },
 ]
 
 export function getDefaults() {

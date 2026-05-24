@@ -18,6 +18,7 @@ import { Panel, Button } from '../../../../shared/ui'
 import DndSubNav from '../components/ui/DndSubNav'
 import GmSessionPrefsEditor from '../components/ui/GmSessionPrefsEditor'
 import ConditionChips from '../components/ui/ConditionChips'
+import SessionCardCategories from '../components/sheet/SessionCardCategories'
 import { useSessionPrefs } from '../lib/useSessionPrefs'
 // PASSIVE_OPTIONS / STAT_OPTIONS still drive the prefs editor; tile
 // labels here use the short PASSIVE_CODE / STAT_CODE maps below.
@@ -26,7 +27,7 @@ import {
   setSessionActive,
 } from '../lib/campaigns'
 import { computeCharacter } from '../lib/rulesEngine'
-import { modStr, ABILITY_KEYS } from '../lib/sheetUtils'
+import { modStr, ABILITY_KEYS, COIN_TYPES } from '../lib/sheetUtils'
 
 const wrap = { maxWidth: 1500, margin: '0 auto', padding: '12px 16px' }
 
@@ -341,7 +342,10 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
         </div>
       </div>
 
-      {/* HP row — value + ±1/±5 buttons on one line */}
+      {/* HP row — value (+ optional Hit Dice inline) + ±1/±5 buttons.
+          Hit Dice is intentionally inside the HP box rather than a
+          separate tile: it's a closely related "resource" stat and the
+          extra tile would push the buttons to a wrap-row on narrow cards. */}
       {character && maxHP != null && (
         <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, padding: `0 ${PAD}px ${PAD}px` }}>
           <div style={{
@@ -352,11 +356,21 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
             border: `1px solid ${tone === 'danger' ? 'var(--color-danger)'
                                 : tone === 'warning' ? 'var(--color-warning, #d98e00)'
                                 : 'var(--color-border)'}`,
-            display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
+            display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexWrap: 'wrap',
           }}>
             <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>HP</span>
             <span style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--fs-md)' }}>{currentHP}/{maxHP}</span>
             {tempHP > 0 && <span style={{ color: 'var(--accent-green, #2d8a2d)', fontSize: 10 }}>+{tempHP}</span>}
+            {prefs.stats.includes('hitDice') && computed && (() => {
+              const hd = renderStat('hitDice', computed, character)
+              if (!hd) return null
+              return (
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>HD</span>
+                  <span style={{ fontWeight: 'var(--fw-semibold)', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{hd.value}</span>
+                </span>
+              )
+            })()}
           </div>
           <HpBtn onClick={() => bumpHP(-5)}>−5</HpBtn>
           <HpBtn onClick={() => bumpHP(-1)}>−1</HpBtn>
@@ -387,34 +401,54 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
         </div>
       )}
 
-      {/* Stats strip — fixed 4-col grid for consistent alignment; tiles
-          use short uppercase codes (PER/INS/INV/STL/AC/INIT/SPD/HD/DC)
-          so labels never wrap. Saves is rendered as its own 6-col band
-          below since it can't fit in one tile. */}
+      {/* Stats area — ordered top-to-bottom into dedicated rows so each
+          group reads as a horizontal block:
+            1) AC / Speed / Initiative                (combat top-line)
+            2) Passive scores                         (perception family)
+            3) Spell Save DC / Spell Attack            (caster-only)
+            4) Saves band                             (6 abilities)
+          Each row is its own grid with exactly as many columns as it
+          has visible tiles — no orphan empty cells, all equal width. */}
       {!character ? (
         <StatsHint>Charakterdaten konnten nicht geladen werden.</StatsHint>
       ) : !computed ? (
         <StatsHint>Charakter unvollständig — kein Level vergeben?</StatsHint>
       ) : (
         <>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: 4, padding: `0 ${PAD}px ${PAD}px`,
-          }}>
-            {prefs.stats.filter(id => id !== 'saves').map(id => {
-              const v = renderStat(id, computed, character)
-              return v == null ? null : <Stat key={id} label={v.label} value={v.value} />
-            })}
-            {prefs.passives.map(id => {
-              const total = passiveTotal(id, computed)
-              if (total == null) return null
-              return <Stat key={id} label={passiveLabel(id)} value={total} />
-            })}
-          </div>
+          {/* Row 1: top combat stats */}
+          <TileRow
+            tiles={TOP_ROW_STATS
+              .filter(id => prefs.stats.includes(id))
+              .map(id => renderStat(id, computed, character))
+              .filter(Boolean)}
+          />
+          {/* Row 2: passive scores */}
+          <TileRow
+            tiles={prefs.passives
+              .map(id => {
+                const total = passiveTotal(id, computed)
+                return total == null ? null : { label: passiveLabel(id), value: total }
+              })
+              .filter(Boolean)}
+          />
+          {/* Row 3: spell stats (auto-suppressed for non-casters via renderStat) */}
+          <TileRow
+            tiles={SPELL_ROW_STATS
+              .filter(id => prefs.stats.includes(id))
+              .map(id => renderStat(id, computed, character))
+              .filter(Boolean)}
+          />
+          {/* Row 4: saves band */}
           {prefs.stats.includes('saves') && computed?.savingThrows && (
             <SavesBand st={computed.savingThrows} />
           )}
+          {/* Anything not handled above (e.g. unknown future stat ids) */}
+          <TileRow
+            tiles={prefs.stats
+              .filter(id => !SPECIAL_STATS.has(id))
+              .map(id => renderStat(id, computed, character))
+              .filter(Boolean)}
+          />
         </>
       )}
 
@@ -425,6 +459,17 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
           <ConditionChips active={conditions} onToggle={toggleCondition} compact />
         </div>
       )}
+
+      {/* Currency — bottom of the card, only non-zero coins shown.
+          Hover a coin to see its full name. */}
+      {character && prefs.stats.includes('currency') && (
+        <CurrencyStrip currency={character?.inventory?.currency} />
+      )}
+
+      {/* Lookup categories — click to expand inline. Lazy-loads the
+          relevant dataset (spells / feats / class data) on first open
+          via the in-module caches in SessionCardCategories. */}
+      {character && <SessionCardCategories character={character} />}
 
       {/* Notes — single-line label, 2-row textarea, no resize handle */}
       <div style={{ padding: PAD, borderTop: '1px solid var(--color-border)' }}>
@@ -473,6 +518,23 @@ function StatsHint({ children }) {
       padding: `0 ${PAD}px ${PAD}px`, color: 'var(--color-text-muted)',
       fontSize: 11, fontStyle: 'italic',
     }}>{children}</div>
+  )
+}
+
+// One-row grid where the column count matches the visible tile count so
+// every tile fills exactly its share of the row width — no orphan empty
+// cells like the previous fixed 4-col grid produced when only 2-3 stats
+// were enabled.
+function TileRow({ tiles }) {
+  if (!tiles?.length) return null
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))`,
+      gap: 4, padding: `0 ${PAD}px ${PAD}px`,
+    }}>
+      {tiles.map((t, i) => <Stat key={i} label={t.label} value={t.value} />)}
+    </div>
   )
 }
 
@@ -569,12 +631,19 @@ const PASSIVE_CODE = {
 }
 
 const STAT_CODE = {
-  ac:         'AC',
-  speed:      'SPD',
-  initiative: 'INIT',
-  hitDice:    'HD',
-  spellSave:  'DC',
+  ac:          'AC',
+  speed:       'SPD',
+  initiative:  'INIT',
+  hitDice:     'HD',
+  spellSave:   'DC',
+  spellAttack: 'ATK',
 }
+
+// Stats with dedicated render slots — they live in their own band/row,
+// not in the generic 4-col tile grid.
+const TOP_ROW_STATS   = ['ac', 'speed', 'initiative']
+const SPELL_ROW_STATS = ['spellSave', 'spellAttack']
+const SPECIAL_STATS   = new Set(['saves', 'hitDice', 'currency', ...TOP_ROW_STATS, ...SPELL_ROW_STATS])
 
 function passiveLabel(id) {
   return PASSIVE_CODE[id] || id.slice(0, 3).toUpperCase()
@@ -604,10 +673,50 @@ function renderStat(id, computed, character) {
       if (!dcs.length) return null
       return { label, value: dcs.join('/') }
     }
-    // 'saves' is rendered by the dedicated SavesBand outside the tile grid.
-    case 'saves': return null
+    case 'spellAttack': {
+      const sc = computed?.spellcasting
+      const atks = sc ? Object.values(sc).map(x => x.spellAttackDisplay).filter(Boolean) : []
+      if (!atks.length) return null
+      return { label, value: atks.join('/') }
+    }
+    // 'saves' + 'currency' are rendered in dedicated bands outside the tile grid.
+    case 'saves':    return null
+    case 'currency': return null
     default: return { label, value: '—' }
   }
+}
+
+// Compact coin strip — number + colored dot per non-zero currency.
+// Hovering shows the canonical name ("Gold", "Silver", …).
+function CurrencyStrip({ currency }) {
+  const cur = currency || {}
+  const entries = COIN_TYPES.filter(c => (cur[c.key] || 0) > 0)
+  if (entries.length === 0) return null
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 8,
+      padding: `0 ${PAD}px ${PAD}px`,
+      fontSize: 11, fontVariantNumeric: 'tabular-nums',
+    }}>
+      {entries.map(c => (
+        <span
+          key={c.key}
+          title={c.label}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            color: 'var(--color-text)', whiteSpace: 'nowrap',
+          }}
+        >
+          <span aria-hidden="true" style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: c.color, flexShrink: 0,
+            border: '1px solid var(--color-border)',
+          }} />
+          <span style={{ fontWeight: 'var(--fw-semibold)' }}>{cur[c.key]}</span>
+        </span>
+      ))}
+    </div>
+  )
 }
 
 // Dedicated saving-throw row — 6 mini-cells, one per ability. Fixed
