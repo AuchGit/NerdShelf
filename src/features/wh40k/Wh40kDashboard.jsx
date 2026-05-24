@@ -15,12 +15,15 @@ import { totalArmyPoints } from './services/points';
 import { ShareTokenBadge } from '../../shared/tokens';
 import { ImportedSection, useImports } from '../../shared/imports';
 import { ShareButton, useDeepLinkImport } from '../../shared/sharing';
+import { readList, writeList, invalidate, subscribe } from '../../shared/cache/listCache';
 
 export default function Wh40kDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [armies, setArmies] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = user ? `wh40k_armies:${user.id}` : null;
+  const cached = cacheKey ? readList(cacheKey) : null;
+  const [armies, setArmies] = useState(() => cached ?? []);
+  const [loading, setLoading] = useState(() => !cached);
   const [error, setError] = useState(null);
   const [importStatus, setImportStatus] = useState(null);
   const { data } = useWh40kData();
@@ -42,7 +45,7 @@ export default function Wh40kDashboard() {
 
   const loadArmies = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    // Background revalidate — no spinner flash when we already have cache.
     const { data: rows, error: err } = await supabase
       .from('wh40k_armies')
       .select('*')
@@ -58,12 +61,22 @@ export default function Wh40kDashboard() {
         setError(err.message);
       }
     } else {
-      setArmies(rows || []);
+      const list = rows || [];
+      setArmies(list);
+      writeList(`wh40k_armies:${user.id}`, list);
     }
     setLoading(false);
   }, [user]);
 
   useEffect(() => { loadArmies(); }, [loadArmies]);
+
+  useEffect(() => {
+    if (!cacheKey) return;
+    return subscribe(cacheKey, (next) => {
+      if (next === null) loadArmies();
+      else setArmies(next);
+    });
+  }, [cacheKey, loadArmies]);
 
   async function handleDelete(armyId, name) {
     if (!window.confirm(`Armee "${name}" wirklich löschen?`)) return;
@@ -72,8 +85,9 @@ export default function Wh40kDashboard() {
       .delete()
       .eq('id', armyId)
       .eq('user_id', user.id);
-    if (err) alert(`Löschen fehlgeschlagen: ${err.message}`);
-    else loadArmies();
+    if (err) { alert(`Löschen fehlgeschlagen: ${err.message}`); return; }
+    if (cacheKey) invalidate(cacheKey);
+    loadArmies();
   }
 
   async function handleDuplicate(army) {
@@ -96,8 +110,9 @@ export default function Wh40kDashboard() {
       .insert(payload)
       .select()
       .single();
-    if (err) alert(`Duplizieren fehlgeschlagen: ${err.message}`);
-    else loadArmies();
+    if (err) { alert(`Duplizieren fehlgeschlagen: ${err.message}`); return; }
+    if (cacheKey) invalidate(cacheKey);
+    loadArmies();
   }
 
   const factionLabel = (a) => data?.factionsById[a.faction]?.name || 'Keine Fraktion';

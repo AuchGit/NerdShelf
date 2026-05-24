@@ -7,6 +7,7 @@ import DashboardLayout from '../../../../shared/dashboard/DashboardLayout'
 import { ShareTokenBadge } from '../../../../shared/tokens'
 import { ImportedSection, useImports } from '../../../../shared/imports'
 import { ShareButton, useDeepLinkImport } from '../../../../shared/sharing'
+import { readList, writeList, invalidate, subscribe } from '../../../../shared/cache/listCache'
 import DndSubNav from '../components/ui/DndSubNav'
 
 const EDITION_ORDER = ['5e', '5.5e']
@@ -14,8 +15,11 @@ const EDITION_LABEL = { '5e': '5e', '5.5e': '5.5e' }
 
 export default function DashboardPage({ session }) {
   const navigate = useNavigate()
-  const [characters, setCharacters] = useState([])
-  const [loading, setLoading] = useState(true)
+  const uid = session?.user?.id
+  const cacheKey = uid ? `dnd_characters:${uid}` : null
+  const cached = cacheKey ? readList(cacheKey) : null
+  const [characters, setCharacters] = useState(() => cached ?? [])
+  const [loading, setLoading] = useState(() => !cached)
   const [error, setError] = useState(null)
   const [importStatus, setImportStatus] = useState(null)
   const imports = useImports({ domain: 'dnd_character' })
@@ -37,19 +41,32 @@ export default function DashboardPage({ session }) {
   })
 
   const loadCharacters = useCallback(async () => {
-    if (!session?.user?.id) return
-    setLoading(true)
+    if (!uid) return
+    // Background revalidate: no spinner if cache already populated.
     const { data, error: err } = await supabase
       .from('dnd_characters')
       .select('id, name, created_at, data, share_token')
-      .eq('user_id', session.user.id)
+      .eq('user_id', uid)
       .order('created_at', { ascending: false })
-    if (err) setError(err.message)
-    else setCharacters(data || [])
+    if (err) {
+      setError(err.message)
+    } else {
+      const rows = data || []
+      setCharacters(rows)
+      writeList(`dnd_characters:${uid}`, rows)
+    }
     setLoading(false)
-  }, [session?.user?.id])
+  }, [uid])
 
   useEffect(() => { loadCharacters() }, [loadCharacters])
+
+  useEffect(() => {
+    if (!cacheKey) return
+    return subscribe(cacheKey, (next) => {
+      if (next === null) loadCharacters()
+      else setCharacters(next)
+    })
+  }, [cacheKey, loadCharacters])
 
   async function handleDelete(charId, name) {
     if (!window.confirm(`Charakter "${name}" wirklich löschen?`)) return
@@ -57,8 +74,9 @@ export default function DashboardPage({ session }) {
       .from('dnd_characters').delete()
       .eq('id', charId)
       .eq('user_id', session.user.id)
-    if (err) alert(`Löschen fehlgeschlagen: ${err.message}`)
-    else loadCharacters()
+    if (err) { alert(`Löschen fehlgeschlagen: ${err.message}`); return }
+    if (cacheKey) invalidate(cacheKey)
+    loadCharacters()
   }
 
   return (

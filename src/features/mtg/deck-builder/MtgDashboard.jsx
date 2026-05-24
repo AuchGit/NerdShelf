@@ -10,6 +10,7 @@ import MtgSubNav from './components/MtgSubNav';
 import { ShareTokenBadge } from '../../../shared/tokens';
 import { ImportedSection, useImports } from '../../../shared/imports';
 import { ShareButton, useDeepLinkImport } from '../../../shared/sharing';
+import { readList, writeList, invalidate, subscribe } from '../../../shared/cache/listCache';
 import useLongPress from '../../../shared/hooks/useLongPress';
 import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 
@@ -32,8 +33,12 @@ const FORMAT_ORDER = [
 export default function MtgDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [decks, setDecks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Show cached decks instantly on re-navigation; the background refetch
+  // below updates silently. Skip the spinner entirely when cache is warm.
+  const cacheKey = user ? `mtg_decks:${user.id}` : null;
+  const cached = cacheKey ? readList(cacheKey) : null;
+  const [decks, setDecks] = useState(() => cached ?? []);
+  const [loading, setLoading] = useState(() => !cached);
   const [error, setError] = useState(null);
   const [importStatus, setImportStatus] = useState(null);   // shared-link feedback
   const imports = useImports({ domain: 'mtg_deck' });
@@ -54,18 +59,35 @@ export default function MtgDashboard() {
 
   const loadDecks = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    // No setLoading(true) here — initial value already reflects cache
+    // presence, and a background refetch shouldn't blink the spinner.
     const { data, error: err } = await supabase
       .from('mtg_decks')
       .select('*')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
-    if (err) setError(err.message);
-    else setDecks(data || []);
+    if (err) {
+      setError(err.message);
+    } else {
+      const rows = data || [];
+      setDecks(rows);
+      writeList(`mtg_decks:${user.id}`, rows);
+    }
     setLoading(false);
   }, [user]);
 
   useEffect(() => { loadDecks(); }, [loadDecks]);
+
+  // Pick up invalidations from other components (currently only this
+  // dashboard writes, but the subscription is cheap insurance for future
+  // call sites — e.g. an import path that ends here).
+  useEffect(() => {
+    if (!cacheKey) return;
+    return subscribe(cacheKey, (next) => {
+      if (next === null) loadDecks();
+      else setDecks(next);
+    });
+  }, [cacheKey, loadDecks]);
 
   async function handleDelete(deckId, deckName) {
     if (!window.confirm(`Deck "${deckName}" wirklich löschen?`)) return;
@@ -74,8 +96,9 @@ export default function MtgDashboard() {
       .delete()
       .eq('id', deckId)
       .eq('user_id', user.id);
-    if (err) alert(`Löschen fehlgeschlagen: ${err.message}`);
-    else loadDecks();
+    if (err) { alert(`Löschen fehlgeschlagen: ${err.message}`); return; }
+    if (cacheKey) invalidate(cacheKey);
+    loadDecks();
   }
 
   async function handleDuplicate(deck) {
@@ -98,8 +121,9 @@ export default function MtgDashboard() {
       .insert(payload)
       .select()
       .single();
-    if (err) alert(`Duplizieren fehlgeschlagen: ${err.message}`);
-    else loadDecks();
+    if (err) { alert(`Duplizieren fehlgeschlagen: ${err.message}`); return; }
+    if (cacheKey) invalidate(cacheKey);
+    loadDecks();
   }
 
   return (

@@ -1,13 +1,14 @@
 // src/features/dnd/character-builder/pages/CampaignsPage.jsx
 // Campaign dashboard: the campaigns you run or play in, plus create / join.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from '../lib/hashNav'
 import { useAuth } from '../../../../core/auth/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Panel, Button, Modal, Input } from '../../../../shared/ui'
 import { ShareButton, useDeepLinkImport } from '../../../../shared/sharing'
 import { ShareTokenBadge } from '../../../../shared/tokens'
+import { readList, writeList, invalidate, subscribe } from '../../../../shared/cache/listCache'
 import DndSubNav from '../components/ui/DndSubNav'
 import {
   listMyCampaigns, memberCounts, nextEventByCampaign,
@@ -21,10 +22,16 @@ export default function CampaignsPage({ session }) {
   const { playerName } = useAuth()
   const uid = session.user.id
 
-  const [campaigns, setCampaigns] = useState([])
-  const [counts, setCounts] = useState({})
-  const [nextEvents, setNextEvents] = useState({})
-  const [loading, setLoading] = useState(true)
+  // Shape kept in one cache key so a single read/write covers the whole
+  // dashboard. memberCounts / nextEventByCampaign are cheap aggregates
+  // derived from the campaign list — bundling them avoids three keys for
+  // one user-visible "campaigns view".
+  const cacheKey = uid ? `dnd_campaigns_dashboard:${uid}` : null
+  const cached = cacheKey ? readList(cacheKey) : null
+  const [campaigns, setCampaigns] = useState(() => cached?.campaigns ?? [])
+  const [counts, setCounts] = useState(() => cached?.counts ?? {})
+  const [nextEvents, setNextEvents] = useState(() => cached?.nextEvents ?? {})
+  const [loading, setLoading] = useState(() => !cached)
   const [error, setError] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
@@ -38,22 +45,32 @@ export default function CampaignsPage({ session }) {
     onToken: (token) => { setJoinTokenSeed(token); setShowJoin(true) },
   })
 
+  const reload = useCallback(async () => {
+    if (!uid) return
+    try {
+      const cs = await listMyCampaigns()
+      const ids = cs.map(c => c.id)
+      const [mc, ne] = await Promise.all([memberCounts(ids), nextEventByCampaign(ids)])
+      setCampaigns(cs); setCounts(mc); setNextEvents(ne); setError(null)
+      writeList(`dnd_campaigns_dashboard:${uid}`, { campaigns: cs, counts: mc, nextEvents: ne })
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [uid])
+
+  useEffect(() => { reload() }, [reload])
+
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const cs = await listMyCampaigns()
-        const ids = cs.map(c => c.id)
-        const [mc, ne] = await Promise.all([memberCounts(ids), nextEventByCampaign(ids)])
-        if (cancelled) return
-        setCampaigns(cs); setCounts(mc); setNextEvents(ne)
-      } catch (e) {
-        if (!cancelled) setError(e.message || String(e))
-      }
-      if (!cancelled) setLoading(false)
-    })()
-    return () => { cancelled = true }
-  }, [])
+    if (!cacheKey) return
+    return subscribe(cacheKey, (next) => {
+      if (next === null) { reload(); return }
+      if (next.campaigns) setCampaigns(next.campaigns)
+      if (next.counts) setCounts(next.counts)
+      if (next.nextEvents) setNextEvents(next.nextEvents)
+    })
+  }, [cacheKey, reload])
 
   return (
     <>
@@ -99,7 +116,7 @@ export default function CampaignsPage({ session }) {
         <CreateCampaignModal
           gmId={uid}
           onClose={() => setShowCreate(false)}
-          onCreated={(id) => { setShowCreate(false); navigate(`/campaign/${id}`) }}
+          onCreated={(id) => { setShowCreate(false); if (cacheKey) invalidate(cacheKey); navigate(`/campaign/${id}`) }}
         />
       )}
       {showJoin && (
@@ -108,7 +125,7 @@ export default function CampaignsPage({ session }) {
           playerName={playerName}
           initialToken={joinTokenSeed}
           onClose={() => { setShowJoin(false); setJoinTokenSeed('') }}
-          onJoined={(id) => { setShowJoin(false); setJoinTokenSeed(''); navigate(`/campaign/${id}`) }}
+          onJoined={(id) => { setShowJoin(false); setJoinTokenSeed(''); if (cacheKey) invalidate(cacheKey); navigate(`/campaign/${id}`) }}
         />
       )}
       </div>

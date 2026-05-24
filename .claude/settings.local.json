@@ -47,7 +47,8 @@
       "Bash(rm -rf public/wh40k/factions)",
       "Bash(npm uninstall *)",
       "Bash(ls -la \"C:/Users/Miles/.claude/projects/c--Coding-NerdShelf-shell-nerdshelf/memory/\" 2>&1)",
-      "Read(//c/Users/Miles/.claude/projects/c--Coding-NerdShelf-shell-nerdshelf/memory/**)"
+      "Read(//c/Users/Miles/.claude/projects/c--Coding-NerdShelf-shell-nerdshelf/memory/**)",
+      "Bash(grep -n \"navigate\\(\\\\`/campaign/\" \"c:/Coding/NerdShelf/shell/nerdshelf/src/features/dnd/character-builder/pages/CampaignsPage.jsx\")"
     ]
   }
 }
