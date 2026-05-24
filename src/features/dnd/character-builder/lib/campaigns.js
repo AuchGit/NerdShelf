@@ -146,6 +146,39 @@ export async function removeMember(memberId) {
   if (error) throw error
 }
 
+/** GM-only per-member notes for the session overview. RLS (dnd-session-schema.sql)
+ *  lets the GM both read (via dnd_members_select) and update. */
+export async function updateMemberGmNotes(memberId, gmNotes) {
+  const { error } = await supabase
+    .from('dnd_campaign_members')
+    .update({ gm_notes: gmNotes ?? '' })
+    .eq('id', memberId)
+  if (error) throw error
+}
+
+/**
+ * Shared write path for combat state (HP, temporary HP, conditions,
+ * death saves) keyed by character id. Routes through the dnd_patch_combat_state
+ * RPC so the same call works for the character owner OR the GM of any
+ * campaign the character belongs to. Patch may carry any subset of the
+ * whitelisted keys; unknown keys are dropped server-side.
+ *
+ * Returns the new `data.status` object.
+ */
+export async function patchCombatState(characterId, patch) {
+  const { data, error } = await supabase.rpc('dnd_patch_combat_state', {
+    p_char_id: characterId,
+    p_patch:   patch || {},
+  })
+  if (error) {
+    if (/NOT_AUTHORIZED/.test(error.message)) throw new Error('Keine Rechte für diesen Charakter.')
+    if (/NOT_AUTHENTICATED/.test(error.message)) throw new Error('Nicht eingeloggt.')
+    if (/CHARACTER_NOT_FOUND/.test(error.message)) throw new Error('Charakter nicht gefunden.')
+    throw error
+  }
+  return data
+}
+
 // ── Events ──────────────────────────────────────────────────
 
 // Notify the calendar-notification hook (and anything else interested)

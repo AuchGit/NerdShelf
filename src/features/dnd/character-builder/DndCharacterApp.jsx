@@ -12,6 +12,7 @@ import CharacterEditPage from './pages/CharacterEditPage'
 import CharacterViewPage from './pages/CharacterViewPage'
 import CampaignsPage from './pages/CampaignsPage'
 import CampaignDetailPage from './pages/CampaignDetailPage'
+import SessionPage from './pages/SessionPage'
 
 setupErrorCollector()
 
@@ -65,6 +66,12 @@ function matchRoute(route) {
   if (m) return { page: 'edit', id: m[1] }
   // ── Campaigns ──
   if (route === '/campaigns' || route === '/campaigns/') return { page: 'campaigns' }
+  // /campaign/:id/session/character/:charId  (GM sheet opened from session — back goes to session)
+  m = route.match(/^\/campaign\/([^/]+)\/session\/character\/([^/]+)\/?$/)
+  if (m) return { page: 'gmsheet', campaignId: m[1], charId: m[2], fromSession: true }
+  // /campaign/:id/session  (session overview)
+  m = route.match(/^\/campaign\/([^/]+)\/session\/?$/)
+  if (m) return { page: 'session', campaignId: m[1] }
   // /campaign/:id/character/:charId  (GM read-only character sheet)
   m = route.match(/^\/campaign\/([^/]+)\/character\/([^/]+)\/?$/)
   if (m) return { page: 'gmsheet', campaignId: m[1], charId: m[2] }
@@ -90,8 +97,10 @@ function DndRoutes({ session }) {
     case 'view':      return <CharacterViewPage />
     case 'campaigns': return <CampaignsPage session={session} />
     case 'campaign':  return <CampaignDetailPage session={session} campaignId={match.campaignId} />
+    case 'session':   return <SessionPage session={session} campaignId={match.campaignId} />
     case 'gmsheet':   return <CharacterSheetPage session={session} readOnly
-                               characterId={match.charId} campaignId={match.campaignId} />
+                               characterId={match.charId} campaignId={match.campaignId}
+                               fromSession={!!match.fromSession} />
     case 'dashboard':
     default:          return <DashboardPage session={session} />
   }

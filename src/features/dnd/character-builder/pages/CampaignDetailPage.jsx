@@ -239,6 +239,9 @@ export default function CampaignDetailPage({ session, campaignId }) {
         </h1>
         {isGm ? (
           <>
+            <Button onClick={() => navigate(`/campaign/${campaign.id}/session`)} disabled={!members.length}>
+              ▶ Session starten
+            </Button>
             <Button variant="secondary" onClick={handleExportAll} disabled={!members.length}>Alle exportieren</Button>
             <Button variant="secondary" onClick={() => setEditing(true)}>Bearbeiten</Button>
             <Button variant="danger" onClick={handleDeleteCampaign}>Löschen</Button>

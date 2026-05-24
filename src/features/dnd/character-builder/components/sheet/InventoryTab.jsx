@@ -12,7 +12,7 @@ import {
 import { S } from './sheetStyles'
 import {
   ITEM_TYPES, WEAPON_PROPERTIES, DAMAGE_TYPES, COIN_TYPES, totalGoldValue,
-  isContainerItem, itemKey, itemTypeMeta,
+  isContainerItem, itemKey, itemTypeMeta, isSingletonItem,
 } from '../../lib/sheetUtils'
 
 // 5etools weapon-property codes -> readable names (so finesse etc. work).
@@ -61,6 +61,48 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
     !isContainerItem(i) && (!i.containerId || !containerKeys.has(i.containerId))
   )
 
+  // One-shot migration: any pre-existing singleton with quantity > 1 from
+  // before the split-on-add rule is silently fanned out into N separate
+  // rows so the rest of the UI (no Stepper, per-instance equip/attune) is
+  // consistent. Idempotent — once split, the condition is false and the
+  // effect no-ops on subsequent renders.
+  useEffect(() => {
+    const needsSplit = items.some(i => isSingletonItem(i) && (i.quantity || 1) > 1)
+    if (!needsSplit) return
+    applyCharacter(d => {
+      ensureStores(d)
+      for (const store of ['inventory', 'custom']) {
+        const arr = d[store]?.items
+        if (!arr) continue
+        const next = []
+        for (const it of arr) {
+          if (isSingletonItem(it) && (it.quantity || 1) > 1) {
+            const n = it.quantity
+            // First copy keeps the original id + equipped/attuned flags so
+            // anything referencing the row (containerId chains, attack
+            // wiring) survives the migration. Extra copies get fresh ids
+            // and a clean equipped/attuned state.
+            next.push({ ...it, quantity: 1 })
+            for (let i = 1; i < n; i++) {
+              next.push({
+                ...it,
+                id: crypto.randomUUID(),
+                quantity: 1,
+                equipped: false,
+                attuned: false,
+              })
+            }
+          } else {
+            next.push(it)
+          }
+        }
+        d[store].items = next
+      }
+    })
+    // applyCharacter is stable; `items` covers all the data this depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
+
   // ── Mutations ──────────────────────────────────────────────
   // Guarantees the inventory / custom containers exist on the draft.
   function ensureStores(d) {
@@ -103,12 +145,32 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       isArmor: !!meta.isArmor,
       isShield: form.type === 'S',
     }
+    const singleton = isSingletonItem(clean)
+    const requestedQty = Math.max(1, parseInt(clean.quantity, 10) || 1)
+
     if (existing) {
-      patchItem(existing, clean)
+      // Singletons must stay at qty 1 — the modal hides the field but if
+      // the form somehow carries a higher number, normalise it. Any extra
+      // copies the user wants get added through the "Add Item" flow again.
+      patchItem(existing, { ...clean, quantity: singleton ? 1 : requestedQty })
     } else {
       applyCharacter(d => {
         ensureStores(d)
-        d.inventory.items.push({ ...clean, id: crypto.randomUUID(), grantedBy: 'manual' })
+        const base = { ...clean, grantedBy: 'manual' }
+        if (singleton) {
+          // Split into N separate rows so each can be equipped / attuned
+          // / placed in a different container independently. The first
+          // one inherits the form's equipped/attuned state; the rest do not.
+          for (let i = 0; i < requestedQty; i++) {
+            d.inventory.items.push({
+              ...base, id: crypto.randomUUID(), quantity: 1,
+              equipped: i === 0 ? !!base.equipped : false,
+              attuned:  i === 0 ? !!base.attuned  : false,
+            })
+          }
+        } else {
+          d.inventory.items.push({ ...base, id: crypto.randomUUID(), quantity: requestedQty })
+        }
       })
     }
     setEditing(null)
@@ -117,24 +179,28 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
   function addFromData(entry) {
     const properties = (entry.property || []).map(normProperty).filter(Boolean)
     const meta = itemTypeMeta(entry.type)
+    const base = {
+      grantedBy: 'manual',
+      name: entry.name, source: entry.source || 'PHB',
+      type: entry.type || 'G',
+      weight: entry.weight ?? null, value: entry.value ?? null,
+      ac: entry.ac ?? null, strength: entry.strength ?? null,
+      dmg1: entry.dmg1 || '', dmgType: entry.dmgType || '',
+      weaponCategory: entry.weaponCategory || null,
+      range: typeof entry.range === 'string' ? entry.range : '',
+      properties, rarity: entry.rarity || 'common',
+      equipped: false, attuned: false,
+      isWeapon: !!meta.isWeapon || !!entry.isWeapon,
+      isArmor: !!meta.isArmor || !!entry.isArmor,
+      isShield: entry.type === 'S',
+      isContainer: isContainerItem(entry),
+    }
+    // The browser modal adds one row per click; if it ever gains a
+    // quantity input, the same singleton-split logic from saveItem would
+    // apply here too.
     applyCharacter(d => {
       ensureStores(d)
-      d.inventory.items.push({
-        id: crypto.randomUUID(), grantedBy: 'manual',
-        name: entry.name, source: entry.source || 'PHB',
-        type: entry.type || 'G', quantity: 1,
-        weight: entry.weight ?? null, value: entry.value ?? null,
-        ac: entry.ac ?? null, strength: entry.strength ?? null,
-        dmg1: entry.dmg1 || '', dmgType: entry.dmgType || '',
-        weaponCategory: entry.weaponCategory || null,
-        range: typeof entry.range === 'string' ? entry.range : '',
-        properties, rarity: entry.rarity || 'common',
-        equipped: false, attuned: false,
-        isWeapon: !!meta.isWeapon || !!entry.isWeapon,
-        isArmor: !!meta.isArmor || !!entry.isArmor,
-        isShield: entry.type === 'S',
-        isContainer: isContainerItem(entry),
-      })
+      d.inventory.items.push({ ...base, id: crypto.randomUUID(), quantity: 1 })
     })
   }
 
@@ -281,6 +347,7 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove }) {
   const [open, setOpen] = useState(false)
   const meta = itemTypeMeta(item.type)
   const canEquip = meta.isWeapon || meta.isArmor || item.type === 'S'
+  const singleton = isSingletonItem(item)
   return (
     <div>
       <div style={S.itemRow}>
@@ -297,10 +364,14 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove }) {
             {item.attuned ? ' · Attuned' : ''}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-          <Stepper value={item.quantity || 1} min={1} max={9999} width={36}
-            onChange={v => onPatch(item, { quantity: v })} />
-        </div>
+        {/* Singleton items (weapons, armor, shields) live one-per-row so
+            each can be equipped / attuned independently — no stepper. */}
+        {!singleton && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <Stepper value={item.quantity || 1} min={1} max={9999} width={36}
+              onChange={v => onPatch(item, { quantity: v })} />
+          </div>
+        )}
       </div>
       {open && (
         <div style={{ padding: '8px 12px 12px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -342,6 +413,7 @@ function ItemFormModal({ item, isNew, onClose, onSave }) {
   const meta = itemTypeMeta(form.type)
   const isWeapon = meta.isWeapon
   const isArmor = meta.isArmor
+  const singleton = isSingletonItem(form)
 
   function toggleProp(p) {
     const has = (form.properties || []).includes(p)
@@ -364,14 +436,16 @@ function ItemFormModal({ item, isNew, onClose, onSave }) {
         <TextInput value={form.name} onChange={v => set('name', v)} placeholder="Item name" autoFocus />
       </FormRow>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: singleton ? '1fr' : '1fr 1fr', gap: 10 }}>
         <FormRow label="Type">
           <SelectInput value={form.type} onChange={v => set('type', v)}
             options={ITEM_TYPES.map(t => ({ value: t.id, label: t.label }))} />
         </FormRow>
-        <FormRow label="Quantity">
-          <TextInput type="number" min={1} value={form.quantity} onChange={v => set('quantity', parseInt(v, 10) || 1)} />
-        </FormRow>
+        {!singleton && (
+          <FormRow label="Quantity">
+            <TextInput type="number" min={1} value={form.quantity} onChange={v => set('quantity', parseInt(v, 10) || 1)} />
+          </FormRow>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

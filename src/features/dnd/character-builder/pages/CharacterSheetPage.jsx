@@ -33,10 +33,14 @@ const TABS = [
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export default function CharacterSheetPage({ session, readOnly = false, characterId, campaignId }) {
+export default function CharacterSheetPage({ session, readOnly = false, characterId, campaignId, fromSession = false }) {
   const params = useParams()
   const id = characterId || params.id
-  const backTo = readOnly && campaignId ? `/campaign/${campaignId}` : '/'
+  // Sheet opened from the GM session overview should return there rather than
+  // to the campaign detail — keeps the GM in their session flow.
+  const backTo = readOnly && campaignId
+    ? (fromSession ? `/campaign/${campaignId}/session` : `/campaign/${campaignId}`)
+    : '/'
   const navigate = useNavigate()
   const { t } = useLanguage()
   const [character, setCharacter] = useState(null)

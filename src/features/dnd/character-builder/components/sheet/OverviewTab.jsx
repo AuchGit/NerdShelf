@@ -7,6 +7,7 @@ import { getModifier } from '../../lib/characterModel'
 import { modStr } from '../../lib/sheetUtils'
 import { Section, InfoCard, Badge, DetailChip, Btn, Stepper } from './SheetKit'
 import { S } from './sheetStyles'
+import ConditionChips from '../ui/ConditionChips'
 
 // ── Clickable pip row (death saves, resources) ─────────────────
 function Pips({ count, filled, color, onSet }) {
@@ -186,6 +187,18 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
               onSet={n => updateCharacter('status.deathSaves', { ...deathSaves, failures: n })} />
           </div>
         </div>
+      </Section>
+
+      {/* ── Conditions ── */}
+      <Section title="Conditions">
+        <ConditionChips
+          active={character.status?.conditions || []}
+          onToggle={(id, on) => {
+            const cur = character.status?.conditions || []
+            const next = on ? [...cur.filter(x => x !== id), id] : cur.filter(x => x !== id)
+            updateCharacter('status.conditions', next)
+          }}
+        />
       </Section>
 
       {/* ── Class ── */}

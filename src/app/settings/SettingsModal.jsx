@@ -9,6 +9,7 @@ import {
   setMtgPriceSettings,
   useMtgPriceSettings,
 } from '../../features/mtg/deck-builder/services/priceThresholds';
+import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -375,6 +376,15 @@ function DndSettings() {
             Diese Einstellung ist nur in der Desktop-App verfügbar.
           </div>
         )}
+      </Field>
+
+      {/* ── Spielleiter — session overview defaults ───────────────────── */}
+      <Field label="Spielleiter">
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          Welche Werte für jeden Charakter beim Klick auf „Session starten" angezeigt werden.
+          Auch in der Session selbst änderbar.
+        </div>
+        <GmSessionPrefsEditor />
       </Field>
     </div>
   );

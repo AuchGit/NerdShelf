@@ -210,3 +210,29 @@ export function itemTypeMeta(typeId) {
   const code = String(typeId || '').split('|')[0]
   return ITEM_TYPES.find(t => t.id === code) || { id: code, label: code || 'Item' }
 }
+
+/**
+ * "Singleton" items are kept as one row per physical object — anything
+ * whose identity, equipped/attuned state or contents matters per-instance:
+ *
+ *   - Weapons (M, R)                    — one is equipped, the other isn't
+ *   - Armor + shields (LA, MA, HA, S)   — can't wear two at once
+ *   - Wondrous items (W)                — rings/cloaks/amulets, individually attuned
+ *   - Containers (anything isContainer) — each holds different stuff
+ *
+ * Everything else (P potions, G generic gear, ammunition, rations…) stays
+ * stackable since the quantity column carries the meaningful state.
+ *
+ * Driven off `itemTypeMeta` + the existing flags so the singleton rule
+ * stays in lockstep with ITEM_TYPES — adding a new weapon/armor type
+ * there with isWeapon/isArmor automatically flips it to singleton.
+ */
+export function isSingletonItem(item) {
+  if (!item) return false
+  const meta = itemTypeMeta(item.type)
+  if (meta.isWeapon || meta.isArmor) return true
+  if (item.isWeapon || item.isArmor) return true
+  if (item.type === 'W') return true
+  if (isContainerItem(item)) return true
+  return false
+}
