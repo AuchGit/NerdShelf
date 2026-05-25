@@ -28,13 +28,17 @@ const STORAGE_KEY = 'nerdshelf_local_match_state'
 // 4 players: 2×2, all four read with their tops pointing to the centre
 //            column (left pair rotated CW, right pair CCW). This is the
 //            "all 90° pointing inward" layout.
-// 3 / 5 / 6 players: sensible mix; players can always override per tile.
+// 5 players: 4-player 2×2 on the left, the 5th on the right short edge
+//            rotated −90° (matches the right-edge seat).
+// 6 players: 2 rows of 3 along the long sides — bottom three read
+//            upright (0°), top three read inverted (180°).
+// 3 players: sensible mix; players can always override per tile.
 const DEFAULT_ROTATIONS = {
   2: [90, -90],
   3: [0, 0, 180],
   4: [90, -90, -90, 90],          // BL, BR, TR, TL  (markup order)
-  5: [0, 0, 0, 180, 180],
-  6: [0, 0, 0, 0, 180, 180],
+  5: [90, -90, -90, 90, -90],     // 4 corners as in 4-player + 5th on right edge
+  6: [0, 0, 0, 180, 180, 180],    // bottom row upright, top row inverted
 }
 
 function buildInitialPlayers(n, startingLife) {

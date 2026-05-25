@@ -138,31 +138,59 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
 
   // Apply an arbitrary mutation to a fresh draft, recompute, persist.
   // In read-only (GM) mode every mutation is a no-op.
-  // `opts.skipFullSave: true` is used by updateCharacter() when the
-  // change is a single combat-state key — the RPC takes over persistence.
+  //
+  // Routing rules — derived from the diff between prev and next, NOT from
+  // the caller's intent. This way damage/heal buttons (which call us
+  // directly, not via updateCharacter) also get instant sync:
+  //   • If any combat-state key (HP / temp HP / conditions / death
+  //     saves) changed → fire the slim patchCombatState RPC. The GM
+  //     session view subscribes to dnd_characters UPDATEs and this RPC
+  //     is the only path that propagates inside one tick.
+  //   • If any NON-combat key changed → queue the 700ms full-row save.
+  //   • If ONLY combat keys changed (the common case for HP clicks) →
+  //     skip the full-row save entirely; the RPC already persisted it.
   function applyCharacter(mutator, opts = {}) {
     if (readOnly) return
     setCharacter(prev => {
       const next = structuredClone(prev)
       mutator(next)
       setComputed(computeCharacter(next))
-      if (!opts.skipFullSave) queueSave(next)
+
+      const prevStatus = prev.status || {}
+      const nextStatus = next.status || {}
+      const combatPatch = {}
+      for (const k of COMBAT_STATE_KEYS) {
+        if (JSON.stringify(prevStatus[k]) !== JSON.stringify(nextStatus[k])) {
+          combatPatch[k] = nextStatus[k]
+        }
+      }
+      if (Object.keys(combatPatch).length > 0) {
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        patchCombatState(id, combatPatch)
+          .catch(e => console.warn('[combat patch]', e?.message || e))
+      }
+
+      if (!opts.skipFullSave) {
+        // Stringify both sides with combat keys stripped so we only
+        // trigger a full save when something OUTSIDE combat changed.
+        const stripCombat = (c) => {
+          const s = { ...(c.status || {}) }
+          for (const k of COMBAT_STATE_KEYS) delete s[k]
+          return JSON.stringify({ ...c, status: s })
+        }
+        if (stripCombat(prev) !== stripCombat(next)) {
+          queueSave(next)
+        }
+      }
       return next
     })
   }
 
-  // Set a single dotted path. For status.{currentHp|temporaryHp|conditions
-  // |deathSaves} the change is sent via the slim combat-state RPC
-  // (<500 bytes) instead of re-uploading the whole character data
-  // (10-50KB). Any pending full-row save is cancelled — it'd race with
-  // the RPC and the RPC is more authoritative for these keys.
+  // Set a single dotted path. applyCharacter detects combat-state writes
+  // and routes them through the RPC automatically — no special casing
+  // needed here.
   function updateCharacter(path, value) {
     const parts = path.split('.')
-    const isCombatKey =
-      parts.length === 2 &&
-      parts[0] === 'status' &&
-      COMBAT_STATE_KEYS.includes(parts[1])
-
     applyCharacter(d => {
       let obj = d
       for (let i = 0; i < parts.length - 1; i++) {
@@ -170,13 +198,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         obj = obj[parts[i]]
       }
       obj[parts[parts.length - 1]] = value
-    }, { skipFullSave: isCombatKey })
-
-    if (isCombatKey) {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      patchCombatState(id, { [parts[1]]: value })
-        .catch(e => console.warn('[combat patch]', e?.message || e))
-    }
+    })
   }
 
   // ── Rests ─────────────────────────────────────────────────
@@ -450,9 +472,16 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       )}
 
       {/* ═══ BODY ═══ */}
+      {/* In GM (readOnly) mode the body is `inert`: HTML standard attribute
+          that blocks ALL pointer / focus / keyboard events on the subtree
+          without dimming the content. Defense-in-depth — applyCharacter is
+          already a no-op when readOnly, but inert also kills any
+          direct-supabase-write buttons (e.g. the level-history "Undo")
+          and prevents portrait-picker dialogs from popping up. The tab
+          BAR above is NOT inert so the GM can still switch tabs. */}
       <div className="dnd-sheet-body" style={S.body}>
         {/* ── SIDEBAR ── */}
-        <div className="dnd-sheet-sidebar" style={S.sidebar}>
+        <div className="dnd-sheet-sidebar" style={S.sidebar} inert={readOnly ? '' : undefined}>
           {portrait && (
             <div style={S.sidePortrait}>
               <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait"
@@ -566,11 +595,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             ))}
           </div>
 
-          <div style={S.tabContent}>
+          <div style={S.tabContent} inert={readOnly ? '' : undefined}>
             {activeTab === 'overview' && (
               <OverviewTab character={character} computed={computed} abilityScores={abilityScores}
                 hp={hp} updateCharacter={updateCharacter} applyCharacter={applyCharacter}
-                charId={id} session={session} onReload={loadCharacter} />
+                charId={id} session={session} onReload={loadCharacter}
+                readOnly={readOnly} />
             )}
             {activeTab === 'spells' && (
               <SpellsTab character={character} computed={computed}

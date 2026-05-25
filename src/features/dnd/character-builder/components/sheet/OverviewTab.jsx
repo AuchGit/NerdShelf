@@ -127,7 +127,7 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
   )
 }
 
-export default function OverviewTab({ character, computed, abilityScores, hp, updateCharacter, applyCharacter, charId, session, onReload }) {
+export default function OverviewTab({ character, computed, abilityScores, hp, updateCharacter, applyCharacter, charId, session, onReload, readOnly = false }) {
   const deathSaves = character.status?.deathSaves || { successes: 0, failures: 0 }
   const usedResources = character.status?.usedResources || {}
   const baseMaxHp = computed?.hp?.max || 1
@@ -164,8 +164,10 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
               <div style={{ ...S.hpBarFill, width: `${hpPct}%` }} />
             </div>
           </div>
-          <HpControls hp={hp} baseMaxHp={baseMaxHp} maxHpBonus={maxHpBonus}
-            applyCharacter={applyCharacter} updateCharacter={updateCharacter} />
+          {!readOnly && (
+            <HpControls hp={hp} baseMaxHp={baseMaxHp} maxHpBonus={maxHpBonus}
+              applyCharacter={applyCharacter} updateCharacter={updateCharacter} />
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
@@ -325,7 +327,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                         <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 3 }}>{details.join(' · ')}</div>
                       )}
                     </div>
-                    {i === 0 && entry.snapshot && (
+                    {!readOnly && i === 0 && entry.snapshot && (
                       <Btn variant="danger" style={{ padding: '4px 10px', fontSize: 11 }} onClick={async () => {
                         const snap = structuredClone(entry.snapshot)
                         if (character.appearance?.portrait)

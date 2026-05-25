@@ -130,26 +130,33 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 .mh-grid-local-4 > :nth-child(3) { grid-column: 2; grid-row: 1; }
 .mh-grid-local-4 > :nth-child(4) { grid-column: 1; grid-row: 1; }
 
+/* 5 players: the 4-player 2×2 stays intact on the left, and the 5th tile
+   sits on the RIGHT short edge of the device spanning both rows. No tile
+   lands in the centre of the screen so the seating arrangement always
+   has a player at every visible tile. */
 .mh-grid-local-5 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
 }
-.mh-grid-local-5 > :nth-child(1) { grid-column: 1; grid-row: 3; }
-.mh-grid-local-5 > :nth-child(2) { grid-column: 2; grid-row: 3; }
-.mh-grid-local-5 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 2; }
-.mh-grid-local-5 > :nth-child(4) { grid-column: 2; grid-row: 1; }
-.mh-grid-local-5 > :nth-child(5) { grid-column: 1; grid-row: 1; }
+.mh-grid-local-5 > :nth-child(1) { grid-column: 1; grid-row: 2; }   /* BL */
+.mh-grid-local-5 > :nth-child(2) { grid-column: 2; grid-row: 2; }   /* BR of 2×2 */
+.mh-grid-local-5 > :nth-child(3) { grid-column: 2; grid-row: 1; }   /* TR of 2×2 */
+.mh-grid-local-5 > :nth-child(4) { grid-column: 1; grid-row: 1; }   /* TL */
+.mh-grid-local-5 > :nth-child(5) { grid-column: 3; grid-row: 1 / span 2; } /* right edge */
 
+/* 6 players: two rows of three across the long sides of the device.
+   No tile in the middle; three players sit on the top long edge,
+   three on the bottom long edge. */
 .mh-grid-local-6 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
 }
-.mh-grid-local-6 > :nth-child(1) { grid-column: 1; grid-row: 3; }
-.mh-grid-local-6 > :nth-child(2) { grid-column: 2; grid-row: 3; }
-.mh-grid-local-6 > :nth-child(3) { grid-column: 1; grid-row: 2; }
-.mh-grid-local-6 > :nth-child(4) { grid-column: 2; grid-row: 2; }
-.mh-grid-local-6 > :nth-child(5) { grid-column: 2; grid-row: 1; }
-.mh-grid-local-6 > :nth-child(6) { grid-column: 1; grid-row: 1; }
+.mh-grid-local-6 > :nth-child(1) { grid-column: 1; grid-row: 2; }   /* BL */
+.mh-grid-local-6 > :nth-child(2) { grid-column: 2; grid-row: 2; }   /* BM */
+.mh-grid-local-6 > :nth-child(3) { grid-column: 3; grid-row: 2; }   /* BR */
+.mh-grid-local-6 > :nth-child(4) { grid-column: 1; grid-row: 1; }   /* TL */
+.mh-grid-local-6 > :nth-child(5) { grid-column: 2; grid-row: 1; }   /* TM */
+.mh-grid-local-6 > :nth-child(6) { grid-column: 3; grid-row: 1; }   /* TR */
 
 /* ── Local-match PWA mobile fullscreen + utilities ──────────────────
    On PWA mobile we hide the header chrome entirely and float a small
