@@ -19,6 +19,11 @@ export function makeJoinToken(len = 6) {
  * Build the denormalized "card" snapshot stored on a campaign membership.
  * Players see each other through this snapshot — never the full character
  * `data` — so no character data leaks between players.
+ *
+ * The portrait is included again now that upload compression bounds it
+ * to ~15-25KB (was the dominant payload before that). Other players
+ * don't have RLS access to dnd_characters.data, so the card is the only
+ * way they ever see a portrait.
  */
 export function buildCharacterCard(row) {
   const d = row?.data || {}

@@ -317,12 +317,19 @@ function CreateCampaignModal({ gmId, onClose, onCreated }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
-  function pickImage(e) {
+  async function pickImage(e) {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setImage(ev.target.result)
-    reader.readAsDataURL(file)
+    try {
+      const { compressImage } = await import('../../../../shared/images/compressImage')
+      // Banners are wider than portraits — allow 800px and a bit more
+      // quality (the image is shown larger in the UI).
+      const dataUrl = await compressImage(file, { maxDim: 800, quality: 0.8 })
+      setImage(dataUrl)
+    } catch (err) {
+      setErr(err.message || 'Bild konnte nicht verarbeitet werden.')
+    }
   }
 
   async function submit() {

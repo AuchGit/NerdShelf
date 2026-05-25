@@ -114,6 +114,26 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     setCharacter(data.data)
     setComputed(computeCharacter(data.data))
     setLoading(false)
+
+    // One-time recompression for legacy oversized portraits. New uploads
+    // are already compressed by handlePortrait, but characters created
+    // before that change still carry multi-MB base64 blobs inside
+    // dnd_characters.data.appearance.portrait — those blobs are pulled
+    // on every row fetch (own sheet, GM session view, etc.) and were
+    // the dominant payload cost. ~50KB base64 threshold roughly
+    // corresponds to "bigger than a freshly compressed 256px JPEG".
+    const portrait = data.data?.appearance?.portrait
+    if (typeof portrait === 'string' && portrait.length > 50_000) {
+      ;(async () => {
+        try {
+          const { compressDataUrl } = await import('../../../../shared/images/compressImage')
+          const smaller = await compressDataUrl(portrait, { maxDim: 256, quality: 0.75 })
+          if (smaller && smaller.length < portrait.length) {
+            updateCharacter('appearance.portrait', smaller)
+          }
+        } catch { /* corrupted source — leave it alone */ }
+      })()
+    }
   }
 
   // ── Persistence ───────────────────────────────────────────
@@ -231,13 +251,21 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   }
 
   // ── Portrait ──────────────────────────────────────────────
-  function handlePortrait(e) {
+  // Portraits are stored as base64 data URLs in dnd_characters.data, so
+  // raw 5MB uploads would blow up every row read. compressImage resizes
+  // to 256px on the longer edge and re-encodes as JPEG quality 0.75 —
+  // typically ~15KB regardless of the source.
+  async function handlePortrait(e) {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => updateCharacter('appearance.portrait', ev.target.result)
-    reader.readAsDataURL(file)
     e.target.value = ''
+    if (!file) return
+    try {
+      const { compressImage } = await import('../../../../shared/images/compressImage')
+      const dataUrl = await compressImage(file, { maxDim: 256, quality: 0.75 })
+      updateCharacter('appearance.portrait', dataUrl)
+    } catch (err) {
+      alert(err.message || 'Bild konnte nicht verarbeitet werden.')
+    }
   }
 
   function commitName() {

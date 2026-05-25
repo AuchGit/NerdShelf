@@ -322,8 +322,13 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
           width: 44, height: 44, borderRadius: 'var(--radius-sm)', flexShrink: 0, overflow: 'hidden',
           background: 'var(--color-bg-sunken)', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {card.portrait
-            ? <img src={card.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {/* Portrait is no longer denormalized into the card (base64 blob
+              was too heavy for the dnd_campaign_members row). The GM has
+              full RLS access to dnd_characters, so read it from the live
+              character row instead — falls back to a sword glyph for
+              members whose data isn't loaded yet. */}
+          {character?.appearance?.portrait
+            ? <img src={character.appearance.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <span style={{ fontSize: 20, opacity: 0.4 }}>⚔</span>}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>

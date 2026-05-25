@@ -52,7 +52,15 @@ export default function CampaignDetailPage({ session, campaignId }) {
     return () => { cancelled = true }
   }, [campaignId, reloadKey])
 
-  // Keep the current player's own card snapshot fresh.
+  // Keep the current player's own card snapshot fresh. The previous
+  // version stringified the full character data per render and stored a
+  // sig on a state-managed array element — a runaway loop under
+  // realtime member updates. The version here fetches only what it
+  // needs, then SKIPS the write when the live name + portrait already
+  // match the card. With portrait compression keeping payloads small,
+  // those skipped runs cost almost nothing and the actual write fires
+  // exactly once per change (e.g. user re-uploaded their portrait,
+  // first-time card materialisation after the strip migration).
   useEffect(() => {
     if (!members.length) return
     const mine = members.filter(m => m.user_id === uid)
@@ -60,14 +68,18 @@ export default function CampaignDetailPage({ session, campaignId }) {
     let cancelled = false
     ;(async () => {
       const ids = mine.map(m => m.character_id)
-      const { data } = await supabase.from('dnd_characters').select('id, name, data').in('id', ids)
+      const { data } = await supabase
+        .from('dnd_characters').select('id, name, data').in('id', ids)
       if (cancelled || !data) return
       for (const m of mine) {
         const row = data.find(r => String(r.id) === String(m.character_id))
         if (!row) continue
-        const fresh = JSON.stringify({ name: row.name, data: row.data })
-        if (m._sig === fresh) continue
-        try { await refreshMemberCard(m.id, row, playerName); m._sig = fresh } catch { /* ignore */ }
+        const cardName     = m.card?.name || ''
+        const cardPortrait = m.card?.portrait || null
+        const liveName     = row.name || row.data?.info?.name || ''
+        const livePortrait = row.data?.appearance?.portrait || null
+        if (cardName === liveName && cardPortrait === livePortrait) continue
+        try { await refreshMemberCard(m.id, row, playerName) } catch { /* ignore */ }
       }
     })()
     return () => { cancelled = true }
@@ -461,12 +473,17 @@ function CampaignSettingsModal({ campaign, onClose, onSaved }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
-  function pickImage(e) {
+  async function pickImage(e) {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setImage(ev.target.result)
-    reader.readAsDataURL(file)
+    try {
+      const { compressImage } = await import('../../../../shared/images/compressImage')
+      const dataUrl = await compressImage(file, { maxDim: 800, quality: 0.8 })
+      setImage(dataUrl)
+    } catch (err) {
+      setErr(err.message || 'Bild konnte nicht verarbeitet werden.')
+    }
   }
 
   async function save() {

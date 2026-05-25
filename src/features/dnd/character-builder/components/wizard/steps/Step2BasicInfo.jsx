@@ -21,13 +21,16 @@ export default function Step2BasicInfo({ character, updateCharacter }) {
     ? { ...styles.input, width: '100%', boxSizing: 'border-box' }
     : styles.input
 
-  function handlePortraitUpload(e) {
-    const file = e.target.files[0]
+  async function handlePortraitUpload(e) {
+    const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) { alert('Bild zu groß (max. 2MB)'); return }
-    const reader = new FileReader()
-    reader.onload = ev => updateCharacter('appearance.portrait', ev.target.result)
-    reader.readAsDataURL(file)
+    try {
+      const { compressImage } = await import('../../../../../../shared/images/compressImage')
+      const dataUrl = await compressImage(file, { maxDim: 256, quality: 0.75 })
+      updateCharacter('appearance.portrait', dataUrl)
+    } catch (err) {
+      alert(err.message || 'Bild konnte nicht verarbeitet werden.')
+    }
   }
 
   return (
