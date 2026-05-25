@@ -1,5 +1,5 @@
 // src/features/mtg/deck-builder/MtgDeckBuilderApp.jsx
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -10,9 +10,12 @@ import DeckListView  from './components/DeckListView';
 import DeckPanel     from './components/DeckPanel';
 import CardPreview   from './components/CardPreview';
 import CollapsibleRail from './components/CollapsibleRail';
-import ImportDeckModal from './components/ImportDeckModal';
-import CoverPickerModal from './components/CoverPickerModal';
-import DeckAnalyzerModal from './components/DeckAnalyzerModal';
+// Heavy modals — load on first open. Pulling these eagerly added a lot
+// of weight to the initial deck-builder JS (DeckAnalyzer especially —
+// it pulls in mana-curve / color-stats code that's only opened on demand).
+const ImportDeckModal   = lazy(() => import('./components/ImportDeckModal'));
+const CoverPickerModal  = lazy(() => import('./components/CoverPickerModal'));
+const DeckAnalyzerModal = lazy(() => import('./components/DeckAnalyzerModal'));
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 import MtgDeckBuilderMobile from './pwa/MtgDeckBuilderMobile';
@@ -810,27 +813,35 @@ export default function MtgDeckBuilderApp() {
           mainCount={mainCount} sideCount={sideCount}
           pinnedCard={pinnedCard}
         />
-        <ImportDeckModal
-          open={showImport}
-          onClose={() => setShowImport(false)}
-          onImport={handleImport}
-        />
-        <CoverPickerModal
-          open={showCoverPicker}
-          onClose={() => setShowCoverPicker(false)}
-          mainboard={mainboard}
-          sideboard={sideboard}
-          currentCoverId={coverCardId}
-          onPick={(id) => setCoverCardId(id)}
-        />
-        <DeckAnalyzerModal
-          open={showAnalyzer}
-          onClose={() => setShowAnalyzer(false)}
-          mainboard={mainboard}
-          commander={commander}
-          deckFormat={deckFormat}
-          onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
-        />
+        <Suspense fallback={null}>
+          {showImport && (
+            <ImportDeckModal
+              open
+              onClose={() => setShowImport(false)}
+              onImport={handleImport}
+            />
+          )}
+          {showCoverPicker && (
+            <CoverPickerModal
+              open
+              onClose={() => setShowCoverPicker(false)}
+              mainboard={mainboard}
+              sideboard={sideboard}
+              currentCoverId={coverCardId}
+              onPick={(id) => setCoverCardId(id)}
+            />
+          )}
+          {showAnalyzer && (
+            <DeckAnalyzerModal
+              open
+              onClose={() => setShowAnalyzer(false)}
+              mainboard={mainboard}
+              commander={commander}
+              deckFormat={deckFormat}
+              onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
+            />
+          )}
+        </Suspense>
       </SettingsProvider>
     );
   }
@@ -1047,27 +1058,35 @@ export default function MtgDeckBuilderApp() {
           </main>
         </div>
 
-        <ImportDeckModal
-          open={showImport}
-          onClose={() => setShowImport(false)}
-          onImport={handleImport}
-        />
-        <CoverPickerModal
-          open={showCoverPicker}
-          onClose={() => setShowCoverPicker(false)}
-          mainboard={mainboard}
-          sideboard={sideboard}
-          currentCoverId={coverCardId}
-          onPick={(id) => setCoverCardId(id)}
-        />
-        <DeckAnalyzerModal
-          open={showAnalyzer}
-          onClose={() => setShowAnalyzer(false)}
-          mainboard={mainboard}
-          commander={commander}
-          deckFormat={deckFormat}
-          onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
-        />
+        <Suspense fallback={null}>
+          {showImport && (
+            <ImportDeckModal
+              open
+              onClose={() => setShowImport(false)}
+              onImport={handleImport}
+            />
+          )}
+          {showCoverPicker && (
+            <CoverPickerModal
+              open
+              onClose={() => setShowCoverPicker(false)}
+              mainboard={mainboard}
+              sideboard={sideboard}
+              currentCoverId={coverCardId}
+              onPick={(id) => setCoverCardId(id)}
+            />
+          )}
+          {showAnalyzer && (
+            <DeckAnalyzerModal
+              open
+              onClose={() => setShowAnalyzer(false)}
+              mainboard={mainboard}
+              commander={commander}
+              deckFormat={deckFormat}
+              onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
+            />
+          )}
+        </Suspense>
       </div>
     </SettingsProvider>
   );

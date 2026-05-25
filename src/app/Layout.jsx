@@ -1,14 +1,18 @@
 // src/app/Layout.jsx
 import { Outlet } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import Sidebar from './Sidebar';
-import SettingsModal from './settings/SettingsModal';
-import BugReportModal from '../core/bug-report/BugReportModal';
-import CalendarModal from './calendar/CalendarModal';
 import useCalendarNotification from './calendar/useCalendarNotification';
 import { BottomNav } from '../shared/ui';
 import useWindowWidth from '../shared/hooks/useWindowWidth';
 import usePwaMobile from '../shared/hooks/usePwaMobile';
+
+// Lazy-load the three pop-up modals — they're rendered on every page but
+// only mounted when the user actually opens them. Their JS chunks load
+// on first open and then stay cached.
+const SettingsModal  = lazy(() => import('./settings/SettingsModal'));
+const BugReportModal = lazy(() => import('../core/bug-report/BugReportModal'));
+const CalendarModal  = lazy(() => import('./calendar/CalendarModal'));
 
 export default function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -54,9 +58,11 @@ export default function Layout() {
           <Outlet />
         </main>
         <BottomNav {...sidebarProps} />
-        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        <BugReportModal open={bugOpen} onClose={() => setBugOpen(false)} />
-        <CalendarModal open={calendarOpen} onClose={closeCalendar} />
+        <Suspense fallback={null}>
+          {settingsOpen && <SettingsModal open onClose={() => setSettingsOpen(false)} />}
+          {bugOpen      && <BugReportModal open onClose={() => setBugOpen(false)} />}
+          {calendarOpen && <CalendarModal open onClose={closeCalendar} />}
+        </Suspense>
       </div>
     );
   }
@@ -138,9 +144,11 @@ export default function Layout() {
       }}>
         <Outlet />
       </main>
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <BugReportModal open={bugOpen} onClose={() => setBugOpen(false)} />
-      <CalendarModal open={calendarOpen} onClose={closeCalendar} />
+      <Suspense fallback={null}>
+        {settingsOpen && <SettingsModal open onClose={() => setSettingsOpen(false)} />}
+        {bugOpen      && <BugReportModal open onClose={() => setBugOpen(false)} />}
+        {calendarOpen && <CalendarModal open onClose={closeCalendar} />}
+      </Suspense>
     </div>
   );
 }

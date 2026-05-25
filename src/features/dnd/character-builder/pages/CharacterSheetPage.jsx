@@ -4,12 +4,18 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from '../lib/characterModel'
-import { downloadFoundryJSON } from '../lib/foundryExport'
+// foundryExport is huge (~3000 lines of stat-block / item / spell
+// converters) and only runs when the user clicks "Foundry Export".
+// Defer the import to click time so the initial sheet bundle stays small.
+const importFoundryExport = () => import('../lib/foundryExport')
 import { parseTags } from '../lib/tagParser'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
 import { patchCombatState } from '../lib/campaigns'
 import HeaderButtons from '../components/ui/HeaderButtons'
-import CustomEditModal from '../components/ui/CustomEditModal'
+import { lazy, Suspense } from 'react'
+// CustomEditModal is opened ~rarely (Custom button); split it off so the
+// rules-engine that drives it doesn't sit in the initial sheet bundle.
+const CustomEditModal = lazy(() => import('../components/ui/CustomEditModal'))
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
 import { ActionSheet } from '../../../../shared/ui'
 import { SideSection, ProfBlock, SenseRow } from '../components/sheet/SheetKit'
@@ -159,16 +165,19 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // Apply an arbitrary mutation to a fresh draft, recompute, persist.
   // In read-only (GM) mode every mutation is a no-op.
   //
-  // Routing rules — derived from the diff between prev and next, NOT from
-  // the caller's intent. This way damage/heal buttons (which call us
-  // directly, not via updateCharacter) also get instant sync:
-  //   • If any combat-state key (HP / temp HP / conditions / death
-  //     saves) changed → fire the slim patchCombatState RPC. The GM
-  //     session view subscribes to dnd_characters UPDATEs and this RPC
-  //     is the only path that propagates inside one tick.
-  //   • If any NON-combat key changed → queue the 700ms full-row save.
-  //   • If ONLY combat keys changed (the common case for HP clicks) →
-  //     skip the full-row save entirely; the RPC already persisted it.
+  // Routing:
+  //   • Combat-state keys (HP / temp HP / conditions / death saves) →
+  //     fire the slim patchCombatState RPC for instant cross-user sync.
+  //   • Anything else → queue the 700ms full-row save.
+  //   • If ONLY combat keys changed → skip the full save (RPC already
+  //     covered it).
+  //
+  // `opts.changedPaths` is a hint of dotted paths the mutation touched.
+  // When supplied we can skip the costly "is anything outside combat
+  // different?" diff (used to JSON.stringify the whole 10-50 KB
+  // character — measurable lag on every HP click). Callers that don't
+  // know what they changed (rare — really only the level-up rollback
+  // path) leave it off and we conservatively run a full save.
   function applyCharacter(mutator, opts = {}) {
     if (readOnly) return
     setCharacter(prev => {
@@ -176,11 +185,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       mutator(next)
       setComputed(computeCharacter(next))
 
+      // Combat-state diff is cheap (4 small keys) — always do this so
+      // the RPC fires correctly even when no hint was provided.
       const prevStatus = prev.status || {}
       const nextStatus = next.status || {}
       const combatPatch = {}
       for (const k of COMBAT_STATE_KEYS) {
-        if (JSON.stringify(prevStatus[k]) !== JSON.stringify(nextStatus[k])) {
+        if (prevStatus[k] !== nextStatus[k]
+            && JSON.stringify(prevStatus[k]) !== JSON.stringify(nextStatus[k])) {
           combatPatch[k] = nextStatus[k]
         }
       }
@@ -190,25 +202,31 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           .catch(e => console.warn('[combat patch]', e?.message || e))
       }
 
+      // Decide whether to queue a full-row save.
       if (!opts.skipFullSave) {
-        // Stringify both sides with combat keys stripped so we only
-        // trigger a full save when something OUTSIDE combat changed.
-        const stripCombat = (c) => {
-          const s = { ...(c.status || {}) }
-          for (const k of COMBAT_STATE_KEYS) delete s[k]
-          return JSON.stringify({ ...c, status: s })
+        let needFullSave
+        if (Array.isArray(opts.changedPaths)) {
+          // Skip the full save iff every changed path is a combat key.
+          needFullSave = opts.changedPaths.some(p => {
+            if (!p.startsWith('status.')) return true
+            const head = p.slice(7).split('.')[0]
+            return !COMBAT_STATE_KEYS.includes(head)
+          })
+        } else {
+          // No hint: be conservative and save. Rare path (level-up
+          // rollback, etc.) — the cost of an extra full-row save here
+          // is far less than the cost of a per-click stringify diff.
+          needFullSave = true
         }
-        if (stripCombat(prev) !== stripCombat(next)) {
-          queueSave(next)
-        }
+        if (needFullSave) queueSave(next)
       }
       return next
     })
   }
 
-  // Set a single dotted path. applyCharacter detects combat-state writes
-  // and routes them through the RPC automatically — no special casing
-  // needed here.
+  // Set a single dotted path. Passes the path along so applyCharacter
+  // can route combat-only writes through the RPC without doing a full
+  // save.
   function updateCharacter(path, value) {
     const parts = path.split('.')
     applyCharacter(d => {
@@ -218,7 +236,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         obj = obj[parts[i]]
       }
       obj[parts[parts.length - 1]] = value
-    })
+    }, { changedPaths: [path] })
   }
 
   // ── Rests ─────────────────────────────────────────────────
@@ -401,7 +419,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               {showExportMenu && (
                 <div style={S.exportMenu}>
                   <button style={S.exportMenuItem}
-                    onClick={async () => { await downloadFoundryJSON(character); setShowExportMenu(false) }}>
+                    onClick={async () => { const { downloadFoundryJSON } = await importFoundryExport(); await downloadFoundryJSON(character); setShowExportMenu(false) }}>
                     FoundryVTT (.json)
                   </button>
                 </div>
@@ -433,7 +451,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         title={character.info.name || 'Charakter'}
         items={readOnly ? [
           { id: 'export', label: 'Foundry-Export', icon: '⬇',
-            onSelect: async () => { await downloadFoundryJSON(character) } },
+            onSelect: async () => { const { downloadFoundryJSON } = await importFoundryExport(); await downloadFoundryJSON(character) } },
         ] : [
           { id: 'rename', label: 'Name ändern', icon: 'Aa',
             onSelect: () => {
@@ -451,7 +469,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             onSelect: () => navigate(`/character/${id}/edit`),
           }] : []),
           { id: 'export', label: 'Foundry-Export', icon: '⬇',
-            onSelect: async () => { await downloadFoundryJSON(character) } },
+            onSelect: async () => { const { downloadFoundryJSON } = await importFoundryExport(); await downloadFoundryJSON(character) } },
           ...((character.levelHistory || []).length > 0 ? [{
             id: 'leveldown', label: 'Level Down', icon: '↩', danger: true,
             onSelect: levelDown,
@@ -460,11 +478,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       />
 
       {showCustomEdit && (
-        <CustomEditModal
-          onClose={() => setShowCustomEdit(false)}
-          character={character}
-          updateCharacter={updateCharacter}
-        />
+        <Suspense fallback={null}>
+          <CustomEditModal
+            onClose={() => setShowCustomEdit(false)}
+            character={character}
+            updateCharacter={updateCharacter}
+          />
+        </Suspense>
       )}
 
       {/* ═══ COMBAT BAR ═══ */}

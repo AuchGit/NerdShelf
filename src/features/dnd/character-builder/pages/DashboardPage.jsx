@@ -1,5 +1,5 @@
 // src/features/dnd/character-builder/pages/DashboardPage.jsx
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, memo } from 'react'
 import { useNavigate } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
 import { Panel } from '../../../../shared/ui'
@@ -43,15 +43,43 @@ export default function DashboardPage({ session }) {
   const loadCharacters = useCallback(async () => {
     if (!uid) return
     // Background revalidate: no spinner if cache already populated.
+    //
+    // The dashboard card only reads a handful of fields out of the
+    // character `data` JSONB (classes, species, background, portrait,
+    // edition). Pulling the full `data` (10-50 KB per row, dominated by
+    // class features + spells + inventory) was the dominant egress on
+    // every dashboard load. JSONB path selection lets PostgREST project
+    // just what we need server-side — typical payload drops 80%+.
     const { data, error: err } = await supabase
       .from('dnd_characters')
-      .select('id, name, created_at, data, share_token')
+      .select(`
+        id, name, created_at, share_token,
+        classes:data->classes,
+        species:data->species,
+        background:data->background,
+        portrait:data->appearance->>portrait,
+        edition:data->meta->>edition
+      `)
       .eq('user_id', uid)
       .order('created_at', { ascending: false })
     if (err) {
       setError(err.message)
     } else {
-      const rows = data || []
+      // Reshape back into the { data: { classes, species, ... } } form
+      // CharacterCard expects, so nothing downstream has to change.
+      const rows = (data || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        created_at: r.created_at,
+        share_token: r.share_token,
+        data: {
+          classes: r.classes || [],
+          species: r.species || {},
+          background: r.background || {},
+          appearance: { portrait: r.portrait || null },
+          meta: { edition: r.edition || null },
+        },
+      }))
       setCharacters(rows)
       writeList(`dnd_characters:${uid}`, rows)
     }
@@ -150,7 +178,13 @@ export default function DashboardPage({ session }) {
   )
 }
 
-function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerName, onRemove }) {
+// memo with a custom compare that ignores the click-handler props.
+// Those are inline arrow functions from the parent's renderItem prop and
+// change reference on every render; their *behaviour* is fully captured
+// by the character reference (id + the closed-over navigate / delete
+// callbacks, which are themselves stable). Comparing just the data lets
+// the cards stay mounted across unrelated parent re-renders.
+const CharacterCard = memo(function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerName, onRemove }) {
   const data = character.data || {}
   const classes = data.classes || []
   const totalLevel = classes.reduce((s, c) => s + (c.level || 0), 0)
@@ -283,7 +317,11 @@ function CharacterCard({ character, onOpen, onDelete, readOnly = false, ownerNam
       </div>
     </Panel>
   )
-}
+}, (a, b) => (
+  a.character === b.character
+  && a.readOnly === b.readOnly
+  && a.ownerName === b.ownerName
+))
 
 const Pill = {
   padding: '2px 8px',

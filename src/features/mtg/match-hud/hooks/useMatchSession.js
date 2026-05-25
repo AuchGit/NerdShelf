@@ -62,9 +62,11 @@ const BROADCAST_PATCH = 'player_patch';
 const FRESH_WINDOW_MS = 3000;
 
 // How often to do a full reconcile from the DB as a safety net against
-// drift. 15 s keeps the cost trivial (one tiny SELECT per match per 15 s
-// per phone) while bounding any divergence to a quarter of a minute.
-const SAFETY_REFETCH_MS = 15000;
+// drift. Realtime carries every change already; this is purely a fallback
+// for the rare case the websocket silently dropped. 60 s is a sweet spot:
+// users notice >1min of divergence, but 4 reads/min/phone (vs 16/min on
+// 15 s) makes a huge difference at the free-tier connection budget.
+const SAFETY_REFETCH_MS = 60000;
 
 /**
  * @param {string|null} matchId

@@ -8,7 +8,7 @@
 // Persistence: rows in the `wh40k_armies` table (jsonb `data` column).
 // Schema lives in `scripts/wh40k-schema.sql`.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../core/supabase/client';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -26,7 +26,10 @@ import UnitDetail from './components/UnitDetail';
 import ArmyPanel from './components/ArmyPanel';
 import DetachmentInfo from './components/DetachmentInfo';
 import SquadListPanel from './components/SquadListPanel';
-import SquadBuilderModal from './components/SquadBuilderModal';
+// SquadBuilderModal is heavy (full wargear picker / model loadouts) and
+// only opens when the user actively builds a squad. Lazy-load so it
+// doesn't sit in the initial army-builder chunk.
+const SquadBuilderModal = lazy(() => import('./components/SquadBuilderModal'));
 import { newShareToken } from '../../shared/tokens';
 import usePwaMobile from '../../shared/hooks/usePwaMobile';
 import Wh40kArmyBuilderMobile from './pwa/Wh40kArmyBuilderMobile';
@@ -456,19 +459,23 @@ export default function Wh40kArmyBuilderApp() {
           selectedUnit={selectedUnit}
           pointsTotal={pointsTotal}
         />
-        <SquadBuilderModal
-          open={!!squadModal}
-          onClose={() => setSquadModal(null)}
-          data={data}
-          canonicalWargear={data?.canonical?.wargearOptions || []}
-          initial={squadModal?.edit}
-          lockedFirstUnitId={squadModal?.lockedUnitId}
-          factionFilter={squadModal?.factionFilter}
-          onSave={async (s) => {
-            if (s.id) await squads.update(s.id, s);
-            else await squads.create(s);
-          }}
-        />
+        {squadModal && (
+          <Suspense fallback={null}>
+            <SquadBuilderModal
+              open
+              onClose={() => setSquadModal(null)}
+              data={data}
+              canonicalWargear={data?.canonical?.wargearOptions || []}
+              initial={squadModal?.edit}
+              lockedFirstUnitId={squadModal?.lockedUnitId}
+              factionFilter={squadModal?.factionFilter}
+              onSave={async (s) => {
+                if (s.id) await squads.update(s.id, s);
+                else await squads.create(s);
+              }}
+            />
+          </Suspense>
+        )}
       </>
     );
   }

@@ -4,7 +4,7 @@
 // parity with the MTG/DnD home pages, with a per-faction grouping that
 // matches MTG's per-format grouping.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../core/supabase/client';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -46,9 +46,17 @@ export default function Wh40kDashboard() {
   const loadArmies = useCallback(async () => {
     if (!user) return;
     // Background revalidate — no spinner flash when we already have cache.
+    //
+    // The ArmyCard only needs entries (for points + unit count). The
+    // notes field on data can be arbitrarily long and is never shown on
+    // the dashboard — narrowing the SELECT to just the entries path
+    // cuts the dashboard payload a lot for users with notes-heavy armies.
     const { data: rows, error: err } = await supabase
       .from('wh40k_armies')
-      .select('*')
+      .select(`
+        id, name, faction, detachment, share_token, updated_at, created_at,
+        entries:data->entries
+      `)
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
     if (err) {
@@ -61,7 +69,17 @@ export default function Wh40kDashboard() {
         setError(err.message);
       }
     } else {
-      const list = rows || [];
+      // Reshape: keep the { data: { entries } } shape that ArmyCard reads.
+      const list = (rows || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        faction: r.faction,
+        detachment: r.detachment,
+        share_token: r.share_token,
+        updated_at: r.updated_at,
+        created_at: r.created_at,
+        data: { entries: r.entries || {} },
+      }));
       setArmies(list);
       writeList(`wh40k_armies:${user.id}`, list);
     }
@@ -196,7 +214,9 @@ export default function Wh40kDashboard() {
   );
 }
 
-function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
+// memo: skip re-renders when only the inline click-handler refs change
+// (see CharacterCard in DnD DashboardPage for the same pattern).
+const ArmyCard = memo(function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
   const data = army.data || {};
   const entries = data.entries || {};
   const totalPts = totalArmyPoints(entries, unitsById);
@@ -326,7 +346,13 @@ function ArmyCard({ army, unitsById, faction, onOpen, onDelete, onDuplicate, rea
       </div>
     </Panel>
   );
-}
+}, (a, b) => (
+  a.army === b.army
+  && a.unitsById === b.unitsById
+  && a.faction === b.faction
+  && a.readOnly === b.readOnly
+  && a.ownerName === b.ownerName
+));
 
 const iconBtnStyle = {
   background: 'transparent',

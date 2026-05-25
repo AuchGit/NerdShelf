@@ -6,7 +6,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '../lib/hashNav'
 import { useAuth } from '../../../../core/auth/AuthContext'
 import { supabase } from '../lib/supabase'
-import { downloadFoundryJSON, exportToFoundry } from '../lib/foundryExport'
+// foundryExport is huge (~3000 lines) — only loaded when the GM clicks
+// "Export" on a member. Defer the import to click time.
+const importFoundryExport = () => import('../lib/foundryExport')
 import { Panel, Button, Modal, Input } from '../../../../shared/ui'
 import { ShareButton } from '../../../../shared/sharing'
 import DndSubNav from '../components/ui/DndSubNav'
@@ -138,8 +140,10 @@ export default function CampaignDetailPage({ session, campaignId }) {
 
   async function handleExport(m) {
     try {
-      const { data, error: err } = await supabase
-        .from('dnd_characters').select('data').eq('id', m.character_id).maybeSingle()
+      const [{ data, error: err }, { downloadFoundryJSON }] = await Promise.all([
+        supabase.from('dnd_characters').select('data').eq('id', m.character_id).maybeSingle(),
+        importFoundryExport(),
+      ])
       if (err) throw err
       if (!data) { alert('Charakter konnte nicht geladen werden.'); return }
       await downloadFoundryJSON(data.data)
@@ -162,9 +166,10 @@ export default function CampaignDetailPage({ session, campaignId }) {
     const safe = s => String(s || '').replace(/[^a-z0-9_-]/gi, '_').replace(/^_+|_+$/g, '') || 'unbenannt'
     const campaignFolder = safe(campaign.name)
 
-    const { data: chars, error: fetchErr } = await supabase
-      .from('dnd_characters').select('id, name, data')
-      .in('id', members.map(m => m.character_id))
+    const [{ data: chars, error: fetchErr }, { exportToFoundry }] = await Promise.all([
+      supabase.from('dnd_characters').select('id, name, data').in('id', members.map(m => m.character_id)),
+      importFoundryExport(),
+    ])
     if (fetchErr) { alert('Konnte Charaktere nicht laden:\n' + fetchErr.message); return }
 
     const memberByCharId = {}

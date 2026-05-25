@@ -1,5 +1,5 @@
 // src/features/mtg/deck-builder/MtgDashboard.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -198,7 +198,11 @@ export default function MtgDashboard() {
   );
 }
 
-function DeckCard({ deck, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
+// memo: deck objects are heavy (full Scryfall card data inside data.mainboard)
+// and the parent Dashboard re-renders for many unrelated reasons (form
+// state, hover, etc.). Skipping render unless the deck reference actually
+// changes is a big win on dashboards with 10+ decks.
+const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
   const data = deck.data || {};
   const priceSettings = useMtgPriceSettings();
   const { isPwaMobile } = usePwaMobile();
@@ -459,7 +463,11 @@ function DeckCard({ deck, onOpen, onDelete, onDuplicate, readOnly = false, owner
       />
     </Panel>
   );
-}
+}, (a, b) => (
+  a.deck === b.deck
+  && a.readOnly === b.readOnly
+  && a.ownerName === b.ownerName
+));
 
 function ColorBar({ entries, total }) {
   if (!entries.length || total === 0) {

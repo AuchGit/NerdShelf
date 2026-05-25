@@ -81,7 +81,7 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
       if (t > 0) { const a = Math.min(t, dmg); t -= a; dmg -= a; d.status.temporaryHp = t }
       const cur = d.status.currentHp ?? hp.max
       d.status.currentHp = Math.max(0, cur - dmg)
-    })
+    }, { changedPaths: ['status.temporaryHp', 'status.currentHp'] })
     setAmount(0)
   }
   function heal() {
@@ -90,7 +90,7 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
       if (!d.status) d.status = {}
       const cur = d.status.currentHp ?? hp.max
       d.status.currentHp = Math.min(hp.max, cur + amount)
-    })
+    }, { changedPaths: ['status.currentHp'] })
     setAmount(0)
   }
 
