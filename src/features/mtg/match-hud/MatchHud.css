@@ -275,6 +275,53 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
   height: 100cqw;
 }
 
+/* ── Short-side auxiliary placement (poison + rotate buttons) ─────
+   The user-facing rule is: poison and rotate buttons must sit on
+   the SHORTER sides of the tile from the player's perspective, with
+   the same orientation as the HP number.
+
+   The player's view of the content has these dimensions:
+     • no quarter turn (0° / 180°) → matches the .mh-tile box
+     • quarter turn (90° / 270°)   → swapped (cqh × cqw)
+
+   So whether the content is "wider than tall in player's view"
+   depends on BOTH the tile's own aspect ratio AND whether a quarter
+   turn is in play. The two @container queries below cover the four
+   combinations — only the cases where the content ends up WIDER than
+   tall get switched into row layout (poison right, rotate buttons
+   left); everything else stays in the default column layout (poison
+   bottom, rotate buttons top). */
+
+/* Default: column layout. Rotate buttons top-centre, poison-bearing
+   .mh-tile-foot at the bottom as the last flex item. */
+.mh-tile-content { flex-direction: column; }
+
+/* Tile is wider than tall AND content is not dim-swapped → content
+   is wider than tall in the player's view → use row layout. */
+@container tile (aspect-ratio > 1) {
+  .mh-tile-content:not(.mh-tile-content-quarter) {
+    flex-direction: row;
+  }
+  .mh-tile-content:not(.mh-tile-content-quarter) .mh-tile-rotate {
+    top: 50%; left: 4px;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+}
+
+/* Tile is taller than wide AND content IS dim-swapped (quarter turn)
+   → content is wider than tall in the player's view → row layout. */
+@container tile (aspect-ratio < 1) {
+  .mh-tile-content.mh-tile-content-quarter {
+    flex-direction: row;
+  }
+  .mh-tile-content.mh-tile-content-quarter .mh-tile-rotate {
+    top: 50%; left: 4px;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+}
+
 /* Per-tile rotation buttons — small overlay near the top of the tile.
    Lives in TILE-LOCAL space so when the tile is rotated 90° the
    buttons rotate with it, staying visually pinned to the player's
