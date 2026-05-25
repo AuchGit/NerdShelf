@@ -122,14 +122,19 @@ export function useImports({ domain, select = '*' }) {
     setEntities(src || []);
 
     // 3. Fetch player names for the owners we now know about.
+    //    Goes through the get_player_names RPC (SECURITY DEFINER) instead
+    //    of a direct profiles SELECT — the profiles "public name via
+    //    imports" RLS policy is expensive (UNIONs across three imports
+    //    tables per row) and was a major hot spot in the Supabase stats.
+    //    The RPC enforces the same authorisation but runs once per call.
     const ownerIds = [...new Set((src || []).map(s => s.user_id).filter(Boolean))];
     if (ownerIds.length > 0) {
-      const { data: profs } = await supabase
-        .from('profiles')
-        .select('id, player_name')
-        .in('id', ownerIds);
+      const { data: profs, error: err3 } = await supabase
+        .rpc('get_player_names', { p_user_ids: ownerIds });
       const map = {};
-      for (const p of profs || []) map[p.id] = p.player_name || '';
+      if (!err3) {
+        for (const p of profs || []) map[p.id] = p.player_name || '';
+      }
       setOwners(map);
     } else {
       setOwners({});

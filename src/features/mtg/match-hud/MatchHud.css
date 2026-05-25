@@ -292,33 +292,63 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
    left); everything else stays in the default column layout (poison
    bottom, rotate buttons top). */
 
-/* Default: column layout. Rotate buttons top-centre, poison-bearing
-   .mh-tile-foot at the bottom as the last flex item. */
+/* Default (column layout): used by remote match where meta sits at
+   the top and foot at the bottom of the flex column. */
 .mh-tile-content { flex-direction: column; }
 
-/* Tile is wider than tall AND content is not dim-swapped → content
-   is wider than tall in the player's view → use row layout. */
+/* When meta is hidden (local "phone in the middle" match — we own
+   the entire tile layout) we switch HP and foot to absolute
+   positioning. HP fills the whole content and centres itself → it
+   is ALWAYS dead-centre regardless of where the foot/rotate live.
+   The foot floats to a short side (bottom by default, right in row
+   layout). */
+.mh-tile-content-no-meta .mh-tile-life-wrap {
+  position: absolute;
+  inset: 0;
+  flex: none;
+}
+.mh-tile-content-no-meta .mh-tile-foot {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+}
+
+/* Player view is WIDER than tall → row layout (rotate buttons on
+   the LEFT short side, foot/poison on the RIGHT short side). The
+   poison badge switches to column-reverse so + sits above the
+   number and − below — matching the player's tilted-head view of
+   "the badge stood up on its end". Two container-query cases:
+     (A) tile wide  AND no quarter turn
+     (B) tile tall  AND quarter turn (content is dim-swapped) */
+
+/* (A) tile wide + no quarter turn */
 @container tile (aspect-ratio > 1) {
-  .mh-tile-content:not(.mh-tile-content-quarter) {
-    flex-direction: row;
-  }
-  .mh-tile-content:not(.mh-tile-content-quarter) .mh-tile-rotate {
+  .mh-tile-content-no-meta:not(.mh-tile-content-quarter) .mh-tile-rotate {
     top: 50%; left: 4px;
     transform: translateY(-50%);
     flex-direction: column;
+  }
+  .mh-tile-content-no-meta:not(.mh-tile-content-quarter) .mh-tile-foot {
+    top: 0; bottom: 0; left: auto; right: 0;
+    width: auto;
+  }
+  .mh-tile-content-no-meta:not(.mh-tile-content-quarter) .mh-poison {
+    flex-direction: column-reverse;
   }
 }
 
-/* Tile is taller than wide AND content IS dim-swapped (quarter turn)
-   → content is wider than tall in the player's view → row layout. */
+/* (B) tile tall + quarter turn */
 @container tile (aspect-ratio < 1) {
-  .mh-tile-content.mh-tile-content-quarter {
-    flex-direction: row;
-  }
-  .mh-tile-content.mh-tile-content-quarter .mh-tile-rotate {
+  .mh-tile-content-no-meta.mh-tile-content-quarter .mh-tile-rotate {
     top: 50%; left: 4px;
     transform: translateY(-50%);
     flex-direction: column;
+  }
+  .mh-tile-content-no-meta.mh-tile-content-quarter .mh-tile-foot {
+    top: 0; bottom: 0; left: auto; right: 0;
+    width: auto;
+  }
+  .mh-tile-content-no-meta.mh-tile-content-quarter .mh-poison {
+    flex-direction: column-reverse;
   }
 }
 

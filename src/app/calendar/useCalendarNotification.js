@@ -8,7 +8,6 @@
 //
 // The check fires:
 //   • once on mount,
-//   • every 60 seconds while the app is running,
 //   • whenever the window regains focus,
 //   • whenever the tab becomes visible again (mobile PWA wake-up),
 //   • whenever Supabase realtime pushes an INSERT / UPDATE / DELETE on
@@ -19,6 +18,13 @@
 //     of a dnd_events row — covers the "no realtime configured" case),
 //   • whenever the `refreshKey` dependency bumps (used by the layout to
 //     re-check after the calendar modal closes).
+//
+// A periodic poll used to run every 60 seconds in addition to the above
+// triggers. It was dropped to stop the dnd_events table from being hit
+// once per user per minute — realtime + focus/visibility already cover
+// the "phone wakes up" and "GM adds an event" cases that mattered, and
+// the day-rollover edge case (badge stale across midnight) is handled
+// naturally by the focus event the next time the user looks at the app.
 //
 // All updates run silently in the background — the user never has to open
 // the calendar for the badge to appear.
@@ -67,7 +73,6 @@ export default function useCalendarNotification(refreshKey = 0) {
     }
 
     check();
-    const intervalId = setInterval(check, 60 * 1000);
 
     const onFocus = () => check();
     const onVisibility = () => { if (document.visibilityState === 'visible') check(); };
@@ -87,7 +92,6 @@ export default function useCalendarNotification(refreshKey = 0) {
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener(EVENTS_CHANGED, onCustom);

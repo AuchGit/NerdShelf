@@ -80,7 +80,7 @@ function PlayerTileBase({
       }}
     >
       <div
-        className={`mh-tile-content ${isQuarterTurn ? 'mh-tile-content-quarter' : ''}`}
+        className={`mh-tile-content ${isQuarterTurn ? 'mh-tile-content-quarter' : ''} ${hideMeta ? 'mh-tile-content-no-meta' : ''}`}
         style={{ ['--mh-tile-rot']: `${normalisedRot}deg` }}
       >
       {onRotate && (
