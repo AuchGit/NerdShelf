@@ -10,6 +10,7 @@ import MtgInventoryPage from '../features/mtg/deck-builder/pages/MtgInventoryPag
 import MtgWishlistPage from '../features/mtg/deck-builder/pages/MtgWishlistPage';
 import MatchHudDashboardPage from '../features/mtg/match-hud/pages/MatchHudDashboardPage';
 import MatchHudSessionPage from '../features/mtg/match-hud/pages/MatchHudSessionPage';
+import LocalMatchPage from '../features/mtg/match-hud/pages/LocalMatchPage';
 import Wh40kApp from '../features/wh40k/Wh40kApp';
 
 const LAST_ROUTE_KEY = 'nerdshelf:lastRoute';
@@ -70,6 +71,9 @@ export default function Router() {
           <Route path="/mtg/wishlist" element={<MtgWishlistPage />} />
           <Route path="/mtg/inventory" element={<MtgInventoryPage />} />
           <Route path="/mtg/match" element={<MatchHudDashboardPage />} />
+          {/* /local must precede the :joinCode route so it isn't parsed
+              as a (impossible) join code. */}
+          <Route path="/mtg/match/local" element={<LocalMatchPage />} />
           <Route path="/mtg/match/:joinCode" element={<MatchHudSessionPage />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
           <Route path="/mtg/deck/view/:token" element={<DeckViewPage />} />

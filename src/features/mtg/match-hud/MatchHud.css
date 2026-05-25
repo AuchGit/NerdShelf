@@ -101,6 +101,59 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
   grid-auto-rows: 1fr;
 }
 
+/* ── Local "phone in the middle" layouts ─────────────────────────────
+   The phone sits flat on the table, players sit around it. Each tile
+   is rotated so it reads upright from the player whose seat it is.
+   Tile order in the markup is bottom-first → top-last, mirroring how
+   the seats are usually filled. */
+.mh-grid-local-2 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.mh-grid-local-2 > :nth-child(2) { transform: rotate(180deg); }
+
+.mh-grid-local-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.mh-grid-local-3 > :nth-child(1) { grid-column: 1; grid-row: 2; }
+.mh-grid-local-3 > :nth-child(2) { grid-column: 2; grid-row: 2; }
+.mh-grid-local-3 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 1; transform: rotate(180deg); }
+
+.mh-grid-local-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.mh-grid-local-4 > :nth-child(1) { grid-column: 1; grid-row: 2; }
+.mh-grid-local-4 > :nth-child(2) { grid-column: 2; grid-row: 2; }
+.mh-grid-local-4 > :nth-child(3) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-4 > :nth-child(4) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+
+/* 5–6 players: simple 3-row layout. Top row rotated 180° for the
+   opposing seats. Side seats stay neutral — past 4 players the
+   rotation tetris no longer pays off and reading from any angle is
+   the best we can do. */
+.mh-grid-local-5 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+}
+.mh-grid-local-5 > :nth-child(1) { grid-column: 1; grid-row: 3; }
+.mh-grid-local-5 > :nth-child(2) { grid-column: 2; grid-row: 3; }
+.mh-grid-local-5 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 2; }
+.mh-grid-local-5 > :nth-child(4) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-5 > :nth-child(5) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+
+.mh-grid-local-6 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+}
+.mh-grid-local-6 > :nth-child(1) { grid-column: 1; grid-row: 3; }
+.mh-grid-local-6 > :nth-child(2) { grid-column: 2; grid-row: 3; }
+.mh-grid-local-6 > :nth-child(3) { grid-column: 1; grid-row: 2; }
+.mh-grid-local-6 > :nth-child(4) { grid-column: 2; grid-row: 2; }
+.mh-grid-local-6 > :nth-child(5) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-6 > :nth-child(6) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+
 /* ── Single player tile ──────────────────────────────────────────────── */
 .mh-tile {
   position: relative;

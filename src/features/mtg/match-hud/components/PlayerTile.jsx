@@ -26,6 +26,10 @@ function PlayerTileBase({
   onLifeDelta,
   onPoisonDelta,
   onOpenSelf,
+  // When true, skip the name + deck + presence + settings strip. Used by
+  // the local "all on one phone" match mode where there are no per-player
+  // identities — the colour alone identifies a player.
+  hideMeta = false,
 }) {
   const swatch = getColor(player.color);
   const [flashSide, setFlashSide] = useState(null); // 'left' | 'right' | null
@@ -58,18 +62,20 @@ function PlayerTileBase({
       className={`mh-tile ${isOwn ? 'mh-tile-own' : 'mh-tile-readonly'}`}
       style={{ ['--mh-tile-bg']: swatch.bg, ['--mh-tile-fg']: swatch.text }}
     >
-      <div className="mh-tile-meta">
-        <span
-          className={`mh-tile-presence ${isOnline ? 'mh-presence-on' : ''}`}
-          aria-label={isOnline ? 'online' : 'offline'}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="mh-tile-meta-name">{player.player_name || 'Spieler'}</div>
-          {player.deck_name && <div className="mh-tile-meta-deck">{player.deck_name}</div>}
+      {!hideMeta && (
+        <div className="mh-tile-meta">
+          <span
+            className={`mh-tile-presence ${isOnline ? 'mh-presence-on' : ''}`}
+            aria-label={isOnline ? 'online' : 'offline'}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="mh-tile-meta-name">{player.player_name || 'Spieler'}</div>
+            {player.deck_name && <div className="mh-tile-meta-deck">{player.deck_name}</div>}
+          </div>
         </div>
-      </div>
+      )}
 
-      {isOwn && onOpenSelf && (
+      {isOwn && onOpenSelf && !hideMeta && (
         <div className="mh-tile-actions">
           <button
             type="button"
@@ -142,6 +148,7 @@ function PlayerTileBase({
 const PlayerTile = memo(PlayerTileBase, (a, b) => (
   a.isOwn === b.isOwn
   && a.isOnline === b.isOnline
+  && a.hideMeta === b.hideMeta
   && a.player.id === b.player.id
   && a.player.life === b.player.life
   && a.player.poison === b.player.poison

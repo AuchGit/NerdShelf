@@ -24,6 +24,7 @@ import { formatCode } from '../services/matchCodes';
 import { getColor } from '../services/playerColors';
 import CreateMatchPanel from '../components/CreateMatchPanel';
 import JoinMatchPanel from '../components/JoinMatchPanel';
+import CreateLocalMatchPanel from '../components/CreateLocalMatchPanel';
 import '../MatchHud.css';
 
 export default function MatchHudDashboardPage() {
@@ -197,7 +198,7 @@ export default function MatchHudDashboardPage() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               gap: 'var(--space-4)',
             }}>
               <ActionCard
@@ -211,6 +212,12 @@ export default function MatchHudDashboardPage() {
                 description="Gib den Join-Code ein und wähle dein Deck und deine Farbe."
                 icon="↵"
                 onClick={() => setMode('join')}
+              />
+              <ActionCard
+                title="Lokales Match"
+                description="Ein Gerät für alle — Handy in die Tischmitte, jeder bedient seine Kachel."
+                icon="◉"
+                onClick={() => setMode('local')}
               />
             </div>
 
@@ -247,6 +254,15 @@ export default function MatchHudDashboardPage() {
             defaultName={playerName || ''}
             presetCode={searchParams.get('code') || ''}
             onJoin={handleJoin}
+            onCancel={() => setMode('idle')}
+          />
+        )}
+
+        {mode === 'local' && (
+          <CreateLocalMatchPanel
+            onCreate={({ players, startingLife }) => {
+              navigate(`/mtg/match/local?players=${players}&life=${startingLife}`);
+            }}
             onCancel={() => setMode('idle')}
           />
         )}
