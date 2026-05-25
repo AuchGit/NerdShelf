@@ -62,15 +62,27 @@ function PlayerTileBase({
   // accidental drags. Touch and mouse both come through onClick.
   const noSelect = (e) => e.preventDefault();
 
+  // Rotation lives on the inner content div (not the outer tile box).
+  // The OUTER box stays in its grid cell — keeps `overflow: hidden`
+  // meaningful and prevents the rotated visual from leaking into the
+  // neighbouring cells. The inner div uses container-query units to
+  // swap its dimensions when rotated by 90°/270° so the rotated content
+  // exactly fills the cell instead of bleeding past it.
+  const normalisedRot = ((rotation % 360) + 360) % 360
+  const isQuarterTurn = normalisedRot === 90 || normalisedRot === 270
+
   return (
     <div
       className={`mh-tile ${isOwn ? 'mh-tile-own' : 'mh-tile-readonly'}`}
       style={{
         ['--mh-tile-bg']: swatch.bg,
         ['--mh-tile-fg']: swatch.text,
-        transform: rotation ? `rotate(${rotation}deg)` : undefined,
       }}
     >
+      <div
+        className={`mh-tile-content ${isQuarterTurn ? 'mh-tile-content-quarter' : ''}`}
+        style={{ ['--mh-tile-rot']: `${normalisedRot}deg` }}
+      >
       {onRotate && (
         <div className="mh-tile-rotate" aria-hidden={false}>
           <button type="button" title="Drehen ←"  onClick={(e) => { e.stopPropagation(); onRotate(-90) }}>↺</button>
@@ -153,6 +165,7 @@ function PlayerTileBase({
             >+</button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

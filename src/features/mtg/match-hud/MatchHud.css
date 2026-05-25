@@ -197,6 +197,84 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 }
 .mh-local-exit:hover, .mh-local-exit:active { opacity: 1; }
 
+/* ── Custom in-document confirm modal ─────────────────────────────
+   window.confirm() forces Android Chrome to leave fullscreen for the
+   dialog and the status bar stays around after cancel. This in-page
+   overlay sits within the fullscreen document so the system bar never
+   reappears. */
+.mh-confirm-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.mh-confirm {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  max-width: 360px;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+}
+.mh-confirm-msg {
+  font-size: var(--fs-md);
+  line-height: 1.4;
+}
+.mh-confirm-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.mh-confirm-actions button {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  min-height: 36px;
+}
+.mh-confirm-actions .mh-confirm-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.mh-confirm-actions .mh-confirm-primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ── Tile-content wrapper (rotation lives here, not on .mh-tile) ─────
+   The outer .mh-tile stays in its grid cell with `overflow: hidden`
+   so rotated content can NEVER bleed into a neighbour cell. The inner
+   .mh-tile-content does the visual rotation, and for quarter turns it
+   uses container-query units to swap its dimensions — that way a
+   rotated 540×400 cell still has a 540-tall × 400-wide content area
+   that visually fills exactly the original cell box. */
+.mh-tile-content {
+  position: absolute;
+  top: 50%; left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  /* Default (0°/180°) — match the tile's natural box exactly. */
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%) rotate(var(--mh-tile-rot, 0deg));
+  transition: transform 80ms ease-out;
+}
+/* Quarter turns: swap width/height via container-query units so the
+   rotated rectangle's visual extent matches the parent's box. */
+.mh-tile-content-quarter {
+  width: 100cqh;
+  height: 100cqw;
+}
+
 /* Per-tile rotation buttons — small overlay near the top of the tile.
    Lives in TILE-LOCAL space so when the tile is rotated 90° the
    buttons rotate with it, staying visually pinned to the player's

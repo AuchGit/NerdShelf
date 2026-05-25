@@ -14,7 +14,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import PlayerTile from '../components/PlayerTile'
 import { PLAYER_COLORS } from '../services/playerColors'
 import { useWakeLock } from '../hooks/useWakeLock'
-import { useLandscapeLock } from '../hooks/useLandscapeLock'
 import { useFullscreen } from '../hooks/useFullscreen'
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
 import '../MatchHud.css'
@@ -87,19 +86,21 @@ export default function LocalMatchPage() {
   // Persist every change.
   useEffect(() => { saveStored(state) }, [state])
 
+  // Confirm dialog state. We use an in-document overlay instead of
+  // window.confirm() because the browser-native dialog forces Android
+  // Chrome to leave fullscreen — and after the user cancels, the
+  // status bar stays visible. A custom modal keeps fullscreen intact.
+  const [confirmKind, setConfirmKind] = useState(null)  // 'end' | 'reset' | null
+
   // Keep the screen awake while this page is mounted (PWA mobile users
   // put the phone down and walk away between turns — sleeping kills UX).
   useWakeLock(true)
 
-  // Force landscape — the layouts (especially 4-player rotated 90°) are
-  // designed for a horizontal phone in the table centre. Best-effort:
-  // works on installed PWAs (Chrome Android), silently no-op on iOS.
-  // Reverts to the device's system rotation setting on unmount.
-  useLandscapeLock(true)
-
-  // Browser fullscreen — hides Android's pull-down status bar and any
-  // browser chrome so the tiles can truly reach every edge. Only enable
-  // on PWA mobile; on desktop the in-page header is the right exit.
+  // Browser fullscreen + landscape orientation lock. useFullscreen now
+  // handles both in one sequenced effect (lock must follow fullscreen
+  // on Chrome Android). Only enabled on PWA mobile — on desktop the
+  // in-page header is the right control surface, and orientation is
+  // irrelevant.
   useFullscreen(isPwaMobile)
 
   // Strip the query params after we've used them so a refresh doesn't
@@ -139,18 +140,21 @@ export default function LocalMatchPage() {
     }))
   }, [])
 
-  function handleReset() {
-    if (!window.confirm('Alle Leben + Poison-Counter zurücksetzen?')) return
+  function performReset() {
     setState(s => ({
       ...s,
       players: s.players.map(p => ({ ...p, life: s.startingLife, poison: 0 })),
     }))
   }
-
-  function handleEnd() {
-    if (!window.confirm('Match beenden?')) return
+  function performEnd() {
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
     navigate('/mtg/match')
+  }
+  function handleConfirm() {
+    const k = confirmKind
+    setConfirmKind(null)
+    if (k === 'reset') performReset()
+    else if (k === 'end') performEnd()
   }
 
   const n = state.players.length
@@ -176,7 +180,7 @@ export default function LocalMatchPage() {
         <div className="mh-header-actions">
           <button
             type="button"
-            onClick={handleReset}
+            onClick={() => setConfirmKind('reset')}
             style={{
               background: 'transparent', border: '1px solid var(--color-border)',
               color: 'var(--color-text-muted)', borderRadius: 'var(--radius-sm)',
@@ -187,7 +191,7 @@ export default function LocalMatchPage() {
           >↻ Reset</button>
           <button
             type="button"
-            onClick={handleEnd}
+            onClick={() => setConfirmKind('end')}
             style={{
               background: 'transparent', border: '1px solid var(--color-danger)',
               color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)',
@@ -220,10 +224,33 @@ export default function LocalMatchPage() {
         <button
           type="button"
           className="mh-local-exit"
-          onClick={handleEnd}
+          onClick={() => setConfirmKind('end')}
           aria-label="Match beenden"
           title="Match beenden"
         >✕</button>
+      )}
+
+      {/* In-document confirm — keeps fullscreen alive. window.confirm
+          forces Android Chrome to leave fullscreen for the duration of
+          the dialog, and the status bar stays after cancel. */}
+      {confirmKind && (
+        <div className="mh-confirm-backdrop" onClick={() => setConfirmKind(null)}>
+          <div className="mh-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="mh-confirm-msg">
+              {confirmKind === 'end'
+                ? 'Match beenden? Der aktuelle Stand wird verworfen.'
+                : 'Alle Leben + Poison-Counter zurücksetzen?'}
+            </div>
+            <div className="mh-confirm-actions">
+              <button type="button" onClick={() => setConfirmKind(null)}>Abbrechen</button>
+              <button type="button"
+                      className={confirmKind === 'end' ? 'mh-confirm-danger' : 'mh-confirm-primary'}
+                      onClick={handleConfirm}>
+                {confirmKind === 'end' ? 'Beenden' : 'Zurücksetzen'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
