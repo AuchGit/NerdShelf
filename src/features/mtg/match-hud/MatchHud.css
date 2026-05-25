@@ -156,7 +156,24 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
    X button in the centre to leave the match. Wake-lock keeps the
    screen on, see useWakeLock. */
 .mh-local-screen[data-fullscreen='true'] .mh-header { display: none; }
-.mh-local-screen[data-fullscreen='true'] .mh-grid { padding: 2px; gap: 2px; }
+
+/* Edge-to-edge tiles in fullscreen: no gap, no padding, no rounded
+   corners — the player wants every pixel of the phone used. With
+   .mh-tile { overflow: hidden } the rotated content stays inside
+   its cell so neighbours never overlap. */
+.mh-local-screen[data-fullscreen='true'] .mh-grid    { padding: 0; gap: 0; }
+.mh-local-screen[data-fullscreen='true'] .mh-tile    { border-radius: 0; }
+/* The "your own tile" accent ring is a `::after` inside the tile and
+   stops at the rounded radius — drop its border-radius too so the
+   ring runs flush with the tile edge. */
+.mh-local-screen[data-fullscreen='true'] .mh-tile-own::after { border-radius: 0; }
+/* Defensive: kill safe-area insets the .mh-screen container might add
+   so the grid genuinely starts at the device edge. */
+.mh-local-screen[data-fullscreen='true'] {
+  padding: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 
 /* Centre-of-screen X button — only rendered in fullscreen mode. */
 .mh-local-exit {

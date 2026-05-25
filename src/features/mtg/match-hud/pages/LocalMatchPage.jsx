@@ -14,6 +14,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import PlayerTile from '../components/PlayerTile'
 import { PLAYER_COLORS } from '../services/playerColors'
 import { useWakeLock } from '../hooks/useWakeLock'
+import { useLandscapeLock } from '../hooks/useLandscapeLock'
+import { useFullscreen } from '../hooks/useFullscreen'
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
 import '../MatchHud.css'
 
@@ -88,6 +90,17 @@ export default function LocalMatchPage() {
   // Keep the screen awake while this page is mounted (PWA mobile users
   // put the phone down and walk away between turns — sleeping kills UX).
   useWakeLock(true)
+
+  // Force landscape — the layouts (especially 4-player rotated 90°) are
+  // designed for a horizontal phone in the table centre. Best-effort:
+  // works on installed PWAs (Chrome Android), silently no-op on iOS.
+  // Reverts to the device's system rotation setting on unmount.
+  useLandscapeLock(true)
+
+  // Browser fullscreen — hides Android's pull-down status bar and any
+  // browser chrome so the tiles can truly reach every edge. Only enable
+  // on PWA mobile; on desktop the in-page header is the right exit.
+  useFullscreen(isPwaMobile)
 
   // Strip the query params after we've used them so a refresh doesn't
   // wipe in-progress edits with the original starting life.
