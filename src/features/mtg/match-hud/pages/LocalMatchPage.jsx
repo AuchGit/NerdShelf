@@ -25,19 +25,20 @@ const STORAGE_KEY = 'nerdshelf_local_match_state'
 // "top" points toward the centre / opposing player.
 //
 // 2 players: side-by-side, each face the other across the phone.
-// 4 players: 2×2, all four read with their tops pointing to the centre
-//            column (left pair rotated CW, right pair CCW). This is the
-//            "all 90° pointing inward" layout.
-// 5 players: 4-player 2×2 on the left, the 5th on the right short edge
-//            rotated −90° (matches the right-edge seat).
+// 4 players: 2×2 — players sit on the LONG sides of the device. Bottom
+//            row reads upright (0°), top row reads inverted (180°). So
+//            looking at the device from either long side gives you your
+//            tile the right way up.
+// 5 players: the 4-player 2×2 stays on the left (long-side seating), and
+//            the 5th tile occupies the right short edge rotated −90°.
 // 6 players: 2 rows of 3 along the long sides — bottom three read
 //            upright (0°), top three read inverted (180°).
 // 3 players: sensible mix; players can always override per tile.
 const DEFAULT_ROTATIONS = {
   2: [90, -90],
   3: [0, 0, 180],
-  4: [90, -90, -90, 90],          // BL, BR, TR, TL  (markup order)
-  5: [90, -90, -90, 90, -90],     // 4 corners as in 4-player + 5th on right edge
+  4: [0, 0, 180, 180],            // BL, BR, TR, TL  (markup order)
+  5: [0, 0, 180, 180, -90],       // 4 corners on long sides + 5th on right short edge
   6: [0, 0, 0, 180, 180, 180],    // bottom row upright, top row inverted
 }
 
