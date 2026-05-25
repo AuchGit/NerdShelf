@@ -102,15 +102,16 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 }
 
 /* ── Local "phone in the middle" layouts ─────────────────────────────
-   The phone sits flat on the table, players sit around it. Each tile
-   is rotated so it reads upright from the player whose seat it is.
-   Tile order in the markup is bottom-first → top-last, mirroring how
-   the seats are usually filled. */
+   Designed for landscape — the phone lies flat on the table, players
+   sit around it. The CSS sets the GRID PLACEMENT of each tile; the
+   per-tile rotation is applied via inline style from JS (the player
+   can override it with the in-tile rotate buttons).
+
+   Tile order in markup mirrors seat fill (bottom-first → top-last). */
 .mh-grid-local-2 {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
 }
-.mh-grid-local-2 > :nth-child(2) { transform: rotate(180deg); }
 
 .mh-grid-local-3 {
   grid-template-columns: 1fr 1fr;
@@ -118,7 +119,7 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 }
 .mh-grid-local-3 > :nth-child(1) { grid-column: 1; grid-row: 2; }
 .mh-grid-local-3 > :nth-child(2) { grid-column: 2; grid-row: 2; }
-.mh-grid-local-3 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-3 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 1; }
 
 .mh-grid-local-4 {
   grid-template-columns: 1fr 1fr;
@@ -126,13 +127,9 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 }
 .mh-grid-local-4 > :nth-child(1) { grid-column: 1; grid-row: 2; }
 .mh-grid-local-4 > :nth-child(2) { grid-column: 2; grid-row: 2; }
-.mh-grid-local-4 > :nth-child(3) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
-.mh-grid-local-4 > :nth-child(4) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-4 > :nth-child(3) { grid-column: 2; grid-row: 1; }
+.mh-grid-local-4 > :nth-child(4) { grid-column: 1; grid-row: 1; }
 
-/* 5–6 players: simple 3-row layout. Top row rotated 180° for the
-   opposing seats. Side seats stay neutral — past 4 players the
-   rotation tetris no longer pays off and reading from any angle is
-   the best we can do. */
 .mh-grid-local-5 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
@@ -140,8 +137,8 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 .mh-grid-local-5 > :nth-child(1) { grid-column: 1; grid-row: 3; }
 .mh-grid-local-5 > :nth-child(2) { grid-column: 2; grid-row: 3; }
 .mh-grid-local-5 > :nth-child(3) { grid-column: 1 / span 2; grid-row: 2; }
-.mh-grid-local-5 > :nth-child(4) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
-.mh-grid-local-5 > :nth-child(5) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-5 > :nth-child(4) { grid-column: 2; grid-row: 1; }
+.mh-grid-local-5 > :nth-child(5) { grid-column: 1; grid-row: 1; }
 
 .mh-grid-local-6 {
   grid-template-columns: 1fr 1fr;
@@ -151,8 +148,66 @@ body[data-pwa-orientation='landscape'][data-pwa-layouts='true'] .mh-grid:not(.mh
 .mh-grid-local-6 > :nth-child(2) { grid-column: 2; grid-row: 3; }
 .mh-grid-local-6 > :nth-child(3) { grid-column: 1; grid-row: 2; }
 .mh-grid-local-6 > :nth-child(4) { grid-column: 2; grid-row: 2; }
-.mh-grid-local-6 > :nth-child(5) { grid-column: 2; grid-row: 1; transform: rotate(180deg); }
-.mh-grid-local-6 > :nth-child(6) { grid-column: 1; grid-row: 1; transform: rotate(180deg); }
+.mh-grid-local-6 > :nth-child(5) { grid-column: 2; grid-row: 1; }
+.mh-grid-local-6 > :nth-child(6) { grid-column: 1; grid-row: 1; }
+
+/* ── Local-match PWA mobile fullscreen + utilities ──────────────────
+   On PWA mobile we hide the header chrome entirely and float a small
+   X button in the centre to leave the match. Wake-lock keeps the
+   screen on, see useWakeLock. */
+.mh-local-screen[data-fullscreen='true'] .mh-header { display: none; }
+.mh-local-screen[data-fullscreen='true'] .mh-grid { padding: 2px; gap: 2px; }
+
+/* Centre-of-screen X button — only rendered in fullscreen mode. */
+.mh-local-exit {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--color-bg-sunken);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 30;
+  /* Stays clickable even though it overlaps tile tap zones (tiles use
+     pointer-events via buttons; the X sits above them via z-index). */
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  opacity: 0.85;
+}
+.mh-local-exit:hover, .mh-local-exit:active { opacity: 1; }
+
+/* Per-tile rotation buttons — small overlay near the top of the tile.
+   Lives in TILE-LOCAL space so when the tile is rotated 90° the
+   buttons rotate with it, staying visually pinned to the player's
+   own "top". Tap area is small + z-indexed above the tap zones. */
+.mh-tile-rotate {
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 4px;
+  z-index: 4;          /* above .mh-tap (z-index: 1 in original) */
+}
+.mh-tile-rotate button {
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--mh-tile-fg, #fff);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+.mh-tile-rotate button:hover,
+.mh-tile-rotate button:active { opacity: 1; }
 
 /* ── Single player tile ──────────────────────────────────────────────── */
 .mh-tile {

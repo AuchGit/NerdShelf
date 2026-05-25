@@ -30,6 +30,11 @@ function PlayerTileBase({
   // the local "all on one phone" match mode where there are no per-player
   // identities — the colour alone identifies a player.
   hideMeta = false,
+  // Tile rotation in degrees, applied via inline style (overrides any
+  // grid-layout default). Triggers the in-tile rotate buttons when
+  // onRotate is supplied.
+  rotation = 0,
+  onRotate,
 }) {
   const swatch = getColor(player.color);
   const [flashSide, setFlashSide] = useState(null); // 'left' | 'right' | null
@@ -60,8 +65,19 @@ function PlayerTileBase({
   return (
     <div
       className={`mh-tile ${isOwn ? 'mh-tile-own' : 'mh-tile-readonly'}`}
-      style={{ ['--mh-tile-bg']: swatch.bg, ['--mh-tile-fg']: swatch.text }}
+      style={{
+        ['--mh-tile-bg']: swatch.bg,
+        ['--mh-tile-fg']: swatch.text,
+        transform: rotation ? `rotate(${rotation}deg)` : undefined,
+      }}
     >
+      {onRotate && (
+        <div className="mh-tile-rotate" aria-hidden={false}>
+          <button type="button" title="Drehen ←"  onClick={(e) => { e.stopPropagation(); onRotate(-90) }}>↺</button>
+          <button type="button" title="Umdrehen" onClick={(e) => { e.stopPropagation(); onRotate(180) }}>⇅</button>
+          <button type="button" title="Drehen →"  onClick={(e) => { e.stopPropagation(); onRotate(+90) }}>↻</button>
+        </div>
+      )}
       {!hideMeta && (
         <div className="mh-tile-meta">
           <span
@@ -149,6 +165,7 @@ const PlayerTile = memo(PlayerTileBase, (a, b) => (
   a.isOwn === b.isOwn
   && a.isOnline === b.isOnline
   && a.hideMeta === b.hideMeta
+  && a.rotation === b.rotation
   && a.player.id === b.player.id
   && a.player.life === b.player.life
   && a.player.poison === b.player.poison
@@ -158,6 +175,7 @@ const PlayerTile = memo(PlayerTileBase, (a, b) => (
   && a.onLifeDelta === b.onLifeDelta
   && a.onPoisonDelta === b.onPoisonDelta
   && a.onOpenSelf === b.onOpenSelf
+  && a.onRotate === b.onRotate
 ));
 
 export default PlayerTile;
