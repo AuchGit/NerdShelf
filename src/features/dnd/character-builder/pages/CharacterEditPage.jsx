@@ -131,8 +131,9 @@ export default function CharacterEditPage({ session }) {
         return true
       }
       case STEP.SPELLS: {
-        if (!cls || !isSpellcaster(cls.classId)) return true
-        const info = getSpellcastingInfo(cls.classId, 1, 0)
+        const edition = character?.meta?.edition || '5e'
+        if (!cls || !isSpellcaster(cls.classId, null, edition)) return true
+        const info = getSpellcastingInfo(cls.classId, 1, 0, null, edition)
         if (!info) return true
         const sc = cls.levelChoices?.[1]?.cantrips?.length || 0
         const ss = cls.levelChoices?.[1]?.startingSpells?.length || 0

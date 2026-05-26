@@ -19,6 +19,7 @@ import { useLanguage } from '../../../lib/i18n'
 import { parseTags } from '../../../lib/tagParser'
 import BrowsePanel from '../../ui/BrowsePanel'
 import EntryRenderer from '../../ui/EntryRenderer'
+import FiveEToolsLink from '../../ui/FiveEToolsLink'
 
 const CASTER_COLORS = {
   full: 'var(--accent-purple)', half: 'var(--accent-blue)', '1/3': 'var(--accent-green)', pact: 'var(--accent-pink)', null: 'var(--text-dim)',
@@ -139,8 +140,11 @@ export default function Step4Class({ character, updateCharacter }) {
 
     return (
       <div>
-        <div style={{ color: 'var(--accent)', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }}>
-          {cls.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+          <div style={{ color: 'var(--accent)', fontSize: 20, fontWeight: 'bold' }}>
+            {cls.name}
+          </div>
+          <FiveEToolsLink kind="class" name={cls.name} source={cls.source} edition={character?.meta?.edition} />
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 12 }}>
           {t('source')}: {cls.source}

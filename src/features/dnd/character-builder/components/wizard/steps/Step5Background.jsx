@@ -3,6 +3,7 @@ import { loadBackgroundList } from '../../../lib/dataLoader'
 import { useLanguage } from '../../../lib/i18n'
 import BrowsePanel from '../../ui/BrowsePanel'
 import EntryRenderer from '../../ui/EntryRenderer'
+import FiveEToolsLink from '../../ui/FiveEToolsLink'
 
 // Extrahiert Skill-Namen aus 5etools skillProficiencies format
 function extractSkills(skillProfs) {
@@ -137,7 +138,10 @@ export default function Step5Background({ character, updateCharacter }) {
     const tools  = extractTools(bg.toolProficiencies)
     return (
       <div>
-        <div style={{ color: 'var(--accent)', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>{bg.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+          <div style={{ color: 'var(--accent)', fontSize: 22, fontWeight: 'bold' }}>{bg.name}</div>
+          <FiveEToolsLink kind="background" name={bg.name} source={bg.source} edition={character.meta?.edition} />
+        </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 16 }}>{t('source')}: {bg.source}</div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>

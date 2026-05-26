@@ -126,8 +126,9 @@ function isProficienciesComplete(character) {
 function isSpellStepComplete(character) {
   const cls = character.classes[0]
   if (!cls) return false
-  if (!isSpellcaster(cls.classId)) return true
-  const info = getSpellcastingInfo(cls.classId, cls.level, 0)
+  const edition = character.meta?.edition || '5e'
+  if (!isSpellcaster(cls.classId, null, edition)) return true
+  const info = getSpellcastingInfo(cls.classId, cls.level, 0, null, edition)
   if (!info) return true
   const selectedCantrips  = cls.levelChoices?.[1]?.cantrips?.length        || 0
   const selectedSpells    = cls.levelChoices?.[1]?.startingSpells?.length  || 0

@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
+import FiveEToolsLink from '../ui/FiveEToolsLink'
 import { Section, EmptyState, Btn, SheetModal, TextInput } from './SheetKit'
 import { S } from './sheetStyles'
 import {
@@ -61,23 +62,27 @@ function makeEnricher(spellMap, character) {
       components: loaded?.components || {},
       entries: loaded?.entries || custom?.entries || (custom?.description ? [custom.description] : []),
       entriesHigherLevel: loaded?.entriesHigherLevel || custom?.entriesHigherLevel || [],
+      source: loaded?.source || custom?.source || m.source || null,
     }
   }
 }
 
 // ── Full spell detail block — shared by the list and the prepare dialog ──
-function SpellDetails({ spell }) {
+function SpellDetails({ spell, edition }) {
   const entries = spell.entries || []
   const entriesHL = spell.entriesHigherLevel || []
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
         <div style={S.detailChip}><span style={S.detailChipLabel}>Level: </span><span style={S.detailChipValue}>{spell.level ? spell.level : 'Cantrip'}</span></div>
         <div style={S.detailChip}><span style={S.detailChipLabel}>School: </span><span style={S.detailChipValue}>{SCHOOL_NAMES[spell.school] || spell.school || '—'}</span></div>
         <div style={S.detailChip}><span style={S.detailChipLabel}>Cast: </span><span style={S.detailChipValue}>{spell.castingTime || '—'}</span></div>
         <div style={S.detailChip}><span style={S.detailChipLabel}>Range: </span><span style={S.detailChipValue}>{spell.range || '—'}</span></div>
         <div style={S.detailChip}><span style={S.detailChipLabel}>Duration: </span><span style={S.detailChipValue}>{spell.duration || '—'}</span></div>
         <div style={S.detailChip}><span style={S.detailChipLabel}>Components: </span><span style={S.detailChipValue}>{formatComponents(spell.components)}</span></div>
+        {spell.source && (
+          <FiveEToolsLink kind="spell" name={spell.name} source={spell.source} edition={edition} compact />
+        )}
       </div>
       {(spell.concentration || spell.ritual) && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -101,7 +106,7 @@ function SpellDetails({ spell }) {
 
 // ── Ritual row — same look as a SpellRow, but the only cast option is
 //    "Cast as Ritual (+10 min)" since rituals don't consume a slot ──
-function RitualRow({ spell, onCastRitual }) {
+function RitualRow({ spell, onCastRitual, edition }) {
   const [open, setOpen] = useState(false)
   const lc = levelColor(spell.level)
   return (
@@ -130,7 +135,7 @@ function RitualRow({ spell, onCastRitual }) {
       </div>
       {open && (
         <div style={EXPAND_PANEL}>
-          <SpellDetails spell={spell} />
+          <SpellDetails spell={spell} edition={edition} />
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
             <div style={{ ...S.formLabel, marginBottom: 8 }}>Ritual</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -145,7 +150,7 @@ function RitualRow({ spell, onCastRitual }) {
 }
 
 // ── Spell row in the main list — expands to details + cast actions ──
-function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, spellcasting }) {
+function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, spellcasting, edition }) {
   const [open, setOpen] = useState(false)
   const level = spell.level
   const lc = levelColor(level)
@@ -223,7 +228,7 @@ function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, s
       </div>
       {open && (
         <div style={EXPAND_PANEL}>
-          <SpellDetails spell={spell} />
+          <SpellDetails spell={spell} edition={edition} />
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
             <div style={{ ...S.formLabel, marginBottom: 8 }}>{level === 0 ? 'Cast' : 'Cast at slot level'}</div>
             {castOptions.length === 0 ? (
@@ -285,10 +290,10 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
     return (character.classes || []).map(cls => {
       const sub = cls.subclassId?.split('__')[0] || null
       const mod = computed?.spellcasting?.[cls.classId]?.modifier ?? 0
-      const info = getSpellcastingInfo(cls.classId, cls.level, mod, sub)
+      const info = getSpellcastingInfo(cls.classId, cls.level, mod, sub, edition)
       return info ? { classId: cls.classId, info } : null
     }).filter(Boolean)
-  }, [character.classes, computed])
+  }, [character.classes, computed, edition])
 
   // ── Build the castable spell view ──────────────────────────
   const { byLevel, hasAny, alwaysNames } = useMemo(() => {
@@ -600,7 +605,7 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
             Cast any of these as a ritual (+10 minutes, no slot consumed).
           </div>
           {rituals.map(spell => (
-            <RitualRow key={spell.name} spell={spell} onCastRitual={castRitual} />
+            <RitualRow key={spell.name} spell={spell} onCastRitual={castRitual} edition={edition} />
           ))}
         </Section>
       )}
@@ -620,6 +625,7 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
                 slotRemaining={slotRemaining} pactRemaining={pactRemaining}
                 warlockSlots={warlockSlots} onCast={castSpell}
                 spellcasting={computed?.spellcasting}
+                edition={edition}
               />
             ))}
           </Section>
@@ -677,7 +683,7 @@ function PrepareRow({ spell, isPrep, note, atLimit, onToggle }) {
       </div>
       {open && (
         <div style={EXPAND_PANEL}>
-          <SpellDetails spell={spell} />
+          <SpellDetails spell={spell} edition={edition} />
         </div>
       )}
     </div>

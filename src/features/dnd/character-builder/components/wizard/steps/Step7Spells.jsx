@@ -43,7 +43,7 @@ export default function Step7Spells({ character, updateCharacter }) {
     return () => { cancelled = true }
   }, [edition, classId])
 
-  const spellInfo     = classId ? getSpellcastingInfo(classId, 1) : null
+  const spellInfo     = classId ? getSpellcastingInfo(classId, 1, 0, null, edition) : null
   const maxCastable   = getMaxCastableLevel(classId)
   const profBonus     = 2
 

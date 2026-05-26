@@ -41,6 +41,7 @@ import { loadRaceList } from '../../../lib/dataLoader'
 import { useLanguage } from '../../../lib/i18n'
 import BrowsePanel from '../../ui/BrowsePanel'
 import EntryRenderer from '../../ui/EntryRenderer'
+import FiveEToolsLink from '../../ui/FiveEToolsLink'
 import AdditionalSpellPicker from '../AdditionalSpellPicker'
 import RaceChoicePicker from '../RaceChoicePicker'
 import ChoicePicker from '../../ui/ChoicePicker'
@@ -497,8 +498,11 @@ export default function Step3Race({ character, updateCharacter }) {
 
     return (
       <div>
-        <div style={{ color: 'var(--accent)', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>
-          {race.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+          <div style={{ color: 'var(--accent)', fontSize: 22, fontWeight: 'bold' }}>
+            {race.name}
+          </div>
+          <FiveEToolsLink kind="race" name={race.name} source={race.source} edition={character.meta?.edition} />
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 16 }}>
           {t('source')}: {race.source}

@@ -120,7 +120,7 @@ export default function LevelUpPage({ session }) {
     const castProg = existCasterProg || classData.casterProgression
     const willHaveSpells = spellAb || castProg || li.newCantrips > 0 || li.newSpellsKnown > 0 || li.newSpellbookSpells > 0
     if (willHaveSpells) {
-      const slc = getSpellListClass(classData.id, existSubId)
+      const slc = getSpellListClass(classData.id, existSubId, edition)
       const [sl, cn] = await Promise.all([loadSpellList(edition), loadClassSpellNames(edition, slc)])
       setAllSp(sl); setCsn(cn)
     }
@@ -130,7 +130,7 @@ export default function LevelUpPage({ session }) {
   async function onSubclassChosen(subId, sub) {
     setDraft(d => ({...d, subclassId:subId, subclassSpellAbility:sub?.spellcastingAbility||null, subclassCasterProg:sub?.casterProgression||null}))
     if (sub?.spellcastingAbility) {
-      const slc = getSpellListClass(info.classId, subId)
+      const slc = getSpellListClass(info.classId, subId, edition)
       const [sl, cn] = await Promise.all([loadSpellList(edition), loadClassSpellNames(edition, slc)])
       setAllSp(sl); setCsn(cn)
     }
@@ -143,8 +143,8 @@ export default function LevelUpPage({ session }) {
     const castProg = draft.subclassCasterProg || draft.existingCasterProg || info.casterProgression
     if (!castAb || (castAb === info.spellcastingAbility && castProg === info.casterProgression)) return info
     const subName = draft.subclassId
-    const currSI = getSpellcastingInfo(info.classId, info.nextLevel, 0, subName)
-    const prevSI = info.currentLevel > 0 ? getSpellcastingInfo(info.classId, info.currentLevel, 0, subName) : null
+    const currSI = getSpellcastingInfo(info.classId, info.nextLevel, 0, subName, edition)
+    const prevSI = info.currentLevel > 0 ? getSpellcastingInfo(info.classId, info.currentLevel, 0, subName, edition) : null
     const maxSL = castProg ? getMaxSpellLevel(castProg, info.nextLevel) : 0
     const prevMaxSL = info.currentLevel > 0 && castProg ? getMaxSpellLevel(castProg, info.currentLevel) : 0
     return { ...info,
@@ -547,7 +547,7 @@ function StepASI({ info, draft, setDraft, abScores, feats, optF, edition, allSp 
         </div>
         <div style={{color:total===2?'var(--accent-green)':'var(--text-muted)',fontSize:12,marginTop:6}}>{total}/2 verteilt</div>
       </div>}
-      {draft.asiMode==='feat' && <FeatPicker feats={feats} optF={optF} draft={draft} setDraft={setDraft} edition={edition} allSp={allSp} />}
+      {draft.asiMode==='feat' && <FeatPicker feats={feats} optF={optF} draft={draft} setDraft={setDraft} edition={edition} allSp={allSp} levelContext={{ classId: info.classId, classLevel: info.nextLevel }} />}
     </div>
   )
 }
@@ -619,7 +619,7 @@ function StepFeatures({ info, draft, setDraft, optF, char }) {
 
 function StepSpells({ info, draft, setDraft, allSp, csn, char, optF }) {
   const [sLv,setSLv]=useState(null),[sCon,setSCon]=useState(false),[sRit,setSRit]=useState(false)
-  const slci = getSpellListClass(info.classId, draft.subclassId)
+  const slci = getSpellListClass(info.classId, draft.subclassId, edition)
   const clsLc = (slci||'').toLowerCase()
   const isCS = s => { if(csn.size>0&&csn.has(s.name.toLowerCase()))return true; return(s.classes||[]).some(c=>c.toLowerCase()===clsLc) }
   const classCant = useMemo(()=>allSp.filter(s=>s.level===0&&isCS(s)),[allSp,csn,clsLc])
@@ -883,11 +883,32 @@ function OptFeatPicker({ gain, optF, existOF, draft, setDraft, char, classId, cl
 
 // ═══════ FEAT PICKER (with proper optfeature option loading) ════════════════
 
-function FeatPicker({ feats, optF, draft, setDraft, edition, allSp }) {
+function FeatPicker({ feats, optF, draft, setDraft, edition, allSp, levelContext }) {
   const [search,setSearch]=useState(''),[viewing,setViewing]=useState(null)
-  const filtered=useMemo(()=>!search.trim()?feats:feats.filter(f=>f.name.toLowerCase().includes(search.toLowerCase())),[feats,search])
+  // 5.5e feats carry a `category` field:
+  //   O   — Origin Feat (taken at character creation from background only)
+  //   G   — General Feat (the default ASI-level choice)
+  //   FS  — Fighting Style (only when the class feature grants it)
+  //   FS:X — Fighting Style restricted to class X
+  //   EB  — Epic Boon (only at level 19)
+  // At an ASI level the legitimate categories are G + (EB if total level ≥ 19).
+  // Anything tagged O/FS at an ASI level would be a rules violation.
+  // 5e has no category field — show every feat.
+  const is55e = edition === '5.5e'
+  const totalLevel = (levelContext?.classLevel || 0)  // approximation; full multiclass sum lives on character
+  const categoryFiltered = useMemo(() => {
+    if (!is55e) return feats
+    return feats.filter(f => {
+      const cat = (f.category || 'G').toUpperCase()
+      if (cat === 'O') return false                                    // Origin only at character creation
+      if (cat.startsWith('FS')) return false                            // Fighting-style picker handled elsewhere
+      if (cat === 'EB' && totalLevel < 19) return false                 // Epic Boon at total level 19+
+      return true                                                       // G + anything not classified
+    })
+  }, [feats, is55e, totalLevel])
+  const filtered=useMemo(()=>!search.trim()?categoryFiltered:categoryFiltered.filter(f=>f.name.toLowerCase().includes(search.toLowerCase())),[categoryFiltered,search])
   const sel=draft.featEntry
-  const detail=viewing||(sel?feats.find(f=>f.name===sel.name):null)
+  const detail=viewing||(sel?categoryFiltered.find(f=>f.name===sel.name):null)
 
   function selectFeat(feat) {
     if(sel?.name===feat.name) setDraft(d=>({...d,featEntry:null,featAB:{},featCh:{}}))

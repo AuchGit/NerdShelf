@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
+import FiveEToolsLink from '../ui/FiveEToolsLink'
 import { Section, TraitPill } from './SheetKit'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
@@ -10,7 +11,13 @@ import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
 function getFeatBonusSummary(character) {
   const result = []
   for (const feat of (character.feats || [])) {
-    const entry = { name: feat.featId, source: feat.source, isOrigin: feat._isOriginFeat, bonuses: [], spells: [] }
+    // "Origin" badge in the list = either the race-granted feat (5e
+    // Variant Human style, stored as _isOriginFeat) OR the 5.5e
+    // background feat (stored via chosenAt.source === 'background'
+    // by Step5Background). Both are taken at character creation and
+    // are conceptually the same slot.
+    const isOrigin = !!feat._isOriginFeat || feat.chosenAt?.source === 'background'
+    const entry = { name: feat.featId, source: feat.source, isOrigin, bonuses: [], spells: [] }
     for (const [key, val] of Object.entries(feat.abilityBonus || {})) {
       if (val) entry.bonuses.push(`+${val} ${key.toUpperCase()}`)
     }
@@ -192,7 +199,14 @@ export default function FeaturesTab({ character }) {
                     {feat.name}
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
-                  <div style={S.featCardSource}>{feat.source}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {feat.source && (
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <FiveEToolsLink kind="feat" name={feat.name} source={feat.source} edition={character.meta?.edition} compact />
+                      </span>
+                    )}
+                    <div style={S.featCardSource}>{feat.source}</div>
+                  </div>
                 </div>
                 {(feat.bonuses.length > 0 || feat.spells.length > 0) && (
                   <div style={S.featCardBonuses}>

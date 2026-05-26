@@ -455,10 +455,18 @@ export default function Step6AbilityScores({ character, updateCharacter }) {
   }
 
   const filteredFeats = useMemo(() => {
-    if (!featSearch.trim()) return feats
+    // 5.5e: the Origin Feat slot can only hold a category-O feat. The
+    // race-feat picker (Variant Human in 5e) doesn't appear in 5.5e, so
+    // we don't need a special branch for it. 5e has no category field
+    // so every feat passes.
+    let pool = feats
+    if (is55e && asiMethod === 'originFeat') {
+      pool = pool.filter(f => (f.category || '').toUpperCase() === 'O')
+    }
+    if (!featSearch.trim()) return pool
     const q = featSearch.toLowerCase()
-    return feats.filter(f => f.name.toLowerCase().includes(q))
-  }, [feats, featSearch])
+    return pool.filter(f => f.name.toLowerCase().includes(q))
+  }, [feats, featSearch, is55e, asiMethod])
 
   const asiOptions = [
     { id: 'fixed',      label: t('asiFixed') },

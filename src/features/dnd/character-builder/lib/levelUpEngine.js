@@ -239,8 +239,9 @@ export function computeLevelUpInfo(classData, classEntry, character, isMulticlas
   const castAbility = classEntry?.spellcastingAbility || classData.spellcastingAbility
   const subName = classEntry?.subclassId || classEntry?.subclassName || null
   if (castAbility) {
-    const prevInfo = currentLevel > 0 ? getSpellcastingInfo(classData.id, currentLevel, 0, subName) : null
-    const currInfo = getSpellcastingInfo(classData.id, nextLevel, 0, subName)
+    const edition = character?.meta?.edition || '5e'
+    const prevInfo = currentLevel > 0 ? getSpellcastingInfo(classData.id, currentLevel, 0, subName, edition) : null
+    const currInfo = getSpellcastingInfo(classData.id, nextLevel, 0, subName, edition)
     if (currInfo) {
       info.newCantrips = Math.max(0, (currInfo.cantripsKnown || 0) - (prevInfo?.cantripsKnown || 0))
       if (currInfo.type === 'known')

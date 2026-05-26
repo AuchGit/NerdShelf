@@ -107,9 +107,68 @@ export const SPELLCASTING_RULES = {
   },
 }
 
-export function getSpellcastingInfo(classId, level, abilityMod = 0, subclassId = null) {
-  // Try class first, then subclass name (for subclass-based casters like EK/AT)
-  const rules = SPELLCASTING_RULES[classId] || (subclassId ? SPELLCASTING_RULES[subclassId] : null)
+// ── 5.5e overlay ───────────────────────────────────────────────────
+// In the 2024 PHB (5.5e / XPHB), several "known"-caster classes were
+// converted to "prepared" casters with a flat formula. The numbers
+// here come straight from the 2024 PHB class tables.
+//
+// Anything NOT in this object inherits the 5e rules above unchanged
+// (so Wizard, Cleric, Druid, Paladin, Artificer, EK, AT, etc. behave
+// identically across editions).
+export const SPELLCASTING_RULES_5_5E = {
+  Bard: {
+    type: 'prepared',
+    hasSpellbook: false,
+    cantripsKnown:  [2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],
+    // 2024 Bard prepared spells table (by class level).
+    preparedTable:   [4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,19,20,21,22,22],
+    spellListKey: 'Bard',
+    spellcastingAbility: 'cha',
+    ritualCasting: 'prepared',
+  },
+  Sorcerer: {
+    type: 'prepared',
+    hasSpellbook: false,
+    cantripsKnown:  [4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6],
+    preparedTable:   [4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,19,20,21,22,22],
+    spellListKey: 'Sorcerer',
+    spellcastingAbility: 'cha',
+  },
+  Warlock: {
+    type: 'prepared',
+    hasSpellbook: false,
+    cantripsKnown:  [2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],
+    // 2024 Warlock prepared spells table.
+    preparedTable:   [2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15],
+    spellListKey: 'Warlock',
+    spellcastingAbility: 'cha',
+  },
+  Ranger: {
+    type: 'prepared',
+    hasSpellbook: false,
+    cantripsKnown:  [2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3],
+    // 2024 Ranger prepared spells table — Ranger learned to cast spells
+    // already at level 1 in the 2024 edition.
+    preparedTable:   [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21],
+    spellListKey: 'Ranger',
+    spellcastingAbility: 'wis',
+  },
+}
+
+function pickRules(classId, edition, subclassId) {
+  const is55e = edition === '5.5e'
+  // 5.5e overlay first, then fall back to the shared base table.
+  if (is55e && SPELLCASTING_RULES_5_5E[classId]) return SPELLCASTING_RULES_5_5E[classId]
+  if (SPELLCASTING_RULES[classId]) return SPELLCASTING_RULES[classId]
+  if (subclassId) {
+    if (is55e && SPELLCASTING_RULES_5_5E[subclassId]) return SPELLCASTING_RULES_5_5E[subclassId]
+    return SPELLCASTING_RULES[subclassId] || null
+  }
+  return null
+}
+
+export function getSpellcastingInfo(classId, level, abilityMod = 0, subclassId = null, edition = '5e') {
+  const rules = pickRules(classId, edition, subclassId)
   if (!rules) return null
   const idx = Math.min(level - 1, 19)
   const cantripsKnown = rules.cantripsKnown[idx] ?? 0
@@ -127,26 +186,35 @@ export function getSpellcastingInfo(classId, level, abilityMod = 0, subclassId =
       ritualCasting: rules.ritualCasting || null,
     }
   }
+  // 5.5e prepared casters use a flat per-level TABLE; legacy 5e prepared
+  // casters use a formula (level + ability mod). Support both.
+  const maxPrepared = rules.preparedTable
+    ? (rules.preparedTable[idx] ?? 0)
+    : (rules.preparedFormula ? rules.preparedFormula(level, abilityMod) : 0)
+
   return {
     type: 'prepared',
     hasSpellbook: rules.hasSpellbook ?? false,
     cantripsKnown,
     spellbookStart: rules.spellbookStart ?? null,
-    maxPrepared: rules.preparedFormula(level, abilityMod),
+    maxPrepared,
     spellListKey: rules.spellListKey,
     spellcastingAbility: rules.spellcastingAbility,
     schoolRestriction: null,
-    canSwapSpell: false,
+    // 5.5e prepared casters can also swap one prepared spell on a long
+    // rest (RAW). Keep canSwapSpell tied to the rules' explicit flag if
+    // they set one — defaults to false (5e prepared behaviour).
+    canSwapSpell: rules.canSwapSpell ?? false,
     ritualCasting: rules.ritualCasting || null,
   }
 }
 
-export function isSpellcaster(classId, subclassId = null) {
-  return !!(SPELLCASTING_RULES[classId] || (subclassId ? SPELLCASTING_RULES[subclassId] : null))
+export function isSpellcaster(classId, subclassId = null, edition = '5e') {
+  return !!pickRules(classId, edition, subclassId)
 }
 
 /** Return the class name whose spell list should be used (e.g. EK → 'Wizard') */
-export function getSpellListClass(classId, subclassId = null) {
-  const rules = SPELLCASTING_RULES[classId] || (subclassId ? SPELLCASTING_RULES[subclassId] : null)
+export function getSpellListClass(classId, subclassId = null, edition = '5e') {
+  const rules = pickRules(classId, edition, subclassId)
   return rules?.spellListKey || classId
 }
