@@ -1,6 +1,8 @@
 import { getModifier, getProficiencyBonus, getTotalLevel } from './characterModel'
 import { asArray } from './choiceParser'
-import { combinedMarkEffects } from './weaponMarkingRules'
+import { combinedMarkEffects, gatherCharacterFeatures } from './weaponMarkingRules'
+import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
+import { activeConcentrationEffects } from './concentrationEffects'
 
 // ============================================================
 // HAUPT-FUNKTION
@@ -21,7 +23,7 @@ export function computeCharacter(character, classDataMap = {}) {
   const hp = computeHP(character, modifiers, classDataMap)
   const ac = computeAC(character, modifiers, abilityScores)
   const spellcasting = computeSpellcasting(character, modifiers, profBonus)
-  const attacks = computeAttacks(character, modifiers, profBonus)
+  const attacks = computeAttacks(character, modifiers, profBonus, proficiencies)
   const resources = computeResources(character, modifiers, profBonus, totalLevel)
 
   return {
@@ -320,6 +322,23 @@ export function computeProficiencies(character, classDataMap = {}) {
     }
   }
 
+  // ── Feature-implied grants (data-driven via featureGrants.js) ──
+  // Subclass features whose proficiencies live in `entries` (free text)
+  // — e.g. Hexblade's "Hex Warrior" granting medium armor / shields /
+  // martial weapons — don't show up in `startingProficiencies`. The
+  // FEATURE_PROFICIENCY_GRANTS catalog patches them in based on the
+  // features gatherCharacterFeatures() detects.
+  const featureSet = gatherCharacterFeatures(character)
+  for (const rule of FEATURE_PROFICIENCY_GRANTS) {
+    if (!featureSet.has(rule.feature.toLowerCase())) continue
+    for (const w of (rule.weapons || [])) {
+      if (!result.weapons.includes(w)) result.weapons.push(w)
+    }
+    for (const a of (rule.armor || [])) {
+      if (!result.armor.includes(a)) result.armor.push(a)
+    }
+  }
+
   return result
 }
 
@@ -561,16 +580,42 @@ export function computeAC(character, modifiers, abilityScores) {
   const hasShield = allItems.some(i => i.equipped && (i.isShield || i.type === 'S'))
   const shieldBonus = hasShield ? 2 : 0
 
+  // ── Concentration-spell AC effects ──────────────────────────
+  // Pulled from the data-driven catalog so adding a new buff/debuff is
+  // a one-line JSON entry.
+  const concEff = activeConcentrationEffects(character)
+  // acFormula override (e.g. Mage Armor → 13 + DEX) becomes another
+  // option that competes with armor / unarmored defenses.
+  if (concEff?.acFormula) {
+    const abil = (modifiers[concEff.acFormula.ability] || 0)
+    options.push({
+      label: `${concEff.spell} (Konz.)`,
+      value: (concEff.acFormula.base || 10) + abil,
+      note: `${concEff.acFormula.base} + ${concEff.acFormula.ability.toUpperCase()}`,
+      _concentration: true,
+    })
+  }
+
   // Bestes AC berechnen + Shield
   const best = options.reduce((a, b) => a.value > b.value ? a : b, options[0])
+  let total = best.value + shieldBonus
+
+  // acBonus (additive, e.g. Shield of Faith / Haste) stacks on the
+  // chosen base AC.
+  if (concEff?.acBonus) total += concEff.acBonus
+  // acFloor (e.g. Barkskin) raises the result to a minimum.
+  if (concEff?.acFloor) total = Math.max(total, concEff.acFloor)
 
   return {
-    total: best.value + shieldBonus,
+    total,
     base: best.value,
     shield: shieldBonus,
     source: best.label,
     note: best.note,
     allOptions: options,
+    concentrationEffect: concEff
+      ? { spell: concEff.spell, label: concEff.label, acBonus: concEff.acBonus, acFloor: concEff.acFloor }
+      : null,
   }
 }
 
@@ -605,7 +650,7 @@ export function computeSpellcasting(character, modifiers, profBonus) {
 // ANGRIFFE
 // ============================================================
 
-export function computeAttacks(character, modifiers, profBonus) {
+export function computeAttacks(character, modifiers, profBonus, proficiencies) {
   const attacks = []
 
   // Unarmed Strike (immer verfügbar)
@@ -667,7 +712,7 @@ export function computeAttacks(character, modifiers, profBonus) {
       abilityMod = strMod
     }
 
-    const isProficient = checkWeaponProficiency(character, weapon)
+    const isProficient = checkWeaponProficiency(character, weapon, proficiencies)
     const baseAtk = abilityMod + (isProficient ? profBonus : 0) + (weapon.attackBonus || 0)
     const attackBonus = baseAtk + (marks.attackBonus || 0)
     const damageExtra = (weapon.attackBonus || 0) + (marks.damageBonus || 0)
@@ -681,6 +726,9 @@ export function computeAttacks(character, modifiers, profBonus) {
       damageType: weapon.dmgType || 'unknown',
       range: weapon.range || '5 ft.',
       properties: weapon.properties || [],
+      // 5.5e Weapon Mastery — empty on 5e weapons. Surfaced as a small
+      // pill on the attack row of the player sheet.
+      mastery: weapon.mastery || [],
       isProficient,
       abilityUsed,
       // First active mark — surfaced as a pill on the attack row. If
@@ -695,13 +743,48 @@ export function computeAttacks(character, modifiers, profBonus) {
   return attacks
 }
 
-function checkWeaponProficiency(character, weapon) {
-  // Vereinfacht — wird später mit echten Weapon-Daten erweitert
-  const profs = character.extraProficiencies?.weapons || []
-  return profs.some(p =>
-    p.toLowerCase() === weapon.name?.toLowerCase() ||
-    p.toLowerCase() === weapon.weaponCategory?.toLowerCase()
-  )
+function checkWeaponProficiency(character, weapon, proficiencies) {
+  // Pull weapon proficiencies from EVERY source the character has —
+  // classes (via computeProficiencies), feats, races, AND any legacy
+  // extraProficiencies.weapons that older characters might still carry.
+  //
+  // Each proficiency entry can be:
+  //   • a category — "simple" / "martial" / "simple weapons" / …
+  //   • a category-shorthand — "simpleWeapons" / "martialWeapons" (5etools shape)
+  //   • a specific weapon name — "Longsword" / "Shortsword|PHB" / …
+  // Matching is case-insensitive and strips the |SOURCE suffix and
+  // trailing " weapons" so "Longsword|XPHB" matches a weapon called
+  // "Longsword" and "martialWeapons" matches weaponCategory "martial".
+  const aggregated = [
+    ...(proficiencies?.weapons || []),
+    ...(character.extraProficiencies?.weapons || []),
+  ]
+  // Some feats / class-features add weapon prof via `weaponProficiencies`
+  // on the character row directly — pick those up too.
+  for (const feat of (character.feats || [])) {
+    for (const w of (feat.weaponProficiencies || feat.choices?.weaponProficiencies || [])) {
+      aggregated.push(w)
+    }
+  }
+
+  const norm = (s) => String(s || '')
+    .toLowerCase()
+    .replace(/\|.*$/, '')        // drop |SOURCE suffix
+    .replace(/\s*weapons?$/, '')  // drop trailing " weapons"
+    .replace(/weapons?$/, '')     // also handle the shorthand "simpleWeapons"
+    .trim()
+
+  const weaponName = norm(weapon.name)
+  const weaponCustom = norm(weapon.customName)
+  const weaponCat = norm(weapon.weaponCategory)
+
+  for (const p of aggregated) {
+    const n = norm(p)
+    if (!n) continue
+    if (n === weaponCat) return true                // category match (simple/martial)
+    if (n === weaponName || n === weaponCustom) return true  // specific weapon
+  }
+  return false
 }
 
 function getMonkMartialArtsDie(level) {
@@ -795,29 +878,60 @@ export function computeResources(character, modifiers, profBonus, totalLevel) {
 // ============================================================
 
 function computeSpeed(character, abilityScores) {
-  // Basis aus Rasse
-  let base = character.species?.speed || 30
-
-  // Monk: Unarmored Movement
-  const monkClass = character.classes.find(c => c.classId === 'Monk')
-  if (monkClass) {
-    base += getMonkUnarmoredMovement(monkClass.level)
+  // species.speed may be:
+  //   • a plain number (the walk speed)
+  //   • an object { walk, fly, swim, climb, burrow } where each value
+  //     is a number, OR `true` meaning "equal to walk speed"
+  // — match 5etools' source shape.
+  const raw = character.species?.speed
+  const speed = { walk: 30, fly: null, swim: null, climb: null, burrow: null }
+  if (typeof raw === 'number') {
+    speed.walk = raw
+  } else if (raw && typeof raw === 'object') {
+    if (typeof raw.walk === 'number') speed.walk = raw.walk
+    for (const mode of ['fly', 'swim', 'climb', 'burrow']) {
+      const v = raw[mode]
+      if (typeof v === 'number') speed[mode] = v
+      else if (v === true)       speed[mode] = speed.walk
+    }
   }
 
-  // Barbarian Fast Movement (Level 5+)
-  const barbarianClass = character.classes.find(c => c.classId === 'Barbarian' && c.level >= 5)
-  if (barbarianClass) base += 10
+  // Monk: Unarmored Movement (walk + extra movement modes do NOT get
+  // the bonus — only walk per RAW).
+  const monkClass = character.classes.find(c => c.classId === 'Monk')
+  if (monkClass) {
+    speed.walk += getMonkUnarmoredMovement(monkClass.level)
+  }
 
-  // Heavy armor speed penalty: -10 ft if STR below armor's minimum
+  // Barbarian Fast Movement (Level 5+).
+  const barbarianClass = character.classes.find(c => c.classId === 'Barbarian' && c.level >= 5)
+  if (barbarianClass) speed.walk += 10
+
+  // Heavy armor speed penalty: -10 ft if STR below armor's minimum.
   const equippedHA = [...(character.inventory?.items || []), ...(character.custom?.items || [])].find(i =>
     i.equipped && i.isArmor && (i.type || '').split('|')[0] === 'HA'
   )
   if (equippedHA && equippedHA.strength) {
     const str = abilityScores?.str || 10
-    if (str < equippedHA.strength) base -= 10
+    if (str < equippedHA.strength) speed.walk -= 10
   }
 
-  return { walk: base, swim: null, fly: null, climb: null, burrow: null }
+  // ── Concentration-spell speed effects ──────────────────────
+  // Longstrider (+10), Haste (×2 walk), Fly/Spider Climb (grant mode).
+  const concEff = activeConcentrationEffects(character)
+  if (concEff) {
+    if (concEff.speedBonus) speed.walk += concEff.speedBonus
+    if (concEff.speedMul && concEff.speedMul !== 1) speed.walk = Math.round(speed.walk * concEff.speedMul)
+    if (concEff.addSpeedMode) {
+      for (const [mode, source] of Object.entries(concEff.addSpeedMode)) {
+        if (mode === 'walk') continue
+        // 'walk' means "= walk speed"; numbers are used as-is.
+        speed[mode] = source === 'walk' ? speed.walk : Number(source) || speed[mode]
+      }
+    }
+  }
+
+  return speed
 }
 
 function getInitiativeBonus(character) {

@@ -164,6 +164,48 @@ export function totalGoldValue(currency = {}) {
        + (currency.sp || 0) * 0.1 + (currency.cp || 0) * 0.01
 }
 
+// ── Encumbrance ─────────────────────────────────────────────
+// Pure informational: never restricts speed/checks (the user said
+// "soll aber nichts einschränken falls man sich dazu entscheidet
+// encumbrance nicht zu verwenden"). Most 5e tables ignore the rules
+// anyway; we just compute and display.
+//
+// 5e RAW:
+//   max carry = STR × 15
+//   encumbered (push/drag halved) at STR × 5
+//   heavily encumbered (speed −20, disadvantage) at STR × 10
+// Coins: 50 of any denomination weigh 1 lb (RAW).
+export function computeEncumbrance(character, abilityScores) {
+  const items = [
+    ...(character.inventory?.items || []),
+    ...(character.custom?.items || []),
+  ]
+  let carried = 0
+  for (const item of items) {
+    const w = Number(item.weight || 0)
+    const q = Number(item.quantity || 1)
+    if (Number.isFinite(w) && Number.isFinite(q)) carried += w * q
+  }
+  const currency = character.inventory?.currency || {}
+  const coinTotal = Object.values(currency).reduce((s, n) => s + (Number(n) || 0), 0)
+  carried += coinTotal / 50
+
+  const str = abilityScores?.str || 10
+  const max   = str * 15
+  const enc   = str * 5
+  const heavy = str * 10
+  const state =
+    carried > max   ? 'over'  :
+    carried > heavy ? 'heavy' :
+    carried > enc   ? 'enc'   :
+    'ok'
+  return {
+    carried: Math.round(carried * 10) / 10,
+    max, enc, heavy, state,
+    pct: max > 0 ? Math.min(100, (carried / max) * 100) : 0,
+  }
+}
+
 // ── Containers ──────────────────────────────────────────────
 // Containers are a sheet-only organisational aid (the Foundry export
 // keeps its own backpack-stowing logic untouched).

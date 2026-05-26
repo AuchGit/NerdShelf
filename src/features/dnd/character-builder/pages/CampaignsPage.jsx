@@ -314,6 +314,9 @@ function CreateCampaignModal({ gmId, onClose, onCreated }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [image, setImage] = useState(null)
+  // Edition is required at create time — the join modal uses it to
+  // hide characters of the other edition from the picker.
+  const [edition, setEdition] = useState('5e')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
@@ -336,7 +339,7 @@ function CreateCampaignModal({ gmId, onClose, onCreated }) {
     if (!name.trim()) return
     setBusy(true); setErr(null)
     try {
-      const c = await createCampaign({ gmId, name: name.trim(), description, image })
+      const c = await createCampaign({ gmId, name: name.trim(), description, image, edition })
       onCreated(c.id)
     } catch (e) {
       setErr(e.message || String(e)); setBusy(false)
@@ -351,6 +354,35 @@ function CreateCampaignModal({ gmId, onClose, onCreated }) {
       </>}>
       <Field label="Name">
         <Input value={name} onChange={e => setName(e.target.value)} placeholder="z.B. Die Verlorene Mine" autoFocus />
+      </Field>
+      <Field label="Edition">
+        <div style={{ display: 'flex', gap: 8 }}>
+          {['5e', '5.5e'].map(ed => (
+            <button
+              key={ed}
+              type="button"
+              onClick={() => setEdition(ed)}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-md)',
+                fontFamily: 'inherit', fontSize: 'var(--fs-sm)',
+                cursor: 'pointer',
+                border: `2px solid ${edition === ed ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                background: edition === ed
+                  ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)'
+                  : 'transparent',
+                color: edition === ed ? 'var(--color-accent)' : 'var(--color-text)',
+                fontWeight: edition === ed ? 'var(--fw-semibold)' : 'normal',
+              }}
+            >
+              {ed === '5.5e' ? 'D&D 2024 (5.5e)' : 'D&D 2014 (5e)'}
+            </button>
+          ))}
+        </div>
+        <div style={{ color: 'var(--color-text-dim)', fontSize: 'var(--fs-xs)', marginTop: 4 }}>
+          Spieler können der Campaign nur mit Charakteren dieser Edition beitreten.
+        </div>
       </Field>
       <Field label="Beschreibung">
         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
@@ -373,6 +405,11 @@ function JoinCampaignModal({ userId, playerName, initialToken = '', onClose, onJ
   const [token, setToken] = useState(initialToken.toUpperCase())
   const [characters, setCharacters] = useState([])
   const [charId, setCharId] = useState('')
+  // Edition of the campaign matching `token` — fetched once the token is
+  // long enough to look up. Filters the character list so the user can
+  // only join with a same-edition character.
+  const [campaignEdition, setCampaignEdition] = useState(null)
+  const [campaignNotFound, setCampaignNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
@@ -386,10 +423,45 @@ function JoinCampaignModal({ userId, playerName, initialToken = '', onClose, onJ
         .order('created_at', { ascending: false })
       if (cancelled) return
       setCharacters(data || [])
-      if (data && data.length) setCharId(String(data[0].id))
     })()
     return () => { cancelled = true }
   }, [userId])
+
+  // Look up the campaign by token to learn its edition. Done on every
+  // token change with a tiny debounce — the campaigns table is small and
+  // there's a join_token index, so this is cheap. The lookup uses the
+  // campaign select policy, which lets anyone with the token see the
+  // edition (same shape as the existing join RPC).
+  useEffect(() => {
+    setCampaignEdition(null); setCampaignNotFound(false)
+    const cleaned = (token || '').trim().toUpperCase()
+    if (cleaned.length < 4) return
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      const { data } = await supabase
+        .from('dnd_campaigns')
+        .select('edition')
+        .eq('join_token', cleaned)
+        .maybeSingle()
+      if (cancelled) return
+      if (!data) { setCampaignNotFound(true); return }
+      setCampaignEdition(data.edition || '5e')
+    }, 200)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [token])
+
+  // Filtered character list — only same-edition characters can be picked.
+  // If we don't know the campaign edition yet (token blank / not found),
+  // show all. Auto-select the first eligible character.
+  const eligibleCharacters = campaignEdition
+    ? characters.filter(c => (c.data?.meta?.edition || '5e') === campaignEdition)
+    : characters
+  useEffect(() => {
+    if (eligibleCharacters.length === 0) { setCharId(''); return }
+    if (!eligibleCharacters.find(c => String(c.id) === String(charId))) {
+      setCharId(String(eligibleCharacters[0].id))
+    }
+  }, [eligibleCharacters, charId])
 
   async function submit() {
     if (!token.trim() || !charId) return
@@ -414,18 +486,33 @@ function JoinCampaignModal({ userId, playerName, initialToken = '', onClose, onJ
           placeholder="z.B. K7QM2F" autoCapitalize="characters"
           autoFocus={!initialToken}
           style={{ letterSpacing: 2, fontWeight: 'var(--fw-semibold)' }} />
+        {campaignEdition && (
+          <div style={{ marginTop: 6, fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)' }}>
+            Campaign-Edition: <b style={{ color: 'var(--color-accent)' }}>{campaignEdition === '5.5e' ? 'D&D 2024 (5.5e)' : 'D&D 2014 (5e)'}</b>
+          </div>
+        )}
+        {campaignNotFound && token.trim() && (
+          <div style={{ marginTop: 6, fontSize: 'var(--fs-xs)', color: 'var(--color-danger)' }}>
+            Keine Campaign mit diesem Token gefunden.
+          </div>
+        )}
       </Field>
       <Field label="Charakter">
         {characters.length === 0 ? (
           <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
             Du hast noch keine Charaktere. Erstelle zuerst einen.
           </div>
+        ) : eligibleCharacters.length === 0 && campaignEdition ? (
+          <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
+            Keiner deiner Charaktere ist in der Edition <b>{campaignEdition === '5.5e' ? '5.5e' : '5e'}</b>.
+            Erstelle einen passenden Charakter, um beitreten zu können.
+          </div>
         ) : (
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr', gap: 6,
             maxHeight: 340, overflowY: 'auto', padding: 2,
           }}>
-            {characters.map(c => (
+            {eligibleCharacters.map(c => (
               <CharacterPickRow
                 key={c.id}
                 character={c}

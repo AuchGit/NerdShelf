@@ -145,7 +145,7 @@ function RitualRow({ spell, onCastRitual }) {
 }
 
 // ── Spell row in the main list — expands to details + cast actions ──
-function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast }) {
+function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, spellcasting }) {
   const [open, setOpen] = useState(false)
   const level = spell.level
   const lc = levelColor(level)
@@ -187,6 +187,29 @@ function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast })
           </div>
         </div>
         <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+          {/* Source-class chip(s) with that class's attack mod / save DC.
+              For multiclass characters every spell can have different
+              numbers depending on which class grants it — make that
+              attribution explicit so the player doesn't have to remember
+              "wait, my Hex was cast as a Warlock or a Sorcerer?" */}
+          {(spell.sourceClasses && Array.from(spell.sourceClasses)).map(cls => {
+            const sc = spellcasting?.[cls]
+            if (!sc) return null
+            return (
+              <span
+                key={cls}
+                style={{
+                  ...S.tag,
+                  borderColor: 'var(--accent-blue)',
+                  color: 'var(--accent-blue)',
+                  fontWeight: 600,
+                }}
+                title={`${cls}: Spell Attack ${sc.spellAttackDisplay} · Save DC ${sc.spellSaveDC} · Ability ${sc.ability?.toUpperCase()}`}
+              >
+                {cls} · {sc.spellAttackDisplay} / DC {sc.spellSaveDC}
+              </span>
+            )
+          })}
           {spell.status === 'prepared' && (
             <span style={{ ...S.tag, borderColor: 'var(--accent)', color: 'var(--accent)' }}>Prepared</span>
           )}
@@ -276,38 +299,43 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
 
     const castable = new Map()
     const always = new Set()
-    function add(name, status) {
+    function add(name, status, sources = []) {
       const key = name.toLowerCase()
       const ex = castable.get(key)
-      if (ex) { if (status === 'always') ex.status = 'always'; return }
-      castable.set(key, { ...enrich(name), status })
+      if (ex) {
+        if (status === 'always') ex.status = 'always'
+        for (const sc of sources) ex.sourceClasses.add(sc)
+        return
+      }
+      castable.set(key, { ...enrich(name), status, sourceClasses: new Set(sources) })
     }
 
     for (const c of collected) {
       const lvl = enrich(c.name).level
-      if (lvl === 0) { add(c.name, 'always'); always.add(c.name.toLowerCase()); continue }
+      const allSources = Array.isArray(c.sourceClasses) ? c.sourceClasses : []
+      if (lvl === 0) { add(c.name, 'always', allSources); always.add(c.name.toLowerCase()); continue }
       if (c.origins.includes('race') || c.origins.includes('feat') || c.origins.includes('custom')) {
-        add(c.name, 'always'); always.add(c.name.toLowerCase()); continue
+        add(c.name, 'always', allSources); always.add(c.name.toLowerCase()); continue
       }
       let resolved = false
       for (const sc of c.sourceClasses) {
         const info = infoByClass[sc]
         if (!info) continue
         if (info.type === 'known') {
-          add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
+          add(c.name, 'always', [sc]); always.add(c.name.toLowerCase()); resolved = true
         } else if (info.type === 'prepared') {
           if (c.granted) {
-            add(c.name, 'always'); always.add(c.name.toLowerCase()); resolved = true
+            add(c.name, 'always', [sc]); always.add(c.name.toLowerCase()); resolved = true
           } else {
             resolved = true  // preparable pool spell — castable only once prepared
           }
         }
       }
-      if (!resolved) { add(c.name, 'always'); always.add(c.name.toLowerCase()) }
+      if (!resolved) { add(c.name, 'always', allSources); always.add(c.name.toLowerCase()) }
     }
 
-    for (const names of Object.values(preparedByClass)) {
-      for (const name of (names || [])) add(name, 'prepared')
+    for (const [classId, names] of Object.entries(preparedByClass)) {
+      for (const name of (names || [])) add(name, 'prepared', [classId])
     }
 
     const groups = {}
@@ -402,9 +430,14 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
   }
 
   // ── Casting ───────────────────────────────────────────────
+  // Concentration data shape: { spell: <name>, level: <slot used>,
+  //   since: <iso timestamp> }. Single canonical key `spell` — older
+  //   characters that stored `.name` are bridged by the read side
+  //   (OverviewTab reads `c.spell || c.name`).
   function castSpell(spell, slotLevel, usePact) {
-    if (spell.concentration && concentration && concentration.name !== spell.name) {
-      if (!window.confirm(`You are concentrating on ${concentration.name}. Replace it with ${spell.name}?`)) return
+    const concName = concentration?.spell || concentration?.name
+    if (spell.concentration && concName && concName !== spell.name) {
+      if (!window.confirm(`Du konzentrierst gerade auf ${concName}. Durch ${spell.name} ersetzen?`)) return
     }
     applyCharacter(d => {
       if (!d.status) d.status = {}
@@ -415,20 +448,29 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
         d.status.usedSpellSlots[slotLevel] = (d.status.usedSpellSlots[slotLevel] || 0) + 1
       }
       if (spell.concentration) {
-        d.status.concentration = { name: spell.name, level: usePact ? warlockSlots?.level : slotLevel }
+        d.status.concentration = {
+          spell: spell.name,
+          level: usePact ? warlockSlots?.level : slotLevel,
+          since: new Date().toISOString(),
+        }
       }
     })
   }
 
   // Ritual casts: no slot consumed, but concentration still applies.
   function castRitual(spell) {
-    if (spell.concentration && concentration && concentration.name !== spell.name) {
-      if (!window.confirm(`You are concentrating on ${concentration.name}. Replace it with ${spell.name}?`)) return
+    const concName = concentration?.spell || concentration?.name
+    if (spell.concentration && concName && concName !== spell.name) {
+      if (!window.confirm(`Du konzentrierst gerade auf ${concName}. Durch ${spell.name} ersetzen?`)) return
     }
     if (spell.concentration) {
       applyCharacter(d => {
         if (!d.status) d.status = {}
-        d.status.concentration = { name: spell.name, level: spell.level }
+        d.status.concentration = {
+          spell: spell.name,
+          level: spell.level,
+          since: new Date().toISOString(),
+        }
       })
     }
   }
@@ -460,10 +502,10 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
       )}
 
       {/* ── Concentration banner ── */}
-      {concentration && (
+      {concentration && (concentration.spell || concentration.name) && (
         <div style={S.concBanner}>
           <span style={{ color: 'var(--accent-purple)', fontSize: 13, fontWeight: 'bold' }}>
-            Concentrating on {concentration.name}
+            Concentrating on {concentration.spell || concentration.name}
             {concentration.level ? ` (Level ${concentration.level})` : ''}
           </span>
           <Btn variant="ghost" onClick={() => updateCharacter('status.concentration', null)}>Drop</Btn>
@@ -577,6 +619,7 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
                 key={spell.name} spell={spell}
                 slotRemaining={slotRemaining} pactRemaining={pactRemaining}
                 warlockSlots={warlockSlots} onCast={castSpell}
+                spellcasting={computed?.spellcasting}
               />
             ))}
           </Section>

@@ -12,8 +12,10 @@ import {
 import { S } from './sheetStyles'
 import {
   ITEM_TYPES, WEAPON_PROPERTIES, DAMAGE_TYPES, COIN_TYPES, totalGoldValue,
+  computeEncumbrance,
   isContainerItem, itemKey, itemTypeMeta, isSingletonItem,
 } from '../../lib/sheetUtils'
+import { computeAbilityScores } from '../../lib/rulesEngine'
 import {
   getAvailableMarkingRules, weaponEligibleForMark, setWeaponMark,
 } from '../../lib/weaponMarkingRules'
@@ -38,6 +40,39 @@ function blankItem() {
     equipped: false, attuned: false, isContainer: false,
     isWeapon: false, isArmor: false,
   }
+}
+
+// Reorder helper: swap a singleton-or-container item with its nearest
+// sibling of the same kind (container ↔ container, or in-bag-item ↔
+// in-same-bag-item). Items in the legacy `character.custom.items`
+// array are reordered there; everything else moves inside
+// `character.inventory.items`.
+function reorderInArray(arr, item, dir) {
+  const idx = arr.findIndex(x => x.id === item.id || itemKey(x) === item._key)
+  if (idx < 0) return false
+  const isContainer = isContainerItem(item)
+  const sameContainer = item.containerId || null
+  const sameSibling = (other) => {
+    if (other === item) return false
+    if (other.id && item.id && other.id === item.id) return false
+    if ((other.containerId || null) !== sameContainer) return false
+    return isContainer
+      ? isContainerItem(other)
+      : !isContainerItem(other)
+  }
+  let swapIdx = -1
+  if (dir === 'up') {
+    for (let i = idx - 1; i >= 0; i--) {
+      if (sameSibling(arr[i])) { swapIdx = i; break }
+    }
+  } else {
+    for (let i = idx + 1; i < arr.length; i++) {
+      if (sameSibling(arr[i])) { swapIdx = i; break }
+    }
+  }
+  if (swapIdx < 0) return false
+  ;[arr[idx], arr[swapIdx]] = [arr[swapIdx], arr[idx]]
+  return true
 }
 
 export default function InventoryTab({ character, updateCharacter, applyCharacter }) {
@@ -209,6 +244,11 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       isArmor: !!meta.isArmor || !!entry.isArmor,
       isShield: entry.type === 'S',
       isContainer: isContainerItem(entry),
+      // 5.5e weapon mastery — empty array on 5e weapons (the data
+      // doesn't carry the field there). Surfaced on the inventory row
+      // + attack table so the player sees which mastery they get from
+      // each weapon at a glance.
+      mastery: Array.isArray(entry.mastery) ? [...entry.mastery] : [],
     }
     // The browser modal adds one row per click; if it ever gains a
     // quantity input, the same singleton-split logic from saveItem would
@@ -221,6 +261,48 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
 
   function moveItem(item, targetKey) {
     patchItem(item, { containerId: targetKey || null })
+  }
+
+  // Move an item up or down among its in-list siblings (same container
+  // section + same kind: container ↔ container, item ↔ item). Lets the
+  // user pick a stable display order — purely a UX nicety.
+  function reorderItem(item, dir) {
+    applyCharacter(d => {
+      ensureStores(d)
+      const arr = item._store === 'custom' ? d.custom.items : d.inventory.items
+      reorderInArray(arr, item, dir)
+    })
+  }
+
+  // ── Section ordering ────────────────────────────────────────
+  // "Sections" are the top-level cards in the equipment grid: every
+  // container plus the synthetic "Carried" bucket. Their visual order
+  // is controlled by character.inventory.sectionOrder — an array of
+  // section keys. Containers reference their item id; "Carried" uses
+  // the literal '__carried__'. Defaults to all containers in their
+  // natural array order followed by Carried.
+  const CARRIED_KEY = '__carried__'
+  const sectionOrder = (() => {
+    const all = [...containers.map(c => c._key), CARRIED_KEY]
+    const saved = Array.isArray(character.inventory?.sectionOrder)
+      ? character.inventory.sectionOrder
+      : null
+    if (!saved) return all
+    const known = new Set(all)
+    const out = saved.filter(k => known.has(k))
+    // Append any sections that weren't in the saved order (newly added
+    // containers, or upgrade from a pre-sectionOrder character).
+    for (const k of all) if (!out.includes(k)) out.push(k)
+    return out
+  })()
+  function reorderSection(key, dir) {
+    const order = [...sectionOrder]
+    const idx = order.indexOf(key)
+    if (idx < 0) return
+    const swap = dir === 'up' ? idx - 1 : idx + 1
+    if (swap < 0 || swap >= order.length) return
+    ;[order[idx], order[swap]] = [order[swap], order[idx]]
+    updateCharacter('inventory.sectionOrder', order)
   }
 
   const moveOptions = (item) => [
@@ -263,16 +345,67 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
 
         {/* Multi-column grid: each container group + the "Carried" bucket tile
             side-by-side on wide viewports (auto-fit at ~360px min). On phones
-            this collapses to a single column — same look as before. */}
+            this collapses to a single column — same look as before.
+            The order of sections (containers + Carried) is driven by
+            sectionOrder. ↑/↓ buttons on each header rearrange. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
-          {containers.map(container => {
+          {sectionOrder.map((sectionKey) => {
+            if (sectionKey === CARRIED_KEY) {
+              if (carried.length === 0) return null
+              return (
+                <div key={CARRIED_KEY} style={{ ...S.containerGroup, marginBottom: 0 }}>
+                  <div
+                    style={S.containerHead}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowUp')   { e.preventDefault(); reorderSection(CARRIED_KEY, 'up') }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); reorderSection(CARRIED_KEY, 'down') }
+                    }}
+                    title="Pfeil ↑ / ↓ verschiebt den Carried-Block."
+                  >
+                    <span style={S.containerTitle}>Carried</span>
+                    <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{carried.length} items</span>
+                    <ReorderBtns
+                      onUp={() => reorderSection(CARRIED_KEY, 'up')}
+                      onDown={() => reorderSection(CARRIED_KEY, 'down')}
+                    />
+                  </div>
+                  {carried.map(it => (
+                    <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
+                      onMove={k => moveItem(it, k)} onPatch={patchItem}
+                      onEdit={() => setEditing({ item: it, isNew: false })}
+                      onRemove={() => removeItem(it)}
+                      onReorder={(dir) => reorderItem(it, dir)}
+                      character={character}
+                      markingRules={markingRules}
+                      markedWeapons={markedWeapons}
+                      onToggleMark={toggleMark} />
+                  ))}
+                </div>
+              )
+            }
+
+            const container = containers.find(c => c._key === sectionKey)
+            if (!container) return null
             const contents = itemsIn(container._key)
             return (
               <div key={container._key} style={{ ...S.containerGroup, marginBottom: 0 }}>
-                <div style={S.containerHead}>
+                <div
+                  style={S.containerHead}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp')   { e.preventDefault(); reorderSection(container._key, 'up') }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); reorderSection(container._key, 'down') }
+                  }}
+                  title="Pfeil ↑ / ↓ verschiebt den Container."
+                >
                   <span style={{ color: 'var(--accent-yellow)', fontSize: 13 }}>▣</span>
                   <span style={S.containerTitle}>{container.customName || container.name}</span>
                   <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{contents.length} items</span>
+                  <ReorderBtns
+                    onUp={() => reorderSection(container._key, 'up')}
+                    onDown={() => reorderSection(container._key, 'down')}
+                  />
                   <ItemActions
                     item={container} moveOptions={moveOptions(container)}
                     onMove={k => moveItem(container, k)} onPatch={patchItem}
@@ -289,6 +422,7 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
                     onMove={k => moveItem(it, k)} onPatch={patchItem}
                     onEdit={() => setEditing({ item: it, isNew: false })}
                     onRemove={() => removeItem(it)}
+                    onReorder={(dir) => reorderItem(it, dir)}
                     character={character}
                     markingRules={markingRules}
                     markedWeapons={markedWeapons}
@@ -297,26 +431,11 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
               </div>
             )
           })}
-
-          {/* Carried (loose) */}
-          {carried.length > 0 && (
-            <div style={{ ...S.containerGroup, marginBottom: 0 }}>
-              <div style={S.containerHead}>
-                <span style={S.containerTitle}>Carried</span>
-              </div>
-              {carried.map(it => (
-                <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
-                  onMove={k => moveItem(it, k)} onPatch={patchItem}
-                  onEdit={() => setEditing({ item: it, isNew: false })}
-                  onRemove={() => removeItem(it)}
-                  character={character}
-                  markingRules={markingRules}
-                  markedWeapons={markedWeapons}
-                  onToggleMark={toggleMark} />
-              ))}
-            </div>
-          )}
         </div>
+        {/* Encumbrance lives under the containers — it's a roll-up of
+            everything carried, so it makes more sense here than inside
+            the Currency section. */}
+        <EncumbranceBar character={character} />
       </Section>
 
       {/* ── Attunement ── */}
@@ -366,7 +485,26 @@ function ItemActions({ item, moveOptions, onMove, onEdit, onRemove }) {
   )
 }
 
-function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove,
+// Small ↑↓ button pair shared between the container header and item
+// rows. Click to move within the same group (containers among
+// containers, items among items in the same container).
+function ReorderBtns({ onUp, onDown }) {
+  const btn = {
+    width: 22, height: 22,
+    background: 'transparent', border: '1px solid var(--border)',
+    borderRadius: 4, color: 'var(--text-muted)',
+    cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, lineHeight: 1,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  }
+  return (
+    <div style={{ display: 'inline-flex', gap: 2 }}>
+      <button type="button" style={btn} onClick={(e) => { e.stopPropagation(); onUp() }} title="Nach oben">↑</button>
+      <button type="button" style={btn} onClick={(e) => { e.stopPropagation(); onDown() }} title="Nach unten">↓</button>
+    </div>
+  )
+}
+
+function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReorder,
                    character, markingRules = [], markedWeapons = {}, onToggleMark }) {
   const [open, setOpen] = useState(false)
   const meta = itemTypeMeta(item.type)
@@ -405,18 +543,20 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove,
             {meta.label}
             {item.dmg1 ? ` · ${item.dmg1} ${item.dmgType || ''}` : ''}
             {item.ac ? ` · AC ${item.ac}` : ''}
+            {item.mastery?.length > 0 && ` · ${item.mastery.join(', ')}`}
             {item.equipped ? ' · Equipped' : ''}
             {item.attuned ? ' · Attuned' : ''}
           </div>
         </div>
         {/* Singleton items (weapons, armor, shields) live one-per-row so
             each can be equipped / attuned independently — no stepper. */}
-        {!singleton && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {onReorder && <ReorderBtns onUp={() => onReorder('up')} onDown={() => onReorder('down')} />}
+          {!singleton && (
             <Stepper value={item.quantity || 1} min={1} max={9999} width={36}
               onChange={v => onPatch(item, { quantity: v })} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {open && (
         <div style={{ padding: '8px 12px 12px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -711,5 +851,64 @@ function ItemBrowseModal({ edition, existingNames, onClose, onAdd }) {
         )}
       </div>
     </SheetModal>
+  )
+}
+
+// ── Encumbrance bar ──────────────────────────────────────────────
+// Strictly informational: never disables an action, never blocks an
+// equip, never alters speed. Tables that use the optional encumbrance
+// rules can read the colour; tables that don't can ignore it
+// completely.
+function EncumbranceBar({ character }) {
+  const abilityScores = computeAbilityScores(character)
+  const enc = computeEncumbrance(character, abilityScores)
+
+  const colour =
+    enc.state === 'over'  ? 'var(--accent-red)'
+    : enc.state === 'heavy' ? 'var(--accent-red)'
+    : enc.state === 'enc'   ? 'var(--accent-yellow)'
+    : 'var(--accent-green)'
+  const label =
+    enc.state === 'over'  ? 'Überladen — über dem Trag­limit'
+    : enc.state === 'heavy' ? 'Schwer beladen (−20 ft. Speed, Disadvantage)'
+    : enc.state === 'enc'   ? 'Beladen (−10 ft. Speed)'
+    : 'OK'
+
+  return (
+    <div
+      style={{
+        marginTop: 10, padding: '6px 10px',
+        background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+        borderRadius: 6, fontSize: 11,
+      }}
+      title="Gewicht aller Inventory-Items (×Anzahl) + Münzen (50 Münzen = 1 lb). Maximum = STR × 15."
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ color: 'var(--text-secondary)' }}>Encumbrance</span>
+        <span style={{ color: colour, fontWeight: 600 }}>
+          {enc.carried} / {enc.max} lb
+          <span style={{ color: 'var(--text-dim)', fontWeight: 'normal', marginLeft: 6 }}>· {label}</span>
+        </span>
+      </div>
+      <div style={{
+        height: 6, background: 'var(--bg-page)', borderRadius: 3, overflow: 'hidden',
+        position: 'relative',
+      }}>
+        <div style={{
+          height: '100%',
+          width: `${Math.min(100, enc.pct)}%`,
+          background: colour, transition: 'width 200ms, background 200ms',
+        }} />
+        {/* Markers at STR×5 and STR×10 thresholds */}
+        <div style={{
+          position: 'absolute', top: 0, left: `${(enc.enc / enc.max) * 100}%`,
+          width: 1, height: '100%', background: 'var(--border-strong)',
+        }} title={`Beladen ab ${enc.enc} lb`} />
+        <div style={{
+          position: 'absolute', top: 0, left: `${(enc.heavy / enc.max) * 100}%`,
+          width: 1, height: '100%', background: 'var(--border-strong)',
+        }} title={`Schwer beladen ab ${enc.heavy} lb`} />
+      </div>
+    </div>
   )
 }

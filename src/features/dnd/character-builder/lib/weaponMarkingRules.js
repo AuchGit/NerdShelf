@@ -78,6 +78,52 @@ export const WEAPON_MARKING_RULES = [
     count: 1,
     effects: { attackBonus: 1, damageBonus: 1 },
   },
+  {
+    id: 'battle_smith',
+    label: 'Battle Smith',
+    note: 'Artificer Battle Smith: nutze INT für Angriff & Schaden mit Waffen, mit denen du proficient bist. Magische Waffen behalten ihren eigenen Bonus.',
+    feature: 'Battle Ready',
+    className: 'Artificer',
+    subclass: 'Battle Smith',
+    count: 1,
+    effects: { abilityOverride: 'int' },
+    requires: { proficient: true },
+  },
+  {
+    id: 'kensei_weapon',
+    label: 'Kensei Weapon',
+    note: 'Way of the Kensei (Monk): zähle als Monk-Waffe — DEX zählt für Angriff & Schaden. Auswahl bei Levelaufstieg + jedem Long Rest erneuerbar.',
+    feature: 'Path of the Kensei',
+    className: 'Monk',
+    subclass: 'Kensei',
+    count: 2,
+    effects: {},  // DEX/STR-finesse already kicks in; this is mostly a marker for the player
+    requires: {},
+  },
+  {
+    id: 'bladesong_weapon',
+    label: 'Bladesong Active',
+    note: 'Bladesinger (Wizard): Bladesong aktiv — INT auf Schaden bei einarmiger Waffen-Attacke (RAW). Halte Konzentration.',
+    feature: 'Bladesong',
+    className: 'Wizard',
+    subclass: 'Bladesinger',
+    count: 1,
+    effects: { damageBonus: 0 },  // damage bonus is INT mod — applied via abilityOverride? RAW is "add INT to damage of one attack/turn"
+    requires: { notTwoHanded: true },
+    // INT-to-damage is a turn-by-turn thing not a passive — keep this rule
+    // as a *marker* (label only) so the player remembers the bonus exists.
+  },
+  {
+    id: 'psychic_blade',
+    label: 'Psychic Blade',
+    note: 'Soulknife (Rogue): psionische Klinge, DEX-basiert + Psionic Energy Dice. Bonus erscheint nur als Marker — die zusätzlichen Würfel werden manuell verwaltet.',
+    feature: 'Psychic Blades',
+    className: 'Rogue',
+    subclass: 'Soulknife',
+    count: 1,
+    effects: {},
+    requires: {},
+  },
 ]
 
 // Normalised string compare (lowercase, trimmed).
@@ -145,7 +191,11 @@ export function gatherCharacterFeatures(character) {
 // gained for free as part of the subclass." Kept tiny and data-only so
 // the same machinery covers homebrew adds.
 const SUBCLASS_IMPLIED_FEATURES = [
-  ['Hexblade',  ['Hex Warrior', "Hexblade's Curse"]],
+  ['Hexblade',     ['Hex Warrior', "Hexblade's Curse"]],
+  ['Battle Smith', ['Battle Ready']],
+  ['Kensei',       ['Path of the Kensei']],
+  ['Bladesinger',  ['Training in War and Song']],  // gives prof; Bladesong is the toggleable feature, but marker is fine here
+  ['Soulknife',    ['Psychic Blades']],
   // Add more rows here as the need arises — no code changes required.
 ]
 

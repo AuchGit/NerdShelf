@@ -68,13 +68,23 @@ export async function getCampaign(id) {
   return data
 }
 
-export async function createCampaign({ gmId, name, description, image }) {
+export async function createCampaign({ gmId, name, description, image, edition }) {
+  // Edition is required so the join flow can filter to compatible
+  // characters. Default to '5e' for callers that don't pass one (e.g.
+  // older code paths) — the schema has the same default.
+  const ed = edition === '5.5e' ? '5.5e' : '5e'
   // Retry on the (astronomically unlikely) token collision.
   for (let attempt = 0; attempt < 5; attempt++) {
     const join_token = makeJoinToken()
     const { data, error } = await supabase
       .from('dnd_campaigns')
-      .insert({ gm_id: gmId, name, description: description || '', image: image || null, join_token })
+      .insert({
+        gm_id: gmId, name,
+        description: description || '',
+        image: image || null,
+        edition: ed,
+        join_token,
+      })
       .select()
       .single()
     if (!error) return data
@@ -153,6 +163,7 @@ export async function joinCampaign({ token, characterRow, playerName }) {
   if (error) {
     if (/CAMPAIGN_NOT_FOUND/.test(error.message)) throw new Error('Keine Campaign mit diesem Token gefunden.')
     if (/CHARACTER_NOT_OWNED/.test(error.message)) throw new Error('Dieser Charakter gehört dir nicht.')
+    if (/EDITION_MISMATCH/.test(error.message))    throw new Error('Charakter und Campaign haben unterschiedliche Editionen (5e vs. 5.5e).')
     throw error
   }
   return data   // campaign id

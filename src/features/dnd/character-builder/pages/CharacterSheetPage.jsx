@@ -54,6 +54,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const [computed, setComputed] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  // Concentration-save prompt: { damage, dc } when the player has just
+  // taken damage while concentrating. Player-side only — readOnly GM
+  // view skips this entirely.
+  const [concSavePrompt, setConcSavePrompt] = useState(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showCustomEdit, setShowCustomEdit] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
@@ -158,9 +162,16 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   }
 
   // Keys that go through the slim RPC path instead of saving the whole
-  // character row. Same whitelist the SQL function enforces — keeps the
-  // two ends in lock-step.
-  const COMBAT_STATE_KEYS = ['currentHp', 'temporaryHp', 'conditions', 'deathSaves']
+  // character row. Same whitelist the SQL function (dnd_patch_combat_state)
+  // enforces — keeps the two ends in lock-step. Anything in here also
+  // propagates INSTANTLY to the GM session view via realtime; anything
+  // not in here goes through the 700 ms full-row debounce.
+  const COMBAT_STATE_KEYS = [
+    'currentHp', 'temporaryHp', 'conditions', 'deathSaves',
+    'concentration', 'economy', 'markedWeapons',
+    'maxHpBonus', 'inspiration',
+    'usedResources', 'usedSpellSlots', 'usedPactSlots', 'hitDiceUsed',
+  ]
 
   // Apply an arbitrary mutation to a fresh draft, recompute, persist.
   // In read-only (GM) mode every mutation is a no-op.
@@ -184,6 +195,23 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       const next = structuredClone(prev)
       mutator(next)
       setComputed(computeCharacter(next))
+
+      // Concentration-save trigger: any HP drop while a concentration
+      // spell is active fires a prompt. DC = max(10, ⌊damage / 2⌋).
+      // The prompt is dismissable and never auto-changes state by
+      // itself — only the user's "Bestanden / Gescheitert" choice does.
+      const prevHp = prev.status?.currentHp
+      const nextHp = next.status?.currentHp
+      const conc = next.status?.concentration
+      if (
+        conc && (conc.spell || conc.name)
+        && typeof prevHp === 'number' && typeof nextHp === 'number'
+        && nextHp < prevHp
+      ) {
+        const dmg = prevHp - nextHp
+        const dc = Math.max(10, Math.floor(dmg / 2))
+        setConcSavePrompt({ damage: dmg, dc, spell: conc.spell || conc.name })
+      }
 
       // Combat-state diff is cheap (4 small keys) — always do this so
       // the RPC fires correctly even when no hint was provided.
@@ -265,6 +293,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       d.status.temporaryHp = 0
       d.status.deathSaves = { successes: 0, failures: 0 }
       d.status.concentration = null
+      d.status.economy = { action: false, bonusAction: false, reaction: false }
     })
   }
 
@@ -487,6 +516,21 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         </Suspense>
       )}
 
+      {/* ═══ CONCENTRATION-SAVE PROMPT ═══
+          Fires after any HP drop while concentrating. Lets the player
+          choose the save outcome — failing auto-clears concentration. */}
+      {concSavePrompt && (
+        <ConcentrationSavePrompt
+          info={concSavePrompt}
+          onSucceeded={() => setConcSavePrompt(null)}
+          onFailed={() => {
+            updateCharacter('status.concentration', null)
+            setConcSavePrompt(null)
+          }}
+          onSkip={() => setConcSavePrompt(null)}
+        />
+      )}
+
       {/* ═══ COMBAT BAR ═══ */}
       <div style={S.combatBar}>
         <CombatStat label="Armor Class" value={ac} color="var(--accent-blue)" />
@@ -684,6 +728,80 @@ function CombatStat({ label, value, color, sub, onClick }) {
       <div style={{ ...S.combatStatValue, color }}>{value}</div>
       <div style={S.combatStatLabel}>{label}</div>
       {sub && <div style={S.combatStatSub}>{sub}</div>}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONCENTRATION SAVE PROMPT
+// Centered modal that appears whenever HP drops while a concentration
+// spell is active. The DC is derived per RAW (max(10, ⌊damage/2⌋));
+// the player picks the save outcome — failing auto-drops concentration.
+// ═══════════════════════════════════════════════════════════════
+function ConcentrationSavePrompt({ info, onSucceeded, onFailed, onSkip }) {
+  return (
+    <div
+      onClick={onSkip}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-surface)', color: 'var(--text-primary)',
+          border: '1px solid var(--accent-purple)', borderRadius: 12,
+          padding: 22, maxWidth: 420, width: '100%',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
+        }}
+      >
+        <div style={{
+          fontSize: 11, color: 'var(--accent-purple)',
+          textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6,
+          fontWeight: 'bold',
+        }}>
+          Konzentrations-Save
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>
+          {info.spell}
+        </div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 16, lineHeight: 1.5 }}>
+          Du hast <b style={{ color: 'var(--accent-red)' }}>{info.damage} HP</b> Schaden bekommen.
+          Würfle einen Konstitutions-Save gegen <b style={{ color: 'var(--accent-purple)' }}>DC {info.dc}</b>.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button
+            type="button" onClick={onSkip}
+            style={{
+              padding: '8px 14px', borderRadius: 6,
+              border: '1px solid var(--border)', background: 'transparent',
+              color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
+            }}
+          >Überspringen</button>
+          <button
+            type="button" onClick={onFailed}
+            style={{
+              padding: '8px 14px', borderRadius: 6,
+              border: '1px solid var(--accent-red)', background: 'transparent',
+              color: 'var(--accent-red)', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13, fontWeight: 'bold',
+            }}
+          >✗ Nicht bestanden</button>
+          <button
+            type="button" onClick={onSucceeded}
+            style={{
+              padding: '8px 14px', borderRadius: 6,
+              border: '1px solid var(--accent-green)',
+              background: 'color-mix(in srgb, var(--accent-green) 22%, transparent)',
+              color: 'var(--accent-green)', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13, fontWeight: 'bold',
+            }}
+          >✓ Bestanden</button>
+        </div>
+      </div>
     </div>
   )
 }

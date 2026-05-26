@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
 import { modStr } from '../../lib/sheetUtils'
+import { undoLevelUp } from '../../lib/levelUpEngine'
 import { Section, Badge, DetailChip, Btn, Stepper } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
@@ -141,10 +142,31 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
   // ── Combat stat tiles (the four numbers a player needs at a glance) ──
   const profBonus = Math.ceil((character.classes || []).reduce((s, c) => s + (c.level || 0), 0) / 4) + 1
   const ac = computed?.ac?.total ?? 10
+  // Concentration buffs are surfaced in the AC tile's tooltip + badge so
+  // the player (and GM) can see at a glance that the number includes a
+  // temp bonus.
+  const acConcEff = computed?.ac?.concentrationEffect
+  const acTooltip = acConcEff?.label ? `${acConcEff.spell}: ${acConcEff.label}` : undefined
   const initiative = computed?.initiative ?? getModifier(abilityScores.dex)
-  const speed = computed?.speed?.walk ?? character.species?.speed ?? 30
+
+  // Speed: walk is the headline value; fly / swim / climb / burrow show
+  // up in the hover tooltip if the species (or other features) provide
+  // them. computeSpeed in the rules engine returns null for modes the
+  // character doesn't have.
+  const sp = computed?.speed || { walk: character.species?.speed ?? 30 }
+  const extraSpeeds = [
+    sp.fly    && `Fly ${sp.fly} ft.`,
+    sp.swim   && `Swim ${sp.swim} ft.`,
+    sp.climb  && `Climb ${sp.climb} ft.`,
+    sp.burrow && `Burrow ${sp.burrow} ft.`,
+  ].filter(Boolean)
+  const speedValue = `${sp.walk} ft.`
+  const speedTooltip = extraSpeeds.length > 0
+    ? `Walk ${sp.walk} ft.\n${extraSpeeds.join('\n')}`
+    : `Walk ${sp.walk} ft.`
 
   const concentration = character.status?.concentration
+  const economy = character.status?.economy || {}
 
   return (
     <div className="dnd-sheet-tab-body" style={S.tabBody}>
@@ -229,9 +251,21 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         </div>
 
         <div style={combatTileColumn}>
-          <CombatTile label="AC" value={ac} color="var(--accent-blue)" />
+          <CombatTile
+            label="AC"
+            value={ac}
+            color="var(--accent-blue)"
+            tooltip={acTooltip}
+            badge={acConcEff ? '✦' : null}
+          />
           <CombatTile label="Initiative" value={modStr(initiative)} color="var(--accent-purple)" />
-          <CombatTile label="Speed" value={`${speed} ft.`} color="var(--accent-green)" />
+          <CombatTile
+            label={extraSpeeds.length > 0 ? `Speed · +${extraSpeeds.length}` : 'Speed'}
+            value={speedValue}
+            color="var(--accent-green)"
+            tooltip={speedTooltip}
+            badge={extraSpeeds.length > 0 ? '↪' : null}
+          />
           <CombatTile label="Prof Bonus" value={modStr(profBonus)} color="var(--accent-yellow)" />
         </div>
       </div>
@@ -248,17 +282,25 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         />
       </Section>
 
-      {/* ── Concentration tracker ──
-          Spells that say "Concentration, up to …" go here. One spell at
-          a time per 5e rules; setting a new one (or taking damage and
-          failing the CON save) clears the old. Long Rest auto-clears
-          via CharacterSheetPage. */}
-      <Section title="Concentration">
-        <ConcentrationTracker
-          value={concentration}
-          onChange={(v) => updateCharacter('status.concentration', v || null)}
-        />
-      </Section>
+      {/* ── Combat economy + Concentration on one row when wide ──
+          Both are play-only state. The economy badges (Action / Bonus
+          Action / Reaction) track what the player has used this turn.
+          "Neue Runde" resets all three to unused — a single button is
+          faster than three taps in initiative order. */}
+      <div style={twoColumnRow}>
+        <Section title="Combat-Aktionen">
+          <CombatEconomy
+            value={economy}
+            onChange={(next) => updateCharacter('status.economy', next)}
+          />
+        </Section>
+        <Section title="Konzentration">
+          <ConcentrationTracker
+            value={concentration}
+            onChange={(v) => updateCharacter('status.concentration', v || null)}
+          />
+        </Section>
+      </div>
 
       {/* ── Attacks ── */}
       {computed?.attacks?.length > 0 && (
@@ -284,6 +326,9 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                           {atk.markedAs.label}
                         </span>
                       )}
+                      {atk.mastery?.length > 0 && atk.mastery.map((m) => (
+                        <span key={m} style={masteryBadge} title="5.5e Weapon Mastery">{m}</span>
+                      ))}
                     </td>
                     <td style={{ ...S.td, color: 'var(--accent-blue)', fontWeight: 'bold' }}>{atk.attackDisplay}</td>
                     <td style={{ ...S.td, color: 'var(--accent-red)' }}>{atk.damage}</td>
@@ -397,10 +442,20 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                     </div>
                     {!readOnly && i === 0 && entry.snapshot && (
                       <Btn variant="danger" style={{ padding: '4px 10px', fontSize: 11 }} onClick={async () => {
-                        const snap = structuredClone(entry.snapshot)
-                        if (character.appearance?.portrait)
-                          snap.appearance = { ...(snap.appearance || {}), portrait: character.appearance.portrait }
-                        await supabase.from('dnd_characters').update({ data: snap, name: snap.info.name })
+                        // Use the engine's undoLevelUp helper — it grafts the
+                        // LIVE levelHistory back onto the restored snapshot so
+                        // step-by-step undos keep working (each entry's
+                        // snapshot stays available for the NEXT click).
+                        // The old code wrote `entry.snapshot` straight to the
+                        // DB, which is the snapshot-with-stripped-nested-
+                        // history. That broke the chain after the first undo.
+                        const restored = undoLevelUp(character, 0)
+                        if (!restored) { alert('Kein Snapshot verfügbar.'); return }
+                        if (character.appearance?.portrait) {
+                          restored.appearance = { ...(restored.appearance || {}), portrait: character.appearance.portrait }
+                        }
+                        await supabase.from('dnd_characters')
+                          .update({ data: restored, name: restored.info.name })
                           .eq('id', charId).eq('user_id', session.user.id)
                         onReload()
                       }}>Undo</Btn>
@@ -417,11 +472,77 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
 }
 
 // ── Combat-stat tile (AC, Initiative, Speed, Prof Bonus) ──────────
-function CombatTile({ label, value, color }) {
+// `tooltip` puts a native title on the element; used by the Speed tile
+// to surface fly / swim / climb modes without crowding the visual.
+// `badge` is a tiny glyph in the corner indicating extra info exists.
+function CombatTile({ label, value, color, tooltip, badge }) {
   return (
-    <div style={combatTile}>
+    <div style={combatTile} title={tooltip || undefined}>
+      {badge && <div style={tileBadge}>{badge}</div>}
       <div style={{ ...combatTileValue, color }}>{value}</div>
       <div style={combatTileLabel}>{label}</div>
+    </div>
+  )
+}
+
+// ── Combat economy (Action / Bonus Action / Reaction) ─────────────
+// One button per slot. Click toggles "used" state. "Neue Runde" resets
+// all three to unused at the start of the player's next turn. State
+// lives at character.status.economy.
+function CombatEconomy({ value, onChange }) {
+  const slots = [
+    { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
+    { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
+    { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
+  ]
+  function toggle(id) {
+    onChange({ ...(value || {}), [id]: !value?.[id] })
+  }
+  function reset() {
+    onChange({ action: false, bonusAction: false, reaction: false })
+  }
+  const anyUsed = !!(value?.action || value?.bonusAction || value?.reaction)
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {slots.map(s => {
+        const used = !!value?.[s.id]
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => toggle(s.id)}
+            title={used ? `${s.label} bereits verwendet — klicken zum Zurücksetzen` : `${s.label} verfügbar — klicken zum Markieren als verwendet`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
+              border: `1.5px solid ${used ? 'var(--text-dim)' : s.color}`,
+              background: used ? 'transparent' : `color-mix(in srgb, ${s.color} 18%, transparent)`,
+              color: used ? 'var(--text-dim)' : s.color,
+              fontSize: 12, fontWeight: 600,
+              textDecoration: used ? 'line-through' : 'none',
+              opacity: used ? 0.7 : 1,
+              fontFamily: 'inherit',
+            }}
+          >
+            {used ? '✓' : '○'} {s.label}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        onClick={reset}
+        disabled={!anyUsed}
+        title="Alle drei zurücksetzen — neue Runde."
+        style={{
+          marginLeft: 'auto', padding: '4px 12px', borderRadius: 999,
+          border: '1px solid var(--border)', background: 'transparent',
+          color: anyUsed ? 'var(--text-secondary)' : 'var(--text-dim)',
+          fontSize: 11, cursor: anyUsed ? 'pointer' : 'default', fontFamily: 'inherit',
+        }}
+      >
+        ↻ Neue Runde
+      </button>
     </div>
   )
 }
@@ -433,8 +554,10 @@ function CombatTile({ label, value, color }) {
 // the fastest "I just cast Hex on the goblin" entry path. The flag is
 // what matters for ruling purposes; the name is a memory aid.
 function ConcentrationTracker({ value, onChange }) {
+  // Support both legacy `{ name }` and current `{ spell }` shapes.
+  const spellName = value?.spell || value?.name || ''
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value?.spell || '')
+  const [draft, setDraft] = useState(spellName)
 
   if (editing) {
     return (
@@ -465,7 +588,7 @@ function ConcentrationTracker({ value, onChange }) {
     )
   }
 
-  if (!value?.spell) {
+  if (!spellName) {
     return (
       <div
         onClick={() => { setDraft(''); setEditing(true) }}
@@ -481,8 +604,8 @@ function ConcentrationTracker({ value, onChange }) {
   return (
     <div style={concentrationActive}>
       <span style={concentrationDot} />
-      <span style={concentrationSpellName} onClick={() => { setDraft(value.spell); setEditing(true) }}>
-        {value.spell}
+      <span style={concentrationSpellName} onClick={() => { setDraft(spellName); setEditing(true) }}>
+        {spellName}{value?.level ? ` (Lv. ${value.level})` : ''}
       </span>
       <Btn variant="ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => onChange(null)}>
         Aufheben
@@ -523,6 +646,17 @@ const combatTileColumn = {
 const combatTile = {
   background: 'var(--bg-surface)', border: '1px solid var(--border)',
   borderRadius: 10, padding: '10px 8px', textAlign: 'center', minWidth: 0,
+  position: 'relative',
+}
+const tileBadge = {
+  position: 'absolute', top: 4, right: 6,
+  fontSize: 10, color: 'var(--accent)',
+  fontWeight: 600,
+}
+const twoColumnRow = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  gap: 12,
 }
 const combatTileValue = { fontSize: 22, fontWeight: 'bold', lineHeight: 1.1, marginBottom: 2 }
 const combatTileLabel = { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }
@@ -550,6 +684,14 @@ const markedBadge = {
   color: 'var(--accent-purple)',
   border: '1px solid var(--accent-purple)',
   textTransform: 'uppercase', letterSpacing: 0.5,
+}
+const masteryBadge = {
+  display: 'inline-block', marginLeft: 6, padding: '1px 7px',
+  borderRadius: 999, fontSize: 10, fontWeight: 600,
+  background: 'color-mix(in srgb, var(--accent-blue) 22%, transparent)',
+  color: 'var(--accent-blue)',
+  border: '1px solid var(--accent-blue)',
+  letterSpacing: 0.4,
 }
 
 const classStrip = { display: 'flex', flexDirection: 'column', gap: 6 }

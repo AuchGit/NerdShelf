@@ -27,7 +27,10 @@ import {
   setSessionActive,
 } from '../lib/campaigns'
 import { computeCharacter } from '../lib/rulesEngine'
-import { modStr, ABILITY_KEYS, COIN_TYPES } from '../lib/sheetUtils'
+import {
+  modStr, ABILITY_KEYS, COIN_TYPES,
+  computeSpellSlots, computeEncumbrance, ordinal,
+} from '../lib/sheetUtils'
 
 const wrap = { maxWidth: 1500, margin: '0 auto', padding: '12px 16px' }
 
@@ -424,7 +427,7 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
           <TileRow
             tiles={TOP_ROW_STATS
               .filter(id => prefs.stats.includes(id))
-              .map(id => renderStat(id, computed, character))
+              .map(id => renderStat(id, computed, character, prefs))
               .filter(Boolean)}
           />
           {/* Row 2: passive scores */}
@@ -440,7 +443,7 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
           <TileRow
             tiles={SPELL_ROW_STATS
               .filter(id => prefs.stats.includes(id))
-              .map(id => renderStat(id, computed, character))
+              .map(id => renderStat(id, computed, character, prefs))
               .filter(Boolean)}
           />
           {/* Row 4: saves band */}
@@ -451,7 +454,7 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
           <TileRow
             tiles={prefs.stats
               .filter(id => !SPECIAL_STATS.has(id))
-              .map(id => renderStat(id, computed, character))
+              .map(id => renderStat(id, computed, character, prefs))
               .filter(Boolean)}
           />
         </>
@@ -463,6 +466,26 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
         <div style={{ padding: `0 ${PAD}px ${PAD}px` }}>
           <ConditionChips active={conditions} onToggle={toggleCondition} compact />
         </div>
+      )}
+
+      {/* ── Optional play-state blocks (each toggleable in GM prefs) ──
+          Ordered roughly by combat relevance: concentration first, then
+          economy (current-turn state), then resources (slots), then
+          encumbrance + currency at the bottom. */}
+      {/* Concentration is always rendered — it's THE most important combat
+          state and the banner already self-suppresses when the character
+          isn't concentrating, so no need for a GM toggle. */}
+      {character && (
+        <ConcentrationBanner concentration={character.status?.concentration} />
+      )}
+      {character && prefs.stats.includes('actions') && (
+        <ActionEconomyStrip economy={character.status?.economy} />
+      )}
+      {character && prefs.stats.includes('spellSlots') && computed?.spellcasting && (
+        <SpellSlotStrip character={character} />
+      )}
+      {character && prefs.stats.includes('encumbrance') && computed?.abilityScores && (
+        <EncumbranceMini character={character} abilityScores={computed.abilityScores} />
       )}
 
       {/* Currency — bottom of the card, only non-zero coins shown.
@@ -538,26 +561,29 @@ function TileRow({ tiles }) {
       gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))`,
       gap: 4, padding: `0 ${PAD}px ${PAD}px`,
     }}>
-      {tiles.map((t, i) => <Stat key={i} label={t.label} value={t.value} />)}
+      {tiles.map((t, i) => <Stat key={i} label={t.label} value={t.value} tooltip={t.tooltip} />)}
     </div>
   )
 }
 
-function Stat({ label, value, tone }) {
+function Stat({ label, value, tone, tooltip }) {
   return (
-    <div style={{
-      background: 'var(--color-bg-sunken)', borderRadius: 'var(--radius-sm)',
-      padding: '3px 4px', textAlign: 'center', minWidth: 0,
-      border: tone === 'danger'  ? '1px solid var(--color-danger)'
-            : tone === 'warning' ? '1px solid var(--color-warning, #d98e00)'
-            : '1px solid var(--color-border)',
-    }}>
+    <div
+      title={tooltip || undefined}
+      style={{
+        background: 'var(--color-bg-sunken)', borderRadius: 'var(--radius-sm)',
+        padding: '3px 4px', textAlign: 'center', minWidth: 0,
+        cursor: tooltip ? 'help' : 'default',
+        border: tone === 'danger'  ? '1px solid var(--color-danger)'
+              : tone === 'warning' ? '1px solid var(--color-warning, #d98e00)'
+              : '1px solid var(--color-border)',
+      }}>
       <div style={{
         fontSize: 9, color: 'var(--color-text-muted)',
         textTransform: 'uppercase', letterSpacing: 0.5,
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
-        {label}
+        {label}{tooltip && <span style={{ marginLeft: 3, color: 'var(--color-accent)' }}>↪</span>}
       </div>
       <div style={{ fontWeight: 'var(--fw-bold)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {value}
@@ -648,7 +674,16 @@ const STAT_CODE = {
 // not in the generic 4-col tile grid.
 const TOP_ROW_STATS   = ['ac', 'speed', 'initiative']
 const SPELL_ROW_STATS = ['spellSave', 'spellAttack']
-const SPECIAL_STATS   = new Set(['saves', 'hitDice', 'currency', ...TOP_ROW_STATS, ...SPELL_ROW_STATS])
+// 'spellSlots', 'actions', 'concentration', 'encumbrance', 'movementModes'
+// each have a dedicated render block below the tile grid — keep them out
+// of the generic fallthrough row so they don't appear as empty tiles.
+const CUSTOM_BLOCK_STATS = new Set([
+  'spellSlots', 'actions', 'concentration', 'encumbrance', 'movementModes',
+])
+const SPECIAL_STATS   = new Set([
+  'saves', 'hitDice', 'currency',
+  ...TOP_ROW_STATS, ...SPELL_ROW_STATS, ...CUSTOM_BLOCK_STATS,
+])
 
 function passiveLabel(id) {
   return PASSIVE_CODE[id] || id.slice(0, 3).toUpperCase()
@@ -660,11 +695,27 @@ function passiveTotal(id, computed) {
   return 10 + (skill.total ?? 0)
 }
 
-function renderStat(id, computed, character) {
+function renderStat(id, computed, character, prefs) {
   const label = STAT_CODE[id] || id.slice(0, 3).toUpperCase()
   switch (id) {
     case 'ac':         return { label, value: computed?.ac?.total ?? '—' }
-    case 'speed':      return { label, value: typeof computed?.speed?.walk === 'number' ? computed.speed.walk : (computed?.speed ?? '—') }
+    case 'speed': {
+      const sp = computed?.speed
+      const walk = typeof sp?.walk === 'number' ? sp.walk : (typeof sp === 'number' ? sp : null)
+      if (walk == null) return { label, value: '—' }
+      // movementModes pref: surface fly / swim / climb / burrow in the
+      // tooltip so the GM sees them without crowding the card.
+      let tooltip
+      if (prefs?.stats?.includes?.('movementModes') && sp && typeof sp === 'object') {
+        const extra = []
+        if (sp.fly)    extra.push(`Fly ${sp.fly} ft.`)
+        if (sp.swim)   extra.push(`Swim ${sp.swim} ft.`)
+        if (sp.climb)  extra.push(`Climb ${sp.climb} ft.`)
+        if (sp.burrow) extra.push(`Burrow ${sp.burrow} ft.`)
+        if (extra.length > 0) tooltip = `Walk ${walk} ft.\n${extra.join('\n')}`
+      }
+      return { label, value: walk, tooltip }
+    }
     case 'initiative': return { label, value: modStr(computed?.initiative ?? 0) }
     case 'hitDice': {
       const total = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
@@ -689,6 +740,147 @@ function renderStat(id, computed, character) {
     case 'currency': return null
     default: return { label, value: '—' }
   }
+}
+
+// ── Concentration banner ─────────────────────────────────────────
+// Only renders if the player is actively concentrating. Single-line,
+// tinted, so the GM can spot it at a glance during combat.
+function ConcentrationBanner({ concentration }) {
+  // Support legacy `.name` field on older saved characters.
+  const spellName = concentration?.spell || concentration?.name
+  if (!spellName) return null
+  return (
+    <div style={{
+      margin: `0 ${PAD}px ${PAD}px`, padding: '4px 8px', borderRadius: 4,
+      background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+      border: '1px solid var(--color-accent)',
+      color: 'var(--color-accent)', fontSize: 10, fontWeight: 'var(--fw-semibold)',
+      display: 'flex', alignItems: 'center', gap: 6,
+    }} title="Aktive Konzentration — bei Schaden CON-Save (DC = max(10, 1/2 Schaden))">
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: 'var(--color-accent)', boxShadow: '0 0 4px var(--color-accent)',
+      }} />
+      <span style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}>Konz:</span>
+      <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
+        {spellName}{concentration.level ? ` (Lv. ${concentration.level})` : ''}
+      </span>
+    </div>
+  )
+}
+
+// ── Action-economy strip ──────────────────────────────────────────
+// Three dots: Action / Bonus Action / Reaction. Coloured when AVAILABLE,
+// crossed out when used. Pure display in the GM card (the player
+// toggles them on their own sheet).
+function ActionEconomyStrip({ economy }) {
+  const slots = [
+    { id: 'action',      label: 'A',  full: 'Action',       color: 'var(--color-danger)' },
+    { id: 'bonusAction', label: 'BA', full: 'Bonus Action', color: 'var(--color-warning, #d98e00)' },
+    { id: 'reaction',    label: 'R',  full: 'Reaction',     color: 'var(--color-accent)' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 4, padding: `0 ${PAD}px ${PAD}px` }}>
+      {slots.map(s => {
+        const used = !!economy?.[s.id]
+        return (
+          <span
+            key={s.id}
+            title={used ? `${s.full} verbraucht` : `${s.full} verfügbar`}
+            style={{
+              flex: 1, padding: '2px 0', textAlign: 'center',
+              borderRadius: 4,
+              border: `1px solid ${used ? 'var(--color-border)' : s.color}`,
+              background: used ? 'transparent' : `color-mix(in srgb, ${s.color} 18%, transparent)`,
+              color: used ? 'var(--color-text-dim)' : s.color,
+              fontSize: 10, fontWeight: 'var(--fw-bold)',
+              textDecoration: used ? 'line-through' : 'none', opacity: used ? 0.6 : 1,
+            }}
+          >{s.label}</span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Spell-slot compact strip ──────────────────────────────────────
+// One pill per level that has slots, showing "L1 4/4". Pact slot gets a
+// purple pill. Wraps as needed.
+function SpellSlotStrip({ character }) {
+  const { slots, warlockSlots } = computeSpellSlots(character) || {}
+  const used = character?.status?.usedSpellSlots || {}
+  const pactUsed = character?.status?.usedPactSlots || 0
+
+  const pills = []
+  for (let i = 0; i < (slots?.length || 0); i++) {
+    const max = slots[i]
+    if (!max || max <= 0) continue
+    const lvl = i + 1
+    const remaining = max - (used[lvl] || 0)
+    pills.push({
+      key: `slot-${lvl}`,
+      label: `L${lvl}`, value: `${remaining}/${max}`,
+      empty: remaining <= 0,
+      tint: 'var(--color-accent)',
+    })
+  }
+  if (warlockSlots && warlockSlots.slots > 0) {
+    pills.push({
+      key: 'pact',
+      label: `Pact L${warlockSlots.level}`,
+      value: `${warlockSlots.slots - pactUsed}/${warlockSlots.slots}`,
+      empty: (warlockSlots.slots - pactUsed) <= 0,
+      tint: 'color-mix(in srgb, var(--color-accent) 50%, magenta)',
+    })
+  }
+  if (pills.length === 0) return null
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 4,
+      padding: `0 ${PAD}px ${PAD}px`, fontSize: 10,
+    }}>
+      {pills.map(p => (
+        <span
+          key={p.key}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 6px', borderRadius: 999,
+            border: `1px solid ${p.empty ? 'var(--color-border)' : p.tint}`,
+            background: p.empty ? 'transparent' : `color-mix(in srgb, ${p.tint} 14%, transparent)`,
+            color: p.empty ? 'var(--color-text-dim)' : p.tint,
+            fontWeight: 'var(--fw-semibold)', opacity: p.empty ? 0.6 : 1,
+          }}
+        >
+          <span style={{ textTransform: 'uppercase', letterSpacing: 0.4, fontSize: 9 }}>{p.label}</span>
+          <span style={{ color: p.empty ? 'inherit' : 'var(--color-text)' }}>{p.value}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+// ── Encumbrance mini-bar ──────────────────────────────────────────
+// Tiny horizontal bar showing carried / max. Yellow if encumbered, red
+// if heavy or over. Lives near currency on the user's request — at the
+// bottom of the card so it doesn't crowd combat info.
+function EncumbranceMini({ character, abilityScores }) {
+  const enc = computeEncumbrance(character, abilityScores)
+  const colour =
+    enc.state === 'over'  ? 'var(--color-danger)'
+    : enc.state === 'heavy' ? 'var(--color-danger)'
+    : enc.state === 'enc'   ? 'var(--color-warning, #d98e00)'
+    : 'var(--color-success, #4ade80)'
+  return (
+    <div style={{ padding: `0 ${PAD}px ${PAD}px` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, marginBottom: 2 }}>
+        <span style={{ color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Enc</span>
+        <span style={{ color: colour, fontWeight: 'var(--fw-bold)' }}>{enc.carried} / {enc.max} lb</span>
+      </div>
+      <div style={{ height: 4, background: 'var(--color-bg-sunken)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${Math.min(100, enc.pct)}%`, height: '100%', background: colour, transition: 'width 200ms' }} />
+      </div>
+    </div>
+  )
 }
 
 // Compact coin strip — number + colored dot per non-zero currency.

@@ -31,14 +31,22 @@ export const PASSIVE_OPTIONS = [
 ]
 
 export const STAT_OPTIONS = [
-  { id: 'ac',          label: 'Armor Class',       default: true  },
-  { id: 'speed',       label: 'Speed',             default: false },
-  { id: 'initiative',  label: 'Initiative',        default: false },
-  { id: 'saves',       label: 'Saving Throws',     default: false },
-  { id: 'hitDice',     label: 'Hit Dice',          default: false },
-  { id: 'spellSave',   label: 'Spell Save DC',     default: false },
-  { id: 'spellAttack', label: 'Spell Attack Mod',  default: false },
-  { id: 'currency',    label: 'Currency / Coins',  default: false },
+  { id: 'ac',          label: 'Armor Class',          default: true  },
+  { id: 'speed',       label: 'Speed (Walk)',         default: false },
+  // When `speed` is enabled the SessionCard also surfaces fly / swim /
+  // climb on hover via this option. Separated so the GM can hide the
+  // primary speed value entirely without losing the hover.
+  { id: 'movementModes', label: 'Andere Bewegungsmodi (Tooltip)', default: false },
+  { id: 'initiative',  label: 'Initiative',           default: false },
+  { id: 'saves',       label: 'Saving Throws',        default: false },
+  { id: 'hitDice',     label: 'Hit Dice',             default: false },
+  { id: 'spellSave',   label: 'Spell Save DC',        default: false },
+  { id: 'spellAttack', label: 'Spell Attack Mod',     default: false },
+  { id: 'spellSlots',  label: 'Spell Slots',          default: false },
+  { id: 'actions',     label: 'Action-Economy',       default: false },
+  // Konzentration ist immer sichtbar (siehe SessionPage) — kein Toggle nötig.
+  { id: 'encumbrance', label: 'Encumbrance-Bar',      default: false },
+  { id: 'currency',    label: 'Currency / Coins',     default: false },
 ]
 
 export function getDefaults() {

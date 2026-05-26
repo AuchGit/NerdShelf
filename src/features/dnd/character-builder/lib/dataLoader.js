@@ -723,6 +723,13 @@ export async function loadItemIndex(edition) {
       isArmor: ['LA', 'MA', 'HA', 'S'].includes(item.type),
       isGear: !['M','R','LA','MA','HA','S'].includes(item.type) && !item.weaponCategory,
       packContents: item.packContents || null,
+      // 5.5e weapon mastery (Topple / Vex / Push / Graze / Nick / Sap /
+      // Slow / Cleave). Strip the |SOURCE suffix and keep the names as
+      // a clean string array. Empty array for 5e weapons — the data
+      // file simply doesn't have the field there.
+      mastery: Array.isArray(item.mastery)
+        ? item.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
+        : [],
     }))
   if (edition === '5.5e') return deduplicateByName(baseItems)
   return baseItems
