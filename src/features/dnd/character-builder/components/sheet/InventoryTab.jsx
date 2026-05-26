@@ -14,6 +14,9 @@ import {
   ITEM_TYPES, WEAPON_PROPERTIES, DAMAGE_TYPES, COIN_TYPES, totalGoldValue,
   isContainerItem, itemKey, itemTypeMeta, isSingletonItem,
 } from '../../lib/sheetUtils'
+import {
+  getAvailableMarkingRules, weaponEligibleForMark, setWeaponMark,
+} from '../../lib/weaponMarkingRules'
 
 // 5etools weapon-property codes -> readable names (so finesse etc. work).
 const PROP_CODE_MAP = {
@@ -43,6 +46,18 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
   const edition = character.meta?.edition || '5e'
 
   const currency = character.inventory?.currency || {}
+
+  // Weapon-marking rules currently available to this character (Hex
+  // Warrior etc.). Empty for non-Hexblade / non-pact characters — the
+  // ItemRow won't even show the marking UI in that case.
+  const markingRules = useMemo(() => getAvailableMarkingRules(character),
+    [character.classes, character.feats])
+  const markedWeapons = character.status?.markedWeapons || {}
+  function toggleMark(ruleId, weaponId) {
+    const cur = markedWeapons[ruleId]
+    const next = setWeaponMark(character, ruleId, cur === weaponId ? null : weaponId)
+    updateCharacter('status.markedWeapons', next)
+  }
 
   // ── Unified item list (tag each item with its store + stable key) ──
   const items = useMemo(() => {
@@ -273,7 +288,11 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
                   <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
                     onMove={k => moveItem(it, k)} onPatch={patchItem}
                     onEdit={() => setEditing({ item: it, isNew: false })}
-                    onRemove={() => removeItem(it)} />
+                    onRemove={() => removeItem(it)}
+                    character={character}
+                    markingRules={markingRules}
+                    markedWeapons={markedWeapons}
+                    onToggleMark={toggleMark} />
                 ))}
               </div>
             )
@@ -289,7 +308,11 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
                 <ItemRow key={it._key} item={it} moveOptions={moveOptions(it)}
                   onMove={k => moveItem(it, k)} onPatch={patchItem}
                   onEdit={() => setEditing({ item: it, isNew: false })}
-                  onRemove={() => removeItem(it)} />
+                  onRemove={() => removeItem(it)}
+                  character={character}
+                  markingRules={markingRules}
+                  markedWeapons={markedWeapons}
+                  onToggleMark={toggleMark} />
               ))}
             </div>
           )}
@@ -343,11 +366,21 @@ function ItemActions({ item, moveOptions, onMove, onEdit, onRemove }) {
   )
 }
 
-function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove }) {
+function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove,
+                   character, markingRules = [], markedWeapons = {}, onToggleMark }) {
   const [open, setOpen] = useState(false)
   const meta = itemTypeMeta(item.type)
   const canEquip = meta.isWeapon || meta.isArmor || item.type === 'S'
   const singleton = isSingletonItem(item)
+
+  // Only weapons can be marked, and only when a rule actually allows it.
+  // We filter to eligible rules per-weapon so Hex Warrior won't suggest
+  // a two-handed maul as a target, etc.
+  const eligibleRules = (item.isWeapon ? markingRules : [])
+    .filter(r => weaponEligibleForMark(item, r, character))
+  const activeMarks = item.isWeapon
+    ? Object.entries(markedWeapons).filter(([, wId]) => wId === item.id).map(([id]) => id)
+    : []
   return (
     <div>
       <div style={S.itemRow}>
@@ -355,6 +388,18 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove }) {
           <div style={S.itemName}>
             {item.customName || item.name}
             {item._isCustom && <span style={{ color: 'var(--accent-purple)', fontSize: 10, marginLeft: 6 }}>CUSTOM</span>}
+            {activeMarks.length > 0 && (
+              <span style={{
+                marginLeft: 8, padding: '1px 7px', fontSize: 10, fontWeight: 600,
+                color: 'var(--accent-purple)',
+                border: '1px solid var(--accent-purple)',
+                borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5,
+              }} title="Diese Waffe ist markiert">
+                {activeMarks.length === 1
+                  ? markingRules.find(r => r.id === activeMarks[0])?.label || 'Marked'
+                  : `${activeMarks.length} marks`}
+              </span>
+            )}
           </div>
           <div style={S.itemSub}>
             {meta.label}
@@ -394,6 +439,46 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove }) {
               {item.isWeapon
                 ? 'Equip to add this weapon to Attacks & Actions. Finesse weapons use the higher of STR / DEX.'
                 : 'Equip to apply this armor / shield to your AC.'}
+            </div>
+          )}
+          {item.isWeapon && eligibleRules.length > 0 && (
+            <div style={{
+              marginBottom: 10, padding: '8px 10px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--border-subtle)', borderRadius: 6,
+            }}>
+              <div style={{
+                fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase',
+                letterSpacing: 0.5, marginBottom: 6, fontWeight: 600,
+              }}>Markierungen</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {eligibleRules.map(rule => {
+                  const isActive = markedWeapons[rule.id] === item.id
+                  const usedByOther = markedWeapons[rule.id] && markedWeapons[rule.id] !== item.id
+                  return (
+                    <button
+                      key={rule.id}
+                      type="button"
+                      title={rule.note + (usedByOther ? '\n\n(Aktuell auf einer anderen Waffe — Klick wechselt zur aktuellen Waffe.)' : '')}
+                      onClick={() => onToggleMark?.(rule.id, item.id)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 999, fontSize: 11,
+                        fontFamily: 'inherit', cursor: 'pointer',
+                        border: `1px solid ${isActive ? 'var(--accent-purple)' : 'var(--border)'}`,
+                        background: isActive ? 'color-mix(in srgb, var(--accent-purple) 22%, transparent)' : 'transparent',
+                        color: isActive ? 'var(--accent-purple)' : 'var(--text-secondary)',
+                        fontWeight: isActive ? 600 : 400,
+                      }}
+                    >
+                      {isActive ? '✓ ' : ''}{rule.label}
+                      {usedByOther && !isActive && <span style={{ opacity: 0.5, marginLeft: 4 }}>(belegt)</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ color: 'var(--text-dim)', fontSize: 10, marginTop: 6, lineHeight: 1.4 }}>
+                Markierungen ändern Angriff / Schaden dynamisch nach den Klassen-Regeln (siehe Tooltip pro Markierung).
+              </div>
             </div>
           )}
           <ItemActions item={item} moveOptions={moveOptions} onMove={onMove} onPatch={onPatch} onEdit={onEdit} onRemove={onRemove} />

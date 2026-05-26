@@ -1,5 +1,6 @@
 import { getModifier, getProficiencyBonus, getTotalLevel } from './characterModel'
 import { asArray } from './choiceParser'
+import { combinedMarkEffects } from './weaponMarkingRules'
 
 // ============================================================
 // HAUPT-FUNKTION
@@ -644,28 +645,50 @@ export function computeAttacks(character, modifiers, profBonus) {
     const isFinesse = weapon.properties?.includes('Finesse')
     const isRanged = weapon.properties?.includes('Ammunition') || weapon.properties?.includes('Thrown')
 
+    // Weapon-marking rules (Hex Warrior, Pact Weapon, Improved Pact
+    // Weapon, …). Effects are data-driven via WEAPON_MARKING_RULES —
+    // the engine never names a class or feature directly.
+    const marks = combinedMarkEffects(character, weapon.id)
+
     let abilityMod
-    if (isFinesse) {
-      abilityMod = Math.max(strMod, modifiers.dex || 0)
+    let abilityUsed
+    if (marks.abilityOverride) {
+      abilityUsed = marks.abilityOverride
+      abilityMod = modifiers[marks.abilityOverride] || 0
+    } else if (isFinesse) {
+      const useDex = (modifiers.dex || 0) >= strMod
+      abilityUsed = useDex ? 'dex' : 'str'
+      abilityMod = useDex ? (modifiers.dex || 0) : strMod
     } else if (isRanged) {
+      abilityUsed = 'dex'
       abilityMod = modifiers.dex || 0
     } else {
+      abilityUsed = 'str'
       abilityMod = strMod
     }
 
     const isProficient = checkWeaponProficiency(character, weapon)
-    const attackBonus = abilityMod + (isProficient ? profBonus : 0) + (weapon.attackBonus || 0)
+    const baseAtk = abilityMod + (isProficient ? profBonus : 0) + (weapon.attackBonus || 0)
+    const attackBonus = baseAtk + (marks.attackBonus || 0)
+    const damageExtra = (weapon.attackBonus || 0) + (marks.damageBonus || 0)
 
     attacks.push({
       id: weapon.id,
       name: weapon.customName || weapon.name,
       attackBonus,
       attackDisplay: `${attackBonus >= 0 ? '+' : ''}${attackBonus}`,
-      damage: `${weapon.dmg1} + ${abilityMod}${weapon.attackBonus ? ` + ${weapon.attackBonus}` : ''}`,
+      damage: `${weapon.dmg1} + ${abilityMod}${damageExtra ? ` + ${damageExtra}` : ''}`,
       damageType: weapon.dmgType || 'unknown',
       range: weapon.range || '5 ft.',
       properties: weapon.properties || [],
       isProficient,
+      abilityUsed,
+      // First active mark — surfaced as a pill on the attack row. If
+      // multiple are active (e.g. Hex Warrior + Pact Weapon), only the
+      // first label shows but the tooltip aggregates them.
+      markedAs: marks.labels.length > 0
+        ? { label: marks.labels[0].label, note: marks.labels.map(l => l.note).join('\n') }
+        : null,
     })
   }
 
