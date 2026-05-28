@@ -4,12 +4,15 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from '../lib/characterModel'
+import { loadClassData, loadItemIndex } from '../lib/dataLoader'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
 // Defer the import to click time so the initial sheet bundle stays small.
 const importFoundryExport = () => import('../lib/foundryExport')
 import { parseTags } from '../lib/tagParser'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
+import { getEffectsForSlot } from '../lib/featureEffects'
+import { FeatureNoteList } from '../components/sheet/SheetKit'
 import { patchCombatState } from '../lib/campaigns'
 import HeaderButtons from '../components/ui/HeaderButtons'
 import { lazy, Suspense } from 'react'
@@ -52,6 +55,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const { t } = useLanguage()
   const [character, setCharacter] = useState(null)
   const [computed, setComputed] = useState(null)
+  // classDataMap is keyed by classId and holds the raw 5etools class
+  // payload (incl. classTableGroups). The rules engine reads scaling
+  // resource counts (e.g. 5.5e Fighter "Second Wind" → 2/3/4 by level)
+  // straight from those tables, so until this is loaded the resource
+  // panel falls back to the pre-2024 single-use behaviour.
+  const classDataMapRef = useRef({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   // Concentration-save prompt: { damage, dc } when the player has just
@@ -70,6 +79,80 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   useEffect(() => { loadCharacter() }, [id])
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
+  // Load every class file the character uses (5etools payloads, with
+  // classTableGroups in 5.5e), stash the result in the ref, and trigger
+  // a recompute so resource panels pick up the table values. Cheap on
+  // re-load thanks to dataLoader's module-level fetch cache.
+  async function hydrateClassDataAndRecompute(charData) {
+    const edition = charData?.meta?.edition || '5e'
+    const classes = (charData?.classes || []).map(c => c.classId).filter(Boolean)
+    const unique = [...new Set(classes)]
+    const loaded = await Promise.all(unique.map(id => loadClassData(edition, id).catch(() => null)))
+    const map = {}
+    unique.forEach((cid, i) => { if (loaded[i]) map[cid] = loaded[i] })
+    classDataMapRef.current = map
+    setComputed(computeCharacter(charData, map))
+    // Backfill mastery + entries on weapons already in the inventory.
+    // Characters created before the dataLoader started preserving these
+    // fields have weapons without `mastery` / `entries`, which makes
+    // them silently miss in the sheet's attack badges, mastery picker,
+    // and item description panel. We patch in place exactly once and
+    // persist the result so the next open is clean.
+    if (!readOnly) backfillItemMetadata(edition, charData).catch(() => {})
+  }
+
+  // Walks the inventory once, fills missing mastery / entries from the
+  // edition's item catalog, and saves if anything changed. Cheap if
+  // there's nothing to fix — the catalog fetch is cached and we bail
+  // before triggering a state update when no items are stale, so we
+  // don't write back to Supabase on every load. Operates on the
+  // `charData` snapshot passed in (the version that triggered the
+  // hydrate), not the React state, to avoid stale-closure reads.
+  async function backfillItemMetadata(edition, charData) {
+    const items = await loadItemIndex(edition).catch(() => [])
+    if (!items || items.length === 0) return false
+    const byName = new Map()
+    for (const it of items) {
+      const k = it.name?.toLowerCase()
+      if (!k) continue
+      if (!byName.has(k)) byName.set(k, it)
+    }
+    const lists = [charData?.inventory?.items, charData?.custom?.items].filter(Array.isArray)
+    let needsPatch = false
+    outer: for (const list of lists) {
+      for (const w of list) {
+        if (!w?.name) continue
+        const ref = byName.get(w.name.toLowerCase())
+        if (!ref) continue
+        const wantsMastery = ref.isWeapon && Array.isArray(ref.mastery) && ref.mastery.length > 0
+          && !(Array.isArray(w.mastery) && w.mastery.length > 0)
+        const wantsEntries = Array.isArray(ref.entries) && ref.entries.length > 0
+          && !(Array.isArray(w.entries) && w.entries.length > 0)
+        if (wantsMastery || wantsEntries) { needsPatch = true; break outer }
+      }
+    }
+    if (!needsPatch) return false
+    applyCharacter(d => {
+      const draftLists = [d.inventory?.items, d.custom?.items].filter(Array.isArray)
+      for (const list of draftLists) {
+        for (const w of list) {
+          if (!w?.name) continue
+          const ref = byName.get(w.name.toLowerCase())
+          if (!ref) continue
+          if (ref.isWeapon && Array.isArray(ref.mastery) && ref.mastery.length > 0
+              && !(Array.isArray(w.mastery) && w.mastery.length > 0)) {
+            w.mastery = ref.mastery.slice()
+          }
+          if (Array.isArray(ref.entries) && ref.entries.length > 0
+              && !(Array.isArray(w.entries) && w.entries.length > 0)) {
+            w.entries = ref.entries
+          }
+        }
+      }
+    }, { changedPaths: ['inventory.items', 'custom.items'] })
+    return true
+  }
+
   async function loadCharacter() {
     // Read-only (GM) load relies on RLS: the GM may SELECT member characters
     // but never filters by user_id. The owner path keeps the user_id filter.
@@ -83,6 +166,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       setCharacter(data.data)
       setComputed(computeCharacter(data.data))
       setLoading(false)
+      hydrateClassDataAndRecompute(data.data)
       return
     }
 
@@ -110,6 +194,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                 setCharacter(backup.updated)
                 setComputed(computeCharacter(backup.updated))
                 setLoading(false)
+                hydrateClassDataAndRecompute(backup.updated)
                 return
               }
             }
@@ -124,6 +209,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     setCharacter(data.data)
     setComputed(computeCharacter(data.data))
     setLoading(false)
+    hydrateClassDataAndRecompute(data.data)
 
     // One-time recompression for legacy oversized portraits. New uploads
     // are already compressed by handlePortrait, but characters created
@@ -194,7 +280,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     setCharacter(prev => {
       const next = structuredClone(prev)
       mutator(next)
-      setComputed(computeCharacter(next))
+      setComputed(computeCharacter(next, classDataMapRef.current))
 
       // Concentration-save trigger: any HP drop while a concentration
       // spell is active fires a prompt. DC = max(10, ⌊damage / 2⌋).
@@ -552,13 +638,16 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           <button type="button" style={S.playBtn} onClick={shortRest}>Short Rest</button>
           <button type="button" style={S.playBtn} onClick={longRest}>Long Rest</button>
           <button type="button"
+            title={character.meta?.edition === '5.5e'
+              ? 'Heroic Inspiration (2024 PHB): erlaubt einmal pro Rast einen Wurf zu wiederholen. Wird oft bei Nat 1 verliehen.'
+              : 'Inspiration (PHB 2014): erlaubt einen Roll mit Advantage. Vom DM verliehen.'}
             style={{
               ...S.playBtn,
               borderColor: inspiration ? 'var(--accent-yellow)' : 'var(--border)',
               color: inspiration ? 'var(--accent-yellow)' : 'var(--text-secondary)',
             }}
             onClick={() => updateCharacter('status.inspiration', !inspiration)}>
-            Inspiration: {inspiration ? 'On' : 'Off'}
+            {character.meta?.edition === '5.5e' ? 'Heroic Inspiration' : 'Inspiration'}: {inspiration ? 'On' : 'Off'}
           </button>
         </div>
       )}
@@ -612,28 +701,48 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           </SideSection>
 
           <SideSection title="Saving Throws">
-            {computed && Object.entries(computed.savingThrows).map(([key, save]) => (
-              <div key={key} style={S.saveRow}>
-                <span style={{ ...S.profDot, background: save.proficient ? 'var(--accent)' : 'var(--border-strong)' }} />
-                <span style={S.saveName}>{key.toUpperCase()}</span>
-                <span style={S.saveValue}>{modStr(save.total)}</span>
-              </div>
-            ))}
+            {computed && Object.entries(computed.savingThrows).map(([key, save]) => {
+              const perSaveNotes = getEffectsForSlot(character, `save:${key}`)
+              return (
+                <div key={key} style={S.saveRow}
+                  title={perSaveNotes.length > 0
+                    ? perSaveNotes.map(n => `${n.feature}: ${n.text}`).join('\n')
+                    : undefined}>
+                  <span style={{ ...S.profDot, background: save.proficient ? 'var(--accent)' : 'var(--border-strong)' }} />
+                  <span style={S.saveName}>{key.toUpperCase()}</span>
+                  <span style={S.saveValue}>{modStr(save.total)}</span>
+                  {perSaveNotes.length > 0 && (
+                    <span style={featureNoteDot} title="Spezielle Modifikatoren — Hover für Details">★</span>
+                  )}
+                </div>
+              )
+            })}
+            {/* General save notes (all-abilities scope): rendered as a
+                small list below the table so the player can see them at
+                a glance instead of hunting tooltips. */}
+            <FeatureNoteList notes={getEffectsForSlot(character, 'saves')} />
           </SideSection>
 
           <SideSection title="Skills">
             {computed && Object.entries(computed.skills).map(([skill, data]) => {
               const dotColor = data.proficiency === 'expertise' ? 'var(--accent)'
                 : data.proficiency === 'proficient' ? 'var(--accent-green)' : 'var(--border-strong)'
+              const perSkillNotes = getEffectsForSlot(character, `skill:${skill}`)
+              const tooltipBase =
+                data.proficiency === 'expertise' ? 'Expertise'
+                : data.proficiency === 'proficient' ? 'Proficient' : 'Not Proficient'
+              const tooltip = perSkillNotes.length > 0
+                ? `${tooltipBase}\n` + perSkillNotes.map(n => `${n.feature}: ${n.text}`).join('\n')
+                : tooltipBase
               return (
-                <div key={skill} style={S.skillRow}>
-                  <span style={{ ...S.profDot, background: dotColor }} title={
-                    data.proficiency === 'expertise' ? 'Expertise'
-                    : data.proficiency === 'proficient' ? 'Proficient' : 'Not Proficient'
-                  } />
+                <div key={skill} style={S.skillRow} title={tooltip}>
+                  <span style={{ ...S.profDot, background: dotColor }} />
                   <span style={S.skillName}>
                     {formatSkillName(skill)}
                     <span style={S.skillAbility}> ({data.ability.toUpperCase()})</span>
+                    {perSkillNotes.length > 0 && (
+                      <span style={featureNoteDot} title="Spezielle Modifikatoren — Hover für Details">★</span>
+                    )}
                   </span>
                   <span style={{ ...S.skillValue, color: data.proficiency ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
                     {modStr(data.total)}
@@ -716,6 +825,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
 // ═══════════════════════════════════════════════════════════════
 // COMBAT STAT
 // ═══════════════════════════════════════════════════════════════
+
+// (FeatureNoteList moved to ./components/sheet/SheetKit — shared with
+// OverviewTab and any future caller. featureNoteDot stays here because
+// it's used inline in the saving-throws side-section.)
+const featureNoteDot = {
+  marginLeft: 6, color: 'var(--accent-yellow)', fontSize: 11, cursor: 'help',
+}
 
 function CombatStat({ label, value, color, sub, onClick }) {
   return (

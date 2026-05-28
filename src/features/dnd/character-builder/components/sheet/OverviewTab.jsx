@@ -5,12 +5,14 @@
 // Class details and level history are tucked away because they don't
 // change during a session.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
 import { modStr } from '../../lib/sheetUtils'
 import { undoLevelUp } from '../../lib/levelUpEngine'
-import { Section, Badge, DetailChip, Btn, Stepper } from './SheetKit'
+import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
+import { loadItemIndex } from '../../lib/dataLoader'
+import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
 
@@ -146,8 +148,18 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
   // the player (and GM) can see at a glance that the number includes a
   // temp bonus.
   const acConcEff = computed?.ac?.concentrationEffect
-  const acTooltip = acConcEff?.label ? `${acConcEff.spell}: ${acConcEff.label}` : undefined
+  const acFeatureNotes = getEffectsForSlot(character, 'ac')
+  const acTooltipParts = []
+  if (acConcEff?.label) acTooltipParts.push(`${acConcEff.spell}: ${acConcEff.label}`)
+  for (const n of acFeatureNotes) acTooltipParts.push(`${n.feature}: ${n.text}`)
+  const acTooltip = acTooltipParts.length > 0 ? acTooltipParts.join('\n') : undefined
+  const acHasNotes = acConcEff || acFeatureNotes.length > 0
+
   const initiative = computed?.initiative ?? getModifier(abilityScores.dex)
+  const initFeatureNotes = getEffectsForSlot(character, 'init')
+  const initTooltip = initFeatureNotes.length > 0
+    ? initFeatureNotes.map(n => `${n.feature}: ${n.text}`).join('\n')
+    : undefined
 
   // Speed: walk is the headline value; fly / swim / climb / burrow show
   // up in the hover tooltip if the species (or other features) provide
@@ -161,9 +173,11 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
     sp.burrow && `Burrow ${sp.burrow} ft.`,
   ].filter(Boolean)
   const speedValue = `${sp.walk} ft.`
-  const speedTooltip = extraSpeeds.length > 0
-    ? `Walk ${sp.walk} ft.\n${extraSpeeds.join('\n')}`
-    : `Walk ${sp.walk} ft.`
+  const speedFeatureNotes = getEffectsForSlot(character, 'speed')
+  const speedTooltipParts = [`Walk ${sp.walk} ft.`]
+  for (const e of extraSpeeds) speedTooltipParts.push(e)
+  for (const n of speedFeatureNotes) speedTooltipParts.push(`${n.feature}: ${n.text}`)
+  const speedTooltip = speedTooltipParts.join('\n')
 
   const concentration = character.status?.concentration
   const economy = character.status?.economy || {}
@@ -233,6 +247,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             <DetailChip label="Hit Dice" value={character.classes.map(c => `${c.level}d${c.hitDie}`).join(' + ')} />
             <DetailChip label="CON" value={modStr(getModifier(abilityScores.con))} />
           </div>
+          <DamageResistancePills character={character} />
+          <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
 
           {/* Death saves */}
           <div style={S.deathSaves}>
@@ -256,9 +272,15 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             value={ac}
             color="var(--accent-blue)"
             tooltip={acTooltip}
-            badge={acConcEff ? '✦' : null}
+            badge={acHasNotes ? '✦' : null}
           />
-          <CombatTile label="Initiative" value={modStr(initiative)} color="var(--accent-purple)" />
+          <CombatTile
+            label="Initiative"
+            value={modStr(initiative)}
+            color="var(--accent-purple)"
+            tooltip={initTooltip}
+            badge={initFeatureNotes.length > 0 ? '✦' : null}
+          />
           <CombatTile
             label={extraSpeeds.length > 0 ? `Speed · +${extraSpeeds.length}` : 'Speed'}
             value={speedValue}
@@ -280,6 +302,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             updateCharacter('status.conditions', next)
           }}
         />
+        <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
       </Section>
 
       {/* ── Combat economy + Concentration on one row when wide ──
@@ -299,6 +322,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             value={concentration}
             onChange={(v) => updateCharacter('status.concentration', v || null)}
           />
+          <FeatureNoteList notes={getEffectsForSlot(character, 'concentration')} />
         </Section>
       </div>
 
@@ -342,6 +366,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 6 }}>
             Waffen in der Inventory-Tab ausrüsten. Finesse-Waffen nehmen automatisch den höheren von STR / DEX.
           </div>
+          <FeatureNoteList notes={getEffectsForSlot(character, 'attacks')} />
+          <WeaponMasteryPicker character={character} computed={computed} updateCharacter={updateCharacter} />
         </Section>
       )}
 
@@ -469,6 +495,183 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
       )}
     </div>
   )
+}
+
+// ── Damage Resistance / Immunity / Vulnerability pills ──────────
+// Aggregated from the featureEffects catalog. Empty → null so the HP
+// section doesn't grow a phantom row when nothing's applicable.
+// ── 5.5e Weapon Mastery picker ────────────────────────────────
+// Reads computed.weaponMastery (computed from the class table column),
+// shows known/max per class, and lets the player toggle which weapons
+// from their inventory the mastery applies to. The 5.5e rule lets you
+// swap one pick per long rest — that constraint is enforced socially,
+// not by the sheet, so toggles are always live.
+function WeaponMasteryPicker({ character, computed, updateCharacter }) {
+  const wm = computed?.weaponMastery
+  // Load the full 5.5e weapon catalog so the picker can offer every
+  // weapon with a mastery, not just the ones the player happens to be
+  // carrying. The 5.5e rules let you pick from any weapon you're
+  // proficient with — owning it isn't a prerequisite.
+  // `loaded` distinguishes "still fetching" from "fetched but empty",
+  // so the UI can show a useful message instead of a permanent spinner.
+  const [catalog, setCatalog] = useState([])
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (!wm || wm.perClass.length === 0) return
+    const edition = character?.meta?.edition || '5e'
+    let cancelled = false
+    loadItemIndex(edition).then(items => {
+      if (cancelled) return
+      const seen = new Set()
+      const weapons = []
+      for (const it of items || []) {
+        if (!it.isWeapon || !(it.mastery?.length > 0)) continue
+        const key = it.name.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        weapons.push({ name: it.name, mastery: it.mastery, weaponCategory: it.weaponCategory })
+      }
+      weapons.sort((a, b) => a.name.localeCompare(b.name))
+      setCatalog(weapons)
+      setLoaded(true)
+    }).catch(() => { if (!cancelled) setLoaded(true) })
+    return () => { cancelled = true }
+  }, [wm, character?.meta?.edition])
+
+  if (!wm || wm.perClass.length === 0) return null
+
+  function togglePick(classIndex, weaponName, max) {
+    const cls = character.classes[classIndex]
+    const current = Array.isArray(cls.weaponMasteries) ? [...cls.weaponMasteries] : []
+    const idx = current.findIndex(w => w.toLowerCase() === weaponName.toLowerCase())
+    if (idx >= 0) {
+      current.splice(idx, 1)
+    } else if (current.length < max) {
+      current.push(weaponName)
+    } else {
+      return // capped
+    }
+    updateCharacter(`classes.${classIndex}.weaponMasteries`, current)
+  }
+
+  // Group by weapon category so the picker reads "simple … martial …"
+  // rather than 30 weapons in a flat line.
+  const grouped = { simple: [], martial: [], other: [] }
+  for (const w of catalog) {
+    const cat = String(w.weaponCategory || '').toLowerCase()
+    if (cat === 'simple') grouped.simple.push(w)
+    else if (cat === 'martial') grouped.martial.push(w)
+    else grouped.other.push(w)
+  }
+
+  return (
+    <div style={wmpStyle.wrap}>
+      <div style={wmpStyle.title}>Weapon Mastery</div>
+      {wm.perClass.map(pc => (
+        <div key={pc.classIndex} style={wmpStyle.classBlock}>
+          <div style={wmpStyle.classHead}>
+            <span>{pc.classId}</span>
+            <span style={{ color: pc.picked.length >= pc.count ? 'var(--accent-green)' : 'var(--accent)' }}>
+              {pc.picked.length}/{pc.count} gewählt
+            </span>
+          </div>
+          {catalog.length === 0 ? (
+            <div style={wmpStyle.empty}>
+              {loaded ? 'Keine Mastery-Waffen in den Daten gefunden.' : 'Lade Waffenkatalog …'}
+            </div>
+          ) : (
+            <>
+              {['simple', 'martial', 'other'].filter(g => grouped[g].length > 0).map(g => (
+                <div key={g} style={wmpStyle.groupBlock}>
+                  <div style={wmpStyle.groupLabel}>
+                    {g === 'simple' ? 'Simple' : g === 'martial' ? 'Martial' : 'Andere'}
+                  </div>
+                  <div style={wmpStyle.grid}>
+                    {grouped[g].map(w => {
+                      const isPicked = pc.picked.some(p => p.toLowerCase() === w.name.toLowerCase())
+                      const isFull = pc.picked.length >= pc.count
+                      const disabled = !isPicked && isFull
+                      return (
+                        <button
+                          key={w.name} type="button"
+                          onClick={() => togglePick(pc.classIndex, w.name, pc.count)}
+                          disabled={disabled}
+                          title={`Mastery: ${w.mastery.join(', ')}`}
+                          style={{
+                            ...wmpStyle.chip,
+                            ...(isPicked ? wmpStyle.chipOn : {}),
+                            opacity: disabled ? 0.4 : 1,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                          }}>
+                          {isPicked && '✓ '}{w.name}
+                          <span style={wmpStyle.chipMastery}> · {w.mastery.join('/')}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      ))}
+      <div style={wmpStyle.hint}>
+        Tipp: Bei einer Long Rest darfst du eine Wahl gegen eine andere tauschen.
+      </div>
+    </div>
+  )
+}
+const wmpStyle = {
+  wrap: { marginTop: 10, padding: '8px 10px', background: 'var(--bg-inset)',
+          border: '1px solid var(--border-subtle)', borderRadius: 6 },
+  title: { fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase',
+           letterSpacing: 0.5, color: 'var(--text-secondary)', marginBottom: 8 },
+  classBlock: { marginBottom: 8 },
+  classHead: { display: 'flex', justifyContent: 'space-between', fontSize: 12,
+               color: 'var(--text-primary)', marginBottom: 6, fontWeight: 600 },
+  groupBlock: { marginTop: 6 },
+  groupLabel: { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase',
+                letterSpacing: 0.5, marginBottom: 4 },
+  grid: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  chip: { padding: '3px 8px', borderRadius: 999, fontSize: 11,
+          background: 'transparent', border: '1px solid var(--border)',
+          color: 'var(--text-secondary)' },
+  chipOn: { borderColor: 'var(--accent-green)', color: 'var(--accent-green)',
+            background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)' },
+  chipMastery: { color: 'var(--text-muted)', marginLeft: 4 },
+  empty: { fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' },
+  hint: { fontSize: 10, color: 'var(--text-dim)', marginTop: 4 },
+}
+
+function DamageResistancePills({ character }) {
+  const m = getMechanicalEffects(character)
+  const has = m.damageResistance.size + m.damageImmunity.size + m.damageVulnerability.size > 0
+  if (!has) return null
+  const renderGroup = (set, label, color) => {
+    if (set.size === 0) return null
+    return (
+      <div style={drGroup} title={`${label} gegen: ${[...set].join(', ')}`}>
+        <span style={{ ...drLabel, color }}>{label}</span>
+        {[...set].map(t => (
+          <span key={t} style={{ ...drPill, borderColor: color, color }}>{t}</span>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+      {renderGroup(m.damageResistance,    'Resistenz',    'var(--accent-green)')}
+      {renderGroup(m.damageImmunity,      'Immunität',    'var(--accent-blue)')}
+      {renderGroup(m.damageVulnerability, 'Verwundbarkeit', 'var(--accent-red)')}
+    </div>
+  )
+}
+const drGroup = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }
+const drLabel = { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }
+const drPill = {
+  padding: '1px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+  border: '1px solid', textTransform: 'capitalize',
+  background: 'transparent',
 }
 
 // ── Combat-stat tile (AC, Initiative, Speed, Prof Bonus) ──────────

@@ -428,24 +428,26 @@ function JoinCampaignModal({ userId, playerName, initialToken = '', onClose, onJ
   }, [userId])
 
   // Look up the campaign by token to learn its edition. Done on every
-  // token change with a tiny debounce — the campaigns table is small and
-  // there's a join_token index, so this is cheap. The lookup uses the
-  // campaign select policy, which lets anyone with the token see the
-  // edition (same shape as the existing join RPC).
+  // token change with a tiny debounce. A direct SELECT on dnd_campaigns
+  // is blocked by RLS for non-members (the policy exposes rows only to
+  // the GM and existing members), which made the pre-flight always
+  // report "not found" even when joining worked. We use the
+  // dnd_lookup_campaign_by_token SECURITY DEFINER RPC instead — same
+  // pattern as dnd_join_campaign, returns just the bits the modal
+  // needs (id, name, edition).
   useEffect(() => {
     setCampaignEdition(null); setCampaignNotFound(false)
     const cleaned = (token || '').trim().toUpperCase()
     if (cleaned.length < 4) return
     let cancelled = false
     const handle = setTimeout(async () => {
-      const { data } = await supabase
-        .from('dnd_campaigns')
-        .select('edition')
-        .eq('join_token', cleaned)
-        .maybeSingle()
+      const { data, error } = await supabase
+        .rpc('dnd_lookup_campaign_by_token', { p_token: cleaned })
       if (cancelled) return
-      if (!data) { setCampaignNotFound(true); return }
-      setCampaignEdition(data.edition || '5e')
+      if (error) { setCampaignNotFound(true); return }
+      const row = Array.isArray(data) ? data[0] : data
+      if (!row) { setCampaignNotFound(true); return }
+      setCampaignEdition(row.edition || '5e')
     }, 200)
     return () => { cancelled = true; clearTimeout(handle) }
   }, [token])

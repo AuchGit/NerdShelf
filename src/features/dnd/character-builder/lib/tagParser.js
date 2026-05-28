@@ -35,7 +35,11 @@ export function parseTags(text) {
     // ── Named entities: 3-Teile (name|source|displayName) → displayName ──
     .replace(/\{@(?:spell|item|creature|feat|race|background|class|subclass|vehicle|object|reward|trap|hazard|skill|sense|action|condition|disease|status|optfeature|classFeature|subclassFeature) [^|}]+\|[^|}]*\|([^}]+)\}/g, '$1')
     // ── Named entities: 2-Teile (name|source) → name ──
-    .replace(/\{@(?:spell|item|creature|feat|race|background|class|subclass|vehicle|object|reward|trap|hazard) ([^|}]+)\|[^}]*\}/g, '$1')
+    // Skill/sense/condition/etc. MUST be in this list: 5.5e XPHB entries
+    // routinely emit {@skill Stealth|XPHB} (name + source, no displayName),
+    // and without these tokens the catch-all on the last replace was
+    // wiping them out — leaving "Skill Proficiencies: ," in the UI.
+    .replace(/\{@(?:spell|item|creature|feat|race|background|class|subclass|vehicle|object|reward|trap|hazard|skill|sense|action|condition|disease|status|optfeature|classFeature|subclassFeature) ([^|}]+)\|[^}]*\}/g, '$1')
     // ── Named entities: nur Name ──
     .replace(/\{@(?:spell|item|creature|feat|race|background|class|subclass|vehicle|object|reward|trap|hazard|skill|sense|action|condition|disease|status|optfeature) ([^|}]+)\}/g, '$1')
 

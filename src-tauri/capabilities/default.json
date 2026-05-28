@@ -12,6 +12,15 @@
     "dialog:default",
     "dialog:allow-save",
     "dialog:allow-open",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://5e.tools/**" },
+        { "url": "https://2014.5e.tools/**" },
+        { "url": "https://*.5e.tools/**" }
+      ]
+    },
     {
       "identifier": "fs:allow-write-text-file",
       "allow": [

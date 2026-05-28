@@ -248,7 +248,12 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       // doesn't carry the field there). Surfaced on the inventory row
       // + attack table so the player sees which mastery they get from
       // each weapon at a glance.
-      mastery: Array.isArray(entry.mastery) ? [...entry.mastery] : [],
+      mastery: Array.isArray(entry.mastery)
+        ? entry.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
+        : [],
+      // Item description / entries so the expanded inventory row can
+      // render the rules text without round-tripping to the data files.
+      entries: entry.entries || [],
     }
     // The browser modal adds one row per click; if it ever gains a
     // quantity input, the same singleton-split logic from saveItem would
@@ -315,20 +320,30 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
 
   return (
     <div className="dnd-sheet-tab-body" style={S.tabBody}>
-      {/* ── Currency ── */}
+      {/* ── Currency ─────
+          Compact one-line layout: each coin is a tight label + numeric
+          input. The previous Stepper buttons were larger than the value
+          they edited and the player almost always types the new total
+          rather than nudging it one coin at a time. */}
       <Section title="Currency">
-        <div style={S.currencyRow}>
+        <div style={currencyCompactRow}>
           {COIN_TYPES.map(({ key, label, color }) => (
-            <div key={key} style={S.currencyBox}>
-              <div style={{ ...S.currencyLabel, color }}>{label}</div>
-              <Stepper
-                value={currency[key] || 0} min={0} max={999999}
-                onChange={v => updateCharacter(`inventory.currency.${key}`, v)}
+            <label key={key} style={currencyCompactCell}>
+              <span style={{ ...currencyCompactLabel, color }}>{label}</span>
+              <input
+                type="number" min="0" inputMode="numeric"
+                value={currency[key] ?? 0}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
+                  updateCharacter(`inventory.currency.${key}`, v)
+                }}
+                style={currencyCompactInput}
               />
-            </div>
+            </label>
           ))}
+          <span style={currencyTotal}>= {totalGoldValue(currency).toFixed(2)} gp</span>
         </div>
-        <div style={S.totalGP}>Total value: {totalGoldValue(currency).toFixed(2)} gp</div>
       </Section>
 
       {/* ── Equipment ── */}
@@ -488,6 +503,65 @@ function ItemActions({ item, moveOptions, onMove, onEdit, onRemove }) {
 // Small ↑↓ button pair shared between the container header and item
 // rows. Click to move within the same group (containers among
 // containers, items among items in the same container).
+// ── Currency strip styling (compact, no steppers) ───────────────
+const currencyCompactRow = {
+  display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+}
+const currencyCompactCell = {
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '2px 6px 2px 4px',
+  background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+  borderRadius: 4,
+}
+const currencyCompactLabel = {
+  fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
+}
+const currencyCompactInput = {
+  width: 60, background: 'transparent', border: 'none', outline: 'none',
+  color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 13,
+  padding: '2px 0', textAlign: 'right',
+}
+const currencyTotal = {
+  color: 'var(--text-muted)', fontSize: 12, marginLeft: 'auto',
+}
+
+// ── Small palette picker for the item left-stripe ───────────────
+// A row of preset swatches + a "clear" dot. The colors are picked to
+// stay legible on both light and dark surfaces. Storing a raw CSS
+// color string on `item.tagColor` keeps the persisted shape simple
+// (no enum to migrate later if we add colors).
+const TAG_COLORS = [
+  { label: 'Rot',    value: '#ef4444' },
+  { label: 'Orange', value: '#f59e0b' },
+  { label: 'Gelb',   value: '#eab308' },
+  { label: 'Grün',   value: '#22c55e' },
+  { label: 'Blau',   value: '#3b82f6' },
+  { label: 'Lila',   value: '#a855f7' },
+  { label: 'Pink',   value: '#ec4899' },
+]
+function TagColorPicker({ value, onChange }) {
+  const swatch = { width: 16, height: 16, borderRadius: 4, cursor: 'pointer',
+                   border: '1px solid var(--border)', padding: 0 }
+  return (
+    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}
+         title="Farb-Tag zum schnellen Wiederfinden">
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tag</span>
+      <button type="button" aria-label="Kein Tag"
+        onClick={(e) => { e.stopPropagation(); onChange(null) }}
+        style={{ ...swatch, background: 'transparent',
+                 outline: !value ? '2px solid var(--accent)' : 'none' }}>
+        <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>×</span>
+      </button>
+      {TAG_COLORS.map(c => (
+        <button key={c.value} type="button" title={c.label}
+          onClick={(e) => { e.stopPropagation(); onChange(c.value) }}
+          style={{ ...swatch, background: c.value,
+                   outline: value === c.value ? '2px solid var(--accent)' : 'none' }} />
+      ))}
+    </div>
+  )
+}
+
 function ReorderBtns({ onUp, onDown }) {
   const btn = {
     width: 22, height: 22,
@@ -519,8 +593,15 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
   const activeMarks = item.isWeapon
     ? Object.entries(markedWeapons).filter(([, wId]) => wId === item.id).map(([id]) => id)
     : []
+  // Optional user-set tag color — a 4px left stripe on the row so the
+  // player can scan a long inventory and find their "important / quest /
+  // selling" piles at a glance. Stored as a CSS colour string on the
+  // item; null/undefined renders a transparent stripe.
+  const tagStripeStyle = item.tagColor
+    ? { borderLeft: `4px solid ${item.tagColor}`, paddingLeft: 6 }
+    : { borderLeft: '4px solid transparent', paddingLeft: 6 }
   return (
-    <div>
+    <div style={tagStripeStyle}>
       <div style={S.itemRow}>
         <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
           <div style={S.itemName}>
@@ -560,9 +641,10 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
       </div>
       {open && (
         <div style={{ padding: '8px 12px 12px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
             {canEquip && <Checkbox checked={item.equipped} label="Equipped" onChange={v => onPatch(item, { equipped: v })} />}
             <Checkbox checked={item.attuned} label="Attuned" onChange={v => onPatch(item, { attuned: v })} />
+            <TagColorPicker value={item.tagColor} onChange={c => onPatch(item, { tagColor: c })} />
           </div>
           {item.properties?.length > 0 && (
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -572,6 +654,13 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
           {item.description && (
             <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6, marginBottom: 8, whiteSpace: 'pre-wrap' }}>
               {item.description}
+            </div>
+          )}
+          {/* Catalog rules text — 5etools `entries` array preserved on
+              the inventory row by addFromData / makeInventoryItem. */}
+          {Array.isArray(item.entries) && item.entries.length > 0 && (
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>
+              <EntryRenderer entries={item.entries} />
             </div>
           )}
           {(item.isWeapon || item.isArmor) && (

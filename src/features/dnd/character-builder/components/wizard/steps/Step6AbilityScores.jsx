@@ -95,15 +95,45 @@ export default function Step6AbilityScores({ character, updateCharacter }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character.species.raceId, character.species.subraceId, originalRacialASIKey])
 
-  // Feats laden wenn Origin Feat gewählt oder wenn Race im fixed-Mode einen Feat gewährt
+  // Feats laden wenn Origin Feat gewählt oder wenn Race im fixed-Mode einen Feat gewährt.
+  //
+  // Supported shapes in the race/subrace `feats` array (5etools format):
+  //   { any: 1 }                  — 5e Variant Human style ("any one feat")
+  //   { choose: { fromFilter: …, count: 1 } }  — filtered list
+  //   { anyFromCategory: { category: ['O'], count: 1 } }   — 5.5e
+  //                                     (e.g. XPHB Human → any Origin feat)
+  //   { '<exact feat name>': true } — fixed grant; doesn't open a picker
+  // We detect "needs a picker" by looking for any of the choice-shaped
+  // entries — fixed grants don't open the OriginFeatPicker.
    const raceGrantsFeat = useMemo(() => {
     for (const src of [selectedSubrace, selectedRace]) {
       if (!src?.feats) continue
       for (const entry of src.feats) {
-        if (entry?.any !== undefined || entry?.choose !== undefined) return true
+        if (!entry || typeof entry !== 'object') continue
+        if (entry.any !== undefined)              return true
+        if (entry.choose !== undefined)           return true
+        if (entry.anyFromCategory !== undefined)  return true
       }
     }
     return false
+  }, [selectedRace, selectedSubrace])
+
+  // What category filter (if any) the race-granted feat picker should
+  // apply. 5.5e Human's `anyFromCategory.category: ["O"]` means "any
+  // Origin feat". Used by the filteredFeats memo below.
+  const raceFeatCategoryFilter = useMemo(() => {
+    for (const src of [selectedSubrace, selectedRace]) {
+      if (!src?.feats) continue
+      for (const entry of src.feats) {
+        const afc = entry?.anyFromCategory
+        if (afc?.category) {
+          return Array.isArray(afc.category)
+            ? afc.category.map(c => String(c).toUpperCase())
+            : [String(afc.category).toUpperCase()]
+        }
+      }
+    }
+    return null
   }, [selectedRace, selectedSubrace])
   useEffect(() => {
     const needFeats = asiMethod === 'originFeat' ||
@@ -455,18 +485,21 @@ export default function Step6AbilityScores({ character, updateCharacter }) {
   }
 
   const filteredFeats = useMemo(() => {
-    // 5.5e: the Origin Feat slot can only hold a category-O feat. The
-    // race-feat picker (Variant Human in 5e) doesn't appear in 5.5e, so
-    // we don't need a special branch for it. 5e has no category field
-    // so every feat passes.
+    // 5.5e: the Origin Feat slot can only hold a category-O feat. For
+    // race-granted feats (e.g. XPHB Human's "any Origin feat") the race
+    // data declares a category filter we honour here too — no class
+    // names hardcoded, the filter follows the data.
     let pool = feats
     if (is55e && asiMethod === 'originFeat') {
       pool = pool.filter(f => (f.category || '').toUpperCase() === 'O')
+    } else if (asiMethod === 'fixed' && raceGrantsFeat && raceFeatCategoryFilter?.length) {
+      const allow = new Set(raceFeatCategoryFilter)
+      pool = pool.filter(f => allow.has((f.category || 'G').toUpperCase()))
     }
     if (!featSearch.trim()) return pool
     const q = featSearch.toLowerCase()
     return pool.filter(f => f.name.toLowerCase().includes(q))
-  }, [feats, featSearch, is55e, asiMethod])
+  }, [feats, featSearch, is55e, asiMethod, raceGrantsFeat, raceFeatCategoryFilter])
 
   const asiOptions = [
     { id: 'fixed',      label: t('asiFixed') },
@@ -647,8 +680,13 @@ export default function Step6AbilityScores({ character, updateCharacter }) {
         })}
       </div>
 
-      {/* ── Spezies ASI-Methode (nur wenn Rasse gewählt) ── */}
-      {hasRace && (
+      {/* ── Spezies ASI-Methode (nur wenn Rasse gewählt) ──
+          5.5e: races no longer grant ability score bonuses — those come
+          from background. We hide the method picker entirely and only
+          surface the race-granted feat picker (XPHB Human et al.) if
+          applicable. The Background ASI section further down owns the
+          actual ability-score writes. */}
+      {hasRace && !is55e && (
         <div style={styles.asiSection}>
           <h3 style={{ color: 'var(--accent)', marginBottom: 10, fontSize: 15 }}>
             {t('speciesASIMethod')}
@@ -769,6 +807,41 @@ export default function Step6AbilityScores({ character, updateCharacter }) {
               updateCharacter={updateCharacter}
             />
           )}
+        </div>
+      )}
+
+      {/* ── 5.5e race-granted feat picker (e.g. XPHB Human's any-Origin) ──
+          In 5.5e the race no longer gives ability score bonuses, but
+          some species still grant a feat (Human's "any Origin feat",
+          others may grant a fixed feat). We surface the picker here so
+          5.5e players still get the same UI affordance without seeing
+          the inapplicable ASI method buttons. */}
+      {is55e && hasRace && raceGrantsFeat && (
+        <div style={styles.asiSection}>
+          <h3 style={{ color: 'var(--accent)', marginBottom: 10, fontSize: 15 }}>
+            ⭐ Origin Feat (gewährt durch Spezies)
+          </h3>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Deine Spezies gewährt dir einen Feat. {raceFeatCategoryFilter?.length
+              ? `Auswahl beschränkt auf Kategorie: ${raceFeatCategoryFilter.join(', ')}.`
+              : ''}
+          </div>
+          <OriginFeatPicker
+            feats={filteredFeats}
+            allFeats={feats}
+            featSearch={featSearch}
+            setFeatSearch={setFeatSearch}
+            loading={featsLoading}
+            selectedId={originFeatId}
+            viewFeat={viewFeat}
+            setViewFeat={setViewFeat}
+            onSelect={selectOriginFeat}
+            freeASI={freeASI}
+            setFreeASI={setFreeASIValue}
+            character={character}
+            updateCharacter={updateCharacter}
+            showASI={false}
+          />
         </div>
       )}
 

@@ -19,7 +19,11 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_dialog::init());
+    .plugin(tauri_plugin_dialog::init())
+    // Used by FiveEToolsLink (and any future external-link UI) to open
+    // a URL in the user's default browser. Without this plugin, anchor
+    // tags inside the Tauri webview do nothing for http(s) targets.
+    .plugin(tauri_plugin_opener::init());
 
   // Desktop-only plugin (Android-safe)
   #[cfg(not(target_os = "android"))]

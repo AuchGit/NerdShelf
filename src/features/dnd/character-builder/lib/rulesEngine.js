@@ -3,6 +3,7 @@ import { asArray } from './choiceParser'
 import { combinedMarkEffects, gatherCharacterFeatures } from './weaponMarkingRules'
 import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
 import { activeConcentrationEffects } from './concentrationEffects'
+import { getMechanicalEffects } from './featureEffects'
 
 // ============================================================
 // HAUPT-FUNKTION
@@ -23,8 +24,9 @@ export function computeCharacter(character, classDataMap = {}) {
   const hp = computeHP(character, modifiers, classDataMap)
   const ac = computeAC(character, modifiers, abilityScores)
   const spellcasting = computeSpellcasting(character, modifiers, profBonus)
-  const attacks = computeAttacks(character, modifiers, profBonus, proficiencies)
-  const resources = computeResources(character, modifiers, profBonus, totalLevel)
+  const weaponMastery = computeWeaponMastery(character, classDataMap)
+  const attacks = computeAttacks(character, modifiers, profBonus, proficiencies, weaponMastery)
+  const resources = computeResources(character, modifiers, profBonus, totalLevel, classDataMap)
 
   return {
     totalLevel,
@@ -39,9 +41,10 @@ export function computeCharacter(character, classDataMap = {}) {
     spellcasting,
     attacks,
     resources,
+    weaponMastery,
     // Abgeleitetes
     initiative: modifiers.dex + getInitiativeBonus(character),
-    speed: computeSpeed(character, abilityScores),
+    speed: computeSpeed(character, abilityScores, classDataMap),
     passivePerception: 10 + skills.perception.total,
     passiveInvestigation: 10 + skills.investigation.total,
     passiveInsight: 10 + skills.insight.total,
@@ -181,10 +184,47 @@ export function computeProficiencies(character, classDataMap = {}) {
       || {}
 
     // Waffen — unterstützt strings und Objekte
+    // 5.5e classes often ship BOTH a structured `weaponProficiencies`
+    // array (machine-readable) and a human-readable string in `weapons`
+    // like "Martial weapons that have the {@filter Finesse or Light|…}
+    // property". The string form is for the class description, not for
+    // the proficiency engine — without filtering, the sheet renders
+    // both "Martial weapons … property" (parsed tag) AND "martial"
+    // (from weaponProficiencies). When the structured form exists for
+    // this class, skip every string from `weapons` that isn't a plain
+    // category token; the rules engine doesn't need them.
+    const hasStructuredWeaponProfs = Array.isArray(startingProfs.weaponProficiencies)
+      && startingProfs.weaponProficiencies.length > 0
+    const BARE_CATEGORIES = new Set(['simple', 'martial', 'simple weapons', 'martial weapons'])
     for (const weapon of (startingProfs.weapons || [])) {
       const name = typeof weapon === 'string' ? weapon
         : (weapon?.proficiencyBonuses?.weapon || weapon?.value || null)
-      if (name && !result.weapons.includes(name)) result.weapons.push(name)
+      if (!name) continue
+      if (hasStructuredWeaponProfs) {
+        // Only keep bare category tokens — drop descriptive prose / tags.
+        if (!BARE_CATEGORIES.has(String(name).toLowerCase().trim())) continue
+      }
+      if (!result.weapons.includes(name)) result.weapons.push(name)
+    }
+    // Structured weapon proficiencies (5.5e format): { simple: true, all: { fromFilter: "..." } }
+    for (const entry of (startingProfs.weaponProficiencies || [])) {
+      if (!entry || typeof entry !== 'object') continue
+      for (const [key, val] of Object.entries(entry)) {
+        if (val === true && !result.weapons.includes(key)) {
+          result.weapons.push(key)
+        } else if (key === 'all' && val && typeof val === 'object') {
+          // Filter expression → human-readable summary for display only.
+          // The expression is "type=martial weapon|property=light;finesse";
+          // squash to "martial (light/finesse)".
+          const filt = String(val.fromFilter || '')
+          const cat = (filt.match(/type=(\w+)/) || [])[1]
+          const props = (filt.match(/property=([^|]+)/) || [])[1]
+          if (cat) {
+            const label = props ? `${cat} (${props.split(';').join('/')})` : cat
+            if (!result.weapons.includes(label)) result.weapons.push(label)
+          }
+        }
+      }
     }
 
     // Rüstungen
@@ -238,12 +278,8 @@ export function computeProficiencies(character, classDataMap = {}) {
 
   // ── Aus Feats ─────────────────────────────────────────────
   for (const feat of (character.feats || [])) {
-    // Resilient and similar feats: grant saving throw proficiency
-    // Resilient stores chosen ability in abilityBonus (e.g. { con: 1 })
-    if (feat.featId === 'Resilient') {
-      const ability = Object.keys(feat.abilityBonus || {})[0] || feat.choices?.ability
-      if (ability) result.savingThrows[ability.toLowerCase()] = true
-    }
+    // (Resilient and similar save-prof grants are handled below via
+    //  the data-driven featureEffects catalog — no hardcoded names.)
     for (const skill of (feat.skillProficiencies || [])) {
       const key = normalizeSkill(skill)
       if (!result.skills[key]) result.skills[key] = 'proficient'
@@ -339,6 +375,22 @@ export function computeProficiencies(character, classDataMap = {}) {
     }
   }
 
+  // ── Save-proficiency grants from featureEffects catalog ────
+  // Replaces the old hardcoded Resilient handling and adds support
+  // for Diamond Soul (Monk 14, all saves), Slippery Mind (Rogue 15,
+  // WIS+CHA), and anything else the catalog declares via
+  // mechanic.{allSavesProficient,saveProficient,
+  // saveProficiencyFromAbilityBonus}.
+  const mech = getMechanicalEffects(character)
+  if (mech.allSavesProficient) {
+    for (const ab of ['str', 'dex', 'con', 'int', 'wis', 'cha']) {
+      result.savingThrows[ab] = true
+    }
+  }
+  for (const ab of mech.saveProficient) {
+    result.savingThrows[ab] = true
+  }
+
   return result
 }
 
@@ -350,6 +402,13 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
   const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha']
   const result = {}
 
+  // Data-driven save bonuses from the featureEffects catalog:
+  //   • saveBonusFromAbility — e.g. Paladin Aura of Protection adds
+  //     the Paladin's CHA modifier to all saves. We use the CURRENT
+  //     character's modifier — multiclass Paladins gain the aura too.
+  const mech = getMechanicalEffects(character)
+  const auraBonus = mech.saveBonusAbility ? (modifiers[mech.saveBonusAbility] || 0) : 0
+
   for (const ability of abilities) {
     const isProficient = proficiencies.savingThrows[ability] || false
     const mod = modifiers[ability] || 0
@@ -358,11 +417,16 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
     // Feats wie Resilient können Saving Throw Proficiency geben
     const featBonus = getFeatSaveBonus(character, ability)
 
+    const total = mod + bonus + featBonus + auraBonus
+
     result[ability] = {
       modifier: mod,
       proficient: isProficient,
-      total: mod + bonus + featBonus,
-      breakdown: `${mod >= 0 ? '+' : ''}${mod}${isProficient ? ` + ${profBonus} (prof)` : ''}${featBonus ? ` + ${featBonus}` : ''}`,
+      total,
+      breakdown: `${mod >= 0 ? '+' : ''}${mod}`
+        + (isProficient ? ` + ${profBonus} (prof)` : '')
+        + (featBonus ? ` + ${featBonus}` : '')
+        + (auraBonus ? ` + ${auraBonus} (aura/${mech.saveBonusAbility?.toUpperCase()})` : ''),
     }
   }
 
@@ -470,8 +534,10 @@ export function computeHP(character, modifiers, classDataMap) {
     }
   }
 
-  // Feats wie Tough (+2 HP pro Level)
-  const toughBonus = hasTough(character) ? getTotalLevel(character) * 2 : 0
+  // Data-driven HP-per-level feats (Tough = +2). Stacking is supported
+  // so future features can pile on without code changes.
+  const hpPerLevel = getMechanicalEffects(character).hpPerLevel
+  const toughBonus = hpPerLevel ? getTotalLevel(character) * hpPerLevel : 0
   maxHp += toughBonus
 
   return {
@@ -650,7 +716,7 @@ export function computeSpellcasting(character, modifiers, profBonus) {
 // ANGRIFFE
 // ============================================================
 
-export function computeAttacks(character, modifiers, profBonus, proficiencies) {
+export function computeAttacks(character, modifiers, profBonus, proficiencies, weaponMastery = null) {
   const attacks = []
 
   // Unarmed Strike (immer verfügbar)
@@ -683,12 +749,73 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies) {
     })
   }
 
+  // Soulknife Rogue: Psychic Blades. The blade is a feature, not an
+  // item — manifested on demand, doesn't take an inventory slot, the
+  // player can't drop or be disarmed of it. Two attack rows:
+  //
+  //   • Main attack — scaling die (d6 → d8 → d10 → d12) on the Rogue
+  //     Sneak Attack breakpoints (L3 / L5 / L11 / L17), DEX-based,
+  //     finesse, melee + 60 ft. thrown.
+  //   • Bonus-action blade — fixed 1d4, no ability mod to damage; the
+  //     5e "TWF without the ability mod" pattern. Surfaced as its own
+  //     row so the player can see it next to the main one.
+  const soulknifeRogue = character.classes.find(c =>
+    c.classId === 'Rogue' && String(c.subclassId || '').toLowerCase().includes('soulknife')
+  )
+  if (soulknifeRogue) {
+    const dex = modifiers.dex || 0
+    const lvl = soulknifeRogue.level
+    const bladeDie = lvl >= 17 ? '1d12' : lvl >= 11 ? '1d10' : lvl >= 5 ? '1d8' : '1d6'
+    // Range follows the standard 5.5e thrown-weapon profile: 60 ft.
+    // normal, 120 ft. long, disadvantage at long range.
+    const psychicBladeRange = '60/120 ft. (Nachteil > 60 ft.)'
+    attacks.push({
+      id: 'psychic_blades',
+      name: 'Psychic Blades (Action)',
+      attackBonus: dex + profBonus,
+      attackDisplay: `${dex + profBonus >= 0 ? '+' : ''}${dex + profBonus}`,
+      damage: `${bladeDie} + ${dex}`,
+      damageType: 'psychic',
+      range: psychicBladeRange,
+      properties: ['Finesse'],
+      isProficient: true,
+      abilityUsed: 'dex',
+      mastery: [],
+    })
+    attacks.push({
+      id: 'psychic_blades_bonus',
+      name: 'Psychic Blades (Bonus)',
+      attackBonus: dex + profBonus,
+      attackDisplay: `${dex + profBonus >= 0 ? '+' : ''}${dex + profBonus}`,
+      // No DEX-mod on damage (RAW two-weapon-fighting style).
+      damage: '1d4',
+      damageType: 'psychic',
+      range: psychicBladeRange,
+      properties: ['Finesse', 'Bonus Action'],
+      isProficient: true,
+      abilityUsed: 'dex',
+      mastery: [],
+    })
+  }
+
   // Bewaffnete Angriffe aus Inventar (wird später mit echten Item-Daten gefüllt)
   const allCombatItems = [...(character.inventory?.items || []), ...(character.custom?.items || [])]
   const weapons = allCombatItems.filter(i => i.equipped && i.isWeapon)
   for (const weapon of weapons) {
-    const isFinesse = weapon.properties?.includes('Finesse')
-    const isRanged = weapon.properties?.includes('Ammunition') || weapon.properties?.includes('Thrown')
+    // Legacy characters created before the wizard normalised weapon
+    // properties may still carry raw 5etools codes like "F|XPHB". Map
+    // common codes to their English label here so Finesse / Thrown /
+    // Ammunition detection works without forcing the user to re-add
+    // the weapon.
+    const propsRaw = weapon.properties || []
+    const props = propsRaw.map(p => {
+      if (typeof p !== 'string') return ''
+      const code = p.split('|')[0].toUpperCase()
+      const MAP = { F: 'Finesse', V: 'Versatile', L: 'Light', H: 'Heavy', '2H': 'Two-Handed', T: 'Thrown', A: 'Ammunition', R: 'Reach', LD: 'Loading', S: 'Special' }
+      return MAP[code] || p.split('|')[0]
+    })
+    const isFinesse = props.includes('Finesse')
+    const isRanged = props.includes('Ammunition') || props.includes('Thrown')
 
     // Weapon-marking rules (Hex Warrior, Pact Weapon, Improved Pact
     // Weapon, …). Effects are data-driven via WEAPON_MARKING_RULES —
@@ -725,10 +852,18 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies) {
       damage: `${weapon.dmg1} + ${abilityMod}${damageExtra ? ` + ${damageExtra}` : ''}`,
       damageType: weapon.dmgType || 'unknown',
       range: weapon.range || '5 ft.',
-      properties: weapon.properties || [],
+      properties: props,
       // 5.5e Weapon Mastery — empty on 5e weapons. Surfaced as a small
-      // pill on the attack row of the player sheet.
-      mastery: weapon.mastery || [],
+      // pill on the attack row of the player sheet. Hidden unless the
+      // weapon's name is in the character's picked-mastery list so we
+      // don't claim mastery on weapons the player didn't choose.
+      mastery: (() => {
+        const raw = weapon.mastery || []
+        if (!raw.length) return []
+        if (!weaponMastery) return raw
+        const key = String(weapon.name || '').toLowerCase().trim()
+        return weaponMastery.allPicked.has(key) ? raw : []
+      })(),
       isProficient,
       abilityUsed,
       // First active mark — surfaced as a pill on the attack row. If
@@ -777,14 +912,70 @@ function checkWeaponProficiency(character, weapon, proficiencies) {
   const weaponName = norm(weapon.name)
   const weaponCustom = norm(weapon.customName)
   const weaponCat = norm(weapon.weaponCategory)
+  // 5.5e classes (e.g. Rogue) grant proficiency with a filtered slice of
+  // martial weapons — "martial weapons that have Finesse or Light". The
+  // computeProficiencies pass surfaces these as a synthetic entry like
+  // "martial (light/finesse)". Decode that into { cat, props[] } so the
+  // check passes only when both the category AND at least one listed
+  // property are present on the weapon.
+  const weaponProps = (weapon.properties || []).map(p => {
+    if (typeof p !== 'string') return ''
+    return p.split('|')[0].toUpperCase()
+  })
+  const PROP_LABEL = { F: 'finesse', L: 'light', H: 'heavy', '2H': 'two-handed', T: 'thrown', A: 'ammunition', R: 'reach', LD: 'loading', S: 'special', V: 'versatile' }
+  const weaponPropNames = weaponProps.map(c => (PROP_LABEL[c] || c).toLowerCase())
 
   for (const p of aggregated) {
     const n = norm(p)
     if (!n) continue
     if (n === weaponCat) return true                // category match (simple/martial)
     if (n === weaponName || n === weaponCustom) return true  // specific weapon
+    // Filter-style "martial (light/finesse)" — match when the weapon's
+    // category matches AND it carries at least one of the listed props.
+    const filterMatch = n.match(/^(simple|martial)\s*\(([^)]+)\)$/)
+    if (filterMatch && filterMatch[1] === weaponCat) {
+      const wantProps = filterMatch[2].split('/').map(s => s.trim().toLowerCase())
+      if (wantProps.some(wp => weaponPropNames.includes(wp))) return true
+    }
   }
   return false
+}
+
+/**
+ * Compute the per-class Weapon Mastery state for a 5.5e character.
+ *
+ * 5.5e Fighter (and other classes — once their tables ship the column)
+ * gets a level-scaling "Weapon Mastery" column on classTableGroups.
+ * The character picks N weapon NAMES whose mastery technique they can
+ * use; the technique itself is determined by the weapon's `mastery`
+ * field (Topple, Vex, Push, Graze, Nick, Sap, Slow, Cleave).
+ *
+ * Returns `{ knownCount, perClass: [{ classId, count, picked[] }] }`.
+ * The picked list lives on `cls.weaponMasteries`. When no picks are
+ * stored yet the array is empty so the UI can prompt the player to
+ * choose. The attack table reads this to gate the per-row mastery
+ * badge on whether the weapon's name is in any picked list.
+ */
+function computeWeaponMastery(character, classDataMap = {}) {
+  const perClass = []
+  for (const cls of (character.classes || [])) {
+    const cd = classDataMap[cls.classId]
+    const count = getClassTableValue(cd, cls.level, 'Weapon Mastery')
+    if (!count) continue
+    perClass.push({
+      classId: cls.classId,
+      classIndex: character.classes.indexOf(cls),
+      count,
+      picked: Array.isArray(cls.weaponMasteries) ? cls.weaponMasteries.slice(0, count) : [],
+    })
+  }
+  const allPicked = new Set()
+  for (const c of perClass) for (const w of c.picked) allPicked.add(String(w).toLowerCase().trim())
+  return {
+    knownCount: perClass.reduce((s, c) => s + c.count, 0),
+    perClass,
+    allPicked,
+  }
 }
 
 function getMonkMartialArtsDie(level) {
@@ -798,58 +989,164 @@ function getMonkMartialArtsDie(level) {
 // KLASSEN-RESSOURCEN
 // ============================================================
 
-export function computeResources(character, modifiers, profBonus, totalLevel) {
+/**
+ * Look up a numeric value in a class's `classTableGroups` by column
+ * label. 5.5e classes embed level-scaling resource counts directly in
+ * the data (e.g. Fighter "Second Wind" goes 2 → 3 → 4 at certain
+ * levels). Reading the table here keeps the rules engine data-driven
+ * instead of duplicating those breakpoints in code.
+ *
+ * Returns `null` if there's no matching column or no usable cell at
+ * `level` — caller decides the fallback (5e classes typically have no
+ * such table, so the fallback is the legacy hardcoded value).
+ *
+ * Matching is case-insensitive and tolerates `{@filter X|…}` markup so
+ * spell-slot column lookups also work uniformly.
+ */
+function getClassTableValue(classData, level, columnLabel) {
+  const cell = getClassTableCell(classData, level, columnLabel)
+  if (cell == null) return null
+  // Plain number / numeric string → integer.
+  if (typeof cell === 'number') return cell
+  if (typeof cell === 'string') {
+    const n = parseInt(cell, 10)
+    return Number.isNaN(n) ? null : n
+  }
+  // Object cells: { type: "bonus" | "bonusSpeed", value: N } → value.
+  if (cell && typeof cell === 'object' && typeof cell.value === 'number') return cell.value
+  return null
+}
+
+/**
+ * Like getClassTableValue but returns a formatted die string ("1d6")
+ * for cells of the 5etools dice shape:
+ *   { type: "dice", toRoll: [{ number, faces }, ...] }
+ * Used for Monk Martial Arts die, Rogue Sneak Attack dice, Bardic
+ * Inspiration die — everywhere the table cell IS a die rather than a
+ * count.
+ */
+function getClassTableDie(classData, level, columnLabel) {
+  const cell = getClassTableCell(classData, level, columnLabel)
+  if (!cell || typeof cell !== 'object') return null
+  if (cell.type === 'dice' && Array.isArray(cell.toRoll) && cell.toRoll[0]) {
+    const r = cell.toRoll[0]
+    return `${r.number || 1}d${r.faces}`
+  }
+  return null
+}
+
+/** Internal: locate the raw cell. Tolerates `{@filter X|…}` markup on
+ *  column labels and matches case-insensitively. */
+function getClassTableCell(classData, level, columnLabel) {
+  if (!classData?.classTableGroups || !level) return null
+  const stripTag = (s) => String(s || '')
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    .toLowerCase().trim()
+  const target = stripTag(columnLabel)
+  for (const group of classData.classTableGroups) {
+    const labels = group.colLabels || []
+    const idx = labels.findIndex(l => stripTag(l) === target)
+    if (idx < 0) continue
+    const row = (group.rows || [])[level - 1]
+    if (!row) continue
+    return row[idx]
+  }
+  return null
+}
+
+export function computeResources(character, modifiers, profBonus, totalLevel, classDataMap = {}) {
   const resources = []
 
   for (const cls of character.classes) {
     const level = cls.level
 
+    const cd = classDataMap[cls.classId]
+    // tv = table-value (numeric), td = table-die ("1d6")
+    const tv = (col) => getClassTableValue(cd, level, col)
+    const td = (col) => getClassTableDie(cd, level, col)
+
     switch (cls.classId) {
-      case 'Barbarian':
-        resources.push({ id: 'rage', name: 'Rages', max: getBarbarianRages(level), current: 0, recharge: 'long_rest' })
-        resources.push({ id: 'rage_damage', name: 'Rage Damage Bonus', value: getBarbarianRageDamage(level), type: 'passive' })
+      case 'Barbarian': {
+        // 5.5e XPHB Barbarian table: Rages, Rage Damage, Weapon Mastery.
+        // 5e PHB uses hardcoded progression — keep the legacy helpers as
+        // the fallback.
+        const rages = tv('Rages') ?? getBarbarianRages(level)
+        const rageDmg = tv('Rage Damage') ?? getBarbarianRageDamage(level)
+        resources.push({ id: 'rage', name: 'Rages', max: rages, current: 0, recharge: 'long_rest' })
+        resources.push({ id: 'rage_damage', name: 'Rage Damage Bonus', value: `+${rageDmg}`, type: 'passive' })
         break
+      }
 
-      case 'Bard':
-        resources.push({ id: 'bardic_inspiration', name: 'Bardic Inspiration', max: Math.max(1, modifiers.cha || 1), current: 0, recharge: level >= 5 ? 'short_rest' : 'long_rest', die: getBardicInspirationDie(level) })
+      case 'Bard': {
+        // 5.5e XPHB calls the column "Bardic Die" (a die — d6 → d12).
+        // 5e PHB used a static "1d6" and grew. getBardicInspirationDie
+        // remains the 5e fallback.
+        const die = td('Bardic Die') ?? td('Bardic Insp. Die') ?? getBardicInspirationDie(level)
+        resources.push({ id: 'bardic_inspiration', name: 'Bardic Inspiration', max: Math.max(1, modifiers.cha || 1), current: 0, recharge: level >= 5 ? 'short_rest' : 'long_rest', die })
         break
+      }
 
-      case 'Cleric':
-        resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: level >= 18 ? 3 : level >= 6 ? 2 : 1, current: 0, recharge: 'short_rest' })
+      case 'Cleric': {
+        const cdMax = tv('Channel Divinity') ?? (level >= 18 ? 3 : level >= 6 ? 2 : 1)
+        resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: cdMax, current: 0, recharge: 'short_rest' })
         break
+      }
 
-      case 'Druid':
-        resources.push({ id: 'wild_shape', name: 'Wild Shape', max: level >= 20 ? 99 : 2, current: 0, recharge: 'short_rest' })
+      case 'Druid': {
+        const wsMax = tv('Wild Shape') ?? (level >= 20 ? 99 : 2)
+        resources.push({ id: 'wild_shape', name: 'Wild Shape', max: wsMax, current: 0, recharge: 'short_rest' })
         break
+      }
 
-      case 'Fighter':
-        resources.push({ id: 'second_wind', name: 'Second Wind', max: 1, current: 0, recharge: 'short_rest' })
+      case 'Fighter': {
+        // 5.5e Fighter table has a "Second Wind" column (2/3/4 by level).
+        // 5e Fighter has no such column → fallback to 1.
+        const swMax = tv('Second Wind') ?? 1
+        resources.push({ id: 'second_wind', name: 'Second Wind', max: swMax, current: 0, recharge: 'short_rest' })
         if (level >= 2) resources.push({ id: 'action_surge', name: 'Action Surge', max: level >= 17 ? 2 : 1, current: 0, recharge: 'short_rest' })
         if (level >= 9) resources.push({ id: 'indomitable', name: 'Indomitable', max: level >= 17 ? 3 : level >= 13 ? 2 : 1, current: 0, recharge: 'long_rest' })
         break
+      }
 
-      case 'Monk':
-        const kiPoints = level
-        resources.push({ id: 'ki', name: 'Ki Points', max: kiPoints, current: 0, recharge: 'short_rest' })
+      case 'Monk': {
+        // 5.5e renamed Ki → Focus Points. The table's column is one or
+        // the other depending on edition; we prefer Focus Points (newer)
+        // then fall back. Martial Arts die also comes from the table.
+        const points = tv('Focus Points') ?? tv('Ki Points') ?? level
+        const maDie = td('Martial Arts') ?? `1${getMonkMartialArtsDie(level)}`
+        resources.push({ id: 'ki', name: tv('Focus Points') != null ? 'Focus Points' : 'Ki Points', max: points, current: 0, recharge: 'short_rest' })
+        resources.push({ id: 'martial_arts_die', name: 'Martial Arts Die', value: maDie, type: 'passive' })
         break
+      }
 
-      case 'Paladin':
-        const divSmiteSlots = Math.floor(level / 2)
+      case 'Paladin': {
+        const cdMax = tv('Channel Divinity') ?? (level >= 6 ? 2 : 1)
         resources.push({ id: 'lay_on_hands', name: 'Lay on Hands', max: level * 5, current: 0, recharge: 'long_rest', type: 'pool' })
-        if (level >= 2) resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: level >= 6 ? 2 : 1, current: 0, recharge: 'short_rest' })
+        if (level >= 2) resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: cdMax, current: 0, recharge: 'short_rest' })
         break
+      }
 
-      case 'Ranger':
-        if (level >= 1) resources.push({ id: 'favored_foe', name: "Favored Foe", max: profBonus, current: 0, recharge: 'long_rest' })
+      case 'Ranger': {
+        // 5.5e calls it "Favored Enemy" (Hunter's Mark casts), with
+        // explicit counts in the table. 5e uses profBonus.
+        const fe = tv('Favored Enemy') ?? profBonus
+        if (level >= 1) resources.push({ id: 'favored_foe', name: 'Favored Enemy', max: fe, current: 0, recharge: 'long_rest' })
         break
+      }
 
-      case 'Rogue':
-        if (level >= 1) resources.push({ id: 'sneak_attack', name: 'Sneak Attack', value: `${Math.ceil(level / 2)}d6`, type: 'passive' })
+      case 'Rogue': {
+        // 5.5e Sneak Attack die is in the table ("1d6" → "10d6"). 5e
+        // uses ⌈level/2⌉d6 — same numbers, computed differently.
+        const saDie = td('Sneak Attack') ?? `${Math.ceil(level / 2)}d6`
+        if (level >= 1) resources.push({ id: 'sneak_attack', name: 'Sneak Attack', value: saDie, type: 'passive' })
         break
+      }
 
-      case 'Sorcerer':
-        resources.push({ id: 'sorcery_points', name: 'Sorcery Points', max: level, current: 0, recharge: 'long_rest' })
+      case 'Sorcerer': {
+        const sp = tv('Sorcery Points') ?? level
+        resources.push({ id: 'sorcery_points', name: 'Sorcery Points', max: sp, current: 0, recharge: 'long_rest' })
         break
+      }
 
       case 'Warlock':
         // Pact Magic wird separat über Spell Slots gehandelt
@@ -877,7 +1174,7 @@ export function computeResources(character, modifiers, profBonus, totalLevel) {
 // GESCHWINDIGKEIT
 // ============================================================
 
-function computeSpeed(character, abilityScores) {
+function computeSpeed(character, abilityScores, classDataMap = {}) {
   // species.speed may be:
   //   • a plain number (the walk speed)
   //   • an object { walk, fly, swim, climb, burrow } where each value
@@ -897,10 +1194,14 @@ function computeSpeed(character, abilityScores) {
   }
 
   // Monk: Unarmored Movement (walk + extra movement modes do NOT get
-  // the bonus — only walk per RAW).
+  // the bonus — only walk per RAW). 5.5e XPHB stores the per-level
+  // bonus in the class table's "Unarmored Movement" column as a
+  // { type: "bonusSpeed", value: N } object. getClassTableValue
+  // unwraps it. Falls back to the 5e PHB hardcoded table.
   const monkClass = character.classes.find(c => c.classId === 'Monk')
   if (monkClass) {
-    speed.walk += getMonkUnarmoredMovement(monkClass.level)
+    const fromTable = getClassTableValue(classDataMap[monkClass.classId], monkClass.level, 'Unarmored Movement')
+    speed.walk += (fromTable != null ? fromTable : getMonkUnarmoredMovement(monkClass.level))
   }
 
   // Barbarian Fast Movement (Level 5+).
@@ -915,6 +1216,12 @@ function computeSpeed(character, abilityScores) {
     const str = abilityScores?.str || 10
     if (str < equippedHA.strength) speed.walk -= 10
   }
+
+  // ── Permanent speed bonuses from feats (Mobile = +10) ─────────
+  // Data-driven via featureEffects catalog; no class/feat names
+  // hardcoded here.
+  const mechSpeed = getMechanicalEffects(character).speedBonus
+  if (mechSpeed) speed.walk += mechSpeed
 
   // ── Concentration-spell speed effects ──────────────────────
   // Longstrider (+10), Haste (×2 walk), Fly/Spider Climb (grant mode).
@@ -935,9 +1242,9 @@ function computeSpeed(character, abilityScores) {
 }
 
 function getInitiativeBonus(character) {
-  // Feats wie Alert geben +5
-  const hasAlert = character.feats.some(f => f.featId === 'Alert')
-  return hasAlert ? 5 : 0
+  // Data-driven: featureEffects catalog reports any initBonus mechanics
+  // (Alert feat = +5; future entries can stack additively here).
+  return getMechanicalEffects(character).initBonus || 0
 }
 
 // ============================================================
@@ -1020,7 +1327,19 @@ export function normalizeSkill(skill) {
 }
 
 export function normalizeTool(tool) {
-  return tool.toLowerCase().replace(/\s+/g, '_')
+  // Class data routinely uses 5etools refs like
+  //   "{@item Thieves' Tools|XPHB}"
+  // as a tool proficiency entry. Without stripping the wrapper the key
+  // becomes "{@item_thieves'_tools|xphb}", colliding with the plain
+  // "thieves'_tools" key written by backgrounds → both show on the
+  // sheet's Proficiencies panel as duplicates ("{@Item Thieves'
+  // Tools|Xphb}, Thieves' Tools"). The unwrap also drops a trailing
+  // |SOURCE suffix on bare references like "longsword|phb".
+  const stripped = String(tool || '')
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    .replace(/\|[A-Za-z]+$/, '')
+    .trim()
+  return stripped.toLowerCase().replace(/\s+/g, '_')
 }
 
 // Hit Dice Zusammenfassung

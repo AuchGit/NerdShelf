@@ -312,9 +312,9 @@ async function handleUndo() {
         {currentStep.id==='asi' && effectiveInfo && <StepASI info={effectiveInfo} draft={draft} setDraft={setDraft}
           abScores={computeAbilityScores(char)} feats={feats} optF={optF} edition={edition} allSp={allSp} />}
         {currentStep.id==='features' && effectiveInfo && <StepFeatures info={effectiveInfo} draft={draft} setDraft={setDraft}
-          optF={optF} char={char} />}
+          optF={optF} feats={feats} char={char} />}
         {currentStep.id==='spells' && effectiveInfo && <StepSpells info={effectiveInfo} draft={draft} setDraft={setDraft}
-          allSp={allSp} csn={csn} char={char} optF={optF} />}
+          allSp={allSp} csn={csn} char={char} optF={optF} edition={edition} />}
         {currentStep.id==='summary' && effectiveInfo && <StepSummary info={effectiveInfo} draft={draft} />}
       </div>
       <div className="dnd-wizard-footer" data-pwa-target="dnd-wizard-footer" style={S.footer}>
@@ -554,7 +554,7 @@ function StepASI({ info, draft, setDraft, abScores, feats, optF, edition, allSp 
 
 // ═══════ STEP: FEATURES ═════════════════════════════════════════════════════
 
-function StepFeatures({ info, draft, setDraft, optF, char }) {
+function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
   const subD = draft.subclassId && draft.classData ? (draft.classData.subclasses||[]).find(s=>s.name===draft.subclassId) : null
   const gains = computeOptionalFeatureGains(draft.classData, subD, info.nextLevel).filter(g=>g.newCount>0)
   const existOF = useMemo(() => {
@@ -609,7 +609,7 @@ function StepFeatures({ info, draft, setDraft, optF, char }) {
       </div>}
 
       {/* Optional features (Invocations, Metamagic, Fighting Style, etc.) */}
-      {gains.map(gain => <OptFeatPicker key={gain.name} gain={gain} optF={optF} existOF={existOF}
+      {gains.map(gain => <OptFeatPicker key={gain.name} gain={gain} optF={optF} feats={feats} existOF={existOF}
         draft={draft} setDraft={setDraft} char={char} classId={info.classId} classLevel={info.nextLevel} />)}
     </div>
   )
@@ -617,7 +617,7 @@ function StepFeatures({ info, draft, setDraft, optF, char }) {
 
 // ═══════ STEP: SPELLS ═══════════════════════════════════════════════════════
 
-function StepSpells({ info, draft, setDraft, allSp, csn, char, optF }) {
+function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) {
   const [sLv,setSLv]=useState(null),[sCon,setSCon]=useState(false),[sRit,setSRit]=useState(false)
   const slci = getSpellListClass(info.classId, draft.subclassId, edition)
   const clsLc = (slci||'').toLowerCase()
@@ -830,19 +830,36 @@ function StepSummary({ info, draft }) {
 
 // ═══════ OPTIONAL FEATURE PICKER ═════════════════════════════════════════════
 
-function OptFeatPicker({ gain, optF, existOF, draft, setDraft, char, classId, classLevel }) {
+function OptFeatPicker({ gain, optF, feats = [], existOF, draft, setDraft, char, classId, classLevel }) {
   const [search,setSearch]=useState(''),[viewing,setViewing]=useState(null)
   const picks = draft.optPicks[gain.name]||[]
-  const alreadyChosen = new Set(existOF.filter(f=>(optF.find(o=>o.name===f.name)?.featureType||[]).some(t=>gain.featureTypes.includes(t))).map(f=>f.name))
+  // 5.5e: gain.source === 'feat' means draw from the feats catalog
+  // filtered by category (e.g. category "FS" for Fighting Style). 5e
+  // optional features continue to use the optF list filtered by
+  // featureType. The picker UI is identical in both cases — only the
+  // source pool differs.
+  const isFeatSource = gain.source === 'feat'
+  const sourcePool = isFeatSource ? feats : optF
+  const matchesGain = isFeatSource
+    ? (item) => {
+        const cat = String(item.category || '').toUpperCase()
+        return cat && (gain.featCategories || []).includes(cat)
+      }
+    : (item) => (item.featureType || []).some(ft => (gain.featureTypes || []).includes(ft))
+  const alreadyChosen = new Set(existOF.filter(f => {
+    const item = sourcePool.find(o => o.name === f.name)
+    return item && matchesGain(item)
+  }).map(f => f.name))
   const available = useMemo(()=>{
-    let items=optF.filter(of=>(of.featureType||[]).some(ft=>gain.featureTypes.includes(ft)))
-    items=items.filter(of=>!alreadyChosen.has(of.name)||picks.includes(of.name))
-    if(search.trim()){const q=search.toLowerCase();items=items.filter(of=>of.name.toLowerCase().includes(q))}
-    items=items.map(of=>({...of,_prereqMet:meetsPrerequisites(of.prerequisite,char,classId,classLevel),_prereqText:formatPrerequisites(of.prerequisite)}))
+    let items=sourcePool.filter(matchesGain)
+    items=items.filter(o=>!alreadyChosen.has(o.name)||picks.includes(o.name))
+    if(search.trim()){const q=search.toLowerCase();items=items.filter(o=>o.name.toLowerCase().includes(q))}
+    items=items.map(o=>({...o,_prereqMet:meetsPrerequisites(o.prerequisite,char,classId,classLevel),_prereqText:formatPrerequisites(o.prerequisite)}))
     // Sort: met first, then unmet
     items.sort((a,b)=>(b._prereqMet?1:0)-(a._prereqMet?1:0))
     return items
-  },[optF,gain.featureTypes,search,alreadyChosen,picks,char,classId,classLevel])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sourcePool,gain.featureTypes,gain.featCategories,search,alreadyChosen,picks,char,classId,classLevel])
 
   const isFull=picks.length>=gain.newCount
   function toggle(name){const next=picks.includes(name)?picks.filter(n=>n!==name):(!isFull?[...picks,name]:picks);setDraft(d=>({...d,optPicks:{...d.optPicks,[gain.name]:next}}))}

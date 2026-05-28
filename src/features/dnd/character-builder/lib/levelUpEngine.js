@@ -92,15 +92,23 @@ function getProgTotal(progression, level) {
 
 /**
  * Compute optional feature gains at a specific level.
- * Checks both class-level and subclass-level progressions.
+ *
+ * 5e: classes use `optionalfeatureProgression` (Maneuvers, Eldritch
+ *     Invocations, Metamagic, Fighting Style[FS:F/R/P]).
+ * 5.5e: classes use `featProgression` instead — Fighting Style is now
+ *     a feat with `category: "FS"`, and the same picker shape works
+ *     once we let the catalog source be either feats (by category) or
+ *     optional features (by featureType). The returned entries carry
+ *     EITHER `featureTypes` (5e optional features) or `featCategories`
+ *     (5.5e feats); the picker switches its source accordingly.
  */
 export function computeOptionalFeatureGains(classData, subclassData, level) {
   const results = []
-  const allProgs = [
+  const optionalProgs = [
     ...(classData?.optionalfeatureProgression || []),
     ...(subclassData?.optionalfeatureProgression || []),
   ]
-  for (const prog of allProgs) {
+  for (const prog of optionalProgs) {
     if (!prog.progression) continue
     const totalAtLevel = getProgTotal(prog.progression, level)
     const totalAtPrev  = getProgTotal(prog.progression, level - 1)
@@ -108,10 +116,37 @@ export function computeOptionalFeatureGains(classData, subclassData, level) {
     if (totalAtLevel > 0) {
       results.push({
         name: prog.name || 'Optional Feature',
+        source: 'optionalfeature',
         featureTypes: prog.featureType || [],
         newCount,
         totalCount: totalAtLevel,
-        canReplace: newCount > 0, // Can swap old ones when gaining new picks
+        canReplace: newCount > 0,
+      })
+    }
+  }
+  const featProgs = [
+    ...(classData?.featProgression || []),
+    ...(subclassData?.featProgression || []),
+  ]
+  for (const prog of featProgs) {
+    if (!prog.progression) continue
+    const totalAtLevel = getProgTotal(prog.progression, level)
+    const totalAtPrev  = getProgTotal(prog.progression, level - 1)
+    const newCount = totalAtLevel - totalAtPrev
+    if (totalAtLevel > 0) {
+      // Epic Boon (EB) only triggers at level 19 and is a single
+      // category. Fighting Style (FS) is the common case. Other future
+      // categories work the same way.
+      const cats = Array.isArray(prog.category)
+        ? prog.category.map(c => String(c).toUpperCase())
+        : prog.category ? [String(prog.category).toUpperCase()] : []
+      results.push({
+        name: prog.name || 'Feat',
+        source: 'feat',
+        featCategories: cats,
+        newCount,
+        totalCount: totalAtLevel,
+        canReplace: newCount > 0,
       })
     }
   }

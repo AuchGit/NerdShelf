@@ -137,6 +137,34 @@ export function SenseRow({ label, value }) {
   )
 }
 
+// ── Feature-effect notes list ───────────────────────────────────────
+// Renders a compact list of context-sensitive feature notes ("Adv vs
+// charmed", "+CHA on saves") inline under whatever sheet block the
+// notes belong to. Returns null when there are no notes for the slot,
+// so the call site stays uncluttered.
+export function FeatureNoteList({ notes, style }) {
+  if (!notes || notes.length === 0) return null
+  return (
+    <ul style={{ ...featureNoteList, ...(style || {}) }}>
+      {notes.map(n => (
+        <li key={n.id} style={featureNoteItem}>
+          <span style={featureNoteFeature}>{n.feature}</span>
+          <span> · {n.text}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const featureNoteList = {
+  margin: '6px 0 0 0', padding: '6px 8px',
+  listStyle: 'none', background: 'var(--bg-inset)',
+  border: '1px solid var(--border-subtle)', borderRadius: 6,
+  display: 'flex', flexDirection: 'column', gap: 3,
+}
+const featureNoteItem = { fontSize: 11, lineHeight: 1.4, color: 'var(--text-secondary)' }
+const featureNoteFeature = { color: 'var(--accent)', fontWeight: 600 }
+
 // ═══════════════════════════════════════════════════════════════
 // BUTTONS
 // ═══════════════════════════════════════════════════════════════

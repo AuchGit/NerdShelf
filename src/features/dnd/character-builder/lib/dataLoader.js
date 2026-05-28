@@ -287,7 +287,26 @@ export async function loadClassData(edition, classId) {
   const data = await fetchData(edition, `class/class-${fileName}.json`)
   if (!data) return null
 
-  const cls = data.class?.find(c => c.name === classId)
+  // 5.5e class JSONs ship multiple `class` entries — the legacy PHB one
+  // first, then the 2024 XPHB rewrite. The XPHB version is what carries
+  // the 5.5e `classTableGroups` (Fighter "Second Wind" 2→3→4 etc.) and
+  // updated starting proficiencies, so we must prefer it. Without this
+  // preference loadClassData returned the PHB entry — silently breaking
+  // every table-driven 5.5e resource.
+  const officialClasses = (data.class || []).filter(c => isOfficialSource(c.source))
+  const matching = officialClasses.filter(c => c.name === classId)
+  const is55e = edition === '5.5e'
+  let cls = null
+  if (is55e) {
+    cls = matching.find(c => PREFERRED_55E_SOURCES.includes(c.source))
+      || matching[0]
+      || data.class?.find(c => c.name === classId)
+  } else {
+    cls = matching[0] || data.class?.find(c => c.name === classId)
+  }
+  // Pull subclass features from the matching source family first, falling
+  // back to anything in the file so legacy subclasses still appear when
+  // their XPHB rewrite is missing.
   const subclasses = (data.subclass || []).filter(
     s => s.className === classId && isOfficialSource(s.source)
   )
@@ -374,10 +393,24 @@ export async function loadBackgroundList(edition) {
  * Used by FeatChoiceSectionNew in Step7Proficiencies so it hits the correct
  * edition-aware path (/data/5e/... vs /data/5.5e/...) instead of a bare
  * fetch('/data/optionalfeatures.json') which always fails.
+ *
+ * 5.5e dedup: each maneuver / invocation / metamagic option appears in both
+ * the legacy source (TCE / PHB) and the 2024 XPHB rewrite, so the raw array
+ * has e.g. "Ambush" twice. We keep the XPHB version (preferred source list)
+ * and drop the legacy duplicate — same approach the feat/background/race
+ * loaders already use.
  */
 export async function loadOptionalFeatureList(edition) {
   const data = await fetchData(edition || '5e', 'optionalfeatures.json')
-  return data?.optionalfeature || []
+  const all = data?.optionalfeature || []
+  if (edition === '5.5e') {
+    // deduplicateByName matches on lowercase name and is featureType-agnostic.
+    // Two optional features can share a name across feature-type buckets in
+    // theory (none in current data), but the consumer is filtering by
+    // featureType anyway, so the dedup is safe.
+    return deduplicateByName(all)
+  }
+  return all
 }
 
 // ── FEATS ──────────────────────────────────────────────────
@@ -678,18 +711,32 @@ export async function loadItemIndex(edition) {
   // Try combined index first
   let items = await fetchData(edition, 'item-index.json')
   if (items && Array.isArray(items)) {
-    // Merge scfType from items-base.json (item-index lacks this field)
+    // Merge a couple of fields the index strips out but downstream code
+    // needs:
+    //   • scfType — spellcasting-focus subtype, only on items-base.
+    //   • mastery — 5.5e weapon mastery names; 5.5e weapons in
+    //     items-base have these, the index doesn't. Without this merge
+    //     the Weapon Mastery picker on the sheet had nothing to show.
     const baseData = await fetchData(edition, 'items-base.json')
     if (baseData) {
       const scfMap = {}
+      const masteryMap = {}
       for (const b of (baseData.baseitem || [])) {
-        if (b.scfType) scfMap[b.name.toLowerCase()] = b.scfType
+        const key = `${b.name?.toLowerCase()}::${b.source}`
+        if (b.scfType) scfMap[key] = b.scfType
+        if (Array.isArray(b.mastery) && b.mastery.length > 0) {
+          masteryMap[key] = b.mastery
+            .map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0])
+            .filter(Boolean)
+        }
       }
-      items = items.map(i =>
-        i.type === 'SCF' && !i.scfType && scfMap[i.name?.toLowerCase()]
-          ? { ...i, scfType: scfMap[i.name.toLowerCase()] }
-          : i
-      )
+      items = items.map(i => {
+        const key = `${i.name?.toLowerCase()}::${i.source}`
+        const patch = {}
+        if (i.type === 'SCF' && !i.scfType && scfMap[key]) patch.scfType = scfMap[key]
+        if (masteryMap[key]) patch.mastery = masteryMap[key]
+        return Object.keys(patch).length > 0 ? { ...i, ...patch } : i
+      })
     }
     const filtered = items.filter(i => isOfficialSource(i.source))
     if (edition === '5.5e') return deduplicateByName(filtered)
@@ -743,6 +790,27 @@ export const loadItemList = loadItemIndex
  * Input: "chain mail|xphb" or "greatsword|phb"
  * Returns the matching item object, or a stub if not found.
  */
+// 5etools weapon-property codes → English labels the rules engine
+// understands. Shared between the inventory tab (manual add) and the
+// starting-equipment step (auto-add) so weapons added through either
+// path have the same shape — without this normalisation, 5.5e items
+// (which carry codes like "F|XPHB") leak through unchanged and the
+// rules engine's `properties.includes('Finesse')` checks all return
+// false, hiding Finesse / Thrown / Ammunition behaviours.
+const PROP_CODE_MAP = {
+  F: 'Finesse', V: 'Versatile', L: 'Light', H: 'Heavy', '2H': 'Two-Handed',
+  T: 'Thrown', A: 'Ammunition', R: 'Reach', LD: 'Loading', S: 'Special',
+  RLD: 'Reload', BF: 'Burst Fire', N: 'Net', AF: 'Ammunition',
+}
+export function normalizeWeaponProperty(p) {
+  let raw = typeof p === 'string' ? p : (p?.name || p?.uid || '')
+  const code = raw.split('|')[0].toUpperCase()
+  return PROP_CODE_MAP[code] || raw.split('|')[0]
+}
+export function normalizeWeaponProperties(arr) {
+  return (arr || []).map(normalizeWeaponProperty).filter(Boolean)
+}
+
 export function resolveItemRef(ref, itemIndex) {
   if (!ref || typeof ref !== 'string') return null
   const [rawName, rawSource] = ref.split('|')

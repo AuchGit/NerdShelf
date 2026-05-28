@@ -263,6 +263,16 @@ export default function Step4Class({ character, updateCharacter }) {
               ★ Diese Klasse wählt {selectedSubclassId ? 'bereits ✓' : 'sofort'} bei Level 1 eine {cls.subclassTitle}.
             </div>
           )}
+          {/* Classes that pick a subclass later (Fighter L3, Rogue L3, …)
+              should browse but not commit at character creation. We render
+              the cards in read-only mode so the player can read the lore
+              and feature lists — actual selection happens at level-up. */}
+          {!needsL1Subclass && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10, padding: '6px 10px',
+                          background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 6 }}>
+              Diese Klasse wählt ihre {cls.subclassTitle} erst auf Level {cls.subclassLevel}. Du kannst die Optionen hier zum Vergleich ansehen — die Wahl erfolgt beim Level-Up.
+            </div>
+          )}
           {(!cls.subclasses || cls.subclasses.length === 0) ? (
             <div style={{ color: 'var(--text-dim)', fontSize: 13, padding: '16px 0' }}>
               Keine Subklassen-Daten geladen.
@@ -273,7 +283,7 @@ export default function Step4Class({ character, updateCharacter }) {
                 key={i}
                 sub={sub}
                 isSelected={character?.classes?.[0]?.subclassId === sub.name}
-                onSelect={() => {
+                onSelect={needsL1Subclass ? () => {
                   // Build class entry if not yet selected, or reuse existing
                   const base = (selectedClassId === cls.id && character.classes.length > 0)
                     ? { ...character.classes[0] }
@@ -299,7 +309,7 @@ export default function Step4Class({ character, updateCharacter }) {
                     updateCharacter('classes', updated)
                   }
                   // Stay on current tab
-                }}
+                } : null}
               />
             ))
           )}

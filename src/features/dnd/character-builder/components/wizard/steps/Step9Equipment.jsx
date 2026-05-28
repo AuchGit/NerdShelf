@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useMemo } from 'react'
-import { loadItemIndex, loadClassList, loadBackgroundList, parseStartingEquipment, resolveItemRef } from '../../../lib/dataLoader'
+import { loadItemIndex, loadClassList, loadBackgroundList, parseStartingEquipment, resolveItemRef, normalizeWeaponProperties } from '../../../lib/dataLoader'
 import { useLanguage } from '../../../lib/i18n'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -349,7 +349,16 @@ export default function Step9Equipment({ character, updateCharacter }) {
       isWeapon: item.isWeapon || false,
       isArmor: item.isArmor || false,
       rarity: item.rarity || 'none',
-      properties: item.property || [],
+      properties: normalizeWeaponProperties(item.property),
+      // 5.5e weapon mastery (Topple / Vex / Push / Graze / Nick / Sap /
+      // Slow / Cleave). Already source-stripped by dataLoader, but the
+      // |SOURCE suffix can sneak in via legacy paths — normalize again.
+      mastery: Array.isArray(item.mastery)
+        ? item.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
+        : [],
+      // Item description / entries from the catalog so the inventory
+      // detail panel can render the rules text without re-loading data.
+      entries: item.entries || [],
     }
   }
 
@@ -373,7 +382,11 @@ export default function Step9Equipment({ character, updateCharacter }) {
       isWeapon: item.isWeapon || false,
       isArmor: item.isArmor || false,
       rarity: item.rarity || 'none',
-      properties: item.property || [],
+      properties: normalizeWeaponProperties(item.property),
+      mastery: Array.isArray(item.mastery)
+        ? item.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
+        : [],
+      entries: item.entries || [],
     }
     updateCharacter('inventory.items', [...(character.inventory.items || []), newItem])
   }

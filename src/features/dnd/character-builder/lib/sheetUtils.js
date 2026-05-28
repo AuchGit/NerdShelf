@@ -31,7 +31,15 @@ export function spellLevelLabel(lvl) {
 }
 
 export function formatToolName(key) {
-  return String(key).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  // Strip 5etools `{@item Foo|XPHB}` wrappers + bare `|SOURCE` suffixes
+  // BEFORE title-casing so we don't render `{@Item Thieves' Tools|Xphb}`
+  // on the sheet. Class data ships tool references in either shape;
+  // normalising at the display layer keeps every callsite safe even
+  // when the source data leaks raw tags through.
+  const stripped = String(key || '')
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    .replace(/\|[A-Za-z]+$/, '')
+  return stripped.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 export function formatSkillName(skill) {

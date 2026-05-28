@@ -113,17 +113,11 @@ export const WEAPON_MARKING_RULES = [
     // INT-to-damage is a turn-by-turn thing not a passive — keep this rule
     // as a *marker* (label only) so the player remembers the bonus exists.
   },
-  {
-    id: 'psychic_blade',
-    label: 'Psychic Blade',
-    note: 'Soulknife (Rogue): psionische Klinge, DEX-basiert + Psionic Energy Dice. Bonus erscheint nur als Marker — die zusätzlichen Würfel werden manuell verwaltet.',
-    feature: 'Psychic Blades',
-    className: 'Rogue',
-    subclass: 'Soulknife',
-    count: 1,
-    effects: {},
-    requires: {},
-  },
+  // Psychic Blades — Soulknife (Rogue): NOT a marking rule. The blade
+  // is a feature, not an item: the player can manifest it on demand,
+  // never has to draw or carry a physical weapon, and it doesn't
+  // displace anything in the inventory. Surfaced instead as an
+  // automatic attack row in computeAttacks (see character-attack list).
 ]
 
 // Normalised string compare (lowercase, trimmed).
