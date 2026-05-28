@@ -51,8 +51,11 @@ function getActiveSteps(info, draft) {
   const castAb = draft.existingSpellAbility || draft.subclassSpellAbility || info.spellcastingAbility
   const effProg = draft.existingCasterProg || draft.subclassCasterProg || info.casterProgression
   const maxSL = effProg ? getMaxSpellLevel(effProg, info.nextLevel) : 0
-  // Show spell step if: gaining spells, can swap, or is a caster with actual spell levels
-  const hasSpellContent = info.newCantrips > 0 || info.newSpellsKnown > 0 || info.newSpellbookSpells > 0 || info.canSwapSpell || maxSL > 0
+  // Show spell step if: gaining spells, can swap, or is a caster with actual spell levels.
+  // newPreparedSpells covers 5.5e prepared casters whose preparedTable grows each level —
+  // without this the step would be skipped for Ranger / Paladin levels even when they
+  // need to pick a new prepared spell.
+  const hasSpellContent = info.newCantrips > 0 || info.newSpellsKnown > 0 || info.newSpellbookSpells > 0 || (info.newPreparedSpells || 0) > 0 || info.canSwapSpell || maxSL > 0
   // Also check for optional feature spell choices (Blessed Warrior, Pact of the Tome)
   const hasOptFeatSpells = Object.values(draft.optPicks).flat().length > 0
   if (hasSpellContent || (castAb && maxSL > 0) || hasOptFeatSpells) a.push(STEPS[5])
@@ -78,6 +81,10 @@ export default function LevelUpPage({ session }) {
     optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{},
     cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
     preparedSpellPool:null, preparedCantripPool:null,
+    // 5.5e prepared-caster pick at level-up: the new prepared spells
+    // added to character.status.preparedSpells[classId] when the
+    // class's preparedTable grows (1 → 2 → 3 …).
+    preparedPicks: [],
   })
 
   const edition = char?.meta?.edition || '5e'
@@ -205,6 +212,18 @@ export default function LevelUpPage({ session }) {
       classFeatureChoices:draft.classFeatureChoices,
       preparedSpellPool:draft.preparedSpellPool, newChoices:{},
     })
+    // 5.5e prepared casters: append the level-up's new prepared spell
+    // picks to character.status.preparedSpells[classId]. The Prepare
+    // modal on the sheet manages further swaps; this just ensures the
+    // initial list grows with the class table.
+    if (draft.preparedPicks?.length > 0) {
+      if (!updated.status) updated.status = {}
+      if (!updated.status.preparedSpells) updated.status.preparedSpells = {}
+      const prior = updated.status.preparedSpells[info.classId] || []
+      const merged = [...prior]
+      for (const n of draft.preparedPicks) if (n && !merged.includes(n)) merged.push(n)
+      updated.status.preparedSpells[info.classId] = merged
+    }
 
     // Safety: backup both old and new state to localStorage before writing
     try {
@@ -766,11 +785,48 @@ function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) 
           onToggle={sp=>{const h=draft.cantrips.includes(sp.name);setDraft(d=>({...d,cantrips:h?d.cantrips.filter(n=>n!==sp.name):d.cantrips.length<info.newCantrips?[...d.cantrips,sp.name]:d.cantrips}))}}
           grantedSpells={granted} /></div>}
 
-      {/* Leveled spells */}
+      {/* 5.5e Prepared casters — active picker for new prepared
+          spells. The XPHB Ranger / Paladin / Druid / Cleric rules
+          require the player to "choose N additional spells when
+          your prepared count grows" right at level-up; if we leave
+          it passive the player ends the level-up with the spells
+          missing from their list. Render BEFORE the legacy block so
+          it's the first thing the player sees. */}
+      {info.newPreparedSpells > 0 && isPrepared && (
+        <div style={S.card}>
+          <div style={S.cardTitle}>
+            Prepared Spells — wähle {info.newPreparedSpells} neue{' '}
+            <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: 12 }}>
+              (gesamt {info.totalPreparedSpells || 0})
+            </span>
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+            Wähle Zauber bis zu Level {info.maxSpellLevel}, die du auf deiner Prepared-Liste haben willst.
+            Bei einer Long Rest darfst du später einen tauschen.
+          </div>
+          <UniversalSpellList
+            label={`${info.newPreparedSpells} wählen`}
+            spells={filteredLev}
+            selected={draft.preparedPicks}
+            max={info.newPreparedSpells}
+            onToggle={sp => {
+              const has = draft.preparedPicks.includes(sp.name)
+              const next = has
+                ? draft.preparedPicks.filter(n => n !== sp.name)
+                : draft.preparedPicks.length < info.newPreparedSpells
+                  ? [...draft.preparedPicks, sp.name] : draft.preparedPicks
+              setDraft(d => ({ ...d, preparedPicks: next }))
+            }}
+            grantedSpells={granted}
+          />
+        </div>
+      )}
+
+      {/* Leveled spells (known casters / spellbook / 5e prepared reference) */}
       {(spellCount>0||isPrepared)&&<div style={S.card}>
         <div style={S.cardTitle}>{isPrepared?`${info.className} — Vorbereitbare Zauber (Referenz)`:`${info.className} — Neue Zauber`}</div>
         {isPrepared&&<div style={{color:'var(--text-muted)',fontSize:12,marginBottom:10,padding:'8px 12px',background:'var(--bg-inset)',borderRadius:8}}>
-          Prepared Caster: Du bereitest täglich Zauber aus dieser Liste vor. Keine feste Auswahl beim Level-Up nötig.</div>}
+          Prepared Caster: Diese Liste zeigt alle vorbereitbaren Zauber zur Orientierung. Verbindliche Auswahl oben (falls die Anzahl gestiegen ist) — die Tagesauswahl passt du nach Long Rests auf der Sheet-Seite an.</div>}
 
         {info.canSwapSpell&&knownList.length>0&&!isPrepared&&(
           <div style={{marginBottom:12,padding:'10px 14px',background:'var(--bg-inset)',borderRadius:8,border:'1px solid var(--border)'}}>

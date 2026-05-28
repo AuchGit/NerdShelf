@@ -122,7 +122,7 @@ function isProficienciesComplete(character) {
   return true
 }
 
-// ── Spells step completion (unchanged) ────────────────────────────────────────
+// ── Spells step completion ────────────────────────────────────────
 function isSpellStepComplete(character) {
   const cls = character.classes[0]
   if (!cls) return false
@@ -133,7 +133,17 @@ function isSpellStepComplete(character) {
   const selectedCantrips  = cls.levelChoices?.[1]?.cantrips?.length        || 0
   const selectedSpells    = cls.levelChoices?.[1]?.startingSpells?.length  || 0
   const cantripsDone      = info.cantripsKnown === 0 || selectedCantrips >= info.cantripsKnown
-  if (info.type === 'prepared' && !info.hasSpellbook) return cantripsDone
+  if (info.type === 'prepared' && !info.hasSpellbook) {
+    // 5.5e prepared casters (Ranger/Paladin/Druid/Cleric) commit
+    // their initial prepared list at character creation. legacy
+    // info objects without maxPrepared (5e Cleric/Druid) keep the
+    // old "no commitment" behaviour by treating preparedMax=0 as
+    // already-done.
+    const preparedMax = info.maxPrepared || 0
+    const prepared = (character.status?.preparedSpells?.[cls.classId] || []).length
+    const preparedDone = preparedMax === 0 || prepared >= preparedMax
+    return cantripsDone && preparedDone
+  }
   if (info.hasSpellbook) return cantripsDone && selectedSpells >= (info.spellbookStart || 6)
   if (info.type === 'known') {
     return cantripsDone && ((info.spellsKnown || 0) === 0 || selectedSpells >= (info.spellsKnown || 0))

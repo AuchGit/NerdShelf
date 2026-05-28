@@ -268,6 +268,13 @@ export function computeLevelUpInfo(classData, classEntry, character, isMulticlas
     casterProgression: classEntry?.casterProgression || classData.casterProgression,
     spellcastingAbility: classEntry?.spellcastingAbility || classData.spellcastingAbility,
     canSwapSpell: false, schoolRestriction: null,
+    // Δ in max prepared list for 5.5e prepared casters (Ranger /
+    // Paladin "you prepare N spells from the X spell list at L1,
+    // grows by 1 each level"). 0 for legacy 5e prepared casters
+    // (their preparedTable is undefined and we fall back to the
+    // ability-mod formula which doesn't pin to a fixed delta).
+    newPreparedSpells: 0,
+    totalPreparedSpells: 0,
     optionalFeatureGains,
   }
 
@@ -283,6 +290,11 @@ export function computeLevelUpInfo(classData, classEntry, character, isMulticlas
         info.newSpellsKnown = Math.max(0, (currInfo.spellsKnown || 0) - (prevInfo?.spellsKnown || 0))
       if (currInfo.hasSpellbook)
         info.newSpellbookSpells = nextLevel === 1 ? (currInfo.spellbookStart || 6) : 2
+      if (currInfo.type === 'prepared' && !currInfo.hasSpellbook) {
+        info.totalPreparedSpells = currInfo.maxPrepared || 0
+        info.newPreparedSpells = Math.max(0,
+          (currInfo.maxPrepared || 0) - (prevInfo?.maxPrepared || 0))
+      }
       if (currInfo.canSwapSpell && prevInfo) info.canSwapSpell = true
       if (currInfo.schoolRestriction) info.schoolRestriction = currInfo.schoolRestriction
     }

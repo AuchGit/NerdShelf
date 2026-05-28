@@ -151,6 +151,23 @@ export default function Step7Spells({ character, updateCharacter }) {
   const cantripsMax  = spellInfo?.cantripsKnown || 0
   const spellbookMax = spellInfo?.spellbookStart || 6
   const knownMax     = spellInfo?.spellsKnown    || 0
+  // 5.5e prepared casters (Ranger, Paladin, …) pick their initial
+  // prepared list at character creation — "choose two level 1 Ranger
+  // spells" in the XPHB Spellcasting feature. The legacy 5e flow had
+  // no commitment at L1 (you'd pick on the sheet at first long rest);
+  // the 2024 PHB rules require it up front. preparedTable[0] is the
+  // initial count; legacy classes without a table fall through to 0.
+  const preparedMax = (isPrepared && !isWizard) ? (spellInfo?.maxPrepared || 0) : 0
+  const initialPrepared = character.status?.preparedSpells?.[classId] || []
+
+  function togglePrepared(spell) {
+    const cur = initialPrepared
+    const has = cur.includes(spell.name)
+    if (!has && cur.length >= preparedMax) return
+    const next = has ? cur.filter(n => n !== spell.name) : [...cur, spell.name]
+    updateCharacter(`status.preparedSpells.${classId}`, next)
+    if (!has) saveMetadata([spell])
+  }
 
   // Build a map of already-granted spells so the picker can show them as locked
   // { 'Detect Magic': 'von Elf', 'Cure Wounds': 'von Feat: Magic Initiate', … }
@@ -247,28 +264,27 @@ export default function Step7Spells({ character, updateCharacter }) {
             />
           )}
 
-          {/* Prepared caster note */}
-          {isPrepared && !isWizard && (
-            <div style={S.note}>
-              <strong style={{ color: 'var(--accent)' }}>Prepared Caster:</strong>{' '}
-              Du bereitest täglich Zauber aus deiner vollständigen Klassenliste vor (max.{' '}
-              <strong style={{ color: 'var(--accent)' }}>{Math.max(1, abilityMod + 1)}</strong>{' '}
-              Zauber bei Level 1). Keine feste Auswahl jetzt nötig.
-            </div>
-          )}
-
-          {/* Prepared caster: show full class list for reference */}
-          {isPrepared && !isWizard && classSpellsL1.length > 0 && (
+          {/* Prepared caster: pick initial prepared spells.
+              5.5e (XPHB) requires choosing the initial list at creation —
+              "choose two level 1 Ranger spells" / "two level 1 Paladin
+              spells" / etc. The maxPrepared field comes from each
+              class's preparedTable at level 1. Picks land in
+              `character.status.preparedSpells[classId]` which is the
+              same store the sheet's Prepare modal reads on every long
+              rest swap. */}
+          {isPrepared && !isWizard && preparedMax > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={S.label}>
-                Vorbereitbare Zauber — Klassenliste (zur Orientierung)
-              </div>
               <UniversalSpellList
+                label={`Prepared Spells — wähle ${preparedMax} Level-1-Zauber`}
                 spells={classSpellsL1}
-                selected={[]}
-                onToggle={() => {}}
+                selected={initialPrepared}
+                max={preparedMax}
+                onToggle={togglePrepared}
                 grantedSpells={grantedSpells}
               />
+              <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 6 }}>
+                Bei jeder Long Rest darfst du einen vorbereiteten Spell gegen einen anderen tauschen.
+              </div>
             </div>
           )}
 
