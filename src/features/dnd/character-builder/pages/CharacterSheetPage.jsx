@@ -143,13 +143,27 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // Supabase row.
     const { names: traitNames, traits: rawTraits } =
       await loadRaceTraits(edition, charData)
-    if (traitNames.length > 0) {
-      const patch = { __traitNames: traitNames, __traits: rawTraits }
+    // Collect active class + subclass feature entries (Fighting
+    // Style picks, subclass abilities like Otherworldly Glamour,
+    // class-feature text the catalog hasn't translated yet). Same
+    // contract as race traits: the synthesizer scans them for
+    // advantage / resistance / "bonus equal to your X modifier" /
+    // skill-proficiency-choice phrasings and surfaces inline notes.
+    const activeFeatures = collectActiveClassFeatures(charData, map)
+    if (traitNames.length > 0 || activeFeatures.length > 0) {
+      const speciesPatch = traitNames.length > 0
+        ? { __traitNames: traitNames, __traits: rawTraits }
+        : {}
       setCharacter(prev => prev ? ({
         ...prev,
-        species: { ...(prev.species || {}), ...patch },
+        species: { ...(prev.species || {}), ...speciesPatch },
+        __activeFeatures: activeFeatures,
       }) : prev)
-      charData = { ...charData, species: { ...(charData.species || {}), ...patch } }
+      charData = {
+        ...charData,
+        species: { ...(charData.species || {}), ...speciesPatch },
+        __activeFeatures: activeFeatures,
+      }
     }
     setComputed(computeCharacter(charData, map))
     // Backfill mastery + entries on weapons already in the inventory.
@@ -242,6 +256,42 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
     }, { changedPaths: ['inventory.items', 'custom.items'] })
     return true
+  }
+
+  // Walk every class entry on the character and return the active
+  // class + subclass features ({name, entries, classId, level}) for
+  // levels ≤ the character's current level in that class. Feeds the
+  // featureEffects synthesizer so subclass abilities like
+  // Otherworldly Glamour (Fey Wanderer L3) light up as inline notes
+  // on the sheet without per-feature hardcoding in the catalog.
+  function collectActiveClassFeatures(charData, classDataMap) {
+    const out = []
+    for (const cls of (charData?.classes || [])) {
+      const cd = classDataMap[cls.classId]
+      if (!cd) continue
+      // Class features (gained automatically by class level).
+      for (const f of (cd.features || [])) {
+        if (!f?.name) continue
+        const lvl = f.level || 1
+        if (lvl > cls.level) continue
+        if (f.isClassFeatureVariant) continue
+        out.push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] })
+      }
+      // Subclass features filtered to the chosen subclass.
+      const subId = cls.subclassId
+      if (!subId) continue
+      const sub = (cd.subclasses || []).find(s => s.id === subId || s.name === subId)
+      if (!sub?.featuresPerLevel) continue
+      for (const [lvlStr, feats] of Object.entries(sub.featuresPerLevel)) {
+        const lvl = parseInt(lvlStr, 10)
+        if (!Number.isFinite(lvl) || lvl > cls.level) continue
+        for (const f of (feats || [])) {
+          if (!f?.name) continue
+          out.push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+        }
+      }
+    }
+    return out
   }
 
   // Pull race + subrace trait NAMES *and* their raw `entries` arrays
@@ -364,9 +414,18 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // bloating the JSONB column.
     const cleanForSave = (data) => {
       const sp = data?.species || {}
-      if (!sp.__traitNames && !sp.__traits) return data
-      const { __traitNames, __traits, ...restSpecies } = sp
-      return { ...data, species: restSpecies }
+      const stripped = { ...data }
+      let touched = false
+      if (sp.__traitNames || sp.__traits) {
+        const { __traitNames, __traits, ...restSpecies } = sp
+        stripped.species = restSpecies
+        touched = true
+      }
+      if (stripped.__activeFeatures) {
+        delete stripped.__activeFeatures
+        touched = true
+      }
+      return touched ? stripped : data
     }
     saveTimer.current = setTimeout(() => {
       const payload = cleanForSave(next)
@@ -940,7 +999,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               <InventoryTab character={character} computed={computed}
                 updateCharacter={updateCharacter} applyCharacter={applyCharacter} />
             )}
-            {activeTab === 'features' && <FeaturesTab character={character} />}
+            {activeTab === 'features' && <FeaturesTab character={character} updateCharacter={updateCharacter} />}
             {activeTab === 'personality' && (
               <PersonalityTab character={character} updateCharacter={updateCharacter} />
             )}

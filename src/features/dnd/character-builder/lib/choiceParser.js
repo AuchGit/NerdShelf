@@ -1104,7 +1104,103 @@ export function parseClassChoices(cls, level = 1) {
   return descriptors
 }
 
-// ── NEW: filterActiveDescriptors ───────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// Subclass / class feature CHOICE parser
+//
+// Scans a feature's raw `entries` array (5etools shape) for free-form
+// "your choice" patterns we want to expose as a picker:
+//   • "you gain proficiency in one of the following skills…: X, Y, Z"
+//   • "in the X or Y skill (your choice)"
+//   • "you gain proficiency in WIS saving throws. If you already
+//      have… INT or CHA (your choice)"
+//
+// Returns an array of `{ id, type, label, count, options }`. Empty
+// when nothing matches — the caller treats no-choice features as
+// done. Pattern recognition is intentionally conservative; we'd
+// rather miss a choice than fabricate one from non-mandatory text.
+// ──────────────────────────────────────────────────────────────────
+const SKILL_LABEL_BY_LC = {
+  'animal handling': 'animalHandling', 'sleight of hand': 'sleightOfHand',
+}
+function normSkillName(raw) {
+  const k = String(raw || '').toLowerCase().trim()
+  if (SKILL_LABEL_BY_LC[k]) return SKILL_LABEL_BY_LC[k]
+  // Camel-case "Stealth" → "stealth", "Investigation" → "investigation"
+  return k.replace(/[^a-z]/g, '')
+}
+function flattenFeatureText(entries) {
+  const parts = []
+  const walk = (e) => {
+    if (typeof e === 'string') { parts.push(e); return }
+    if (Array.isArray(e)) { for (const x of e) walk(x); return }
+    if (e && typeof e === 'object') {
+      if (Array.isArray(e.entries)) walk(e.entries)
+      if (Array.isArray(e.items))   walk(e.items)
+    }
+  }
+  walk(entries || [])
+  return parts.join(' ')
+}
+const SAVE_NAMES_LC = { strength: 'str', dexterity: 'dex', constitution: 'con',
+                        intelligence: 'int', wisdom: 'wis', charisma: 'cha',
+                        str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' }
+
+export function parseFeatureChoices(feature) {
+  if (!feature?.entries) return []
+  const raw = flattenFeatureText(feature.entries)
+  const low = raw.toLowerCase()
+  const out = []
+  const featureKey = feature.name
+
+  // ── Skill proficiency choice ──
+  // Look for {@skill X} tags inside the prose. The choice phrase is
+  // the gate ("of your choice" / "one of the following skills");
+  // otherwise this would falsely match every text mention of a skill.
+  const choosePhrase = /(?:one\s+(?:of\s+(?:the\s+following\s+)?(?:skills|these\s+skills))|of\s+your\s+choice|your\s+choice)/i.test(low)
+  if (choosePhrase) {
+    const skillNames = [...raw.matchAll(/\{@skill\s+([^|}]+)/gi)].map(m => m[1].trim())
+    if (skillNames.length >= 2) {
+      const opts = [...new Set(skillNames.map(s => normSkillName(s)))].map(key => ({
+        value: key,
+        label: key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()),
+      }))
+      out.push({
+        id: `${featureKey}__skill`,
+        type: 'skillProficiency',
+        label: `${featureKey} — Skill wählen`,
+        count: 1,
+        options: opts,
+      })
+    }
+  }
+
+  // ── Saving-throw choice (Iron Mind pattern) ──
+  // "you gain proficiency in WIS saving throws. If you already have
+  //  this proficiency, you instead gain proficiency in INT or CHA
+  //  saving throws (your choice)"
+  if (/saving\s+throws?/.test(low) && /\(your\s+choice\)|or\s+\w+\s+saving\s+throws?\s*\(your\s+choice\)/.test(low)) {
+    // Pull every ability-name that appears within an "or X saving" /
+    // "in X saving" phrase.
+    const candidates = new Set()
+    const phrase = /(?:in|or)\s+(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+(?:saving|or)/gi
+    let m
+    while ((m = phrase.exec(low)) !== null) {
+      const key = SAVE_NAMES_LC[m[1].toLowerCase()]
+      if (key) candidates.add(key)
+    }
+    if (candidates.size >= 2) {
+      out.push({
+        id: `${featureKey}__save`,
+        type: 'savingThrowProficiency',
+        label: `${featureKey} — Save wählen`,
+        count: 1,
+        options: [...candidates].map(v => ({ value: v, label: v.toUpperCase() })),
+      })
+    }
+  }
+
+  return out
+}
 //
 /**
  * Filter out variant-gated descriptors whose variant option has not been chosen.

@@ -643,6 +643,7 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
           character={character}
           preparedByClass={preparedByClass}
           alwaysNames={alwaysNames}
+          edition={edition}
           onClose={() => setPrepareFor(null)}
           onChange={arr => updateCharacter(`status.preparedSpells.${prepareFor}`, arr)}
         />
@@ -656,7 +657,7 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
 // ═══════════════════════════════════════════════════════════════
 
 // One preparable spell — expands inline to show full details.
-function PrepareRow({ spell, isPrep, note, atLimit, onToggle }) {
+function PrepareRow({ spell, isPrep, note, atLimit, onToggle, edition }) {
   const [open, setOpen] = useState(false)
   return (
     <div style={{ marginBottom: 6 }}>
@@ -692,7 +693,7 @@ function PrepareRow({ spell, isPrep, note, atLimit, onToggle }) {
 
 function PrepareModal({
   classId, section, maxSpellLvl, allSpells, spellMap, character,
-  preparedByClass, alwaysNames, onClose, onChange,
+  preparedByClass, alwaysNames, edition, onClose, onChange,
 }) {
   const [search, setSearch] = useState('')
   const hasSpellbook = section?.hasSpellbook
@@ -810,6 +811,7 @@ function PrepareModal({
                   note={otherSource(s.name)}
                   atLimit={!isPrep && prepared.length >= max}
                   onToggle={() => toggle(s.name)}
+                  edition={edition}
                 />
               )
             })}

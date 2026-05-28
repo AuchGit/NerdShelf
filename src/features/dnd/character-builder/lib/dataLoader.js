@@ -193,13 +193,19 @@ export async function loadClassList(edition) {
     const subclasses = [...subMap.values()].map(s => {
       const shortName = s.shortName || s.name
       const featuresPerLevel = {}
+      // Many 5.5e subclasses (Fey Wanderer, Gloom Stalker, Hexblade,
+      // …) keep their original classSource tag of "PHB" even when the
+      // 2024 subclass entry has classSource="XPHB" — the XPHB
+      // subclass just `_copy`s the older features rather than
+      // re-tagging them. So strict classSource matching on feature
+      // entries empties the table. Match by subclassShortName only
+      // and dedupe by name+level so PHB + XPHB doublets collapse to
+      // one row. Lookup of the actual source if needed is left to
+      // downstream code; the picker only needs the names + entries.
       for (const f of subclassFeatureArray) {
         if (f.subclassShortName !== shortName) continue
         if (f.isClassFeatureVariant) continue
         if (!f.level || !f.name) continue
-        // In 5.5e, filter subclass features by classSource too
-        if (is55e && f.classSource && f.classSource !== classSource) continue
-        // De-duplicate feature names within the same level (PHB + XPHB versions)
         if (!featuresPerLevel[f.level]) featuresPerLevel[f.level] = []
         const alreadyHas = featuresPerLevel[f.level].some(x => x.name === f.name)
         if (!alreadyHas) {

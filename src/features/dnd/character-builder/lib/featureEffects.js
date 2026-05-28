@@ -1006,7 +1006,44 @@ export function getEffectsForSlot(character, slot) {
     if (seenFeatures.has(norm(synth.feature))) continue
     out.push({ id: `synth-${synth.feature}-${slot}-${out.length}`, text: synth.text, feature: synth.feature })
   }
+  for (const synth of synthesizeClassFeatureNotes(character)) {
+    if (synth.slot !== slot) continue
+    if (seenFeatures.has(norm(synth.feature))) continue
+    out.push({ id: `synth-cls-${synth.feature}-${slot}-${out.length}`, text: synth.text, feature: synth.feature })
+  }
   return out
+}
+
+// Same scanner shape as race traits but reads from `__activeFeatures`
+// — the per-class/subclass feature list CharacterSheetPage hydrates
+// at load time. Adds two extra patterns common in subclass abilities:
+//   • "bonus … equal to your <ability> modifier" — emits attacks or
+//     skills slot depending on the surrounding phrasing.
+//   • "you gain proficiency in one of the following skills" — emits
+//     a skills note so the player remembers the unresolved choice.
+function synthesizeClassFeatureNotes(character) {
+  const feats = character?.__activeFeatures
+  if (!Array.isArray(feats) || feats.length === 0) return []
+  const notes = []
+  for (const f of feats) {
+    if (!f?.name || !Array.isArray(f.entries)) continue
+    const raw = stripTraitTags(flattenTraitText(f.entries))
+    if (!raw) continue
+    const low = raw.toLowerCase()
+    let slot = null
+    if (/charisma\s+check/.test(low) && /bonus.*equal\s+to\s+your\s+\w+\s+modifier/.test(low))   slot = 'skills'
+    else if (/advantage\s+on\s+saving\s+throws/.test(low))                                       slot = 'saves'
+    else if (/\bresistance\s+to\s+[a-z]+(\s+damage)?/.test(low))                                 slot = 'hp'
+    else if (/\b(?:immune|immunity)\s+to\b/.test(low))                                           slot = 'hp'
+    else if (/\b(?:initiative)\b/.test(low) && /\bbonus|\badd|\b\+\d/.test(low))                 slot = 'init'
+    else if (/\battack\s+rolls?\b/.test(low) && /(advantage|bonus|extra)/.test(low))             slot = 'attacks'
+    else if (/\bspeed\b/.test(low) && /(increase|bonus|extra|\+\s*\d)/.test(low))                slot = 'speed'
+    else if (/proficiency\s+in\s+one\s+of\s+the\s+following/.test(low))                          slot = 'skills'
+    else if (/\bextra\s+damage\b/.test(low) || /\bdeal\s+an?\s+extra\b/.test(low))               slot = 'attacks'
+    if (!slot) continue
+    notes.push({ slot, text: raw, feature: f.name })
+  }
+  return notes
 }
 
 // Flatten 5etools entry shapes into a single plain-text string.
@@ -1086,6 +1123,12 @@ export function getMechanicalEffects(character) {
     damageResistance:    new Set(),
     damageImmunity:      new Set(),
     damageVulnerability: new Set(),
+    // `abilityCheckBonus[targetAbility] = { fromAbility, min, feature }`
+    // — e.g. Otherworldly Glamour: every CHA check gains +WIS mod
+    // (min +1). computeSkills reads this to apply the bonus on each
+    // skill whose ability matches `targetAbility`, plus surfaces it
+    // as a note on raw ability checks.
+    abilityCheckBonus: {},
   }
   for (const e of getActiveFeatureEffects(character)) {
     const m = e.mechanic
@@ -1110,6 +1153,29 @@ export function getMechanicalEffects(character) {
     if (Array.isArray(m.damageResistance))    for (const t of m.damageResistance)    out.damageResistance.add(norm(t))
     if (Array.isArray(m.damageImmunity))      for (const t of m.damageImmunity)      out.damageImmunity.add(norm(t))
     if (Array.isArray(m.damageVulnerability)) for (const t of m.damageVulnerability) out.damageVulnerability.add(norm(t))
+  }
+  // Data-driven scan: subclass features that say "when you make a
+  // <ability> check, you gain a bonus equal to your <other> modifier"
+  // emit an abilityCheckBonus entry. Otherworldly Glamour (Fey
+  // Wanderer L3) is the canonical example; the same regex catches
+  // any future feature using that 5etools phrasing.
+  for (const f of (character?.__activeFeatures || [])) {
+    if (!f?.entries) continue
+    const raw = stripTraitTags(flattenTraitText(f.entries))
+    if (!raw) continue
+    const m = raw.match(
+      /you\s+make\s+(?:an?\s+)?(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+(?:ability\s+)?check[^.]*?bonus[^.]*?equal\s+to\s+your\s+(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+modifier/i
+    )
+    if (m) {
+      const KEY = { strength: 'str', dexterity: 'dex', constitution: 'con',
+                    intelligence: 'int', wisdom: 'wis', charisma: 'cha' }
+      const target = KEY[m[1].toLowerCase()]
+      const fromAb = KEY[m[2].toLowerCase()]
+      const min = /minimum\s+of\s+\+?1/i.test(raw) ? 1 : 0
+      if (target && fromAb && !out.abilityCheckBonus[target]) {
+        out.abilityCheckBonus[target] = { fromAbility: fromAb, min, feature: f.name }
+      }
+    }
   }
   return out
 }

@@ -1,12 +1,13 @@
 // components/sheet/FeaturesTab.jsx
 // Species / background / class skills / feats — reference display.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
 import { Section, TraitPill } from './SheetKit'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
+import { parseFeatureChoices } from '../../lib/choiceParser'
 
 function getFeatBonusSummary(character) {
   const result = []
@@ -35,10 +36,43 @@ function getFeatBonusSummary(character) {
 
 const SIZE_LABELS = { M: 'Medium', S: 'Small', L: 'Large', T: 'Tiny', H: 'Huge' }
 
-export default function FeaturesTab({ character }) {
+export default function FeaturesTab({ character, updateCharacter }) {
   const featBonuses = getFeatBonusSummary(character)
   const [featDataMap, setFeatDataMap] = useState({})
   const [expandedFeat, setExpandedFeat] = useState(null)
+
+  // Unresolved subclass-feature choices. CharacterSheetPage attaches
+  // `character.__activeFeatures` = [{name, entries, classId, …}]; we
+  // run each through parseFeatureChoices and surface any that the
+  // player hasn't decided yet. The picker writes to
+  // `cls.featureChoices[featureName]` which computeProficiencies
+  // applies on the next compute pass.
+  const unresolvedChoices = useMemo(() => {
+    const list = []
+    const features = character?.__activeFeatures || []
+    for (const f of features) {
+      const choices = parseFeatureChoices(f)
+      if (choices.length === 0) continue
+      const cls = (character.classes || []).find(c => c.classId === f.classId)
+      const stored = cls?.featureChoices || {}
+      for (const ch of choices) {
+        const current = stored[f.name]
+        if (current && current.id === ch.id) continue
+        list.push({ classId: f.classId, featureName: f.name, choice: ch, current: current || null })
+      }
+    }
+    return list
+  }, [character])
+
+  function setFeatureChoice(classId, featureName, choiceDescriptor, value) {
+    const idx = (character.classes || []).findIndex(c => c.classId === classId)
+    if (idx < 0) return
+    updateCharacter(`classes.${idx}.featureChoices.${featureName}`, {
+      id: choiceDescriptor.id,
+      type: choiceDescriptor.type,
+      value,
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +95,48 @@ export default function FeaturesTab({ character }) {
 
   return (
     <div className="dnd-sheet-tab-body" style={S.tabBody}>
+      {/* ── Open class/subclass feature choices ──
+          Fey Wanderer's "pick a skill", Gloom Stalker's "Iron Mind",
+          and every similar 5.5e pattern. The picker surfaces here so
+          a character whose subclass got selected before the picker
+          existed can resolve their missing choices without going
+          back through level-up. */}
+      {updateCharacter && unresolvedChoices.length > 0 && (
+        <Section title="Offene Entscheidungen">
+          {unresolvedChoices.map(({ classId, featureName, choice, current }) => (
+            <div key={`${classId}-${featureName}-${choice.id}`} style={S.featureCard}>
+              <div style={S.featureCardHeader}>
+                <div style={S.featureCardName}>{featureName}</div>
+                <div style={S.featureCardSource}>{classId}</div>
+              </div>
+              <div style={S.featureCardBody}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 6 }}>
+                  {choice.label}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {choice.options.map(opt => {
+                    const isSel = current?.value === opt.value
+                    return (
+                      <button key={opt.value} type="button"
+                        onClick={() => setFeatureChoice(classId, featureName, choice, opt.value)}
+                        style={{
+                          padding: '4px 10px', borderRadius: 999, fontSize: 12,
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+                          border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                          color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
+                        }}>
+                        {isSel && '✓ '}{opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
+
       {/* ── Species ── */}
       <Section title="Species">
         <div style={S.featureCard}>

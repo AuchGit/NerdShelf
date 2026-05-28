@@ -375,6 +375,29 @@ export function computeProficiencies(character, classDataMap = {}) {
     }
   }
 
+  // ── Subclass-feature choices (player-picked skill / save) ──
+  // For features like Fey Wanderer's Otherworldly Glamour, Gloom
+  // Stalker's Iron Mind, Cleric/Fighter/Paladin Persuasion-or-X
+  // grants, etc. The chosen skill is stored as
+  // `cls.featureChoices[featureKey] = abilityKey` by the picker on
+  // the sheet. We apply it here so the standard prof badges +
+  // skill totals reflect the player's pick.
+  for (const cls of (character.classes || [])) {
+    const choices = cls.featureChoices || {}
+    for (const [, picked] of Object.entries(choices)) {
+      if (!picked || typeof picked !== 'object') continue
+      if (picked.type === 'skillProficiency' && picked.value) {
+        const k = normalizeSkill(picked.value)
+        if (!result.skills[k]) result.skills[k] = 'proficient'
+      } else if (picked.type === 'savingThrowProficiency' && picked.value) {
+        const k = String(picked.value).toLowerCase()
+        if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(k)) {
+          result.savingThrows[k] = true
+        }
+      }
+    }
+  }
+
   // ── Save-proficiency grants from featureEffects catalog ────
   // Replaces the old hardcoded Resilient handling and adds support
   // for Diamond Soul (Monk 14, all saves), Slippery Mind (Rogue 15,
@@ -471,6 +494,16 @@ export const SKILL_MAP = {
 
 export function computeSkills(character, modifiers, profBonus, proficiencies) {
   const result = {}
+  // Per-ability check bonuses contributed by features (Otherworldly
+  // Glamour: +WIS on CHA checks, min +1, etc.). Computed once and
+  // applied to every skill whose underlying ability matches.
+  const mech = getMechanicalEffects(character)
+  const checkBonusFor = (ability) => {
+    const spec = mech.abilityCheckBonus?.[ability]
+    if (!spec) return 0
+    const fromMod = modifiers[spec.fromAbility] || 0
+    return Math.max(spec.min || 0, fromMod)
+  }
 
   for (const [skill, ability] of Object.entries(SKILL_MAP)) {
     const profStatus = proficiencies.skills[skill] || null
@@ -485,13 +518,16 @@ export function computeSkills(character, modifiers, profBonus, proficiencies) {
       bonus = Math.floor(profBonus / 2)
     }
 
+    const checkBonus = checkBonusFor(ability)
+
     result[skill] = {
       ability,
       modifier: mod,
       proficiency: profStatus,
       profBonus: bonus,
-      total: mod + bonus,
-      display: `${mod + bonus >= 0 ? '+' : ''}${mod + bonus}`,
+      checkBonus, // surfaced for tooltips; already included in total
+      total: mod + bonus + checkBonus,
+      display: `${mod + bonus + checkBonus >= 0 ? '+' : ''}${mod + bonus + checkBonus}`,
     }
   }
 

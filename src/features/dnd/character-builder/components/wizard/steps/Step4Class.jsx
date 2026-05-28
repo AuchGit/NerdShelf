@@ -499,13 +499,22 @@ function SubclassCard({ sub, isSelected, onSelect }) {
 function FeatureSummary({ entries }) {
   const [expanded, setExpanded] = useState(false)
 
+  // Some 5etools subclass feature blocks (TCE entries like Swarmkeeper /
+  // Fey Wanderer / Hexblade) prepend an italic header — `{@i 3rd-level
+  // Swarmkeeper feature}` — before the actual rules text. Returning
+  // that header as the summary made every subclass feature read "Xth-
+  // level <Subclass> feature" with no real description. Skip strings
+  // that look like an italic level header and walk to the next one.
   function getFirstText(arr) {
     for (const entry of (arr || [])) {
       if (typeof entry === 'string' && entry.length > 5) {
-        return entry.replace(/\{@[^}]+\}/g, m => {
+        const cleaned = entry.replace(/\{@[^}]+\}/g, m => {
           const parts = m.slice(2, -1).split(' ')
           return parts.slice(1).join(' ').split('|')[0]
-        })
+        }).trim()
+        // Header pattern: "<ordinal>-level <subclass> feature" — skip it.
+        if (/^\d+(?:st|nd|rd|th)-level\s+.+\s+feature\.?$/i.test(cleaned)) continue
+        if (cleaned.length > 5) return cleaned
       }
       if (entry?.entries) {
         const t = getFirstText(entry.entries)

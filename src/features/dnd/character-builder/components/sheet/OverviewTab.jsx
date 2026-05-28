@@ -424,7 +424,14 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                 {c.casterProgression && (
                   <span style={classProg} title="Caster Progression">
                     {c.casterProgression === 'full' ? 'Full'
-                      : (c.casterProgression === 'half' || c.casterProgression === '1/2') ? '½'
+                      // "artificer" is the 5.5e XPHB key for both
+                      // Ranger and Paladin (the 2024 unified half-
+                      // caster progression). Display it as the half-
+                      // caster glyph so the badge reads the same as
+                      // its 5e counterpart.
+                      : (c.casterProgression === 'half'
+                        || c.casterProgression === '1/2'
+                        || c.casterProgression === 'artificer') ? '½'
                       : c.casterProgression === '1/3' ? '⅓'
                       : c.casterProgression === 'pact' ? 'Pact' : c.casterProgression}
                   </span>
@@ -522,6 +529,11 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
   // so the UI can show a useful message instead of a permanent spinner.
   const [catalog, setCatalog] = useState([])
   const [loaded, setLoaded] = useState(false)
+  // Collapsed by default — the block can grow to dozens of weapon
+  // chips per class and a sheet-open shouldn't bury the rest of the
+  // attacks section under it. Expanded view shows the full picker;
+  // collapsed view shows only the player's current picks.
+  const [expanded, setExpanded] = useState(false)
   useEffect(() => {
     if (!wm || wm.perClass.length === 0) return
     const edition = character?.meta?.edition || '5e'
@@ -570,9 +582,22 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
     else grouped.other.push(w)
   }
 
+  // Build a quick lookup of mastery names for currently-picked weapons,
+  // so the collapsed view can show each picked weapon's technique on
+  // the chip ("Longsword · Sap").
+  const masteryByName = new Map()
+  for (const w of catalog) masteryByName.set(w.name.toLowerCase(), w.mastery)
+
   return (
     <div style={wmpStyle.wrap}>
-      <div style={wmpStyle.title}>Weapon Mastery</div>
+      <div style={wmpStyle.title}
+           onClick={() => setExpanded(e => !e)}
+           role="button" tabIndex={0}
+           onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setExpanded(v => !v) }}>
+        <span style={{ cursor: 'pointer' }}>
+          {expanded ? '▼' : '▶'} Weapon Mastery
+        </span>
+      </div>
       {wm.perClass.map(pc => (
         <div key={pc.classIndex} style={wmpStyle.classBlock}>
           <div style={wmpStyle.classHead}>
@@ -581,7 +606,30 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
               {pc.picked.length}/{pc.count} gewählt
             </span>
           </div>
-          {catalog.length === 0 ? (
+          {/* Collapsed view: show only the player's current picks. */}
+          {!expanded && (
+            pc.picked.length === 0 ? (
+              <div style={wmpStyle.empty}>Noch keine Mastery gewählt — auf „Weapon Mastery" klicken zum Wählen.</div>
+            ) : (
+              <div style={wmpStyle.grid}>
+                {pc.picked.map(name => {
+                  const m = masteryByName.get(name.toLowerCase()) || []
+                  return (
+                    <span key={name} style={{ ...wmpStyle.chip, ...wmpStyle.chipOn, cursor: 'default' }}>
+                      ✓ {name}
+                      <span style={wmpStyle.chipMastery}>
+                        {' · '}{m.map(s => {
+                          const d = masteryShortDesc(s); return d ? `${s} (${d})` : s
+                        }).join('/')}
+                      </span>
+                    </span>
+                  )
+                })}
+              </div>
+            )
+          )}
+          {/* Expanded view: full catalog picker, grouped by category. */}
+          {expanded && (catalog.length === 0 ? (
             <div style={wmpStyle.empty}>
               {loaded ? 'Keine Mastery-Waffen in den Daten gefunden.' : 'Lade Waffenkatalog …'}
             </div>
@@ -622,12 +670,14 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
                 </div>
               ))}
             </>
-          )}
+          ))}
         </div>
       ))}
-      <div style={wmpStyle.hint}>
-        Tipp: Bei einer Long Rest darfst du eine Wahl gegen eine andere tauschen.
-      </div>
+      {expanded && (
+        <div style={wmpStyle.hint}>
+          Tipp: Bei einer Long Rest darfst du eine Wahl gegen eine andere tauschen.
+        </div>
+      )}
     </div>
   )
 }

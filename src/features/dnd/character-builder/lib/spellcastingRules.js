@@ -146,12 +146,29 @@ export const SPELLCASTING_RULES_5_5E = {
   Ranger: {
     type: 'prepared',
     hasSpellbook: false,
-    cantripsKnown:  [2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3],
+    // 2024 Ranger does NOT get class cantrips (XPHB Spellcasting
+    // feature only lists "level 1+ Ranger spells"; cantrips arrive
+    // only via the Druidic Warrior Fighting Style at L2). Forcing 2
+    // cantrips here made the wizard's cantrip picker pop up with an
+    // empty pool — there are no cantrips on the Ranger spell list.
+    cantripsKnown:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     // 2024 Ranger prepared spells table — Ranger learned to cast spells
     // already at level 1 in the 2024 edition.
     preparedTable:   [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21],
     spellListKey: 'Ranger',
     spellcastingAbility: 'wis',
+  },
+  Paladin: {
+    type: 'prepared',
+    hasSpellbook: false,
+    // Paladin doesn't get class cantrips either (5.5e Blessed
+    // Warrior Fighting Style is how you'd pick some up at L2).
+    cantripsKnown:  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    // 2024 Paladin prepared spells table — same shape as Ranger.
+    preparedTable:   [2,3,4,5,6,7,9,10,11,12,14,15,16,16,17,17,18,19,20,21],
+    spellListKey: 'Paladin',
+    spellcastingAbility: 'cha',
+    ritualCasting: 'prepared',
   },
 }
 

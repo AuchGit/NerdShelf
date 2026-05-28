@@ -168,6 +168,15 @@ export function computeSpellSlots(character) {
     const prog = cls.casterProgression
     if (prog === 'full') {
       casterLevel += cls.level
+    } else if (prog === 'artificer') {
+      // 5.5e XPHB Paladin & Ranger both ship `casterProgression:
+      // "artificer"` (the 2024 PHB merged half-caster + Artificer
+      // into one progression that casts from L1). Same row mapping
+      // as Artificer in 5e: caster-equivalent level = ⌈class
+      // level / 2⌉. Without this branch the prog string fell out of
+      // every case and Ranger / Paladin came up with zero spell
+      // slots — sheet showed no Prepare button.
+      casterLevel += Math.ceil(cls.level / 2)
     } else if (prog === 'half' || prog === '1/2') {
       // 5e PHB: half-caster starts at L2 — floor(level/2) maps L1→0,
       // L2→1, L4→2, … (no L1 slots).
