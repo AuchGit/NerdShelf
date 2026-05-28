@@ -766,9 +766,10 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     const dex = modifiers.dex || 0
     const lvl = soulknifeRogue.level
     const bladeDie = lvl >= 17 ? '1d12' : lvl >= 11 ? '1d10' : lvl >= 5 ? '1d8' : '1d6'
-    // Range follows the standard 5.5e thrown-weapon profile: 60 ft.
-    // normal, 120 ft. long, disadvantage at long range.
-    const psychicBladeRange = '60/120 ft. (Nachteil > 60 ft.)'
+    // Thrown range follows the standard 5.5e thrown-weapon profile;
+    // the "disadvantage past 60 ft." rule is universal so we don't
+    // clutter the cell with it.
+    const psychicBladeRange = '60/120 ft.'
     attacks.push({
       id: 'psychic_blades',
       name: 'Psychic Blades (Action)',
@@ -782,13 +783,15 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       abilityUsed: 'dex',
       mastery: [],
     })
+    // Bonus-action blade: 1d4 + DEX. Unlike regular TWF, the Soulknife
+    // feature explicitly adds your ability modifier to this damage —
+    // no Fighting Style: Two-Weapon Fighting required.
     attacks.push({
       id: 'psychic_blades_bonus',
       name: 'Psychic Blades (Bonus)',
       attackBonus: dex + profBonus,
       attackDisplay: `${dex + profBonus >= 0 ? '+' : ''}${dex + profBonus}`,
-      // No DEX-mod on damage (RAW two-weapon-fighting style).
-      damage: '1d4',
+      damage: `1d4 + ${dex}`,
       damageType: 'psychic',
       range: psychicBladeRange,
       properties: ['Finesse', 'Bonus Action'],
