@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from '../lib/characterModel'
-import { loadClassData, loadItemIndex } from '../lib/dataLoader'
+import { loadClassData, loadItemIndex, loadRaceList } from '../lib/dataLoader'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
 // Defer the import to click time so the initial sheet bundle stays small.
@@ -79,6 +79,39 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   useEffect(() => { loadCharacter() }, [id])
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
+  // Realtime: pull GM-side combat-state writes (and any other client's
+  // patches) onto this sheet without a manual refresh. The GM session
+  // already listens the other way; this is the mirror channel so
+  // toggling a condition on the session card lights up on the player
+  // sheet within the realtime tick. We only merge `data.status`, the
+  // same whitelist the patchCombatState RPC enforces — wholesale row
+  // replacement here would clobber any unsaved local edits.
+  useEffect(() => {
+    if (!id) return
+    const channel = supabase
+      .channel(`dnd-character:${id}`)
+      .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'dnd_characters',
+            filter: `id=eq.${id}` },
+          (payload) => {
+            const row = payload?.new
+            const nextStatus = row?.data?.status
+            if (!nextStatus) return
+            setCharacter(prev => {
+              if (!prev) return prev
+              // Skip if the incoming status matches what we already have —
+              // realtime echoes our own writes back to us and re-setting
+              // would trigger a redundant recompute + computed flash.
+              if (JSON.stringify(prev.status) === JSON.stringify(nextStatus)) return prev
+              const next = { ...prev, status: nextStatus }
+              setComputed(computeCharacter(next, classDataMapRef.current))
+              return next
+            })
+          })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
+
   // Load every class file the character uses (5etools payloads, with
   // classTableGroups in 5.5e), stash the result in the ref, and trigger
   // a recompute so resource panels pick up the table values. Cheap on
@@ -91,6 +124,20 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     const map = {}
     unique.forEach((cid, i) => { if (loaded[i]) map[cid] = loaded[i] })
     classDataMapRef.current = map
+    // Hydrate race trait names from the 5etools race entries so the
+    // featureEffects catalog can detect things like Fey Ancestry,
+    // Dwarven Resilience, Darkvision, etc. without needing every race
+    // name hardcoded. Stored on `character.species.__traitNames` as a
+    // transient hint — queueSave strips it before persisting so it
+    // never bloats the Supabase row.
+    const traitNames = await loadRaceTraitNames(edition, charData)
+    if (traitNames.length > 0) {
+      setCharacter(prev => prev ? ({
+        ...prev,
+        species: { ...(prev.species || {}), __traitNames: traitNames },
+      }) : prev)
+      charData = { ...charData, species: { ...(charData.species || {}), __traitNames: traitNames } }
+    }
     setComputed(computeCharacter(charData, map))
     // Backfill mastery + entries on weapons already in the inventory.
     // Characters created before the dataLoader started preserving these
@@ -151,6 +198,28 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
     }, { changedPaths: ['inventory.items', 'custom.items'] })
     return true
+  }
+
+  // Pull lower-cased trait names from the character's race + subrace
+  // 5etools `entries` arrays. Used by featureEffects to recognise
+  // automatic species traits (Fey Ancestry, Dwarven Resilience,
+  // Darkvision, Brave, etc.) without a hardcoded race→features map.
+  async function loadRaceTraitNames(edition, charData) {
+    const raceId = charData?.species?.raceId
+    if (!raceId) return []
+    const races = await loadRaceList(edition).catch(() => [])
+    const race = races.find(r => r.id === raceId || r.name === raceId)
+    if (!race) return []
+    const sub = (race.subraces || []).find(s =>
+      s.id === charData.species.subraceId || s.name === charData.species.subraceId
+    )
+    const allEntries = [...(race.entries || []), ...(sub?.entries || [])]
+    const names = []
+    for (const e of allEntries) {
+      const name = (e && typeof e === 'object') ? e.name : null
+      if (name) names.push(String(name))
+    }
+    return names
   }
 
   async function loadCharacter() {
@@ -239,9 +308,20 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // a much slimmer path below via the dnd_patch_combat_state RPC.
   function queueSave(next) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
+    // Strip any transient sheet-only hints we attached to the
+    // character before persisting (currently just species.__traitNames
+    // from hydrateClassDataAndRecompute). Keeping the row clean
+    // prevents stale data from being trusted on next load and avoids
+    // bloating the JSONB column.
+    const cleanForSave = (data) => {
+      if (!data?.species?.__traitNames) return data
+      const { __traitNames, ...restSpecies } = data.species
+      return { ...data, species: restSpecies }
+    }
     saveTimer.current = setTimeout(() => {
+      const payload = cleanForSave(next)
       supabase.from('dnd_characters')
-        .update({ data: next, name: next.info?.name || '' })
+        .update({ data: payload, name: payload.info?.name || '' })
         .eq('id', id).eq('user_id', session.user.id)
         .then(({ error }) => { if (error) console.error('[Sheet Save]', error) })
     }, 700)
@@ -701,48 +781,39 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           </SideSection>
 
           <SideSection title="Saving Throws">
-            {computed && Object.entries(computed.savingThrows).map(([key, save]) => {
-              const perSaveNotes = getEffectsForSlot(character, `save:${key}`)
-              return (
-                <div key={key} style={S.saveRow}
-                  title={perSaveNotes.length > 0
-                    ? perSaveNotes.map(n => `${n.feature}: ${n.text}`).join('\n')
-                    : undefined}>
-                  <span style={{ ...S.profDot, background: save.proficient ? 'var(--accent)' : 'var(--border-strong)' }} />
-                  <span style={S.saveName}>{key.toUpperCase()}</span>
-                  <span style={S.saveValue}>{modStr(save.total)}</span>
-                  {perSaveNotes.length > 0 && (
-                    <span style={featureNoteDot} title="Spezielle Modifikatoren — Hover für Details">★</span>
-                  )}
-                </div>
-              )
-            })}
-            {/* General save notes (all-abilities scope): rendered as a
-                small list below the table so the player can see them at
-                a glance instead of hunting tooltips. */}
-            <FeatureNoteList notes={getEffectsForSlot(character, 'saves')} />
+            {computed && Object.entries(computed.savingThrows).map(([key, save]) => (
+              <div key={key} style={S.saveRow}>
+                <span style={{ ...S.profDot, background: save.proficient ? 'var(--accent)' : 'var(--border-strong)' }} />
+                <span style={S.saveName}>{key.toUpperCase()}</span>
+                <span style={S.saveValue}>{modStr(save.total)}</span>
+              </div>
+            ))}
+            {/* All save notes — per-ability and all-saves — rendered as
+                a single small list below the table. Replaces the
+                old ★-with-tooltip pattern: at-a-glance instead of
+                hover-to-find. Each per-ability note is prefixed with
+                the ability (e.g. "DEX · Evasion: …") so the player
+                can tell at a glance which save it applies to. */}
+            <ScopedNoteList
+              character={character}
+              slots={['str','dex','con','int','wis','cha'].map(a => ({ slot: `save:${a}`, prefix: a.toUpperCase() }))}
+              extraSlot="saves"
+            />
           </SideSection>
 
           <SideSection title="Skills">
             {computed && Object.entries(computed.skills).map(([skill, data]) => {
               const dotColor = data.proficiency === 'expertise' ? 'var(--accent)'
                 : data.proficiency === 'proficient' ? 'var(--accent-green)' : 'var(--border-strong)'
-              const perSkillNotes = getEffectsForSlot(character, `skill:${skill}`)
               const tooltipBase =
                 data.proficiency === 'expertise' ? 'Expertise'
                 : data.proficiency === 'proficient' ? 'Proficient' : 'Not Proficient'
-              const tooltip = perSkillNotes.length > 0
-                ? `${tooltipBase}\n` + perSkillNotes.map(n => `${n.feature}: ${n.text}`).join('\n')
-                : tooltipBase
               return (
-                <div key={skill} style={S.skillRow} title={tooltip}>
+                <div key={skill} style={S.skillRow} title={tooltipBase}>
                   <span style={{ ...S.profDot, background: dotColor }} />
                   <span style={S.skillName}>
                     {formatSkillName(skill)}
                     <span style={S.skillAbility}> ({data.ability.toUpperCase()})</span>
-                    {perSkillNotes.length > 0 && (
-                      <span style={featureNoteDot} title="Spezielle Modifikatoren — Hover für Details">★</span>
-                    )}
                   </span>
                   <span style={{ ...S.skillValue, color: data.proficiency ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
                     {modStr(data.total)}
@@ -755,6 +826,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               {' · '}
               <span style={{ color: 'var(--accent)' }}>● Expertise</span>
             </div>
+            {/* All per-skill notes aggregated inline below the table —
+                no hover-to-find tooltips. Each line is "<Skill> · …". */}
+            <ScopedNoteList
+              character={character}
+              slots={computed ? Object.keys(computed.skills).map(s =>
+                ({ slot: `skill:${s}`, prefix: formatSkillName(s) })) : []}
+              extraSlot="skills"
+            />
           </SideSection>
 
           {computed?.proficiencies && (
@@ -832,6 +911,53 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
 const featureNoteDot = {
   marginLeft: 6, color: 'var(--accent-yellow)', fontSize: 11, cursor: 'help',
 }
+
+// Aggregated inline note list for a Side section (Saves / Skills /
+// anything else with per-row + section-wide notes). Each entry is
+// rendered with its feature name + a per-row prefix (e.g. "DEX"
+// for save:dex) so the player can see at a glance which row the note
+// applies to. Returns null when there's nothing to show, so the
+// SideSection doesn't grow a phantom block.
+function ScopedNoteList({ character, slots, extraSlot }) {
+  const items = []
+  let key = 0
+  for (const { slot, prefix } of (slots || [])) {
+    const notes = getEffectsForSlot(character, slot)
+    for (const n of notes) {
+      items.push({ id: `${slot}-${key++}`, prefix, feature: n.feature, text: n.text })
+    }
+  }
+  if (extraSlot) {
+    const notes = getEffectsForSlot(character, extraSlot)
+    for (const n of notes) {
+      items.push({ id: `${extraSlot}-${key++}`, prefix: null, feature: n.feature, text: n.text })
+    }
+  }
+  if (items.length === 0) return null
+  return (
+    <ul style={scopedNoteList}>
+      {items.map(n => (
+        <li key={n.id} style={scopedNoteItem}>
+          {n.prefix && <span style={scopedNotePrefix}>{n.prefix}</span>}
+          <span style={scopedNoteFeature}>{n.feature}</span>
+          <span> · {n.text}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+const scopedNoteList = {
+  margin: '8px 0 0 0', padding: '6px 8px', listStyle: 'none',
+  background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
+  borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 3,
+}
+const scopedNoteItem = { fontSize: 11, lineHeight: 1.4, color: 'var(--text-secondary)' }
+const scopedNotePrefix = {
+  display: 'inline-block', minWidth: 28, marginRight: 6,
+  color: 'var(--text-muted)', fontWeight: 700, fontSize: 10,
+  letterSpacing: 0.5,
+}
+const scopedNoteFeature = { color: 'var(--accent)', fontWeight: 600 }
 
 function CombatStat({ label, value, color, sub, onClick }) {
   return (

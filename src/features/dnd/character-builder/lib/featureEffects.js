@@ -924,9 +924,19 @@ const SUBCLASS_IMPLIED = [
  * automatic class/race effects surface as soon as the level/race
  * matches.
  */
-export function getActiveFeatureEffects(character) {
+export function getActiveFeatureEffects(character, opts = {}) {
   if (!character) return []
   const features = gatherFeatureNames(character)
+  // Race/subrace trait names are pulled from the 5etools `entries`
+  // arrays at sheet-load time (CharacterSheetPage populates
+  // species.__traitNames on `character` as a transient hint).
+  // Without this hint we silently miss every "feature only" catalog
+  // entry for race traits (Fey Ancestry, Brave, Dwarven Resilience,
+  // …) because gatherFeatureNames doesn't see them otherwise.
+  const extraNames = opts.extraFeatureNames instanceof Set
+    ? opts.extraFeatureNames
+    : new Set(character.species?.__traitNames || [])
+  for (const n of extraNames) features.add(norm(n))
   const featSet = new Set((character.feats || []).map(f => norm(f.featId || f.name)))
   const raceTokens = `${character.species?.raceId || ''} ${character.species?.subraceId || ''}`
   const classes = character.classes || []
@@ -945,7 +955,12 @@ export function getActiveFeatureEffects(character) {
     } else if (e.fromFeats) {
       ok = featSet.has(norm(e.feature))
     } else if (e.race) {
-      ok = contains(raceTokens, e.race)
+      // race needle must match AND (if no `feature` declared) that's
+      // enough; with a feature, additionally require the trait name to
+      // be present in the gathered set so we don't surface Fey
+      // Ancestry effects for, say, a Half-Elf subrace that doesn't
+      // have it.
+      ok = contains(raceTokens, e.race) && (!e.feature || features.has(norm(e.feature)))
     } else if (e.feature) {
       ok = features.has(norm(e.feature))
     }

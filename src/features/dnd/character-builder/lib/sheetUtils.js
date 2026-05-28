@@ -46,6 +46,25 @@ export function formatSkillName(skill) {
   return String(skill).replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())
 }
 
+// ── 5.5e Weapon Mastery short-descriptions ─────────────────
+// Map of mastery name → tiny pill-sized German label the sheet shows
+// next to the mastery name so the player remembers what each does
+// without expanding a tooltip. Keys are case-insensitive on lookup.
+const MASTERY_SHORT_DESC = {
+  cleave:    '+Damage an benachbartes Ziel',
+  graze:     'Bei Miss: STR-Mod Schaden',
+  nick:      'Free TWF',
+  push:      'Ziel 10 ft. zurückstoßen',
+  sap:       'Ziel: Nachteil nächste Attacke',
+  slow:      '−10 ft. Speed Ziel',
+  topple:    'Save oder Prone',
+  vex:       'Vorteil nächste Attacke',
+}
+export function masteryShortDesc(mastery) {
+  if (!mastery) return ''
+  return MASTERY_SHORT_DESC[String(mastery).toLowerCase().trim()] || ''
+}
+
 // ── Fake spell-name filter (mirrors foundryExport.js) ───────
 // Spell-list-picker UIs sometimes leak header rows like "Bard Spells".
 // Filtering them keeps the sheet (and Foundry export) clean.

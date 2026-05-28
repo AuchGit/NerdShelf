@@ -10,10 +10,6 @@ function getMod(score) { return Math.floor((score - 10) / 2) }
 function getAbilityScore(char, key) {
   return (char.abilityScores.base[key] || 8) + ((char.species.abilityScoreImprovements || {})[key] || 0)
 }
-// Paladin/Ranger have no spells at level 1 in 5e
-function getMaxCastableLevel(classId) {
-  return ['Paladin', 'Ranger'].includes(classId) ? 0 : 1
-}
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
@@ -44,7 +40,19 @@ export default function Step7Spells({ character, updateCharacter }) {
   }, [edition, classId])
 
   const spellInfo     = classId ? getSpellcastingInfo(classId, 1, 0, null, edition) : null
-  const maxCastable   = getMaxCastableLevel(classId)
+  // Data-driven max castable level at L1. Any class with a
+  // spellcasting profile at L1 (spellInfo non-null AND has spell
+  // capacity — cantrips, known spells, or prepared spells) can cast
+  // 1st-level spells. The previous `['Paladin','Ranger'] → 0`
+  // hardcode silently broke the 5.5e Paladin & Ranger ("keine spells
+  // gefunden") because they DO learn spells at L1 in the 2024 PHB.
+  const hasL1Casting = !!spellInfo && (
+    (spellInfo.cantripsKnown || 0) > 0
+    || (spellInfo.spellsKnown || 0) > 0
+    || (spellInfo.maxPrepared || 0) > 0
+    || !!spellInfo.hasSpellbook
+  )
+  const maxCastable   = hasL1Casting ? 1 : 0
   const profBonus     = 2
 
   const classId_lc = (classId ?? '').toLowerCase()

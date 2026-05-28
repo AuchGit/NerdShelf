@@ -12,7 +12,7 @@ import {
 import { S } from './sheetStyles'
 import {
   ITEM_TYPES, WEAPON_PROPERTIES, DAMAGE_TYPES, COIN_TYPES, totalGoldValue,
-  computeEncumbrance,
+  computeEncumbrance, masteryShortDesc,
   isContainerItem, itemKey, itemTypeMeta, isSingletonItem,
 } from '../../lib/sheetUtils'
 import { computeAbilityScores } from '../../lib/rulesEngine'
@@ -624,7 +624,9 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
             {meta.label}
             {item.dmg1 ? ` · ${item.dmg1} ${item.dmgType || ''}` : ''}
             {item.ac ? ` · AC ${item.ac}` : ''}
-            {item.mastery?.length > 0 && ` · ${item.mastery.join(', ')}`}
+            {item.mastery?.length > 0 && ' · ' + item.mastery.map(m => {
+              const d = masteryShortDesc(m); return d ? `${m} (${d})` : m
+            }).join(', ')}
             {item.equipped ? ' · Equipped' : ''}
             {item.attuned ? ' · Attuned' : ''}
           </div>

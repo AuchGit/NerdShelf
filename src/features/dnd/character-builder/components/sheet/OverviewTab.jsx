@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
-import { modStr } from '../../lib/sheetUtils'
+import { modStr, masteryShortDesc } from '../../lib/sheetUtils'
 import { undoLevelUp } from '../../lib/levelUpEngine'
 import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
 import { loadItemIndex } from '../../lib/dataLoader'
@@ -350,9 +350,15 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                           {atk.markedAs.label}
                         </span>
                       )}
-                      {atk.mastery?.length > 0 && atk.mastery.map((m) => (
-                        <span key={m} style={masteryBadge} title="5.5e Weapon Mastery">{m}</span>
-                      ))}
+                      {atk.mastery?.length > 0 && atk.mastery.map((m) => {
+                        const desc = masteryShortDesc(m)
+                        return (
+                          <span key={m} style={masteryBadge}
+                                title={desc ? `Weapon Mastery: ${m} — ${desc}` : '5.5e Weapon Mastery'}>
+                            {m}{desc ? ` (${desc})` : ''}
+                          </span>
+                        )
+                      })}
                     </td>
                     <td style={{ ...S.td, color: 'var(--accent-blue)', fontWeight: 'bold' }}>{atk.attackDisplay}</td>
                     <td style={{ ...S.td, color: 'var(--accent-red)' }}>{atk.damage}</td>
@@ -604,7 +610,11 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
                             cursor: disabled ? 'not-allowed' : 'pointer',
                           }}>
                           {isPicked && '✓ '}{w.name}
-                          <span style={wmpStyle.chipMastery}> · {w.mastery.join('/')}</span>
+                          <span style={wmpStyle.chipMastery}>
+                            {' · '}{w.mastery.map(m => {
+                              const d = masteryShortDesc(m); return d ? `${m} (${d})` : m
+                            }).join('/')}
+                          </span>
                         </button>
                       )
                     })}

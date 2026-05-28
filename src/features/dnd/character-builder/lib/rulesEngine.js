@@ -781,7 +781,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       properties: ['Finesse'],
       isProficient: true,
       abilityUsed: 'dex',
-      mastery: [],
+      // Psychic Blades have the Vex mastery built in and the Soulknife
+      // knows it automatically — no slot from cls.weaponMasteries used.
+      mastery: ['Vex'],
     })
     // Bonus-action blade: 1d4 + DEX. Unlike regular TWF, the Soulknife
     // feature explicitly adds your ability modifier to this damage —
@@ -963,7 +965,21 @@ function computeWeaponMastery(character, classDataMap = {}) {
   const perClass = []
   for (const cls of (character.classes || [])) {
     const cd = classDataMap[cls.classId]
-    const count = getClassTableValue(cd, cls.level, 'Weapon Mastery')
+    if (!cd) continue
+    // Source 1: scaling table column "Weapon Mastery" (Fighter, Barbarian).
+    let count = getClassTableValue(cd, cls.level, 'Weapon Mastery')
+    // Source 2: static "Weapon Mastery" class feature whose entry text
+    // says "two/three/… kinds of weapons" (Ranger, Paladin, Rogue —
+    // they don't scale, just a flat number from the feature). We parse
+    // the count from the prose so a homebrew that grants "four" still
+    // works without code changes.
+    if (!count) {
+      const feat = (cd.features || []).find(f =>
+        String(f?.name || '').toLowerCase() === 'weapon mastery'
+        && (f?.level == null || f.level <= cls.level)
+      )
+      if (feat) count = parseWeaponMasteryCount(feat) || 2
+    }
     if (!count) continue
     perClass.push({
       classId: cls.classId,
@@ -979,6 +995,27 @@ function computeWeaponMastery(character, classDataMap = {}) {
     perClass,
     allPicked,
   }
+}
+
+// Pull the count of "kinds of weapons" out of a Weapon Mastery feature
+// entry. Matches "two kinds of …weapons", "three kinds of …weapons",
+// "X different weapons", "X weapons of your choice" — all the phrasings
+// 5etools uses across classes. Returns null when no number is found.
+function parseWeaponMasteryCount(feature) {
+  const flat = (arr) => arr.flatMap(e =>
+    typeof e === 'string' ? [e] :
+    Array.isArray(e?.entries) ? flat(e.entries) :
+    Array.isArray(e?.items)   ? flat(e.items)   : []
+  )
+  const text = flat(feature.entries || []).join(' ').toLowerCase()
+  const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+  // Match "two kinds of", "three different weapons", "two weapons of your choice", etc.
+  const m = text.match(/\b(one|two|three|four|five|six|\d+)\b\s+(?:kinds?\s+of|different|weapons?\s+of\s+your\s+choice)/i)
+  if (m) {
+    const v = NUM[m[1].toLowerCase()] ?? parseInt(m[1], 10)
+    return Number.isFinite(v) ? v : null
+  }
+  return null
 }
 
 function getMonkMartialArtsDie(level) {

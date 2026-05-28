@@ -180,7 +180,19 @@ export default function LevelUpPage({ session }) {
         delete featChoices._spells
         const allFeatSpells = Object.values(spellPicks).flat()
         if (allFeatSpells.length > 0) featChoices.spells = allFeatSpells
-        asiChoice = {type:'feat', featEntry:{...draft.featEntry, abilityBonus:draft.featAB, choices:featChoices}}
+        // Flatten per-choose-group picks into the rules-engine shape
+        // ({ability: bonus, …}). draft.featAB is now structured per
+        // ability-choose entry (e.g. {_c0: {dex: 1}}); the old code
+        // passed it through directly which produced an unreadable
+        // shape on character.feats[].abilityBonus. Use whatever
+        // setDraft already flattened into draft.featEntry.abilityBonus.
+        // Fall back to flat draft.featAB for backwards compatibility
+        // with any in-flight draft state predating this change.
+        const flatBonus = draft.featEntry.abilityBonus
+          || (Object.values(draft.featAB || {}).every(v => typeof v === 'number')
+            ? draft.featAB
+            : {})
+        asiChoice = {type:'feat', featEntry:{...draft.featEntry, abilityBonus: flatBonus, choices:featChoices}}
       }
     }
     const ofE = []; for (const [g,ns] of Object.entries(draft.optPicks)) for (const n of ns) ofE.push({name:n, group:g})
@@ -928,8 +940,31 @@ function FeatPicker({ feats, optF, draft, setDraft, edition, allSp, levelContext
   const detail=viewing||(sel?categoryFiltered.find(f=>f.name===sel.name):null)
 
   function selectFeat(feat) {
-    if(sel?.name===feat.name) setDraft(d=>({...d,featEntry:null,featAB:{},featCh:{}}))
-    else setDraft(d=>({...d,featEntry:{featId:feat.name,name:feat.name,source:feat.source,abilityBonus:{},choices:{},additionalSpells:feat.additionalSpells||[]},featAB:{},featCh:{}}))
+    if(sel?.name===feat.name) { setDraft(d=>({...d,featEntry:null,featAB:{},featCh:{}})); return }
+    // Pre-apply any FIXED ability bonuses the feat's data declares
+    // (`ability: [{con:1}]`-style entries). Without this only the
+    // `choose` entries went through the half-feat picker — fixed
+    // bonuses like Tough's +1 CON or Athlete's +1 STR were silently
+    // dropped. Parsed at select-time so they're always present on
+    // the draft regardless of which choose-entries the player picks.
+    const fixedBonus = {}
+    for (const entry of (feat.ability || [])) {
+      if (!entry || typeof entry !== 'object' || entry.choose) continue
+      for (const [k, v] of Object.entries(entry)) {
+        if (typeof v === 'number') fixedBonus[k] = (fixedBonus[k] || 0) + v
+      }
+    }
+    setDraft(d=>({
+      ...d,
+      featEntry: {
+        featId: feat.name, name: feat.name, source: feat.source,
+        abilityBonus: { ...fixedBonus },
+        _fixedAbilityBonus: { ...fixedBonus },
+        choices: {}, additionalSpells: feat.additionalSpells || [],
+      },
+      featAB: {},
+      featCh: {},
+    }))
   }
 
   // Resolve optfeature options for feat choices (like Step6 FeatOptChoicePicker)
@@ -1050,17 +1085,65 @@ function FeatPicker({ feats, optF, draft, setDraft, edition, allSp, levelContext
               </div>
             )}
 
-            {/* Half-feat ability picker */}
+            {/* Half-feat ability picker (data-driven) ──
+                5etools `ability` arrays are a sequence of entries; each
+                entry can be a fixed map (`{con:1}`) or a `choose`
+                descriptor. Fixed entries are written straight onto the
+                feat at select-time (see selectFeat); this block renders
+                a per-`choose` picker for the rest. `choose.amount` is
+                the value-per-pick (defaults 1, +2 for the ASI feat).
+                `choose.count` would be picks-allowed (defaults 1 — no
+                feat currently uses >1 but we read it for forward
+                compatibility). */}
             {detail.ability?.length>0&&detail.ability.some(e=>e.choose)&&(
               <div style={{marginTop:12,padding:'10px 12px',background:'var(--bg-inset)',borderRadius:8,border:'1px solid var(--border)'}}>
-                <div style={{color:'var(--text-secondary)',fontSize:12,fontWeight:'bold',marginBottom:6}}>Ability Score (+1):</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {(detail.ability[0].choose?.from||ABILITIES).map(ab=>(
-                    <button key={ab} style={{...S.miniChip,borderColor:draft.featAB[ab]?'var(--accent)':'var(--border)',color:draft.featAB[ab]?'var(--accent)':'var(--text-muted)'}}
-                      onClick={()=>{const c=detail.ability[0].choose?.count||1
-                        setDraft(d=>{const ab2={...d.featAB};if(ab2[ab])delete ab2[ab];else if(Object.keys(ab2).length<c)ab2[ab]=1
-                          const fe=d.featEntry?{...d.featEntry,abilityBonus:ab2}:d.featEntry;return{...d,featAB:ab2,featEntry:fe}})}}>
-                      {ab.toUpperCase()}</button>))}</div></div>)}
+                {detail.ability.map((entry, idx) => {
+                  if (!entry?.choose) return null
+                  const from = entry.choose.from || ABILITIES
+                  const count = entry.choose.count || 1
+                  const amount = entry.choose.amount || 1
+                  const key = `_c${idx}`
+                  const picksForThis = draft.featAB[key] || {}
+                  const pickedCount = Object.keys(picksForThis).length
+                  return (
+                    <div key={idx} style={{marginBottom:8}}>
+                      <div style={{color:'var(--text-secondary)',fontSize:12,fontWeight:'bold',marginBottom:6}}>
+                        Ability Score (+{amount}{count > 1 ? `, ${pickedCount}/${count} gewählt` : ''}):
+                      </div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {from.map(ab=>{
+                          const isPicked = !!picksForThis[ab]
+                          return (
+                            <button key={ab} style={{...S.miniChip,borderColor:isPicked?'var(--accent)':'var(--border)',color:isPicked?'var(--accent)':'var(--text-muted)'}}
+                              onClick={()=>setDraft(d => {
+                                const groups = { ...d.featAB }
+                                const cur = { ...(groups[key] || {}) }
+                                if (cur[ab]) delete cur[ab]
+                                else if (Object.keys(cur).length < count) cur[ab] = amount
+                                groups[key] = cur
+                                // Flatten fixed-from-data + per-choose
+                                // groups into the featEntry.abilityBonus
+                                // map the rules engine consumes.
+                                const flat = { ...(d.featEntry?._fixedAbilityBonus || {}) }
+                                for (const [, g] of Object.entries(groups)) {
+                                  if (g && typeof g === 'object' && !Array.isArray(g)) {
+                                    for (const [a, v] of Object.entries(g)) {
+                                      flat[a] = (flat[a] || 0) + v
+                                    }
+                                  }
+                                }
+                                const fe = d.featEntry ? { ...d.featEntry, abilityBonus: flat } : d.featEntry
+                                return { ...d, featAB: groups, featEntry: fe }
+                              })}>
+                              {ab.toUpperCase()}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>)}
           </div>
           <div style={fS.footer}><button style={{...fS.selectBtn,...(sel?.name===detail.name?fS.selectBtnAct:{})}}
             onClick={()=>selectFeat(detail)}>{sel?.name===detail.name?'✓ Gewählt':'Wählen'}</button></div>
