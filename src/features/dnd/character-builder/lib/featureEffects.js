@@ -955,12 +955,13 @@ export function getActiveFeatureEffects(character, opts = {}) {
     } else if (e.fromFeats) {
       ok = featSet.has(norm(e.feature))
     } else if (e.race) {
-      // race needle must match AND (if no `feature` declared) that's
-      // enough; with a feature, additionally require the trait name to
-      // be present in the gathered set so we don't surface Fey
-      // Ancestry effects for, say, a Half-Elf subrace that doesn't
-      // have it.
-      ok = contains(raceTokens, e.race) && (!e.feature || features.has(norm(e.feature)))
+      // Race acts as a disambiguator (e.g. "Lucky" halfling trait vs
+      // Lucky feat). Match if EITHER the race token matches OR the
+      // trait name is present in the gathered set — that way Fey
+      // Ancestry shows up on Shadar-Kai, Wood Elf, High Elf, …
+      // without needing every elf subrace listed in the catalog.
+      ok = contains(raceTokens, e.race)
+        || (e.feature && features.has(norm(e.feature)))
     } else if (e.feature) {
       ok = features.has(norm(e.feature))
     }
@@ -973,15 +974,100 @@ export function getActiveFeatureEffects(character, opts = {}) {
 /**
  * All notes attached to a slot, flat. Each result is { id, text } so
  * the renderer can use the id as a stable React key.
+ *
+ * Combines two sources:
+ *   1. Curated catalog entries (above) — German-translated notes for
+ *      well-known features.
+ *   2. Dynamic synthesis from race trait `entries` text — covers any
+ *      trait the catalog hasn't translated yet (homebrew species,
+ *      future printings) by scanning for keyword patterns:
+ *        • "advantage on saving throws"   → slot 'saves'
+ *        • "resistance to X damage"        → slot 'hp'
+ *        • "immunity to / immune to"       → slot 'hp' or 'conditions'
+ *        • "darkvision …"                  → slot 'skill:perception'
+ *        • "your speed …" / "movement"     → slot 'speed'
+ *        • "{@condition X}"                → slot 'conditions'
+ *      Synthetic notes are de-duped against catalog hits (same feature
+ *      name) so they don't double up.
  */
 export function getEffectsForSlot(character, slot) {
   const out = []
+  const seenFeatures = new Set()
   for (const e of getActiveFeatureEffects(character)) {
     for (const eff of (e.effects || [])) {
-      if (eff.slot === slot) out.push({ id: `${e.id}-${slot}-${out.length}`, text: eff.text, feature: e.feature })
+      if (eff.slot === slot) {
+        out.push({ id: `${e.id}-${slot}-${out.length}`, text: eff.text, feature: e.feature })
+        seenFeatures.add(norm(e.feature))
+      }
     }
   }
+  for (const synth of synthesizeRaceTraitNotes(character)) {
+    if (synth.slot !== slot) continue
+    if (seenFeatures.has(norm(synth.feature))) continue
+    out.push({ id: `synth-${synth.feature}-${slot}-${out.length}`, text: synth.text, feature: synth.feature })
+  }
   return out
+}
+
+// Flatten 5etools entry shapes into a single plain-text string.
+function flattenTraitText(entries) {
+  const parts = []
+  const walk = (e) => {
+    if (typeof e === 'string') { parts.push(e); return }
+    if (Array.isArray(e)) { for (const x of e) walk(x); return }
+    if (e && typeof e === 'object') {
+      if (Array.isArray(e.entries)) walk(e.entries)
+      if (Array.isArray(e.items))   walk(e.items)
+    }
+  }
+  walk(entries || [])
+  return parts.join(' ')
+}
+
+// Strip 5etools tags ({@condition charmed}, {@damage 1d6} …) leaving
+// the readable name. Keeps the original behaviour idempotent.
+function stripTraitTags(s) {
+  return String(s || '')
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Build a synthetic notes list from `character.species.__traits` —
+// the raw {name, entries[]} pulled from race data at sheet load.
+// Returns `[{slot, text, feature}, ...]`. Empty when there's no
+// trait data on the character (sheet hasn't hydrated yet, or
+// non-race source).
+function synthesizeRaceTraitNotes(character) {
+  const traits = character?.species?.__traits
+  if (!Array.isArray(traits) || traits.length === 0) return []
+  const notes = []
+  for (const t of traits) {
+    if (!t?.name || !t.entries) continue
+    const raw = stripTraitTags(flattenTraitText(t.entries))
+    if (!raw) continue
+    const low = raw.toLowerCase()
+    // Full trait text — players want to see the actual rule, not a
+    // chopped-off preview ("Blessing of the Raven Queen … to an
+    // unoccupied space you can see. You can use this trait a number…"
+    // got cut at 140 chars in the old version).
+    const text = raw
+    let slot = null
+    if (/advantage\s+on\s+saving\s+throws/.test(low))               slot = 'saves'
+    else if (/\bresistance\s+to\s+[a-z]+(\s+damage)?/.test(low))    slot = 'hp'
+    else if (/\b(immune|immunity)\s+to\b/.test(low))                slot = 'hp'
+    else if (/\bdarkvision\b/.test(low))                            slot = 'skill:perception'
+    else if (/\b(blindsight|tremorsense|truesight)\b/.test(low))    slot = 'skill:perception'
+    else if (/\b(your\s+)?(walking\s+)?speed\b/.test(low))          slot = 'speed'
+    else if (/\bcharmed\b/.test(low) && /condition/.test(low))      slot = 'conditions'
+    else if (/\battack\s+rolls?\b/.test(low))                       slot = 'attacks'
+    // Otherwise: skip — emitting an uncategorised hint adds clutter
+    // for traits that don't mechanically matter on the sheet (cosmetic
+    // race fluff, language grants, etc.).
+    if (!slot) continue
+    notes.push({ slot, text, feature: t.name })
+  }
+  return notes
 }
 
 /**

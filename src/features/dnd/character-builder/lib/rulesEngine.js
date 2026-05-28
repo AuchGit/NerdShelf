@@ -1207,7 +1207,75 @@ export function computeResources(character, modifiers, profBonus, totalLevel, cl
     }
   }
 
+  // Race-trait resources (Blessing of the Raven Queen, Stone's
+  // Endurance, Relentless Endurance, Aasimar Healing Hands, …).
+  // Parsed dynamically from `species.__traits` — same data the
+  // featureEffects scanner uses — so any homebrew race with the
+  // standard "you can use this … times per rest" phrasing gets a
+  // tracked resource for free, without naming traits in code.
+  for (const r of synthesizeRaceTraitResources(character, profBonus)) {
+    resources.push(r)
+  }
+
   return resources
+}
+
+// ── Race-trait resource synthesizer ─────────────────────────────
+// Walks character.species.__traits and emits a class-resource entry
+// for any trait whose text declares a usage limit. Matches the most
+// common phrasings 5etools data uses:
+//   • "<N> times" — fixed integer
+//   • "a number of times equal to your proficiency bonus" — = profBonus
+//   • "X per long rest" / "regain ... after a long rest"  → long_rest
+//   • "short rest" / "short or long rest"                 → short_rest
+// Returns [] when no trait matches — no traits, no resources.
+function synthesizeRaceTraitResources(character, profBonus) {
+  const traits = character?.species?.__traits
+  if (!Array.isArray(traits) || traits.length === 0) return []
+  const out = []
+  for (const t of traits) {
+    if (!t?.name || !Array.isArray(t.entries)) continue
+    const flat = flattenTraitForResources(t.entries).toLowerCase()
+    if (!flat) continue
+    // Need both a usage limit AND a recharge cue to call it a resource.
+    let max = null
+    if (/a\s+number\s+of\s+times\s+equal\s+to\s+your\s+proficiency\s+bonus/.test(flat)) {
+      max = Math.max(1, profBonus || 1)
+    } else {
+      const m = flat.match(/\b(one|two|three|four|five|six|\d+)\s+(?:time|times)\b/)
+      if (m) {
+        const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+        const v = NUM[m[1].toLowerCase()] ?? parseInt(m[1], 10)
+        if (Number.isFinite(v)) max = v
+      }
+    }
+    if (!max) continue
+    let recharge = null
+    if (/\bshort\s+(?:or\s+long\s+)?rest\b/.test(flat)) recharge = 'short_rest'
+    else if (/\blong\s+rest\b/.test(flat)) recharge = 'long_rest'
+    if (!recharge) continue
+    out.push({
+      id: `trait_${String(t.name).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+      name: t.name,
+      max, current: 0, recharge,
+    })
+  }
+  return out
+}
+// Local copy of the entry-flattener used by featureEffects, kept here
+// so rulesEngine doesn't have to import the synthesizer module.
+function flattenTraitForResources(entries) {
+  const parts = []
+  const walk = (e) => {
+    if (typeof e === 'string') { parts.push(e); return }
+    if (Array.isArray(e)) { for (const x of e) walk(x); return }
+    if (e && typeof e === 'object') {
+      if (Array.isArray(e.entries)) walk(e.entries)
+      if (Array.isArray(e.items))   walk(e.items)
+    }
+  }
+  walk(entries)
+  return parts.join(' ').replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1').replace(/\s+/g, ' ').trim()
 }
 
 // ============================================================

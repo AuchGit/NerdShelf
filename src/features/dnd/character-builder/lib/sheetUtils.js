@@ -162,13 +162,28 @@ const WARLOCK_TABLE = {
 export function computeSpellSlots(character) {
   let casterLevel = 0
   let warlockSlots = null
+  const is55e = (character?.meta?.edition || '5e') === '5.5e'
 
   for (const cls of (character.classes || [])) {
     const prog = cls.casterProgression
-    if (prog === 'full')                          casterLevel += cls.level
-    else if (prog === 'half' || prog === '1/2')   casterLevel += Math.floor(cls.level / 2)
-    else if (prog === '1/3')                      casterLevel += Math.floor(cls.level / 3)
-    else if (prog === 'pact')                     warlockSlots = WARLOCK_TABLE[cls.level] || null
+    if (prog === 'full') {
+      casterLevel += cls.level
+    } else if (prog === 'half' || prog === '1/2') {
+      // 5e PHB: half-caster starts at L2 — floor(level/2) maps L1→0,
+      // L2→1, L4→2, … (no L1 slots).
+      // 5.5e XPHB: half-casters now cast from L1 — ceil(level/2)
+      // maps L1→1, L3→2, L5→3, matching the 2024 Ranger / Paladin
+      // table. Using floor here was the silent reason the Ranger
+      // sheet showed "No spell slots available yet" and the prepare
+      // modal's pool stayed empty (maxSpellLvl = 0).
+      casterLevel += is55e ? Math.ceil(cls.level / 2) : Math.floor(cls.level / 2)
+    } else if (prog === '1/3') {
+      // Eldritch Knight / Arcane Trickster — still starts at L3 in
+      // both editions; the floor formula already matches the table.
+      casterLevel += Math.floor(cls.level / 3)
+    } else if (prog === 'pact') {
+      warlockSlots = WARLOCK_TABLE[cls.level] || null
+    }
   }
 
   const lvl = Math.min(20, Math.round(casterLevel))

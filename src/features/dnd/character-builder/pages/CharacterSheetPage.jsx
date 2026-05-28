@@ -124,19 +124,32 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     const map = {}
     unique.forEach((cid, i) => { if (loaded[i]) map[cid] = loaded[i] })
     classDataMapRef.current = map
-    // Hydrate race trait names from the 5etools race entries so the
-    // featureEffects catalog can detect things like Fey Ancestry,
-    // Dwarven Resilience, Darkvision, etc. without needing every race
-    // name hardcoded. Stored on `character.species.__traitNames` as a
-    // transient hint — queueSave strips it before persisting so it
-    // never bloats the Supabase row.
-    const traitNames = await loadRaceTraitNames(edition, charData)
+    // Backfill the spellcasting fields onto cls entries that were
+    // saved before loadClassList consistently forwarded them. Without
+    // this, multiclass Rangers / Paladins / Wizards / etc. created
+    // by an older build show "Spellcasting / Class" stats but no
+    // Prepare section (because casterProgression is missing on the
+    // cls and computeSpellSlots can't tell what progression to use).
+    if (!readOnly) backfillClassSpellcastingFields(charData, map).catch(() => {})
+    // Hydrate race trait names *and* entries from the 5etools race
+    // data so:
+    //   • the featureEffects catalog can detect Fey Ancestry / Brave /
+    //     Dwarven Resilience / Darkvision / Hellish Resistance / etc.
+    //     by trait name without a hardcoded race→features map, and
+    //   • the dynamic scanner in featureEffects can emit a generic
+    //     hint for any trait the catalog hasn't translated yet.
+    // Stored as transient __trait* hints on character.species —
+    // queueSave strips both before persisting so they don't bloat the
+    // Supabase row.
+    const { names: traitNames, traits: rawTraits } =
+      await loadRaceTraits(edition, charData)
     if (traitNames.length > 0) {
+      const patch = { __traitNames: traitNames, __traits: rawTraits }
       setCharacter(prev => prev ? ({
         ...prev,
-        species: { ...(prev.species || {}), __traitNames: traitNames },
+        species: { ...(prev.species || {}), ...patch },
       }) : prev)
-      charData = { ...charData, species: { ...(charData.species || {}), __traitNames: traitNames } }
+      charData = { ...charData, species: { ...(charData.species || {}), ...patch } }
     }
     setComputed(computeCharacter(charData, map))
     // Backfill mastery + entries on weapons already in the inventory.
@@ -146,6 +159,37 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // and item description panel. We patch in place exactly once and
     // persist the result so the next open is clean.
     if (!readOnly) backfillItemMetadata(edition, charData).catch(() => {})
+  }
+
+  // Heal cls entries that lack the spellcasting metadata
+  // (`casterProgression`, `spellcastingAbility`, `isSpellcaster`) the
+  // sheet relies on for spell slot / preparation logic. Earlier
+  // builds saved multiclass entries with these fields undefined
+  // because loadClassList didn't always forward them; without the
+  // backfill, computeSpellSlots falls into the default branch and
+  // produces no slots → no Prepare button.
+  async function backfillClassSpellcastingFields(charData, classDataMap) {
+    if (!charData?.classes?.length) return false
+    let needsPatch = false
+    for (const cls of charData.classes) {
+      const cd = classDataMap[cls.classId]
+      if (!cd) continue
+      if (!cls.casterProgression && cd.casterProgression) { needsPatch = true; break }
+      if (!cls.spellcastingAbility && cd.spellcastingAbility) { needsPatch = true; break }
+    }
+    if (!needsPatch) return false
+    applyCharacter(d => {
+      for (const cls of (d.classes || [])) {
+        const cd = classDataMap[cls.classId]
+        if (!cd) continue
+        if (!cls.casterProgression && cd.casterProgression) cls.casterProgression = cd.casterProgression
+        if (!cls.spellcastingAbility && cd.spellcastingAbility) {
+          cls.spellcastingAbility = cd.spellcastingAbility
+          if (cls.isSpellcaster == null) cls.isSpellcaster = true
+        }
+      }
+    }, { changedPaths: ['classes'] })
+    return true
   }
 
   // Walks the inventory once, fills missing mastery / entries from the
@@ -200,26 +244,31 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     return true
   }
 
-  // Pull lower-cased trait names from the character's race + subrace
-  // 5etools `entries` arrays. Used by featureEffects to recognise
-  // automatic species traits (Fey Ancestry, Dwarven Resilience,
-  // Darkvision, Brave, etc.) without a hardcoded race→features map.
-  async function loadRaceTraitNames(edition, charData) {
+  // Pull race + subrace trait NAMES *and* their raw `entries` arrays
+  // from the 5etools race data. The names feed the featureEffects
+  // catalog's name-based match (so we can call out Fey Ancestry,
+  // Dwarven Resilience, …); the entries feed the dynamic trait
+  // scanner that emits synthetic save/HP/speed notes for any race
+  // trait the catalog hasn't translated yet — without a hardcoded
+  // race→features map.
+  async function loadRaceTraits(edition, charData) {
     const raceId = charData?.species?.raceId
-    if (!raceId) return []
+    if (!raceId) return { names: [], traits: [] }
     const races = await loadRaceList(edition).catch(() => [])
     const race = races.find(r => r.id === raceId || r.name === raceId)
-    if (!race) return []
+    if (!race) return { names: [], traits: [] }
     const sub = (race.subraces || []).find(s =>
       s.id === charData.species.subraceId || s.name === charData.species.subraceId
     )
     const allEntries = [...(race.entries || []), ...(sub?.entries || [])]
     const names = []
+    const traits = []
     for (const e of allEntries) {
-      const name = (e && typeof e === 'object') ? e.name : null
-      if (name) names.push(String(name))
+      if (!e || typeof e !== 'object' || !e.name) continue
+      names.push(String(e.name))
+      traits.push({ name: String(e.name), entries: Array.isArray(e.entries) ? e.entries : [] })
     }
-    return names
+    return { names, traits }
   }
 
   async function loadCharacter() {
@@ -314,8 +363,9 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // prevents stale data from being trusted on next load and avoids
     // bloating the JSONB column.
     const cleanForSave = (data) => {
-      if (!data?.species?.__traitNames) return data
-      const { __traitNames, ...restSpecies } = data.species
+      const sp = data?.species || {}
+      if (!sp.__traitNames && !sp.__traits) return data
+      const { __traitNames, __traits, ...restSpecies } = sp
       return { ...data, species: restSpecies }
     }
     saveTimer.current = setTimeout(() => {

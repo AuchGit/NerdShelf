@@ -241,6 +241,13 @@ export async function loadClassList(edition) {
       startingProficiencies: cls.startingProficiencies || {},
       startingEquipment: cls.startingEquipment || {},
       optionalfeatureProgression: cls.optionalfeatureProgression || [],
+      // 5.5e moves a number of picks (Fighting Style, Metamagic, Epic
+      // Boon, Eldritch Invocations) onto featProgression with category
+      // filters (FS / FS:R / FS:P / EB / MM / EI). Forgetting to
+      // forward this field silently broke the level-up picker — every
+      // class that gained one of those at L≥2 would skip Step 4.
+      featProgression: cls.featProgression || [],
+      classTableGroups: cls.classTableGroups || [],
       multiclassing: cls.multiclassing || null,
     })
   }
@@ -471,12 +478,13 @@ function extractFeatAbilityChoices(feat) {
  *      hardcoded list so it still works without the index file.
  */
 async function resolveSpellFiles(edition) {
-  if (edition === '5.5e') {
-    // 5.5e list is small and stable — keep it hardcoded for now
-    return ['spells/spells-xphb.json', 'spells/spells-phb.json']
-  }
-
-  // Try to load the generated index first
+  // Both editions: read spells/index.json which lists every source
+  // file present. For 5.5e this includes TCE / XGE / SCC / GGR /
+  // FTD / etc. — sources that the 2024 PHB's expanded class lists
+  // (Ranger, Paladin, …) reference for cantrips like Booming Blade,
+  // Sword Burst, Magic Stone. The previous 5.5e-only hardcode to
+  // just XPHB + PHB silently dropped those spells, and the class
+  // spell pickers showed "Keine Zauber gefunden".
   const indexData = await fetchData(edition, 'spells/index.json')
   // BUGFIX: also check length > 0 — an empty {} is truthy but would return []
   // and silently skip the fallback, resulting in zero spells loaded.
@@ -538,18 +546,26 @@ export async function loadSpellList(edition) {
       if (seen.has(uid)) continue
       seen.add(uid)
 
-      // sources.json is authoritative where it has real data.
-      // IMPORTANT: an empty Set is truthy — must check .size > 0,
-      // otherwise spells whose sources.json entry has no class arrays
-      // (EGW reprints, GGR, etc.) silently get classes:[] and vanish.
+      // Build the spell's class list by UNIONING every known source.
+      //
+      // sources.json is the older mapping and is the authoritative
+      // record for the legacy 5e class assignments. spell-lists.json
+      // is the newer per-edition list that, in 5.5e, adds the
+      // expanded Ranger / Paladin / Druid / etc. lists — including
+      // cantrips that sources.json never tagged for those classes
+      // (Booming Blade on Ranger, etc.). Preferring one over the
+      // other dropped spells from whichever side was missing; the
+      // union path keeps every legitimate assignment without losing
+      // anything. Inline `extractSpellClassesFallback` is still the
+      // last-resort when neither map knows about the spell at all.
       const classesFromSources = spellClassMap.get(spell.name.toLowerCase())
       const classesFromLists   = spellListsMap.get(spell.name.toLowerCase())
-
-      const classes = (classesFromSources != null && classesFromSources.size > 0)
-        ? Array.from(classesFromSources)
-        : (classesFromLists != null && classesFromLists.size > 0)
-          ? Array.from(classesFromLists)
-          : extractSpellClassesFallback(spell)
+      const mergedClasses = new Set()
+      if (classesFromSources?.size) for (const c of classesFromSources) mergedClasses.add(c)
+      if (classesFromLists?.size)   for (const c of classesFromLists)   mergedClasses.add(c)
+      const classes = mergedClasses.size > 0
+        ? Array.from(mergedClasses)
+        : extractSpellClassesFallback(spell)
 
       all.push({
         id: uid,
@@ -658,10 +674,42 @@ export async function loadSpellList(edition) {
     console.log(`[dataLoader] Total: ${all.length} spells | Wizard: ${wizardSpells.length} | Bard: ${bardSpells.length}`)
   }
 
-  return all.sort((a, b) => {
+  // 5.5e: collapse PHB/XPHB doublets into one entry per name, keeping
+  // the XPHB version (the 2024 rewrite the player actually reads). The
+  // helper merges every spell's `classes` lists so we don't lose
+  // class assignments declared on the legacy entry that aren't on
+  // the new one — important when the XPHB version doesn't ship with
+  // the spellListsMap fallback's classes attached yet.
+  const final = edition === '5.5e' ? deduplicateSpellsForEdition(all) : all
+  return final.sort((a, b) => {
     if (a.level !== b.level) return a.level - b.level
     return a.name.localeCompare(b.name)
   })
+}
+
+// Like deduplicateByName but spell-aware: merges `classes` from every
+// dropped duplicate into the surviving (preferred-source) entry, so a
+// PHB Aid that lists [Cleric, Paladin] doesn't lose those classes when
+// the XPHB Aid entry wins. Without the merge, a Cleric in 5.5e
+// preparing Aid would find it missing from the pool.
+function deduplicateSpellsForEdition(spells) {
+  const byName = new Map()
+  for (const s of spells) {
+    const k = s.name.toLowerCase()
+    const existing = byName.get(k)
+    if (!existing) { byName.set(k, s); continue }
+    const existingPrio = PREFERRED_55E_SOURCES.indexOf(existing.source)
+    const newPrio      = PREFERRED_55E_SOURCES.indexOf(s.source)
+    const winner = (newPrio !== -1 && (existingPrio === -1 || newPrio < existingPrio)) ? s : existing
+    const loser  = winner === s ? existing : s
+    // Merge classes (set union, preserve order).
+    const seenC = new Set(winner.classes || [])
+    const merged = [...(winner.classes || [])]
+    for (const c of (loser.classes || [])) if (!seenC.has(c)) { seenC.add(c); merged.push(c) }
+    winner.classes = merged
+    byName.set(k, winner)
+  }
+  return [...byName.values()]
 }
 
 // Fallback: extract classes from inline spell data
@@ -1049,21 +1097,41 @@ export function filterSpellsByNames(spells, nameSet) {
 
 export async function loadClassSpellNames(edition, classId) {
   // sources.json: { "PHB": { "Fireball": { "class": [{name:"Wizard",...}] } } }
-  const data = await fetchData(edition, 'spells/sources.json')
-  if (!data) {
-    console.warn('[dataLoader] spells/sources.json not found — run download script')
+  // spell-lists.json: { "Wizard": ["Fireball", "Magic Missile", …], … }
+  //
+  // The two are partially redundant but each carries spells the other
+  // doesn't — most importantly, 5.5e spell-lists.json declares the
+  // expanded Ranger / Paladin / etc. lists (incl. cantrips that
+  // sources.json never tagged for those classes). Union both so the
+  // class's spell picker doesn't silently drop entries that ARE on
+  // the official list.
+  const [sourcesData, listsData] = await Promise.all([
+    fetchData(edition, 'spells/sources.json'),
+    fetchData(edition, 'spell-lists.json'),
+  ])
+  if (!sourcesData && !listsData) {
+    console.warn('[dataLoader] no spell index found — run download script')
     return new Set()
   }
 
   const nameSet = new Set()
-  for (const sourceData of Object.values(data)) {
-    for (const [spellName, spellMeta] of Object.entries(sourceData)) {
-      const classes = spellMeta.class || []
-      const classVariants = spellMeta.classVariant || []
-      const allClasses = [...classes, ...classVariants]
-      if (allClasses.some(c => c.name?.toLowerCase() === classId.toLowerCase())) {
-        nameSet.add(spellName.toLowerCase())
+  const wantClass = classId.toLowerCase()
+
+  if (sourcesData) {
+    for (const sourceData of Object.values(sourcesData)) {
+      for (const [spellName, spellMeta] of Object.entries(sourceData)) {
+        const classes = spellMeta.class || []
+        const classVariants = spellMeta.classVariant || []
+        const allClasses = [...classes, ...classVariants]
+        if (allClasses.some(c => c.name?.toLowerCase() === wantClass)) {
+          nameSet.add(spellName.toLowerCase())
+        }
       }
+    }
+  }
+  if (listsData && Array.isArray(listsData[classId])) {
+    for (const name of listsData[classId]) {
+      if (typeof name === 'string') nameSet.add(name.toLowerCase())
     }
   }
 
