@@ -141,7 +141,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // Stored as transient __trait* hints on character.species —
     // queueSave strips both before persisting so they don't bloat the
     // Supabase row.
-    const { names: traitNames, traits: rawTraits } =
+    const { names: traitNames, traits: rawTraits, fixedSkills: raceFixedSkills } =
       await loadRaceTraits(edition, charData)
     // Collect active class + subclass feature entries (Fighting
     // Style picks, subclass abilities like Otherworldly Glamour,
@@ -157,10 +157,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // up by the regex scanner in collectCharacterSpells; this
     // covers the table-shaped grants.)
     const grantedSpells = collectClassGrantedSpells(charData, map, activeFeatures)
-    if (traitNames.length > 0 || activeFeatures.length > 0 || grantedSpells.length > 0) {
-      const speciesPatch = traitNames.length > 0
-        ? { __traitNames: traitNames, __traits: rawTraits }
-        : {}
+    if (traitNames.length > 0 || activeFeatures.length > 0 || grantedSpells.length > 0 || raceFixedSkills.length > 0) {
+      const speciesPatch = {}
+      if (traitNames.length > 0) {
+        speciesPatch.__traitNames = traitNames
+        speciesPatch.__traits = rawTraits
+      }
+      if (raceFixedSkills.length > 0) speciesPatch.__fixedSkills = raceFixedSkills
       setCharacter(prev => prev ? ({
         ...prev,
         species: { ...(prev.species || {}), ...speciesPatch },
@@ -485,10 +488,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // race→features map.
   async function loadRaceTraits(edition, charData) {
     const raceId = charData?.species?.raceId
-    if (!raceId) return { names: [], traits: [] }
+    if (!raceId) return { names: [], traits: [], fixedSkills: [] }
     const races = await loadRaceList(edition).catch(() => [])
     const race = races.find(r => r.id === raceId || r.name === raceId)
-    if (!race) return { names: [], traits: [] }
+    if (!race) return { names: [], traits: [], fixedSkills: [] }
     const sub = (race.subraces || []).find(s =>
       s.id === charData.species.subraceId || s.name === charData.species.subraceId
     )
@@ -500,7 +503,25 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       names.push(String(e.name))
       traits.push({ name: String(e.name), entries: Array.isArray(e.entries) ? e.entries : [] })
     }
-    return { names, traits }
+    // Fixed skill proficiencies from race + subrace data — e.g. 5e Elf
+    // Keen Senses is `[{"perception": true}]` in races.json. Choice
+    // blocks (`{"choose": {...}}`) are handled by the wizard via
+    // species.traitChoices.skills; this only collects the always-on
+    // grants the rules engine was previously ignoring.
+    const fixedSkills = []
+    const skillBlocks = [
+      ...(race.skillProficiencies || []),
+      ...(sub?.skillProficiencies || []),
+    ]
+    for (const block of skillBlocks) {
+      if (!block || typeof block !== 'object') continue
+      // Skip choice-style entries — those are user picks.
+      if (block.choose || typeof block.any === 'number') continue
+      for (const [k, v] of Object.entries(block)) {
+        if (v === true && k !== 'choose' && k !== 'any') fixedSkills.push(k)
+      }
+    }
+    return { names, traits, fixedSkills }
   }
 
   async function loadCharacter() {
@@ -598,8 +619,8 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       const sp = data?.species || {}
       const stripped = { ...data }
       let touched = false
-      if (sp.__traitNames || sp.__traits) {
-        const { __traitNames, __traits, ...restSpecies } = sp
+      if (sp.__traitNames || sp.__traits || sp.__fixedSkills) {
+        const { __traitNames, __traits, __fixedSkills, ...restSpecies } = sp
         stripped.species = restSpecies
         touched = true
       }

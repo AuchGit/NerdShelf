@@ -269,6 +269,20 @@ export function computeProficiencies(character, classDataMap = {}) {
   for (const lang of (character.species?.extraLanguages || [])) {
     if (!result.languages.includes(lang)) result.languages.push(lang)
   }
+  // Fixed race skill proficiencies (5e Elf Keen Senses = Perception,
+  // Half-Orc Menacing = Intimidation, etc.). Hydrated onto
+  // `species.__fixedSkills` by CharacterSheetPage.loadRaceTraits so the
+  // rules engine doesn't need to re-fetch race data.
+  for (const skill of (character.species?.__fixedSkills || [])) {
+    const key = normalizeSkill(skill)
+    if (!result.skills[key]) result.skills[key] = 'proficient'
+  }
+  // Choice-style race skill proficiencies (5.5e Elf "Insight, Perception,
+  // or Survival" — Step3Race writes the pick to `traitChoices.skills`).
+  for (const skill of (character.species?.traitChoices?.skills || [])) {
+    const key = normalizeSkill(skill)
+    if (!result.skills[key]) result.skills[key] = 'proficient'
+  }
   // Sprachen aus languageProficiencies (werden aus Background-Daten befüllt)
   for (const lang of (character.background?.languageProficiencies || [])) {
     if (typeof lang === 'string' && !result.languages.includes(lang)) {

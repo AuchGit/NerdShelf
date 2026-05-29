@@ -1477,7 +1477,7 @@ function makeClassItem(cls, character) {
     || CLASS_SAVES[cls.classId]
     || []
   const saveGrants = rawSaves.map(s => `saves:${s.toLowerCase()}`).filter(Boolean)
-  const isPrimaryClass = character.classes?.[0]?.classId === cls.classId
+  // isPrimaryClass already computed earlier (HP advancement gate).
 
   // ── Skill Advancement (aus character.choices) ─────────
   // Unified choice keys: "class:{classId}:level1:skill:{n}" → Wert
@@ -2341,7 +2341,7 @@ function makeInventoryItem(item, edition) {
   }
 
   // ── Allgemeine Ausrüstung / Loot ───────────────────
-  const typeCode     = (item.type || '').split('|')[0]
+  // typeCode already computed at the top of makeInventoryItem.
   const isConsumable = ['P', 'SC', 'OTH'].includes(typeCode)
   const foundryType  = isConsumable ? 'consumable' : 'loot'
   const subTypeVal   = typeCode === 'P'  ? 'potion'

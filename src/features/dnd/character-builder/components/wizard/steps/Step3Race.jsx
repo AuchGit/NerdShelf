@@ -324,6 +324,19 @@ export default function Step3Race({ character, updateCharacter }) {
     updateCharacter('species.spellChoices',   fixed)
     updateCharacter('species.expandedSpells', expanded)
     updateCharacter('species.traitChoices', { skills: [] })
+    // Fixed (non-choice) skill proficiencies the race grants — 5e Elf
+    // Keen Senses, Half-Orc Menacing, etc. The sheet re-derives this
+    // on load (loadRaceTraits) but we also write it here so the wizard
+    // preview and creation-time computeProficiencies pick it up.
+    const raceFixed = []
+    for (const block of (race.skillProficiencies || [])) {
+      if (!block || typeof block !== 'object') continue
+      if (block.choose || typeof block.any === 'number') continue
+      for (const [k, v] of Object.entries(block)) {
+        if (v === true && k !== 'choose' && k !== 'any') raceFixed.push(k)
+      }
+    }
+    updateCharacter('species.__fixedSkills', raceFixed)
     // Legacy extraProficiencies.skills no longer used — character.choices is single source
     updateCharacter('species.raceChoices', {
       race:    { abilityScore: null, entryIdx: null, spells: [], feats: [], variantOptions: [] },
@@ -380,6 +393,16 @@ export default function Step3Race({ character, updateCharacter }) {
     updateCharacter('species.spellChoices',   [...allFixed, ...prevChosen])
     updateCharacter('species.expandedSpells', allExpanded)
     updateCharacter('species.traitChoices', { skills: [] })
+    // Re-derive fixed skill profs against race + subrace combined.
+    const fixedSkills = []
+    for (const block of [...(selectedRace?.skillProficiencies || []), ...(sub?.skillProficiencies || [])]) {
+      if (!block || typeof block !== 'object') continue
+      if (block.choose || typeof block.any === 'number') continue
+      for (const [k, v] of Object.entries(block)) {
+        if (v === true && k !== 'choose' && k !== 'any' && !fixedSkills.includes(k)) fixedSkills.push(k)
+      }
+    }
+    updateCharacter('species.__fixedSkills', fixedSkills)
     // Legacy extraProficiencies.skills no longer used — character.choices is single source
     const prevChoices = character.species.raceChoices || {}
     updateCharacter('species.raceChoices', {
