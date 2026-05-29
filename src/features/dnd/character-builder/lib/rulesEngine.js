@@ -377,11 +377,11 @@ export function computeProficiencies(character, classDataMap = {}) {
 
   // ── Subclass-feature choices (player-picked skill / save) ──
   // For features like Fey Wanderer's Otherworldly Glamour, Gloom
-  // Stalker's Iron Mind, Cleric/Fighter/Paladin Persuasion-or-X
-  // grants, etc. The chosen skill is stored as
-  // `cls.featureChoices[featureKey] = abilityKey` by the picker on
-  // the sheet. We apply it here so the standard prof badges +
-  // skill totals reflect the player's pick.
+  // Stalker's Iron Mind, Bard/Rogue Expertise, Cleric/Fighter/
+  // Paladin Persuasion-or-X grants, etc. The chosen skill (or list
+  // of skills) is stored as `cls.featureChoices[featureKey]` by the
+  // picker on the sheet. Applied here so the standard prof badges
+  // + skill totals reflect the player's pick.
   for (const cls of (character.classes || [])) {
     const choices = cls.featureChoices || {}
     for (const [, picked] of Object.entries(choices)) {
@@ -393,6 +393,14 @@ export function computeProficiencies(character, classDataMap = {}) {
         const k = String(picked.value).toLowerCase()
         if (['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(k)) {
           result.savingThrows[k] = true
+        }
+      } else if (picked.type === 'expertise' && Array.isArray(picked.value)) {
+        // Expertise can only be granted on skills the character is
+        // already proficient in — guard so a stale pick doesn't
+        // accidentally upgrade an unrelated skill.
+        for (const skill of picked.value) {
+          const k = normalizeSkill(skill)
+          if (result.skills[k] === 'proficient') result.skills[k] = 'expertise'
         }
       }
     }

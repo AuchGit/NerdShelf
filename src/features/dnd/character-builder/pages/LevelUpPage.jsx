@@ -1250,7 +1250,24 @@ function SubclassCard({ sub, sel, onSel }) {
           <td style={{...tS.td,color:'var(--text-primary)',fontWeight:'bold',whiteSpace:'nowrap'}}>{feat.name}</td>
           <td style={tS.td}><FE entries={feat.entries} /></td></tr>)))}</tbody></table>}</div>)
 }
-function FE({entries}){for(const e of(entries||[])){if(typeof e==='string'&&e.length>5){const t=parseTags(e);return<span style={{color:'var(--text-muted)',fontSize:12}}>{t.slice(0,160)}{t.length>160?'…':''}</span>};if(e?.entries)return<FE entries={e.entries} />};return<span style={{color:'var(--text-dim)'}}>—</span>}
+// Skip "<ordinal>-level <X> feature" header lines (TCE-era pattern)
+// so subclass-feature summaries show the real description text, not
+// the level-tag echo.
+function FE({entries}){
+  for(const e of(entries||[])){
+    if(typeof e==='string'&&e.length>5){
+      const t=parseTags(e).trim()
+      if(/^\d+(?:st|nd|rd|th)-level\s+.+\s+feature\.?$/i.test(t)) continue
+      return<span style={{color:'var(--text-muted)',fontSize:12}}>{t.slice(0,160)}{t.length>160?'…':''}</span>
+    }
+    if(e?.entries){
+      const child=<FE entries={e.entries} />
+      // Only descend if the child actually produced content.
+      if(child) return child
+    }
+  }
+  return<span style={{color:'var(--text-dim)'}}>—</span>
+}
 
 // ═══════ STYLES ══════════════════════════════════════════════════════════════
 const tS={th:{background:'var(--bg-elevated)',color:'var(--accent)',padding:'6px 10px',textAlign:'left',fontSize:11},td:{color:'var(--text-secondary)',padding:'5px 10px',fontSize:12}}

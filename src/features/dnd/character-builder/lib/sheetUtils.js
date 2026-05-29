@@ -120,6 +120,23 @@ export function collectCharacterSpells(character) {
     for (const s of (cls.preparedSpells || [])) add(s, 'class', cls.classId)
   }
 
+  // Class/subclass features whose text declares an automatic spell
+  // grant ("you always have the Hunter's Mark spell prepared",
+  // "you always have Bane prepared", etc.). Pulled dynamically from
+  // each active feature's `entries` so 5.5e Ranger Favored Enemy
+  // grants Hunter's Mark, Twilight Cleric grants Faerie Fire, …
+  // without naming any feature in code. The grants count as
+  // `granted: true` so the picker treats them as always castable.
+  for (const f of (character?.__activeFeatures || [])) {
+    if (!f?.entries) continue
+    const raw = (f.entries || []).map(e => typeof e === 'string' ? e : '').join(' ')
+    const grants = raw.matchAll(/you\s+(?:always\s+have|gain)\s+(?:the\s+)?\{@spell\s+([^|}]+)(?:\|[^}]*)?\}[^.]*?(?:spell\s+prepared|prepared)/gi)
+    for (const m of grants) {
+      const name = String(m[1] || '').trim()
+      if (name) add(name, 'class', f.classId || null, true)
+    }
+  }
+
   for (const s of (character.species?.raceSpells || []))    add(s, 'race', null)
   for (const s of (character.species?.subraceSpells || [])) add(s, 'race', null)
   for (const s of (character.species?.spellChoices || []))  add(s, 'race', null)

@@ -5,7 +5,7 @@
 // Class details and level history are tucked away because they don't
 // change during a session.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
 import { modStr, masteryShortDesc } from '../../lib/sheetUtils'
@@ -316,6 +316,10 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             value={economy}
             onChange={(next) => updateCharacter('status.economy', next)}
           />
+          {/* Collapsible explorer: 3 tabs (Action / Bonus / Reaction)
+              listing every attack, prepared spell, and class-feature
+              action available, grouped by action economy slot. */}
+          <CombatActionsExplorer character={character} computed={computed} />
         </Section>
         <Section title="Konzentration">
           <ConcentrationTracker
@@ -703,35 +707,291 @@ const wmpStyle = {
   hint: { fontSize: 10, color: 'var(--text-dim)', marginTop: 4 },
 }
 
-function DamageResistancePills({ character }) {
-  const m = getMechanicalEffects(character)
-  const has = m.damageResistance.size + m.damageImmunity.size + m.damageVulnerability.size > 0
-  if (!has) return null
-  const renderGroup = (set, label, color) => {
-    if (set.size === 0) return null
-    return (
-      <div style={drGroup} title={`${label} gegen: ${[...set].join(', ')}`}>
-        <span style={{ ...drLabel, color }}>{label}</span>
-        {[...set].map(t => (
-          <span key={t} style={{ ...drPill, borderColor: color, color }}>{t}</span>
-        ))}
-      </div>
-    )
-  }
+// ── Combat-actions explorer ──────────────────────────────────────
+// Collapsible 3-tab table (Action / Bonus / Reaction) listing every
+// option the character has for that slot:
+//   • Weapon / unarmed / class-feature attacks from computed.attacks
+//   • Prepared / always-known spells whose castingTime matches the tab
+//   • Class features whose entry text mentions "as a bonus action" /
+//     "as a reaction" / "as an action"
+// Each row collapses to a one-line summary (damage / mod / range);
+// click to expand for the full description.
+function CombatActionsExplorer({ character, computed }) {
+  const [open, setOpen] = useState(false)
+  const [tab, setTab]   = useState('action')
+  const [expanded, setExpanded] = useState(null)
+
+  const buckets = useMemo(() => {
+    const b = { action: [], bonusAction: [], reaction: [] }
+
+    // Attacks: TWF / Psychic Blades bonus rows are tagged
+    // `Bonus Action`; everything else defaults to Action.
+    for (const atk of (computed?.attacks || [])) {
+      const isBonus = (atk.properties || []).some(p => /bonus\s*action/i.test(String(p)))
+      const slot = isBonus ? 'bonusAction' : 'action'
+      b[slot].push({
+        id: `atk-${atk.id || atk.name}`,
+        name: atk.name,
+        damage: atk.damage,
+        attack: atk.attackDisplay,
+        range: atk.range,
+        target: '1 Ziel',
+        kind: 'attack',
+        notes: [
+          atk.markedAs && `${atk.markedAs.label}: ${atk.markedAs.note}`,
+          atk.mastery?.length > 0 && `Mastery: ${atk.mastery.join(', ')}`,
+        ].filter(Boolean).join(' • '),
+      })
+    }
+
+    // Spells: pull from computed.spellcasting list if present —
+    // currently each cls stores level-up known/prepared lists. We
+    // walk character.classes for spells the player has access to.
+    const knownSpellNames = new Set()
+    for (const cls of (character?.classes || [])) {
+      for (const lc of Object.values(cls.levelChoices || {})) {
+        for (const n of (lc.cantrips || []))       knownSpellNames.add(n)
+        for (const n of (lc.startingSpells || [])) knownSpellNames.add(n)
+        for (const n of (lc.knownSpells || []))    knownSpellNames.add(n)
+      }
+    }
+    for (const [, names] of Object.entries(character?.status?.preparedSpells || {})) {
+      for (const n of (names || [])) knownSpellNames.add(n)
+    }
+    // Surface spells we have metadata for. Cast time is text:
+    // "1 action" / "1 bonus action" / "1 reaction" / "10 minutes" etc.
+    const meta = character?.spellMetadata || {}
+    for (const name of knownSpellNames) {
+      const m = meta[name]
+      if (!m) continue
+      const ct = String(m.castingTime || '').toLowerCase()
+      let slot = null
+      if (/bonus\s*action/.test(ct)) slot = 'bonusAction'
+      else if (/reaction/.test(ct))  slot = 'reaction'
+      else if (/action/.test(ct))    slot = 'action'
+      if (!slot) continue
+      b[slot].push({
+        id: `spell-${name}`,
+        name,
+        damage: '—',
+        attack: m.spellAttack ? '' : '',
+        range: m.range || '—',
+        target: '—',
+        kind: 'spell',
+        notes: [
+          m.school && `${m.school}`,
+          m.duration && `Dauer: ${m.duration}`,
+          m.concentration && 'Konz.',
+          m.ritual && 'Ritual',
+        ].filter(Boolean).join(' • '),
+      })
+    }
+
+    // Class/subclass features whose entry text declares an action
+    // economy ("as a bonus action you can …", "as a reaction…").
+    for (const f of (character?.__activeFeatures || [])) {
+      const raw = (f.entries || []).map(e => typeof e === 'string' ? e : '').join(' ').toLowerCase()
+      let slot = null
+      if (/as\s+a\s+bonus\s*action/.test(raw))      slot = 'bonusAction'
+      else if (/as\s+a\s+reaction/.test(raw))       slot = 'reaction'
+      else if (/as\s+an?\s+action/.test(raw))       slot = 'action'
+      if (!slot) continue
+      const firstString = (f.entries || []).find(e =>
+        typeof e === 'string'
+        && !/^\{?@?i?\s*\d+(?:st|nd|rd|th)-level/i.test(e)
+        && e.length > 8
+      )
+      b[slot].push({
+        id: `feat-${f.classId}-${f.name}-${f.level}`,
+        name: f.name,
+        damage: '—', attack: '', range: '—', target: '—',
+        kind: 'feature',
+        notes: firstString ? String(firstString).slice(0, 160).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
+      })
+    }
+    return b
+  }, [character, computed])
+
+  const total = buckets.action.length + buckets.bonusAction.length + buckets.reaction.length
+  if (total === 0) return null
+
+  const tabs = [
+    { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
+    { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
+    { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
+  ]
+  const rows = buckets[tab] || []
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
-      {renderGroup(m.damageResistance,    'Resistenz',    'var(--accent-green)')}
-      {renderGroup(m.damageImmunity,      'Immunität',    'var(--accent-blue)')}
-      {renderGroup(m.damageVulnerability, 'Verwundbarkeit', 'var(--accent-red)')}
+    <div style={{ marginTop: 10 }}>
+      <button type="button" onClick={() => setOpen(o => !o)} style={caeToggle}>
+        {open ? '▼' : '▶'} Verfügbare Aktionen ({total})
+      </button>
+      {open && (
+        <div style={caeBody}>
+          <div style={caeTabs}>
+            {tabs.map(t => {
+              const sel = tab === t.id
+              const n = buckets[t.id].length
+              return (
+                <button key={t.id} type="button" onClick={() => setTab(t.id)}
+                  style={{
+                    ...caeTab,
+                    borderColor: sel ? t.color : 'var(--border)',
+                    color: sel ? t.color : 'var(--text-muted)',
+                    background: sel ? 'color-mix(in srgb, var(--bg-elevated) 70%, transparent)' : 'transparent',
+                  }}>
+                  {t.label} <span style={caeTabCount}>{n}</span>
+                </button>
+              )
+            })}
+          </div>
+          {rows.length === 0 ? (
+            <div style={caeEmpty}>Nichts in dieser Kategorie.</div>
+          ) : (
+            <div style={caeList}>
+              {rows.map(r => (
+                <div key={r.id} style={caeRow}>
+                  <div style={caeRowHead} onClick={() => setExpanded(e => e === r.id ? null : r.id)}>
+                    <div style={caeRowName}>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 10, marginRight: 6 }}>
+                        {expanded === r.id ? '▼' : '▶'}
+                      </span>
+                      {r.name}
+                    </div>
+                    <div style={caeRowMeta}>
+                      {r.attack && <span style={caeMetaPart} title="Attack-Bonus">{r.attack}</span>}
+                      {r.damage && r.damage !== '—' && <span style={{ ...caeMetaPart, color: 'var(--accent-red)' }}>{r.damage}</span>}
+                      {r.range && <span style={caeMetaPart}>{r.range}</span>}
+                    </div>
+                  </div>
+                  {expanded === r.id && r.notes && (
+                    <div style={caeRowBody}>{r.notes}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
-const drGroup = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }
-const drLabel = { fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }
+const caeToggle = {
+  cursor: 'pointer', background: 'transparent',
+  border: '1px solid var(--border-subtle)', borderRadius: 6,
+  padding: '4px 10px', fontSize: 11, color: 'var(--text-secondary)',
+  fontFamily: 'inherit',
+}
+const caeBody = { marginTop: 8 }
+const caeTabs = { display: 'flex', gap: 6, marginBottom: 8 }
+const caeTab = {
+  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+  border: '1px solid', cursor: 'pointer', fontFamily: 'inherit',
+}
+const caeTabCount = { color: 'var(--text-dim)', fontWeight: 'normal', marginLeft: 6 }
+const caeEmpty = { color: 'var(--text-dim)', fontSize: 11, fontStyle: 'italic', padding: 4 }
+const caeList = { display: 'flex', flexDirection: 'column', gap: 4 }
+const caeRow = {
+  background: 'var(--bg-inset)', borderRadius: 6,
+  border: '1px solid var(--border-subtle)',
+}
+const caeRowHead = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  padding: '5px 8px', cursor: 'pointer', gap: 8,
+}
+const caeRowName = { color: 'var(--text-primary)', fontWeight: 600, fontSize: 12 }
+const caeRowMeta = { display: 'flex', gap: 8, color: 'var(--text-secondary)', fontSize: 11 }
+const caeMetaPart = { color: 'var(--text-muted)' }
+const caeRowBody = {
+  padding: '6px 10px 8px 22px',
+  fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5,
+  borderTop: '1px solid var(--border-subtle)',
+}
+
+// ── Damage Res / Immunity / Vulnerability pills ────────────────────
+// Each damage type is a coloured pill (necrotic = green, fire =
+// orange, …) so the player can spot at a glance which slot is light
+// on what. Two columns: RES (resistance + immunity collapsed into
+// one column because immunity is just "stronger resistance") and
+// VUL (vulnerability). Hidden entirely when nothing applies.
+const DMG_TYPE_COLOR = {
+  acid:        '#7dd87d',
+  bludgeoning: '#a8a8a8',
+  cold:        '#7fc4f7',
+  fire:        '#ff7a45',
+  force:       '#d97aff',
+  lightning:   '#ffd54a',
+  necrotic:    '#5fa86b',
+  piercing:    '#c0c0c0',
+  poison:      '#82c95a',
+  psychic:     '#ff7ed1',
+  radiant:     '#ffe27a',
+  slashing:    '#bfa07a',
+  thunder:     '#7fa8ff',
+}
+const colorFor = (t) => DMG_TYPE_COLOR[String(t).toLowerCase()] || 'var(--text-secondary)'
+
+function DamageResistancePills({ character }) {
+  const m = getMechanicalEffects(character)
+  // Immunity is a stronger resistance — display in the same column,
+  // pill carries an "immune" tooltip so the rule difference isn't
+  // lost. Vulnerability stays its own column.
+  const resSet = new Set([...m.damageResistance, ...m.damageImmunity])
+  const vulSet = m.damageVulnerability
+  if (resSet.size === 0 && vulSet.size === 0) return null
+
+  const renderPills = (set, label, isImmune) => (
+    <div style={drCol}>
+      <div style={drColLabel}>{label}</div>
+      <div style={drPillRow}>
+        {[...set].map(t => {
+          const tn = String(t).toLowerCase()
+          const immune = isImmune && m.damageImmunity.has(tn)
+          const c = colorFor(t)
+          return (
+            <span key={t}
+              title={immune ? `Immun gegen ${t}` : `Resistenz gegen ${t}`}
+              style={{
+                ...drPill,
+                borderColor: c, color: c,
+                background: `color-mix(in srgb, ${c} 15%, transparent)`,
+                fontWeight: immune ? 700 : 600,
+                // Immunity gets a small ⛒ glyph prefix so the player
+                // can tell which entries are immunity vs resistance.
+              }}>
+              {immune ? '★ ' : ''}{t}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={drWrap}>
+      {resSet.size > 0 && renderPills(resSet, 'Resistance', true)}
+      {vulSet.size > 0 && renderPills(vulSet, 'Vulnerability', false)}
+    </div>
+  )
+}
+const drWrap = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+  gap: 8, marginTop: 8,
+}
+const drCol = {
+  background: 'var(--bg-inset)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 6, padding: '4px 6px 6px',
+}
+const drColLabel = {
+  fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+  letterSpacing: 0.5, color: 'var(--text-muted)', marginBottom: 4,
+}
+const drPillRow = { display: 'flex', gap: 4, flexWrap: 'wrap' }
 const drPill = {
-  padding: '1px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+  padding: '1px 7px', borderRadius: 999, fontSize: 10,
   border: '1px solid', textTransform: 'capitalize',
-  background: 'transparent',
 }
 
 // ── Combat-stat tile (AC, Initiative, Speed, Prof Bonus) ──────────

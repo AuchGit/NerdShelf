@@ -266,6 +266,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // on the sheet without per-feature hardcoding in the catalog.
   function collectActiveClassFeatures(charData, classDataMap) {
     const out = []
+    const seen = new Set() // dedup "classId|name|level"
+    const push = (entry) => {
+      const key = `${entry.classId}|${entry.name}|${entry.level}`
+      if (seen.has(key)) return
+      seen.add(key)
+      out.push(entry)
+    }
     for (const cls of (charData?.classes || [])) {
       const cd = classDataMap[cls.classId]
       if (!cd) continue
@@ -275,19 +282,35 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         const lvl = f.level || 1
         if (lvl > cls.level) continue
         if (f.isClassFeatureVariant) continue
-        out.push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] })
+        push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] })
       }
-      // Subclass features filtered to the chosen subclass.
+      // Subclass features. loadClassData returns the subclass as
+      // `{features: [...flat...]}`; loadClassList builds
+      // `{featuresPerLevel: {3: [...], 7: [...]}}`. Walk both shapes
+      // so a subclass loaded via either path is covered. Without
+      // this, Otherworldly Glamour's "WIS-on-CHA" effect (and every
+      // other subclass-feature mechanic) never reached the scanner.
       const subId = cls.subclassId
       if (!subId) continue
       const sub = (cd.subclasses || []).find(s => s.id === subId || s.name === subId)
-      if (!sub?.featuresPerLevel) continue
-      for (const [lvlStr, feats] of Object.entries(sub.featuresPerLevel)) {
-        const lvl = parseInt(lvlStr, 10)
-        if (!Number.isFinite(lvl) || lvl > cls.level) continue
-        for (const f of (feats || [])) {
+      if (!sub) continue
+      if (Array.isArray(sub.features)) {
+        for (const f of sub.features) {
           if (!f?.name) continue
-          out.push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+          const lvl = f.level || 1
+          if (lvl > cls.level) continue
+          if (f.isClassFeatureVariant) continue
+          push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+        }
+      }
+      if (sub.featuresPerLevel) {
+        for (const [lvlStr, feats] of Object.entries(sub.featuresPerLevel)) {
+          const lvl = parseInt(lvlStr, 10)
+          if (!Number.isFinite(lvl) || lvl > cls.level) continue
+          for (const f of (feats || [])) {
+            if (!f?.name) continue
+            push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+          }
         }
       }
     }

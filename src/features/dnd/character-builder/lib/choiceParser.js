@@ -1150,7 +1150,12 @@ export function parseFeatureChoices(feature) {
   const raw = flattenFeatureText(feature.entries)
   const low = raw.toLowerCase()
   const out = []
-  const featureKey = feature.name
+  // Use name+level as the choice id so the same-named feature at
+  // different levels (Bard Expertise L3 + L10, Rogue Expertise L1 +
+  // L6, Cleric Divine Intervention upgrade, …) doesn't collide on a
+  // single stored slot.
+  const lvlSuffix = feature.level != null ? `__l${feature.level}` : ''
+  const featureKey = feature.name + lvlSuffix
 
   // ── Skill proficiency choice ──
   // Look for {@skill X} tags inside the prose. The choice phrase is
@@ -1172,6 +1177,25 @@ export function parseFeatureChoices(feature) {
         options: opts,
       })
     }
+  }
+
+  // ── Expertise choice ("Choose N of your skill proficiencies") ──
+  // Bard L3 / L10, Rogue L1 / L6, Lore Bard, etc. The options aren't
+  // listed in the text — they depend on what the character is
+  // currently proficient in — so we return a special `type:
+  // 'expertise'` descriptor and let the picker pull the live skill
+  // list from the character's computed proficiencies at render time.
+  if (/choose\s+(another\s+)?(one|two|three|four|\d+)\s+(?:of\s+your\s+)?skill\s+proficiencies?/i.test(low)) {
+    const NUM = { one: 1, two: 2, three: 3, four: 4 }
+    const m = low.match(/choose\s+(?:another\s+)?(one|two|three|four|\d+)\s+(?:of\s+your\s+)?skill\s+proficiencies?/i)
+    const count = m ? (NUM[m[1].toLowerCase()] ?? parseInt(m[1], 10)) : 2
+    out.push({
+      id: `${featureKey}__expertise`,
+      type: 'expertise',
+      label: `${featureKey} — Expertise wählen (${count})`,
+      count,
+      options: [], // resolved by the picker from character's skills
+    })
   }
 
   // ── Saving-throw choice (Iron Mind pattern) ──

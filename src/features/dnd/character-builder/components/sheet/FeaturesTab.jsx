@@ -47,6 +47,37 @@ export default function FeaturesTab({ character, updateCharacter }) {
   // player hasn't decided yet. The picker writes to
   // `cls.featureChoices[featureName]` which computeProficiencies
   // applies on the next compute pass.
+  //
+  // Expertise pickers have dynamic options (the character's current
+  // skill proficiencies) so we resolve them here against the current
+  // skill set; everything else uses the static `options` list the
+  // parser returned.
+  const proficientSkillsByClass = useMemo(() => {
+    // We don't have computed here, so derive from the proficiency
+    // tags on character.classes / background / race the same way the
+    // engine would aggregate. Keep this scoped to anything the parent
+    // already knows about: chosen class skills, expertise picks
+    // already made, background skills, and the catch-all per-feature
+    // choices.
+    const set = new Set()
+    for (const s of (character.background?.skillProficiencies || [])) set.add(s)
+    for (const cls of (character.classes || [])) {
+      for (const lc of Object.values(cls.levelChoices || {})) {
+        for (const s of (lc.skillProficiencies || [])) set.add(s)
+      }
+    }
+    for (const [k, v] of Object.entries(character.choices || {})) {
+      if (!k.includes(':skill:')) continue
+      const arr = Array.isArray(v) ? v : [v]
+      for (const s of arr) if (s) set.add(s)
+    }
+    return [...set]
+  }, [character])
+
+  // Resolved-state map keyed by the choice descriptor's id so the
+  // same-named feature at different class levels (Bard Expertise
+  // L3 + L10, Rogue Expertise L1 + L6) doesn't share a slot. Storage
+  // path on the character is `cls.featureChoices[choice.id]`.
   const unresolvedChoices = useMemo(() => {
     const list = []
     const features = character?.__activeFeatures || []
@@ -56,22 +87,39 @@ export default function FeaturesTab({ character, updateCharacter }) {
       const cls = (character.classes || []).find(c => c.classId === f.classId)
       const stored = cls?.featureChoices || {}
       for (const ch of choices) {
-        const current = stored[f.name]
-        if (current && current.id === ch.id) continue
-        list.push({ classId: f.classId, featureName: f.name, choice: ch, current: current || null })
+        const current = stored[ch.id]
+        if (ch.type === 'expertise') {
+          if (current?.id === ch.id && Array.isArray(current.value)
+              && current.value.length >= ch.count) continue
+        } else {
+          if (current?.id === ch.id && current.value != null) continue
+        }
+        list.push({ classId: f.classId, featureName: f.name, level: f.level, choice: ch, current: current || null })
       }
     }
     return list
   }, [character])
 
-  function setFeatureChoice(classId, featureName, choiceDescriptor, value) {
+  function setFeatureChoice(classId, choiceDescriptor, value) {
     const idx = (character.classes || []).findIndex(c => c.classId === classId)
     if (idx < 0) return
-    updateCharacter(`classes.${idx}.featureChoices.${featureName}`, {
+    updateCharacter(`classes.${idx}.featureChoices.${choiceDescriptor.id}`, {
       id: choiceDescriptor.id,
       type: choiceDescriptor.type,
       value,
     })
+  }
+
+  function toggleExpertise(classId, choiceDescriptor, skill, currentArr) {
+    const cur = Array.isArray(currentArr) ? [...currentArr] : []
+    const has = cur.includes(skill)
+    if (has) {
+      const next = cur.filter(s => s !== skill)
+      setFeatureChoice(classId, choiceDescriptor, next)
+      return
+    }
+    if (cur.length >= choiceDescriptor.count) return
+    setFeatureChoice(classId, choiceDescriptor, [...cur, skill])
   }
 
   useEffect(() => {
@@ -103,34 +151,72 @@ export default function FeaturesTab({ character, updateCharacter }) {
           back through level-up. */}
       {updateCharacter && unresolvedChoices.length > 0 && (
         <Section title="Offene Entscheidungen">
-          {unresolvedChoices.map(({ classId, featureName, choice, current }) => (
-            <div key={`${classId}-${featureName}-${choice.id}`} style={S.featureCard}>
+          {unresolvedChoices.map(({ classId, featureName, level, choice, current }) => (
+            <div key={`${classId}-${choice.id}`} style={S.featureCard}>
               <div style={S.featureCardHeader}>
-                <div style={S.featureCardName}>{featureName}</div>
+                <div style={S.featureCardName}>
+                  {featureName}{level ? ` (Lv ${level})` : ''}
+                </div>
                 <div style={S.featureCardSource}>{classId}</div>
               </div>
               <div style={S.featureCardBody}>
                 <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 6 }}>
                   {choice.label}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {choice.options.map(opt => {
-                    const isSel = current?.value === opt.value
-                    return (
-                      <button key={opt.value} type="button"
-                        onClick={() => setFeatureChoice(classId, featureName, choice, opt.value)}
-                        style={{
-                          padding: '4px 10px', borderRadius: 999, fontSize: 12,
-                          cursor: 'pointer', fontFamily: 'inherit',
-                          background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
-                          border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
-                          color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
-                        }}>
-                        {isSel && '✓ '}{opt.label}
-                      </button>
-                    )
-                  })}
-                </div>
+                {choice.type === 'expertise' ? (
+                  // Expertise picker: options come from the character's
+                  // currently-proficient skills (you can only Expert
+                  // something you're already Proficient in). Multi-
+                  // select up to `choice.count`. Empty list → show a
+                  // hint so the player knows why nothing's clickable.
+                  proficientSkillsByClass.length === 0 ? (
+                    <div style={{ color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
+                      Keine Skill-Proficiencies gefunden — wähle erst Klassen-Skills.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {proficientSkillsByClass.map(skill => {
+                        const curArr = Array.isArray(current?.value) ? current.value : []
+                        const isSel = curArr.includes(skill)
+                        const atCap = !isSel && curArr.length >= choice.count
+                        return (
+                          <button key={skill} type="button"
+                            disabled={atCap}
+                            onClick={() => toggleExpertise(classId, choice, skill, curArr)}
+                            style={{
+                              padding: '4px 10px', borderRadius: 999, fontSize: 12,
+                              cursor: atCap ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                              opacity: atCap ? 0.4 : 1,
+                              background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+                              border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                              color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
+                            }}>
+                            {isSel && '✓ '}{formatSkillName(skill)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {choice.options.map(opt => {
+                      const isSel = current?.value === opt.value
+                      return (
+                        <button key={opt.value} type="button"
+                          onClick={() => setFeatureChoice(classId, choice, opt.value)}
+                          style={{
+                            padding: '4px 10px', borderRadius: 999, fontSize: 12,
+                            cursor: 'pointer', fontFamily: 'inherit',
+                            background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+                            border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+                            color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
+                          }}>
+                          {isSel && '✓ '}{opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           ))}
