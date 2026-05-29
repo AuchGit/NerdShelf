@@ -19,6 +19,7 @@ import {
 } from './rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from './characterModel'
 import { parseTags } from './tagParser'
+import { getMechanicalEffects } from './featureEffects'
 // JSON-Daten aus dem public/-Ordner werden zur Laufzeit per fetch() geladen.
 // Vite erlaubt keine statischen imports aus public/ — fetch() ist der korrekte Weg.
 let CLASS_INDEX = null
@@ -1145,7 +1146,7 @@ function buildDefaultSpellActivity(live, levelNum, baseActivity) {
   return { ...baseActivity, type: 'utility', roll: { prompt: false, visible: false } }
 }
 
-function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
+function makeSpellItem(name, rawLevel, prepMode, sourceClass, character, opts = {}) {
   const edition    = character.meta?.edition || '5e'
   const charMeta   = (character.spellMetadata || {})[name] || {}
 
@@ -1283,7 +1284,16 @@ function makeSpellItem(name, rawLevel, prepMode, sourceClass, character) {
     materials:    { value: matText, consumed: matConsumed, cost: matCost, supply: 0 },
     preparation:  {
       mode:     isPact ? 'pact' : isInnate ? 'innate' : isAlways ? 'always' : 'prepared',
-      prepared: !isInnate,
+      // For mode="prepared" the caller can opt the spell IN or OUT of
+      // the prepared list (5.5e Ranger/Paladin export every spell on
+      // their class list, but only the player's current picks are
+      // `prepared: true`). Innate/always/pact ignore the opt and
+      // stay always-castable; cantrips (level 0) are always prepared.
+      prepared: isInnate ? false
+        : isPact ? true
+        : isAlways ? true
+        : levelNum === 0 ? true
+        : (opts.prepared != null ? !!opts.prepared : true),
     },
     properties,
     range:        sanitizeRange(range),
@@ -2249,15 +2259,40 @@ export async function exportToFoundry(character) {
   const edition   = character.meta?.edition || '5e'
   const profs     = computed.proficiencies || {}
 
+  // Active-feature derived modifiers (Otherworldly Glamour CHA-on-checks,
+  // Aura of Protection save bonus, etc.). These already live in
+  // featureEffects.getMechanicalEffects so we don't re-parse here.
+  const mech = (() => {
+    try { return getMechanicalEffects(character) || {} }
+    catch (e) { console.warn('[Export] mechanical effects failed:', e); return {} }
+  })()
+  const checkBonusByAbility = {} // 'cha' → "+@abilities.wis.mod[Feature]"
+  for (const [ability, info] of Object.entries(mech.abilityCheckBonus || {})) {
+    if (!info?.fromAbility) continue
+    // Foundry honors `bonuses.check` as a roll formula; we add the
+    // derived modifier and respect the minimum if the feature stated one.
+    const mod = `@abilities.${info.fromAbility}.mod`
+    checkBonusByAbility[ability] = info.min
+      ? `max(${mod}, ${info.min})`
+      : `${mod}`
+  }
+
   // ── Ability Scores mit vollständigem roll-Block ──────
   const rollBlock = { min: null, max: null, mode: 0 }
   const abilities = {}
   for (const [key, score] of Object.entries(scores)) {
+    // Aura of Protection-style save bonus: every save gets +<ability> mod.
+    const saveBonus = (mech.saveBonusAbility && mech.saveBonusAbility !== key)
+      ? `@abilities.${mech.saveBonusAbility}.mod`
+      : ''
     abilities[key] = {
+      // Active feats already moved their ASI into the score itself
+      // (computeAbilityScores), so `value` is the final number Foundry
+      // should treat as the actor's stat — including +1/+2 from feats.
       value:     score,
-      proficient: profs.savingThrows?.[key] ? 1 : 0,
+      proficient: (profs.savingThrows?.[key] || mech.allSavesProficient || mech.saveProficient?.has?.(key)) ? 1 : 0,
       max:       20,
-      bonuses:   { check: '', save: '' },
+      bonuses:   { check: checkBonusByAbility[key] || '', save: saveBonus },
       check:     { roll: { ...rollBlock } },
       save:      { roll: { ...rollBlock } },
     }
@@ -2278,7 +2313,10 @@ export async function exportToFoundry(character) {
       value:   profValue,
       ability,
       roll:    { ...rollBlock },
-      bonuses: { check: '', passive: '' },
+      // Skills inherit their ability's check bonus on Foundry's side, so
+      // we only need to set it here for completeness when the engine
+      // emitted one. Empty otherwise.
+      bonuses: { check: checkBonusByAbility[ability] || '', passive: '' },
     }
   }
 
@@ -2297,7 +2335,10 @@ export async function exportToFoundry(character) {
     }
     const prog = cls.casterProgression
     if      (prog === 'full') casterLevel += cls.level
-    else if (prog === 'half') casterLevel += Math.floor(cls.level / 2)
+    else if (prog === 'half' || prog === '1/2') casterLevel += Math.floor(cls.level / 2)
+    // 5.5e half-casters (Ranger/Paladin in XPHB) get slots at L1 already —
+    // 5etools labels this progression "artificer". Use ceil to match.
+    else if (prog === 'artificer') casterLevel += Math.ceil(cls.level / 2)
     else if (prog === '1/3')  casterLevel += Math.floor(cls.level / 3)
     else if (prog === 'pact') warlockData  = WARLOCK_SLOTS[cls.level] || null
   }
@@ -2454,16 +2495,27 @@ export async function exportToFoundry(character) {
   const spellItems  = []
   const addedSpells = new Set()
 
-  function addSpell(name, level, mode, srcClass) {
+  function addSpell(name, level, mode, srcClass, opts = {}) {
     if (isFakeSpellName(name)) return
     // Innate + race-granted spells must NOT carry a sourceClass — otherwise
     // Foundry tries to bind them to a (potentially non-existent) class.
     const cleanSrcClass = (mode === 'innate') ? null : srcClass
     const key = `${name}__${cleanSrcClass || 'g'}`
-    if (addedSpells.has(key)) return
+    // De-dupe but UPGRADE prepared status: a later add() with
+    // `prepared: true` overrides an earlier add() with `prepared: false`,
+    // so when we first export the whole class spell list (unprepared)
+    // and then loop the player's actual prepared list, the picks
+    // flip to prepared without us having to re-order the calls.
+    if (addedSpells.has(key)) {
+      if (opts.prepared === true) {
+        const existing = spellItems.find(s => s.name === name && s.system?.sourceClass === cleanSrcClass)
+        if (existing?.system?.preparation) existing.system.preparation.prepared = true
+      }
+      return
+    }
     addedSpells.add(key)
     try {
-      spellItems.push(makeSpellItem(name, level, mode, cleanSrcClass, character))
+      spellItems.push(makeSpellItem(name, level, mode, cleanSrcClass, character, opts))
     } catch (e) {
       console.warn(`[Export] skipped spell "${name}":`, e)
     }
@@ -2472,19 +2524,48 @@ export async function exportToFoundry(character) {
   for (const cls of (character.classes || [])) {
     const prepMode = cls.casterProgression === 'pact' ? 'pact'
                    : PREPARED_CASTERS.has(cls.classId) ? 'prepared' : 'always'
+    const isPrepared = prepMode === 'prepared'
+
+    // 5.5e prepared casters (Ranger/Paladin via `casterProgression:
+    // "artificer"`) also count as prepared.
+    const is55Prepared = isPrepared
+      || cls.casterProgression === 'artificer'
+      || cls.casterProgression === 'half'
+      || cls.casterProgression === '1/2'
+    const effectiveMode = is55Prepared ? 'prepared' : prepMode
+
     for (const choices of Object.values(cls.levelChoices || {})) {
-      for (const s of (choices.cantrips      || [])) addSpell(s, 0,    'prepared', cls.classId)
-      for (const s of (choices.startingSpells|| [])) addSpell(s, null, prepMode,   cls.classId)
-      for (const s of (choices.knownSpells   || [])) addSpell(s, null, prepMode,   cls.classId)
-      for (const s of (choices.preparedSpells|| [])) addSpell(s, null, prepMode,   cls.classId)
-      // Optional-Feature-Spells an diesem Level (Blessed Warrior, Pact of the
-      // Tome, Magic Initiate via Feat, …). Müssen auch durch den Fake-Filter.
+      for (const s of (choices.cantrips      || [])) addSpell(s, 0,    'prepared', cls.classId, { prepared: true })
+      for (const s of (choices.startingSpells|| [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
+      for (const s of (choices.knownSpells   || [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
+      for (const s of (choices.preparedSpells|| [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
       for (const spArr of Object.values(choices.optFeatureSpells || {})) {
-        for (const s of (spArr || [])) addSpell(s, null, prepMode, cls.classId)
+        for (const s of (spArr || [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
       }
     }
-    for (const s of (cls.knownSpells   || [])) addSpell(s, null, prepMode, cls.classId)
-    for (const s of (cls.preparedSpells|| [])) addSpell(s, null, prepMode, cls.classId)
+    for (const s of (cls.knownSpells   || [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
+    for (const s of (cls.preparedSpells|| [])) addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
+
+    // 5.5e + 5e sheet's Prepare modal stores the daily list here.
+    // Export each as the player's actual prepared pick.
+    for (const s of (character?.status?.preparedSpells?.[cls.classId] || [])) {
+      addSpell(s, null, effectiveMode, cls.classId, { prepared: true })
+    }
+
+    // Prepared casters: export the ENTIRE class spell list so the
+    // player can re-prepare on long rest inside Foundry without
+    // re-importing. Spells they haven't picked land with
+    // `prepared: false`; their actual picks were added above with
+    // `prepared: true` (addSpell upgrades the dedup match).
+    if (is55Prepared && LIVE_SPELL_MAP) {
+      const wantClass = (cls.classId || '').toLowerCase()
+      for (const sp of LIVE_SPELL_MAP.values()) {
+        if (sp.level < 1) continue // cantrips handled separately above
+        const inList = (sp.classes || []).some(c => String(c).toLowerCase() === wantClass)
+        if (!inList) continue
+        addSpell(sp.name, sp.level, effectiveMode, cls.classId, { prepared: false })
+      }
+    }
   }
 
   // Rassen-Zauber
@@ -2516,17 +2597,52 @@ export async function exportToFoundry(character) {
   }
 
   // 6. Inventar (regular + custom items)
-  const inventoryItems = [
-    ...safeMap(character.inventory?.items, item => makeInventoryItem(item, edition), 'item'),
-    ...safeMap(character.custom?.items, item => makeInventoryItem({
-      ...item, id: item._id, grantedBy: 'custom',
-    }, edition), 'custom item'),
+  // Track each row's sheet-side `containerId` alongside the Foundry item so
+  // we can rebuild the container hierarchy below. The sheet's container link
+  // is `containerId` -> another item's `_key` (`id || _id || name`); we map
+  // those keys to the corresponding Foundry `_id` via `makeId('inv_<key>')`.
+  const sheetRows = [
+    ...((character.inventory?.items || []).map(it => ({
+      it, key: it.id || it._id || it.name,
+      mk: () => makeInventoryItem(it, edition),
+    }))),
+    ...((character.custom?.items || []).map(it => ({
+      it,
+      key: it._id || it.id || it.name,
+      mk: () => makeInventoryItem({ ...it, id: it._id, grantedBy: 'custom' }, edition),
+    }))),
   ]
 
-  // ── Stow only loose loot/consumables/tools in the first Backpack ──
+  const inventoryItems = []
+  const keyToFoundryId = new Map()
+  for (const row of sheetRows) {
+    try {
+      const fItem = row.mk()
+      if (!fItem) continue
+      inventoryItems.push(fItem)
+      if (row.key) keyToFoundryId.set(row.key, fItem._id)
+    } catch (e) {
+      console.warn('[Export] skipped inventory item:', row.it?.name, e)
+    }
+  }
+
+  // Apply sheet container relationships first — these are the player's
+  // explicit choices and beat any auto-stowing.
+  for (const row of sheetRows) {
+    if (!row.it.containerId) continue
+    const parentId = keyToFoundryId.get(row.it.containerId)
+    if (!parentId) continue
+    const fItem = inventoryItems.find(f => f._id === keyToFoundryId.get(row.key))
+    if (!fItem) continue
+    if (fItem._id === parentId) continue // guard against self-link
+    fItem.system.container = parentId
+  }
+
+  // ── Fallback: stow loose loot/consumables/tools in the first Backpack ──
   // Equippable items (weapons, armor/shields, containers themselves) stay
   // outside so they show up directly on the character sheet rather than
-  // being buried inside the backpack UI.
+  // being buried inside the backpack UI. Items the player already placed
+  // into a container above are left alone.
   const STOWABLE_TYPES = new Set(['loot', 'consumable', 'tool'])
   const backpackItem = inventoryItems.find(i => i.type === 'container')
   if (backpackItem) {
