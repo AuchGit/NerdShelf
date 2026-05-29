@@ -19,7 +19,7 @@ import {
 } from './rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from './characterModel'
 import { parseTags } from './tagParser'
-import { getMechanicalEffects } from './featureEffects'
+import { isContainerItem } from './sheetUtils'
 // JSON-Daten aus dem public/-Ordner werden zur Laufzeit per fetch() geladen.
 // Vite erlaubt keine statischen imports aus public/ — fetch() ist der korrekte Weg.
 let CLASS_INDEX = null
@@ -34,6 +34,11 @@ let BG_DATA     = null   // backgrounds.json — 5etools background entries
 let CF_DESC     = null   // class-feature-desc-index.json — "Name||Class" → HTML
 let FEATS_DATA  = null   // feats.json — 5etools feat entries (für Beschreibungen)
 let OPTFEAT_DATA = null  // optionalfeatures.json — Eldritch Invocations entries
+let FOUNDRY_FEATS_BY_KEY = null   // foundry-feats.json — name||source → { effects, system, … }
+// Edition the current cache was loaded for. Changes between exports
+// invalidate the cache so 5e and 5.5e descriptions/effects don't mix
+// (Alert XPHB vs Alert PHB have different bonuses, different sources).
+let LOADED_EDITION = null
 
 // Subclass spellcasting map: subclassName → { progression, ability }
 // Built from 5etools class files; only populated for subclasses that grant casting (EK, AT, …)
@@ -95,8 +100,13 @@ function safeMap(arr, fn, label) {
   return out
 }
 
-async function ensureIndexes() {
-  if (CLASS_INDEX) return   // bereits geladen → nichts tun
+async function ensureIndexes(edition = '5e') {
+  // Cache hits ONLY when the same edition has already loaded — otherwise
+  // we'd be serving PHB data for a 5.5e character and silently dropping
+  // every XPHB feat/race/background description and Active Effect.
+  if (CLASS_INDEX && LOADED_EDITION === edition) return
+
+  const root = edition === '5.5e' ? '/data/5.5e' : '/data/5e'
 
   // DDB-Importer Icon-Dateien laden (aus public/data/Foundry/)
   const iconFiles = await Promise.all([
@@ -116,27 +126,48 @@ async function ensureIndexes() {
   ICON_RACES          = buildIconMap(iconFiles[5])
   ICON_SPELLS         = buildIconMap(iconFiles[6])
 
-  ;[CLASS_INDEX, SPELL_INDEX, FEAT_INDEX, ITEM_FNDRY, SPELL_DESC, RACE_FNDRY, OPTFEAT_FNDRY, RACE_DATA, BG_DATA, CF_DESC, FEATS_DATA, OPTFEAT_DATA] =
+  let foundryFeats
+  ;[CLASS_INDEX, SPELL_INDEX, FEAT_INDEX, ITEM_FNDRY, SPELL_DESC, RACE_FNDRY, OPTFEAT_FNDRY, RACE_DATA, BG_DATA, CF_DESC, FEATS_DATA, OPTFEAT_DATA, foundryFeats] =
     await Promise.all([
-      fetch('/data/5e/foundry-class-index.json').then(r => r.json()),
-      fetch('/data/5e/foundry-spell-index.json').then(r => r.json()),
-      fetch('/data/5e/foundry-feat-index.json').then(r => r.json()),
-      fetch('/data/5e/foundry-item-foundry-index.json').then(r => r.json()),
-      fetch('/data/5e/spells/spell-desc-index.json').then(r => r.json()),
-      fetch('/data/5e/foundry-races.json').then(r => r.json()),
-      fetch('/data/5e/foundry-optionalfeatures.json').then(r => r.json()),
-      fetch('/data/5e/races.json').then(r => r.json()),
-      fetch('/data/5e/backgrounds.json').then(r => r.json()),
-      fetch('/data/5e/class-feature-desc-index.json').then(r => r.json()).catch(() => ({})),
-      fetch('/data/5e/feats.json').then(r => r.json()).catch(() => ({ feat: [] })),
-      fetch('/data/5e/optionalfeatures.json').then(r => r.json()).catch(() => ({ optionalfeature: [] })),
+      fetch(`${root}/foundry-class-index.json`).then(r => r.json()),
+      fetch(`${root}/foundry-spell-index.json`).then(r => r.json()),
+      fetch(`${root}/foundry-feat-index.json`).then(r => r.json()),
+      fetch(`${root}/foundry-item-foundry-index.json`).then(r => r.json()),
+      fetch(`${root}/spells/spell-desc-index.json`).then(r => r.json()),
+      fetch(`${root}/foundry-races.json`).then(r => r.json()),
+      fetch(`${root}/foundry-optionalfeatures.json`).then(r => r.json()),
+      fetch(`${root}/races.json`).then(r => r.json()),
+      fetch(`${root}/backgrounds.json`).then(r => r.json()),
+      fetch(`${root}/class-feature-desc-index.json`).then(r => r.json()).catch(() => ({})),
+      fetch(`${root}/feats.json`).then(r => r.json()).catch(() => ({ feat: [] })),
+      fetch(`${root}/optionalfeatures.json`).then(r => r.json()).catch(() => ({ optionalfeature: [] })),
+      // foundry-feats.json carries ActiveEffects per feat (Alert: +PB
+      // init flag, Lucky: extra luck point, etc.). The Foundry feat
+      // index alone doesn't have these — we need this separate file
+      // so the exported feat actually grants its mechanical bonus.
+      fetch(`${root}/foundry-feats.json`).then(r => r.json()).catch(() => ({ feat: [] })),
     ])
+
+  // Index foundry-feats by `Name||Source` so makeFeatItem can pull
+  // effects/system patches the same way it pulls FEAT_INDEX img/desc.
+  FOUNDRY_FEATS_BY_KEY = {}
+  const ffArr = Array.isArray(foundryFeats)
+    ? foundryFeats
+    : (foundryFeats.feat || Object.values(foundryFeats))
+  for (const ff of (ffArr || [])) {
+    if (!ff?.name) continue
+    const key = `${ff.name}||${ff.source || ''}`
+    FOUNDRY_FEATS_BY_KEY[key] = ff
+    if (!FOUNDRY_FEATS_BY_KEY[ff.name]) FOUNDRY_FEATS_BY_KEY[ff.name] = ff
+  }
 
   // Build SUBCLASS_SPELL_MAP from 5etools class files so subclasses that grant
   // spellcasting (Eldritch Knight, Arcane Trickster, …) get the correct progression.
+  // 5.5e (XPHB) drops Artificer from the player-side class list, so we skip
+  // it gracefully when the file is absent.
   const classFileNames = ['artificer','barbarian','bard','cleric','druid','fighter','monk','paladin','ranger','rogue','sorcerer','warlock','wizard']
   const classDataFiles = await Promise.all(
-    classFileNames.map(n => fetch(`/data/5e/class/class-${n}.json`).then(r => r.json()).catch(() => ({})))
+    classFileNames.map(n => fetch(`${root}/class/class-${n}.json`).then(r => r.json()).catch(() => ({})))
   )
   SUBCLASS_SPELL_MAP  = new Map()
   CLASS_ASI_LEVELS    = new Map()
@@ -192,6 +223,8 @@ async function ensureIndexes() {
       CLASS_FEATURES_MAP.set(cls.name, { classFeatures, subclassFeatures, subclassShortNames })
     }
   }
+
+  LOADED_EDITION = edition
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -331,7 +364,14 @@ const ITEM_TYPE_ICONS = {
 }
 
 // Which casters get mode="prepared" (can swap spells on long rest) vs "always"
-const PREPARED_CASTERS = new Set(['Cleric', 'Druid', 'Wizard', 'Paladin', 'Artificer'])
+// Prepared casters in either edition. 5.5e adds Ranger as a prepared
+// caster (it lost spells-known in XPHB) and keeps Paladin prepared as
+// well; 5e Ranger is technically a "known" caster but Foundry's
+// preparation UI is the same widget, so showing a prep count is the
+// helpful default.
+const PREPARED_CASTERS = new Set([
+  'Cleric', 'Druid', 'Wizard', 'Paladin', 'Artificer', 'Ranger',
+])
 
 // ─────────────────────────────────────────────────────────────────────────
 // Recharge / Uses table for class features and feats.
@@ -1350,8 +1390,14 @@ function buildPreparationFormula(cls) {
   const ability = cls.spellcastingAbility
   if (!ability) return null
   const id = cls.classId.toLowerCase().replace(/\s+/g, '-')
-  const isHalf = cls.casterProgression === 'half' || cls.casterProgression === '1/2'
-  const lvlExpr = isHalf ? `floor(@classes.${id}.levels / 2)` : `@classes.${id}.levels`
+  const prog = cls.casterProgression
+  // 5.5e half-casters (Ranger / Paladin in XPHB) use the "artificer"
+  // progression name and get slots from L1 — match Foundry by using
+  // ceil(level/2) so the prep count tracks the early-game uptick.
+  const lvlExpr =
+    (prog === 'half' || prog === '1/2') ? `floor(@classes.${id}.levels / 2)`
+    : prog === 'artificer'               ? `ceil(@classes.${id}.levels / 2)`
+    :                                       `@classes.${id}.levels`
   return `max(@abilities.${ability}.mod + ${lvlExpr}, 1)`
 }
 
@@ -1993,26 +2039,46 @@ function makeFeatItem(feat, character) {
     prefer: feat.description,
     kind:   'feat',
   })
+
+  // Foundry feat patches (foundry-feats.json) carry the ActiveEffects
+  // that grant the feat's mechanical bonus — Alert's
+  // flags.dnd5e.initiativeAlert, Archery's +2 RWAK attack, etc. Without
+  // them the exported feat is decorative-only and the player would have
+  // to re-create the bonus by hand in Foundry.
+  const patch = FOUNDRY_FEATS_BY_KEY?.[`${feat.featId}||${feat.source || ''}`]
+             || FOUNDRY_FEATS_BY_KEY?.[feat.featId]
+             || null
+  const effects = (patch?.effects || []).map((effPatch, i) =>
+    buildEffect(effPatch, makeId(`feat_eff_${feat.featId}_${i}`), feat.featId)
+  )
+
+  // Some patches also carry system-level overrides (e.g. uses block,
+  // type subtype). Treat them like the spell patches do.
+  const systemPatch = patch?.system || null
+
+  const system = {
+    description:   { value: featDesc, chat: '' },
+    identifier:    feat.featId.toLowerCase().replace(/\s+/g, '-'),
+    source:        makeSource(feat.source || 'PHB', edition),
+    prerequisites: { repeatable: false },
+    properties:    [],
+    requirements:  '',
+    type:          { value: 'feat', subtype: '' },
+    advancement:   [],
+    activities:    {},
+    uses:          buildUsesBlock(feat.featId, feat.source || 'PHB', feat.uses),
+    crewed:        false,
+    enchant:       {},
+  }
+  if (systemPatch) applyDotOverrides(system, systemPatch)
+
   return {
     _id:  makeId(`feat_${feat.featId}`),
     name: feat.featId,
     type: 'feat',
     img:  featImg || lookupIcon(feat.featId, ICON_FEATS) || 'icons/svg/item-bag.svg',
-    system: {
-      description:   { value: featDesc, chat: '' },
-      identifier:    feat.featId.toLowerCase().replace(/\s+/g, '-'),
-      source:        makeSource(feat.source || 'PHB', edition),
-      prerequisites: { repeatable: false },
-      properties:    [],
-      requirements:  '',
-      type:          { value: 'feat', subtype: '' },
-      advancement:   [],
-      activities:    {},
-      uses:          buildUsesBlock(feat.featId, feat.source || 'PHB', feat.uses),
-      crewed:        false,
-      enchant:       {},
-    },
-    effects: [],
+    system,
+    effects,
     folder:  null,
     sort:    0,
     flags:   {},
@@ -2035,7 +2101,14 @@ function makeInventoryItem(item, edition) {
     lookupItemFoundry(item.name || item.itemId, item.source, ITEM_FNDRY)
   const itemTypeIcon = ITEM_TYPE_ICONS[(item.type || '').split('|')[0]] || 'icons/svg/item-bag.svg'
   const itemImg = itemFoundryImg || lookupIcon(item.name || item.itemId, ICON_ITEMS) || itemTypeIcon
-  const itemDesc = itemFoundryDesc || ''
+  // Fall back to 5etools `entries` when the Foundry item index gives us
+  // nothing — e.g. Leather Armor||XPHB ships with an empty description
+  // string in foundry-item-foundry-index.json so the equipment item
+  // arrives in Foundry with no rules text and (per dnd5e UI) can't be
+  // toggled equipped on its sheet row. The Description tab needs HTML.
+  const itemDesc = itemFoundryDesc
+    || (Array.isArray(item.entries) && item.entries.length ? entriesToHtml(item.entries) : '')
+    || (item.description && String(item.description).trim() ? item.description : '')
 
   const baseSystem = {
     description:  { value: itemDesc, chat: '' },
@@ -2178,10 +2251,21 @@ function makeInventoryItem(item, edition) {
   }
 
   // ── Container (Backpack, Pouch, Chest, etc.) ────────
+  // Two sources tell us this is a container:
+  //   1. foundry-item-foundry-index gives a `containerCapacity` block
+  //      (canonical PHB/XPHB items: Backpack, Pouch, Quiver, …).
+  //   2. The sheet's own classifier — name regex for sack/crate/case/
+  //      bandolier/… and the explicit `isContainer` flag the player can
+  //      set on a custom item. Without (2) a custom or generically-named
+  //      container becomes a loose `loot` item and Foundry refuses to
+  //      nest its contents, defeating the export's container hierarchy.
   const itemFndryEntry = lookupItemFoundry(item.name || item.itemId, item.source, ITEM_FNDRY)
   const containerCap   = itemFndryEntry.containerCapacity || null
-  if (containerCap) {
-    const capWeight = Array.isArray(containerCap.weight) ? containerCap.weight.reduce((a,b) => a+b, 0) : 0
+  const sheetThinksContainer = isContainerItem(item)
+  if (containerCap || sheetThinksContainer) {
+    const capWeight = Array.isArray(containerCap?.weight)
+      ? containerCap.weight.reduce((a,b) => a+b, 0)
+      : 0
     return {
       _id:  makeId(`inv_${item.id || item.name}`),
       name: item.name || 'Unknown Item',
@@ -2234,20 +2318,26 @@ function makeInventoryItem(item, edition) {
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function exportToFoundry(character) {
-  await ensureIndexes()
+  const characterEdition = character.meta?.edition || '5e'
+  await ensureIndexes(characterEdition)
 
-  // Load live spell data for accurate levels/schools/descriptions
-  if (!LIVE_SPELL_MAP) {
+  // Load live spell data for accurate levels/schools/descriptions. Cache
+  // is keyed by the edition we loaded for; if it changed since the last
+  // export we must rebuild (XPHB spells differ from PHB on level / class
+  // list / casting time for several spells).
+  if (!LIVE_SPELL_MAP || LIVE_SPELL_MAP._edition !== characterEdition) {
     try {
       const { loadSpellList } = await import('./dataLoader')
-      const spells = await loadSpellList(character.meta?.edition || '5e')
+      const spells = await loadSpellList(characterEdition)
       LIVE_SPELL_MAP = new Map()
+      LIVE_SPELL_MAP._edition = characterEdition
       for (const sp of spells) {
         LIVE_SPELL_MAP.set(sp.name.toLowerCase(), sp)
       }
     } catch (e) {
       console.warn('[Export] Could not load spell data:', e)
       LIVE_SPELL_MAP = new Map()
+      LIVE_SPELL_MAP._edition = characterEdition
     }
   }
 
@@ -2259,40 +2349,24 @@ export async function exportToFoundry(character) {
   const edition   = character.meta?.edition || '5e'
   const profs     = computed.proficiencies || {}
 
-  // Active-feature derived modifiers (Otherworldly Glamour CHA-on-checks,
-  // Aura of Protection save bonus, etc.). These already live in
-  // featureEffects.getMechanicalEffects so we don't re-parse here.
-  const mech = (() => {
-    try { return getMechanicalEffects(character) || {} }
-    catch (e) { console.warn('[Export] mechanical effects failed:', e); return {} }
-  })()
-  const checkBonusByAbility = {} // 'cha' → "+@abilities.wis.mod[Feature]"
-  for (const [ability, info] of Object.entries(mech.abilityCheckBonus || {})) {
-    if (!info?.fromAbility) continue
-    // Foundry honors `bonuses.check` as a roll formula; we add the
-    // derived modifier and respect the minimum if the feature stated one.
-    const mod = `@abilities.${info.fromAbility}.mod`
-    checkBonusByAbility[ability] = info.min
-      ? `max(${mod}, ${info.min})`
-      : `${mod}`
-  }
-
   // ── Ability Scores mit vollständigem roll-Block ──────
+  // We don't emit feature-derived check/save bonuses here. The class /
+  // subclass / race items we export each carry their own Active
+  // Effects (e.g. Fey Wanderer's Otherworldly Glamour, Paladin's Aura
+  // of Protection), and Foundry applies those at runtime. Emitting the
+  // same bonus on `abilities.<ab>.bonuses.check` would stack on top of
+  // the active effect — every Fey Wanderer's CHA check would be
+  // doubled. `value` already reflects feat ASIs via
+  // computeAbilityScores, which is the *only* score-level adjustment
+  // that doesn't have an equivalent Foundry item granting it.
   const rollBlock = { min: null, max: null, mode: 0 }
   const abilities = {}
   for (const [key, score] of Object.entries(scores)) {
-    // Aura of Protection-style save bonus: every save gets +<ability> mod.
-    const saveBonus = (mech.saveBonusAbility && mech.saveBonusAbility !== key)
-      ? `@abilities.${mech.saveBonusAbility}.mod`
-      : ''
     abilities[key] = {
-      // Active feats already moved their ASI into the score itself
-      // (computeAbilityScores), so `value` is the final number Foundry
-      // should treat as the actor's stat — including +1/+2 from feats.
       value:     score,
-      proficient: (profs.savingThrows?.[key] || mech.allSavesProficient || mech.saveProficient?.has?.(key)) ? 1 : 0,
+      proficient: profs.savingThrows?.[key] ? 1 : 0,
       max:       20,
-      bonuses:   { check: checkBonusByAbility[key] || '', save: saveBonus },
+      bonuses:   { check: '', save: '' },
       check:     { roll: { ...rollBlock } },
       save:      { roll: { ...rollBlock } },
     }
@@ -2313,10 +2387,7 @@ export async function exportToFoundry(character) {
       value:   profValue,
       ability,
       roll:    { ...rollBlock },
-      // Skills inherit their ability's check bonus on Foundry's side, so
-      // we only need to set it here for completeness when the engine
-      // emitted one. Empty otherwise.
-      bonuses: { check: checkBonusByAbility[ability] || '', passive: '' },
+      bonuses: { check: '', passive: '' },
     }
   }
 
@@ -2521,6 +2592,41 @@ export async function exportToFoundry(character) {
     }
   }
 
+  // Map of granted-spell-name (lowercase) → resource info for the
+  // matching feature, so always-prepared spells like Hunter's Mark
+  // export with their per-day uses (e.g. Ranger's Favored Enemy = PB
+  // casts/day). Mirrors the resKeyOf logic on the sheet so the export
+  // and the sheet show the same numbers.
+  const grantedSpellUses = (() => {
+    const computedRes = (computed?.resources || [])
+    const usedRes = character?.status?.usedResources || {}
+    const out = new Map()
+    const findRes = (spellName) => {
+      const lower = String(spellName).toLowerCase()
+      if (/hunter's\s*mark/.test(lower)) {
+        return computedRes.find(r => /favored\s*(?:enemy|foe)/i.test(r.name))
+      }
+      // Generic substring match against resource names.
+      return computedRes.find(r => r.name && lower.includes(String(r.name).toLowerCase()))
+    }
+    for (const f of (character?.__activeFeatures || [])) {
+      if (!f?.entries) continue
+      const flat = (f.entries || []).map(e => typeof e === 'string' ? e : '').join(' ')
+      const grants = flat.matchAll(/you\s+(?:always\s+have|gain)\s+(?:the\s+)?\{@spell\s+([^|}]+)(?:\|[^}]*)?\}[^.]*?(?:spell\s+prepared|prepared)/gi)
+      for (const m of grants) {
+        const spellName = String(m[1] || '').trim()
+        if (!spellName) continue
+        const res = findRes(spellName)
+        if (!res || !res.max) continue
+        out.set(spellName.toLowerCase(), {
+          max: res.max,
+          spent: Math.min(res.max, usedRes[res.id] || 0),
+        })
+      }
+    }
+    return out
+  })()
+
   for (const cls of (character.classes || [])) {
     const prepMode = cls.casterProgression === 'pact' ? 'pact'
                    : PREPARED_CASTERS.has(cls.classId) ? 'prepared' : 'always'
@@ -2533,6 +2639,28 @@ export async function exportToFoundry(character) {
       || cls.casterProgression === 'half'
       || cls.casterProgression === '1/2'
     const effectiveMode = is55Prepared ? 'prepared' : prepMode
+
+    // Cap exports to spell levels this class alone can actually cast.
+    // For multiclass we use the CLASS's own caster level (not combined),
+    // because a Ranger L4 can only prepare L1 Ranger spells even if
+    // some other class hands them higher slots.
+    const ownCL =
+      cls.casterProgression === 'full' ? cls.level
+      : cls.casterProgression === 'artificer' ? Math.ceil(cls.level / 2)
+      : (cls.casterProgression === 'half' || cls.casterProgression === '1/2') ? Math.floor(cls.level / 2)
+      : cls.casterProgression === '1/3' ? Math.floor(cls.level / 3)
+      : cls.casterProgression === 'pact' ? cls.level
+      : 0
+    const ownSlots = ownCL > 0 ? (FULL_CASTER_SLOTS[Math.min(20, ownCL)] || []) : []
+    let maxSpellLevel = 0
+    for (let i = ownSlots.length - 1; i >= 0; i--) {
+      if (ownSlots[i] > 0) { maxSpellLevel = i + 1; break }
+    }
+    // Warlocks cap by their pact slot level (also progression-driven).
+    if (cls.casterProgression === 'pact') {
+      const pact = WARLOCK_SLOTS[cls.level]
+      if (pact?.level) maxSpellLevel = pact.level
+    }
 
     for (const choices of Object.values(cls.levelChoices || {})) {
       for (const s of (choices.cantrips      || [])) addSpell(s, 0,    'prepared', cls.classId, { prepared: true })
@@ -2561,12 +2689,48 @@ export async function exportToFoundry(character) {
       const wantClass = (cls.classId || '').toLowerCase()
       for (const sp of LIVE_SPELL_MAP.values()) {
         if (sp.level < 1) continue // cantrips handled separately above
+        if (sp.level > maxSpellLevel) continue // class can't cast it yet
         const inList = (sp.classes || []).some(c => String(c).toLowerCase() === wantClass)
         if (!inList) continue
         addSpell(sp.name, sp.level, effectiveMode, cls.classId, { prepared: false })
       }
     }
   }
+
+  // For spells granted by a class feature that ALSO gives free casts
+  // (Hunter's Mark via Favored Enemy, etc.) we want both views in
+  // Foundry: an entry in the regular spell list (no uses) so the
+  // player can prepare and cast it with a slot like any other spell,
+  // AND a separate "At-Will" entry carrying the per-day free-cast pool
+  // from the source feature's resource. The original entry stays
+  // unmodified; we clone it into an at-will copy with uses attached
+  // and slot consumption disabled.
+  const atWillCopies = []
+  for (const sp of spellItems) {
+    const info = grantedSpellUses.get(String(sp.name).toLowerCase())
+    if (!info) continue
+    const clone = JSON.parse(JSON.stringify(sp))
+    clone._id = makeId(`atwill_${sp.name}_${sp.system?.sourceClass || 'g'}`)
+    clone.system.preparation = { mode: 'atwill', prepared: true }
+    clone.system.uses = {
+      spent:    info.spent || 0,
+      max:      String(info.max),
+      recovery: [{ period: 'lr', type: 'recoverAll' }],
+    }
+    // At-will casts don't burn a slot — they spend the spell's own
+    // uses pool. Wire each activity accordingly.
+    for (const act of Object.values(clone.system.activities || {})) {
+      if (act?.consumption) {
+        act.consumption.spellSlot = false
+        act.consumption.targets = [
+          ...(act.consumption.targets || []).filter(t => t?.type !== 'itemUses'),
+          { type: 'itemUses', target: '', value: '1', scaling: { mode: '', formula: '' } },
+        ]
+      }
+    }
+    atWillCopies.push(clone)
+  }
+  spellItems.push(...atWillCopies)
 
   // Rassen-Zauber
   const raceSpellSources = [
@@ -2601,15 +2765,20 @@ export async function exportToFoundry(character) {
   // we can rebuild the container hierarchy below. The sheet's container link
   // is `containerId` -> another item's `_key` (`id || _id || name`); we map
   // those keys to the corresponding Foundry `_id` via `makeId('inv_<key>')`.
+  // Sheet uses `itemKey(item) = item.id || item._id || item.name` to set
+  // `containerId`. We mirror that here so this side's lookup map shares
+  // the same keys, and we feed the same key as `id` into
+  // makeInventoryItem so the resulting Foundry `_id`
+  // (`makeId('inv_<id>')`) stays in sync between parents and children.
+  const sheetKey = (it) => it.id || it._id || it.name
   const sheetRows = [
     ...((character.inventory?.items || []).map(it => ({
-      it, key: it.id || it._id || it.name,
-      mk: () => makeInventoryItem(it, edition),
+      it, key: sheetKey(it),
+      mk: () => makeInventoryItem({ ...it, id: sheetKey(it) }, edition),
     }))),
     ...((character.custom?.items || []).map(it => ({
-      it,
-      key: it._id || it.id || it.name,
-      mk: () => makeInventoryItem({ ...it, id: it._id, grantedBy: 'custom' }, edition),
+      it, key: sheetKey(it),
+      mk: () => makeInventoryItem({ ...it, id: sheetKey(it), grantedBy: 'custom' }, edition),
     }))),
   ]
 
@@ -2626,32 +2795,19 @@ export async function exportToFoundry(character) {
     }
   }
 
-  // Apply sheet container relationships first — these are the player's
-  // explicit choices and beat any auto-stowing.
+  // The sheet is the single source of truth for container placement
+  // and equipped state. Items with no containerId stay loose (Foundry
+  // shows them in the "Carried" group); items the player explicitly
+  // placed into a container get their Foundry parent set.
   for (const row of sheetRows) {
     if (!row.it.containerId) continue
     const parentId = keyToFoundryId.get(row.it.containerId)
     if (!parentId) continue
-    const fItem = inventoryItems.find(f => f._id === keyToFoundryId.get(row.key))
+    const fId = keyToFoundryId.get(row.key)
+    if (!fId || fId === parentId) continue // guard against self-link
+    const fItem = inventoryItems.find(f => f._id === fId)
     if (!fItem) continue
-    if (fItem._id === parentId) continue // guard against self-link
     fItem.system.container = parentId
-  }
-
-  // ── Fallback: stow loose loot/consumables/tools in the first Backpack ──
-  // Equippable items (weapons, armor/shields, containers themselves) stay
-  // outside so they show up directly on the character sheet rather than
-  // being buried inside the backpack UI. Items the player already placed
-  // into a container above are left alone.
-  const STOWABLE_TYPES = new Set(['loot', 'consumable', 'tool'])
-  const backpackItem = inventoryItems.find(i => i.type === 'container')
-  if (backpackItem) {
-    const backpackId = backpackItem._id
-    for (const item of inventoryItems) {
-      if (STOWABLE_TYPES.has(item.type) && !item.system.container) {
-        item.system.container = backpackId
-      }
-    }
   }
 
   // Custom Feats als Feat Items
