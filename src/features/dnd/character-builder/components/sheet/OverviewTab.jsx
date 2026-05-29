@@ -8,10 +8,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
-import { modStr, masteryShortDesc } from '../../lib/sheetUtils'
+import { modStr, masteryShortDesc, collectCharacterSpells } from '../../lib/sheetUtils'
 import { undoLevelUp } from '../../lib/levelUpEngine'
 import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
-import { loadItemIndex } from '../../lib/dataLoader'
+import { loadItemIndex, loadSpellList } from '../../lib/dataLoader'
 import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
@@ -710,19 +710,95 @@ const wmpStyle = {
 // ── Combat-actions explorer ──────────────────────────────────────
 // Collapsible 3-tab table (Action / Bonus / Reaction) listing every
 // option the character has for that slot:
+//   • Standard universal actions (Dash, Disengage, Help, Hide, …)
 //   • Weapon / unarmed / class-feature attacks from computed.attacks
 //   • Prepared / always-known spells whose castingTime matches the tab
-//   • Class features whose entry text mentions "as a bonus action" /
-//     "as a reaction" / "as an action"
+//     (metadata pulled from the loaded spell list)
+//   • Class / subclass / race / background features whose entry text
+//     mentions "as a bonus action" / "as a reaction" / "as an action"
 // Each row collapses to a one-line summary (damage / mod / range);
 // click to expand for the full description.
+const STANDARD_ACTIONS = {
+  '5e': {
+    action: [
+      { name: 'Attack',      notes: 'Mache 1 oder mehr Angriffe basierend auf Klasse.' },
+      { name: 'Cast a Spell',notes: 'Wirke einen Spell mit Casting Time „1 action".' },
+      { name: 'Dash',        notes: 'Verdoppelt deine Bewegung in diesem Zug.' },
+      { name: 'Disengage',   notes: 'Verhindert Opportunity Attacks bis Ende deines Zugs.' },
+      { name: 'Dodge',       notes: 'Angriffe gegen dich haben Disadvantage; deine DEX-Saves haben Advantage.' },
+      { name: 'Help',        notes: 'Verbündeter erhält Advantage auf seinen nächsten Ability-Check oder Attack.' },
+      { name: 'Hide',        notes: 'Stealth-Check vs. Passive Perception.' },
+      { name: 'Ready',       notes: 'Bereite eine Aktion auf einen Trigger vor.' },
+      { name: 'Search',      notes: 'Wahrnehmungs- oder Investigation-Check.' },
+      { name: 'Use Object',  notes: 'Interagiere mit einem Objekt als Aktion.' },
+      { name: 'Grapple',     notes: 'Athletics vs. Athletics/Acrobatics.' },
+      { name: 'Shove',       notes: 'Athletics vs. Athletics/Acrobatics. Ziel: prone oder 5 ft. zurück.' },
+    ],
+    bonusAction: [],
+    reaction: [
+      { name: 'Opportunity Attack', notes: 'Wenn ein Feind deine Reichweite verlässt, mache 1 Nahkampf-Angriff.' },
+    ],
+  },
+  '5.5e': {
+    action: [
+      { name: 'Attack',      notes: 'Mache 1 oder mehr Angriffe basierend auf Klasse.' },
+      { name: 'Magic',       notes: 'Wirke einen Spell mit Casting Time „1 action" oder benutze magic-item-Aktion.' },
+      { name: 'Dash',        notes: 'Verdoppelt deine Bewegung in diesem Zug.' },
+      { name: 'Disengage',   notes: 'Verhindert Opportunity Attacks bis Ende deines Zugs.' },
+      { name: 'Dodge',       notes: 'Angriffe gegen dich haben Disadvantage; deine DEX-Saves haben Advantage.' },
+      { name: 'Help',        notes: 'Verbündeter erhält Advantage oder du machst Aid (1d4 Boost auf Roll).' },
+      { name: 'Hide',        notes: 'Stealth-Check DC 15. Brichst bei Angriff / Zauber-Cast / Bewegung in Sicht.' },
+      { name: 'Influence',   notes: 'Probiere ein Wesen zu beeinflussen — typischerweise CHA-Check.' },
+      { name: 'Ready',       notes: 'Bereite eine Aktion auf einen Trigger vor.' },
+      { name: 'Search',      notes: 'WIS-/INT-Check nach einer Information, einem Spur etc.' },
+      { name: 'Study',       notes: 'INT-Check zum Erinnern oder Identifizieren.' },
+      { name: 'Utilize',     notes: 'Benutze ein Objekt mit besonderer „Utilize"-Eigenschaft.' },
+    ],
+    bonusAction: [],
+    reaction: [
+      { name: 'Opportunity Attack', notes: 'Wenn ein Feind deine Reichweite verlässt, mache 1 Nahkampf-Angriff.' },
+    ],
+  },
+}
+
 function CombatActionsExplorer({ character, computed }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab]   = useState('action')
   const [expanded, setExpanded] = useState(null)
 
+  // Lazy-load the full spell list so we know each spell's casting
+  // time and metadata. Without this, prepared spells fall through
+  // when `character.spellMetadata` doesn't have them.
+  const [spellMap, setSpellMap] = useState(null)
+  useEffect(() => {
+    if (!open) return
+    const edition = character?.meta?.edition || '5e'
+    let cancelled = false
+    loadSpellList(edition).then(list => {
+      if (cancelled) return
+      const m = new Map()
+      for (const s of list) m.set(s.name.toLowerCase(), s)
+      setSpellMap(m)
+    }).catch(() => { if (!cancelled) setSpellMap(new Map()) })
+    return () => { cancelled = true }
+  }, [open, character?.meta?.edition])
+
   const buckets = useMemo(() => {
     const b = { action: [], bonusAction: [], reaction: [] }
+    const edition = character?.meta?.edition || '5e'
+
+    // Universal standard actions everyone can take. Marked as kind
+    // 'standard' so the renderer can differentiate styling later.
+    const stdSet = STANDARD_ACTIONS[edition] || STANDARD_ACTIONS['5e']
+    for (const slot of ['action', 'bonusAction', 'reaction']) {
+      for (const a of (stdSet[slot] || [])) {
+        b[slot].push({
+          id: `std-${slot}-${a.name}`, name: a.name,
+          damage: '', attack: '', range: '', target: '',
+          kind: 'standard', notes: a.notes,
+        })
+      }
+    }
 
     // Attacks: TWF / Psychic Blades bonus rows are tagged
     // `Bonus Action`; everything else defaults to Action.
@@ -744,51 +820,70 @@ function CombatActionsExplorer({ character, computed }) {
       })
     }
 
-    // Spells: pull from computed.spellcasting list if present —
-    // currently each cls stores level-up known/prepared lists. We
-    // walk character.classes for spells the player has access to.
-    const knownSpellNames = new Set()
-    for (const cls of (character?.classes || [])) {
-      for (const lc of Object.values(cls.levelChoices || {})) {
-        for (const n of (lc.cantrips || []))       knownSpellNames.add(n)
-        for (const n of (lc.startingSpells || [])) knownSpellNames.add(n)
-        for (const n of (lc.knownSpells || []))    knownSpellNames.add(n)
-      }
-    }
-    for (const [, names] of Object.entries(character?.status?.preparedSpells || {})) {
-      for (const n of (names || [])) knownSpellNames.add(n)
-    }
-    // Surface spells we have metadata for. Cast time is text:
-    // "1 action" / "1 bonus action" / "1 reaction" / "10 minutes" etc.
+    // Spells: pull every spell the character can cast through the
+    // shared collector (cantrips + known + prepared + race-/feat-/
+    // feature-granted), then look up each one's full data from the
+    // loaded spell list (preferred) or the character's
+    // spellMetadata cache (fallback). Routes to Action / Bonus /
+    // Reaction by parsing castingTime.
     const meta = character?.spellMetadata || {}
-    for (const name of knownSpellNames) {
-      const m = meta[name]
-      if (!m) continue
-      const ct = String(m.castingTime || '').toLowerCase()
+    const collected = collectCharacterSpells(character) || []
+    const seenSpells = new Set()
+    for (const c of collected) {
+      const key = c.name.toLowerCase()
+      if (seenSpells.has(key)) continue
+      seenSpells.add(key)
+      const full = spellMap?.get(key) || null
+      const m = full || meta[c.name] || null
+      // 5etools `time` array stores `unit: "bonus" | "reaction" | "action"`
+      // (no trailing "action" on "bonus"); formatCastingTime stringifies
+      // to "1 bonus" / "1 reaction …" / "1 action". Match the unit word
+      // with a word boundary so each branch is unambiguous. Order
+      // matters: bonus and reaction must precede the plain action
+      // branch because every reaction string also contains "action" via
+      // surrounding prose. Default to action when we have no metadata
+      // at all (e.g. spell list still loading) so the row is at least
+      // visible somewhere.
+      const ct = String(m?.castingTime || '').toLowerCase()
       let slot = null
-      if (/bonus\s*action/.test(ct)) slot = 'bonusAction'
-      else if (/reaction/.test(ct))  slot = 'reaction'
-      else if (/action/.test(ct))    slot = 'action'
+      if (/\bbonus(?:\s*action)?\b/.test(ct))   slot = 'bonusAction'
+      else if (/\breaction\b/.test(ct))          slot = 'reaction'
+      else if (/\baction\b/.test(ct))            slot = 'action'
+      else if (!m) slot = 'action'
       if (!slot) continue
+      // Extract a brief description from the spell's entries when
+      // available — first ~180 chars of the first string entry.
+      const firstString = (full?.entries || []).find(e => typeof e === 'string' && e.length > 8)
+      const desc = firstString
+        ? String(firstString).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+        : null
+      // `granted: true` = always-prepared spell (race trait / feat /
+      // class feature). Surfaces as its own row kind so the sort
+      // groups them above the regular prepared/known spells and the
+      // UI can tag them visually ("Always").
+      const isAlways = !!c.granted
       b[slot].push({
-        id: `spell-${name}`,
-        name,
+        id: `spell-${c.name}`,
+        name: c.name + (full?.level === 0 ? ' (Cantrip)' : full?.level ? ` (L${full.level})` : ''),
         damage: '—',
-        attack: m.spellAttack ? '' : '',
-        range: m.range || '—',
+        attack: '',
+        range: full?.range || m?.range || '—',
         target: '—',
-        kind: 'spell',
+        kind: isAlways ? 'always-spell' : 'spell',
+        badge: isAlways ? 'Always' : null,
         notes: [
-          m.school && `${m.school}`,
-          m.duration && `Dauer: ${m.duration}`,
-          m.concentration && 'Konz.',
-          m.ritual && 'Ritual',
+          desc ? (desc.length > 200 ? desc.slice(0, 200) + '…' : desc) : null,
+          full?.duration && `Dauer: ${full.duration}`,
+          full?.concentration && 'Konzentration',
+          full?.ritual && 'Ritual',
         ].filter(Boolean).join(' • '),
       })
     }
 
-    // Class/subclass features whose entry text declares an action
-    // economy ("as a bonus action you can …", "as a reaction…").
+    // Active class / subclass features whose entry text declares an
+    // action economy ("as a bonus action you can …" / "as a
+    // reaction" / "as an action"). __activeFeatures is populated at
+    // sheet load (CharacterSheetPage.hydrateClassDataAndRecompute).
     for (const f of (character?.__activeFeatures || [])) {
       const raw = (f.entries || []).map(e => typeof e === 'string' ? e : '').join(' ').toLowerCase()
       let slot = null
@@ -803,14 +898,72 @@ function CombatActionsExplorer({ character, computed }) {
       )
       b[slot].push({
         id: `feat-${f.classId}-${f.name}-${f.level}`,
-        name: f.name,
+        name: `${f.name}`,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'feature',
-        notes: firstString ? String(firstString).slice(0, 160).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
+        notes: firstString ? String(firstString).slice(0, 200).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
       })
     }
+
+    // Species traits with action economy (Aasimar Healing Hands, …).
+    for (const t of (character?.species?.__traits || [])) {
+      const raw = (t.entries || []).map(e => typeof e === 'string' ? e : '').join(' ').toLowerCase()
+      let slot = null
+      if (/as\s+a\s+bonus\s*action/.test(raw))      slot = 'bonusAction'
+      else if (/as\s+a\s+reaction/.test(raw))       slot = 'reaction'
+      else if (/as\s+an?\s+action/.test(raw))       slot = 'action'
+      if (!slot) continue
+      const firstString = (t.entries || []).find(e => typeof e === 'string' && e.length > 8)
+      b[slot].push({
+        id: `race-${t.name}`,
+        name: t.name,
+        damage: '—', attack: '', range: '—', target: '—',
+        kind: 'species',
+        notes: firstString ? String(firstString).slice(0, 200).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
+      })
+    }
+
+    // Attach uses info from computed.resources. Match by name keyword
+    // (case-insensitive substring) — so the "Hunter's Mark" spell
+    // entry links to the "Favored Enemy" resource (XPHB stores
+    // Hunter's Mark uses under the Favored Enemy class feature), and
+    // "Second Wind" feature row links to the Second Wind resource.
+    // Anything that doesn't match keeps `uses = null` and renders no
+    // counter — at-a-glance "infinite / slot-based" vs "limited".
+    const resources = computed?.resources || []
+    const usedResources = character?.status?.usedResources || {}
+    const resKeyOf = (name) => {
+      const lower = String(name).toLowerCase()
+      // Hardcoded synonyms kept tiny — Hunter's Mark IS Favored Enemy
+      // in 5.5e, the data doesn't give a different name to match.
+      if (/hunter's\s*mark/.test(lower)) {
+        return resources.find(r => /favored\s*(?:enemy|foe)/i.test(r.name))
+      }
+      // Otherwise: substring match against the resource name.
+      return resources.find(r => lower.includes(String(r.name).toLowerCase()))
+    }
+    for (const k of Object.keys(b)) {
+      for (const row of b[k]) {
+        if (row.kind === 'standard' || row.kind === 'attack') continue
+        const res = resKeyOf(row.name)
+        if (!res || !res.max) continue
+        const used = usedResources[res.id] || 0
+        row.uses = { remaining: Math.max(0, res.max - used), max: res.max, label: res.name }
+      }
+    }
+
+    // Sort each bucket. always-spells (granted by race / feat /
+    // feature) get their own slot above regular spells so they
+    // visually group as an "Always" category at a glance. Standard
+    // actions stay pinned at the top.
+    const kindOrder = { standard: 0, attack: 1, 'always-spell': 2, spell: 3, feature: 4, species: 5 }
+    for (const k of Object.keys(b)) {
+      b[k].sort((a, c) =>
+        ((kindOrder[a.kind] ?? 99) - (kindOrder[c.kind] ?? 99))
+        || a.name.localeCompare(c.name))
+    }
     return b
-  }, [character, computed])
+  }, [character, computed, spellMap])
 
   const total = buckets.action.length + buckets.bonusAction.length + buckets.reaction.length
   if (total === 0) return null
@@ -850,26 +1003,63 @@ function CombatActionsExplorer({ character, computed }) {
             <div style={caeEmpty}>Nichts in dieser Kategorie.</div>
           ) : (
             <div style={caeList}>
-              {rows.map(r => (
-                <div key={r.id} style={caeRow}>
+              {rows.map((r, idx) => {
+                // Section divider when the kind changes — visualises
+                // the four groups (Standard / Attacks / Always /
+                // Spells / Features / Species). Empty groups never
+                // render a header because they have no rows.
+                const prev = idx > 0 ? rows[idx - 1] : null
+                const groupChanged = !prev || prev.kind !== r.kind
+                const KIND_LABEL = {
+                  'standard':     'Standard',
+                  'attack':       'Attacks',
+                  'always-spell': 'Always Prepared Spells',
+                  'spell':        'Prepared / Known Spells',
+                  'feature':      'Class & Subclass Features',
+                  'species':      'Species Traits',
+                }
+                return (
+                  <div key={r.id}>
+                    {groupChanged && (
+                      <div style={caeGroupHead}>{KIND_LABEL[r.kind] || r.kind}</div>
+                    )}
+                    <div style={caeRow}>
                   <div style={caeRowHead} onClick={() => setExpanded(e => e === r.id ? null : r.id)}>
                     <div style={caeRowName}>
                       <span style={{ color: 'var(--text-dim)', fontSize: 10, marginRight: 6 }}>
                         {expanded === r.id ? '▼' : '▶'}
                       </span>
                       {r.name}
+                      {r.badge && (
+                        <span style={caeAlwaysBadge} title="Immer vorbereitet — zählt nicht gegen dein Prepared-Limit">
+                          {r.badge}
+                        </span>
+                      )}
                     </div>
                     <div style={caeRowMeta}>
                       {r.attack && <span style={caeMetaPart} title="Attack-Bonus">{r.attack}</span>}
                       {r.damage && r.damage !== '—' && <span style={{ ...caeMetaPart, color: 'var(--accent-red)' }}>{r.damage}</span>}
                       {r.range && <span style={caeMetaPart}>{r.range}</span>}
+                      {r.uses && (
+                        <span style={{
+                          ...caeMetaPart,
+                          color: r.uses.remaining === 0 ? 'var(--accent-red)'
+                            : r.uses.remaining < r.uses.max ? 'var(--accent-yellow)'
+                            : 'var(--accent-green)',
+                          fontWeight: 700,
+                        }} title={`${r.uses.label}: ${r.uses.remaining} von ${r.uses.max} übrig`}>
+                          {r.uses.remaining}/{r.uses.max}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {expanded === r.id && r.notes && (
                     <div style={caeRowBody}>{r.notes}</div>
                   )}
-                </div>
-              ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -907,6 +1097,19 @@ const caeRowBody = {
   padding: '6px 10px 8px 22px',
   fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5,
   borderTop: '1px solid var(--border-subtle)',
+}
+const caeGroupHead = {
+  fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+  letterSpacing: 0.5, color: 'var(--text-muted)',
+  margin: '8px 0 2px 2px',
+}
+const caeAlwaysBadge = {
+  marginLeft: 8, padding: '1px 7px', borderRadius: 999,
+  fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+  letterSpacing: 0.5,
+  color: 'var(--accent-green)',
+  border: '1px solid var(--accent-green)',
+  background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)',
 }
 
 // ── Damage Res / Immunity / Vulnerability pills ────────────────────

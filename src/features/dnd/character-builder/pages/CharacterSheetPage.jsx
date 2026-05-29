@@ -150,7 +150,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // advantage / resistance / "bonus equal to your X modifier" /
     // skill-proficiency-choice phrasings and surfaces inline notes.
     const activeFeatures = collectActiveClassFeatures(charData, map)
-    if (traitNames.length > 0 || activeFeatures.length > 0) {
+    // Always-prepared spells granted by structured class /
+    // subclass `additionalSpells.prepared` data — Cleric domain
+    // spells, Paladin oath spells, Warlock patron spells, etc.
+    // (Text-based grants like the Ranger Hunter's Mark are picked
+    // up by the regex scanner in collectCharacterSpells; this
+    // covers the table-shaped grants.)
+    const grantedSpells = collectClassGrantedSpells(charData, map)
+    if (traitNames.length > 0 || activeFeatures.length > 0 || grantedSpells.length > 0) {
       const speciesPatch = traitNames.length > 0
         ? { __traitNames: traitNames, __traits: rawTraits }
         : {}
@@ -158,11 +165,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         ...prev,
         species: { ...(prev.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
+        __grantedSpells: grantedSpells,
       }) : prev)
       charData = {
         ...charData,
         species: { ...(charData.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
+        __grantedSpells: grantedSpells,
       }
     }
     setComputed(computeCharacter(charData, map))
@@ -266,13 +275,29 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // on the sheet without per-feature hardcoding in the catalog.
   function collectActiveClassFeatures(charData, classDataMap) {
     const out = []
-    const seen = new Set() // dedup "classId|name|level"
-    const push = (entry) => {
-      const key = `${entry.classId}|${entry.name}|${entry.level}`
-      if (seen.has(key)) return
-      seen.add(key)
-      out.push(entry)
+    // Dedup "classId|name|level" but PREFER the XPHB (2024) entry
+    // when both exist. Several 5.5e features (Favored Enemy, Wild
+    // Shape, …) are reprinted with different text in XPHB — the
+    // 2024 text usually adds the actually-mechanically-relevant
+    // hooks (e.g. "you always have Hunter's Mark prepared"). The
+    // PHB-first dedup would have kept the legacy text and the
+    // scanner that reads "you always have X prepared" wouldn't find
+    // anything.
+    const PREFERRED = ['XPHB', 'XDMG', 'XMM']
+    const sourceRank = (s) => {
+      const i = PREFERRED.indexOf(s)
+      return i >= 0 ? i : 99
     }
+    const byKey = new Map()
+    const push = (entry, source) => {
+      const key = `${entry.classId}|${entry.name}|${entry.level}`
+      const existing = byKey.get(key)
+      if (!existing) { byKey.set(key, { entry, source }); return }
+      if (sourceRank(source) < sourceRank(existing.source)) {
+        byKey.set(key, { entry, source })
+      }
+    }
+    const is55e = (charData?.meta?.edition || '5e') === '5.5e'
     for (const cls of (charData?.classes || [])) {
       const cd = classDataMap[cls.classId]
       if (!cd) continue
@@ -282,7 +307,17 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         const lvl = f.level || 1
         if (lvl > cls.level) continue
         if (f.isClassFeatureVariant) continue
-        push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] })
+        // 5.5e filter: skip features tagged with a classSource that
+        // belongs to a different edition (PHB feature for an XPHB
+        // class entry). Both versions show up in classFeature[]
+        // because loadClassData doesn't filter. Without this the
+        // dedup tie-breaker still saves us, but it's cheaper to
+        // skip the wrong-source entry up front.
+        const matchesEdition = is55e
+          ? (!f.classSource || f.classSource === cd.source || PREFERRED.includes(f.classSource))
+          : true
+        if (!matchesEdition) continue
+        push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] }, f.source)
       }
       // Subclass features. loadClassData returns the subclass as
       // `{features: [...flat...]}`; loadClassList builds
@@ -300,7 +335,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           const lvl = f.level || 1
           if (lvl > cls.level) continue
           if (f.isClassFeatureVariant) continue
-          push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+          push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
         }
       }
       if (sub.featuresPerLevel) {
@@ -309,10 +344,59 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           if (!Number.isFinite(lvl) || lvl > cls.level) continue
           for (const f of (feats || [])) {
             if (!f?.name) continue
-            push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] })
+            push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
           }
         }
       }
+    }
+    for (const v of byKey.values()) out.push(v.entry)
+    return out
+  }
+
+  // Walk class + subclass `additionalSpells.prepared` tables and
+  // return the spells the character has unlocked at their current
+  // class level. Output shape: `[{name, classId, sourceFeature}]`.
+  // The character-level keyed table is filtered against `cls.level`,
+  // so a Cleric 1 Twilight gets the L1 row and a Cleric 5 gets L1+3+5.
+  function collectClassGrantedSpells(charData, classDataMap) {
+    const out = []
+    const seen = new Set()
+    const push = (name, classId, sourceFeature) => {
+      const key = `${classId}|${String(name).toLowerCase()}`
+      if (seen.has(key)) return
+      seen.add(key)
+      out.push({ name: String(name), classId, sourceFeature })
+    }
+    // 5etools `additionalSpells` is an array of blocks. Each block can
+    // have `prepared: { <classLevel>: [<spell names>] }`. Spell strings
+    // may carry `|SOURCE` suffix → strip. We only read the `prepared`
+    // bucket — `known` / `innate` go through other paths (spellbook,
+    // race / feat innate casting).
+    const consumeAdditional = (additionalSpells, level, classId, sourceFeature) => {
+      for (const block of (additionalSpells || [])) {
+        if (!block || typeof block !== 'object') continue
+        const prep = block.prepared
+        if (!prep || typeof prep !== 'object') continue
+        for (const [lvlKey, arr] of Object.entries(prep)) {
+          const lv = parseInt(lvlKey, 10)
+          if (!Number.isFinite(lv) || lv > level) continue
+          for (const raw of (Array.isArray(arr) ? arr : [])) {
+            const name = typeof raw === 'string'
+              ? raw.split('|')[0].replace(/\b\w/g, c => c.toUpperCase()).trim()
+              : null
+            if (name) push(name, classId, sourceFeature)
+          }
+        }
+      }
+    }
+    for (const cls of (charData?.classes || [])) {
+      const cd = classDataMap[cls.classId]
+      if (!cd) continue
+      consumeAdditional(cd.additionalSpells, cls.level, cls.classId, cls.classId)
+      const subId = cls.subclassId
+      if (!subId) continue
+      const sub = (cd.subclasses || []).find(s => s.id === subId || s.name === subId)
+      if (sub) consumeAdditional(sub.additionalSpells, cls.level, cls.classId, subId)
     }
     return out
   }
@@ -446,6 +530,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
       if (stripped.__activeFeatures) {
         delete stripped.__activeFeatures
+        touched = true
+      }
+      if (stripped.__grantedSpells) {
+        delete stripped.__grantedSpells
         touched = true
       }
       return touched ? stripped : data

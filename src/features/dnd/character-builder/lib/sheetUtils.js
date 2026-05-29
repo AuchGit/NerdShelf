@@ -120,6 +120,16 @@ export function collectCharacterSpells(character) {
     for (const s of (cls.preparedSpells || [])) add(s, 'class', cls.classId)
   }
 
+  // Daily-prepared list for prepared casters (5.5e Ranger / Paladin
+  // and the Prepare modal on the sheet write here). collectCharacterSpells
+  // historically only saw `cls.preparedSpells` / `cls.levelChoices`
+  // and missed everything written through status.preparedSpells —
+  // which meant the sheet's "Verfügbare Aktionen" tab couldn't see
+  // any prepared spell.
+  for (const [classId, names] of Object.entries(character?.status?.preparedSpells || {})) {
+    for (const name of (names || [])) add(name, 'class', classId)
+  }
+
   // Class/subclass features whose text declares an automatic spell
   // grant ("you always have the Hunter's Mark spell prepared",
   // "you always have Bane prepared", etc.). Pulled dynamically from
@@ -135,6 +145,15 @@ export function collectCharacterSpells(character) {
       const name = String(m[1] || '').trim()
       if (name) add(name, 'class', f.classId || null, true)
     }
+  }
+
+  // Structured class-feature spell grants (5etools
+  // `additionalSpells.prepared` tables — Cleric domain spells,
+  // Paladin oath spells, Warlock patron spells, etc.). Hydrated
+  // server-side by CharacterSheetPage's collectClassGrantedSpells
+  // so collectCharacterSpells stays sync.
+  for (const g of (character?.__grantedSpells || [])) {
+    if (g?.name) add(g.name, 'class', g.classId || null, true)
   }
 
   for (const s of (character.species?.raceSpells || []))    add(s, 'race', null)
