@@ -139,11 +139,42 @@ export function collectCharacterSpells(character) {
   // `granted: true` so the picker treats them as always castable.
   for (const f of (character?.__activeFeatures || [])) {
     if (!f?.entries) continue
-    const raw = (f.entries || []).map(e => typeof e === 'string' ? e : '').join(' ')
+    // Walk nested entry blocks so tabular feature text (XPHB Archfey
+    // Spells, Twilight Domain spells, …) is included alongside top-
+    // level prose. JSON-stringify a deep walk preserves the {@spell …}
+    // tags inside table rows that a plain string-join would miss.
+    const walk = (node, out) => {
+      if (typeof node === 'string') { out.push(node); return }
+      if (Array.isArray(node)) { for (const x of node) walk(x, out); return }
+      if (node && typeof node === 'object') {
+        if (Array.isArray(node.entries))   walk(node.entries, out)
+        if (Array.isArray(node.items))     walk(node.items, out)
+        if (Array.isArray(node.rows))      out.push(JSON.stringify(node.rows))
+      }
+    }
+    const parts = []
+    walk(f.entries, parts)
+    const raw = parts.join(' ')
+    // Always-prepared grants. The closing word can be "prepared" or
+    // "spell prepared" depending on phrasing.
     const grants = raw.matchAll(/you\s+(?:always\s+have|gain)\s+(?:the\s+)?\{@spell\s+([^|}]+)(?:\|[^}]*)?\}[^.]*?(?:spell\s+prepared|prepared)/gi)
     for (const m of grants) {
       const name = String(m[1] || '').trim()
       if (name) add(name, 'class', f.classId || null, true)
+    }
+    // At-will cantrips granted by a feature: "You learn the {@spell X}
+    // cantrip", "you also know the {@spell X} cantrip", "you gain the
+    // {@spell X} … cantrip". Bonus Cantrips (Warlock Celestial L1)
+    // gives "{@spell sacred flame} and {@spell light} cantrips" — one
+    // verb intro plus N tagged spells before "cantrip", so the inner
+    // scan harvests every spell tag within the matched span.
+    const cantripIntros = raw.matchAll(/you\s+(?:also\s+)?(?:learn|know|gain)\s+(?:the\s+)?([^.]*?\bcantrips?)/gi)
+    for (const m of cantripIntros) {
+      const span = m[1] || ''
+      for (const sm of span.matchAll(/\{@spell\s+([^|}]+)(?:\|[^}]*)?\}/g)) {
+        const name = String(sm[1] || '').trim()
+        if (name) add(name, 'class', f.classId || null, true)
+      }
     }
   }
 

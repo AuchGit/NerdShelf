@@ -19,6 +19,7 @@ import DndSubNav from '../components/ui/DndSubNav'
 import GmSessionPrefsEditor from '../components/ui/GmSessionPrefsEditor'
 import ConditionChips from '../components/ui/ConditionChips'
 import SessionCardCategories from '../components/sheet/SessionCardCategories'
+import { DamageResistancePills } from '../components/sheet/OverviewTab'
 import { useSessionPrefs } from '../lib/useSessionPrefs'
 // PASSIVE_OPTIONS / STAT_OPTIONS still drive the prefs editor; tile
 // labels here use the short PASSIVE_CODE / STAT_CODE maps below.
@@ -486,6 +487,17 @@ function SessionCard({ member, row, onPatch, onOpenSheet }) {
       )}
       {character && prefs.stats.includes('encumbrance') && computed?.abilityScores && (
         <EncumbranceMini character={character} abilityScores={computed.abilityScores} />
+      )}
+
+      {/* Damage resistance / immunity / vulnerability pills — same
+          component used inside the player's Overview HP card. Tucked
+          into the GM card under encumbrance so the row stays compact
+          and the colored pills are immediately visible above the
+          lookup-category bar. */}
+      {character && prefs.stats.includes('resistances') && (
+        <div style={{ padding: `0 ${PAD}px ${PAD}px` }}>
+          <DamageResistancePills character={character} compact />
+        </div>
       )}
 
       {/* Currency — bottom of the card, only non-zero coins shown.

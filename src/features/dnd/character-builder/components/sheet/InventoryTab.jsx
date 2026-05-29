@@ -15,6 +15,8 @@ import {
   computeEncumbrance, masteryShortDesc,
   isContainerItem, itemKey, itemTypeMeta, isSingletonItem,
 } from '../../lib/sheetUtils'
+import { favoriteKey } from '../../lib/favorites'
+import { FavoriteToggle } from './OverviewTab'
 import { computeAbilityScores } from '../../lib/rulesEngine'
 import {
   getAvailableMarkingRules, weaponEligibleForMark, setWeaponMark,
@@ -394,7 +396,8 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
                       character={character}
                       markingRules={markingRules}
                       markedWeapons={markedWeapons}
-                      onToggleMark={toggleMark} />
+                      onToggleMark={toggleMark}
+                      applyCharacter={applyCharacter} />
                   ))}
                 </div>
               )
@@ -579,7 +582,7 @@ function ReorderBtns({ onUp, onDown }) {
 }
 
 function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReorder,
-                   character, markingRules = [], markedWeapons = {}, onToggleMark }) {
+                   character, markingRules = [], markedWeapons = {}, onToggleMark, applyCharacter }) {
   const [open, setOpen] = useState(false)
   const meta = itemTypeMeta(item.type)
   const canEquip = meta.isWeapon || meta.isArmor || item.type === 'S'
@@ -605,6 +608,11 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
       <div style={S.itemRow}>
         <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
           <div style={S.itemName}>
+            <FavoriteToggle
+              favKey={favoriteKey('item', item.id || item._id || item.name)}
+              character={character}
+              applyCharacter={applyCharacter}
+            />
             {item.customName || item.name}
             {item._isCustom && <span style={{ color: 'var(--accent-purple)', fontSize: 10, marginLeft: 6 }}>CUSTOM</span>}
             {activeMarks.length > 0 && (

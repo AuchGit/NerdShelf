@@ -13,6 +13,8 @@ import {
   collectCharacterSpells, computeSpellSlots, ordinal, spellLevelLabel, SCHOOL_NAMES,
 } from '../../lib/sheetUtils'
 import { getSpellcastingInfo } from '../../lib/spellcastingRules'
+import { favoriteKey } from '../../lib/favorites'
+import { FavoriteToggle } from './OverviewTab'
 
 function formatComponents(c = {}) {
   const parts = []
@@ -150,7 +152,7 @@ function RitualRow({ spell, onCastRitual, edition }) {
 }
 
 // ── Spell row in the main list — expands to details + cast actions ──
-function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, spellcasting, edition }) {
+function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, spellcasting, edition, character, applyCharacter }) {
   const [open, setOpen] = useState(false)
   const level = spell.level
   const lc = levelColor(level)
@@ -181,7 +183,12 @@ function SpellRow({ spell, slotRemaining, pactRemaining, warlockSlots, onCast, s
           {level === 0 ? 'C' : level}
         </div>
         <div style={S.spellRowMain} onClick={() => setOpen(o => !o)}>
-          <div style={S.spellName}>
+          <div style={{ ...S.spellName, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <FavoriteToggle
+              favKey={favoriteKey('spell', spell.name)}
+              character={character}
+              applyCharacter={applyCharacter}
+            />
             {spell.name}
             <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>{open ? '▲' : '▼'}</span>
           </div>
@@ -626,6 +633,8 @@ export default function SpellsTab({ character, computed, updateCharacter, applyC
                 warlockSlots={warlockSlots} onCast={castSpell}
                 spellcasting={computed?.spellcasting}
                 edition={edition}
+                character={character}
+                applyCharacter={applyCharacter}
               />
             ))}
           </Section>

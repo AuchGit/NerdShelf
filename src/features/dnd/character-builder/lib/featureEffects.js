@@ -1033,8 +1033,9 @@ function synthesizeClassFeatureNotes(character) {
     let slot = null
     if (/charisma\s+check/.test(low) && /bonus.*equal\s+to\s+your\s+\w+\s+modifier/.test(low))   slot = 'skills'
     else if (/advantage\s+on\s+saving\s+throws/.test(low))                                       slot = 'saves'
-    else if (/\bresistance\s+to\s+[a-z]+(\s+damage)?/.test(low))                                 slot = 'hp'
-    else if (/\b(?:immune|immunity)\s+to\b/.test(low))                                           slot = 'hp'
+    // Damage resistance / immunity / vulnerability flow to the pills
+    // under the HP bar — skip the textual duplicate.
+    else if (/\b(resistance|immunity|immune|vulnerability|vulnerable)\s+to\b/.test(low) && /\bdamage\b/.test(low)) continue
     else if (/\b(?:initiative)\b/.test(low) && /\bbonus|\badd|\b\+\d/.test(low))                 slot = 'init'
     else if (/\battack\s+rolls?\b/.test(low) && /(advantage|bonus|extra)/.test(low))             slot = 'attacks'
     else if (/\bspeed\b/.test(low) && /(increase|bonus|extra|\+\s*\d)/.test(low))                slot = 'speed'
@@ -1091,8 +1092,10 @@ function synthesizeRaceTraitNotes(character) {
     const text = raw
     let slot = null
     if (/advantage\s+on\s+saving\s+throws/.test(low))               slot = 'saves'
-    else if (/\bresistance\s+to\s+[a-z]+(\s+damage)?/.test(low))    slot = 'hp'
-    else if (/\b(immune|immunity)\s+to\b/.test(low))                slot = 'hp'
+    // Damage resistance / immunity / vulnerability are surfaced as
+    // colored pills (DamageResistancePills under the HP bar). Skip the
+    // textual note so we don't show the same fact twice.
+    else if (/\b(resistance|immunity|immune|vulnerability|vulnerable)\s+to\b/.test(low) && /\bdamage\b/.test(low)) continue
     else if (/\bdarkvision\b/.test(low))                            slot = 'skill:perception'
     else if (/\b(blindsight|tremorsense|truesight)\b/.test(low))    slot = 'skill:perception'
     else if (/\b(your\s+)?(walking\s+)?speed\b/.test(low))          slot = 'speed'
@@ -1176,6 +1179,41 @@ export function getMechanicalEffects(character) {
         out.abilityCheckBonus[target] = { fromAbility: fromAb, min, feature: f.name }
       }
     }
+  }
+
+  // Data-driven scan: any race trait OR class feature entry whose text
+  // says "resistance to X damage" / "immunity to X" / "vulnerable to X"
+  // contributes the type to the matching set, so the HP-card pills
+  // pick it up without needing a curated catalog entry per trait
+  // (Shadar-Kai's Necrotic Resistance, etc.). Damage types listed here
+  // mirror the 5e standard set; the regex is permissive about "damage"
+  // being optional and supports a list ("fire and cold damage").
+  const DMG_TYPES = ['acid','bludgeoning','cold','fire','force','lightning',
+    'necrotic','piercing','poison','psychic','radiant','slashing','thunder']
+  const dmgAlt = DMG_TYPES.join('|')
+  const harvest = (raw, kind, set) => {
+    // e.g. "resistance to fire and cold damage" → ['fire','cold']
+    const re = new RegExp(`\\b${kind}\\s+to\\s+((?:${dmgAlt})(?:\\s*,\\s*(?:${dmgAlt}))*(?:\\s+and\\s+(?:${dmgAlt}))?)`, 'ig')
+    let m
+    while ((m = re.exec(raw))) {
+      for (const t of m[1].split(/\s*,\s*|\s+and\s+/i)) {
+        const k = t.trim().toLowerCase()
+        if (DMG_TYPES.includes(k)) set.add(k)
+      }
+    }
+  }
+  const allEntryBlocks = [
+    ...((character?.species?.__traits || []).map(t => t.entries)),
+    ...((character?.__activeFeatures || []).map(f => f.entries)),
+  ]
+  for (const entries of allEntryBlocks) {
+    if (!Array.isArray(entries)) continue
+    const raw = stripTraitTags(flattenTraitText(entries))
+    if (!raw) continue
+    const low = raw.toLowerCase()
+    harvest(low, 'resistance',                out.damageResistance)
+    harvest(low, '(?:immunity|immune)',       out.damageImmunity)
+    harvest(low, '(?:vulnerability|vulnerable)', out.damageVulnerability)
   }
   return out
 }

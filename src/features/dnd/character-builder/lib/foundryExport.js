@@ -35,6 +35,11 @@ let CF_DESC     = null   // class-feature-desc-index.json — "Name||Class" → 
 let FEATS_DATA  = null   // feats.json — 5etools feat entries (für Beschreibungen)
 let OPTFEAT_DATA = null  // optionalfeatures.json — Eldritch Invocations entries
 let FOUNDRY_FEATS_BY_KEY = null   // foundry-feats.json — name||source → { effects, system, … }
+// items-base.json entries indexed by `Name||Source`. Foundry's item
+// index ships empty descriptions for several XPHB entries (Leather
+// Armor||XPHB, Padded Armor||XPHB, etc.); this is the data-driven
+// fallback so the rules text still makes it into Foundry.
+let ITEM_ENTRIES_BY_KEY = null
 // Edition the current cache was loaded for. Changes between exports
 // invalidate the cache so 5e and 5.5e descriptions/effects don't mix
 // (Alert XPHB vs Alert PHB have different bonuses, different sources).
@@ -147,6 +152,19 @@ async function ensureIndexes(edition = '5e') {
       // so the exported feat actually grants its mechanical bonus.
       fetch(`${root}/foundry-feats.json`).then(r => r.json()).catch(() => ({ feat: [] })),
     ])
+
+  // items-base.json holds the raw 5etools `entries` for armor, weapons
+  // and adventuring gear. We use it as the description fallback when
+  // foundry-item-foundry-index ships an empty string (Leather Armor
+  // XPHB and several other XPHB-source items).
+  const itemsBase = await fetch(`${root}/items-base.json`).then(r => r.json()).catch(() => ({ baseitem: [] }))
+  ITEM_ENTRIES_BY_KEY = {}
+  for (const it of (itemsBase.baseitem || [])) {
+    if (!it?.name || !Array.isArray(it.entries) || it.entries.length === 0) continue
+    const k = `${it.name}||${it.source || ''}`
+    ITEM_ENTRIES_BY_KEY[k] = it.entries
+    if (!ITEM_ENTRIES_BY_KEY[it.name]) ITEM_ENTRIES_BY_KEY[it.name] = it.entries
+  }
 
   // Index foundry-feats by `Name||Source` so makeFeatItem can pull
   // effects/system patches the same way it pulls FEAT_INDEX img/desc.
@@ -1431,9 +1449,17 @@ function makeClassItem(cls, character) {
   // ── HP Advancement ────────────────────────────────────
   // Every level from 1..cls.level must have a value — Foundry uses this to
   // compute max HP. Missing entries mean "no HP gained at that level".
+  //
+  // 5e/5.5e rule: only the *primary* class (the character's L1 class)
+  // grants max HP at its level 1. Multiclassed levels — even the
+  // multiclass class's own level 1 — get average or rolled HP. Marking
+  // both classes' L1 as 'max' overcounted by (max - avg) HP per extra
+  // class: Ranger d10 max(10) vs avg(6) = 4 extra HP, which is exactly
+  // the discrepancy we were seeing for a Rogue3 / Ranger4 character.
+  const isPrimaryClass = character.classes?.[0]?.classId === cls.classId
   const hpValue = {}
   for (let lv = 1; lv <= cls.level; lv++) {
-    if (lv === 1) {
+    if (lv === 1 && isPrimaryClass) {
       hpValue['1'] = 'max'
     } else if (character.hpPreference?.method === 'roll' && cls.hpRolls?.[lv]) {
       hpValue[String(lv)] = cls.hpRolls[lv]
@@ -2094,6 +2120,15 @@ function makeFeatItem(feat, character) {
 function makeInventoryItem(item, edition) {
   const slug  = (item.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   const src   = makeSource(item.source || 'PHB', edition)
+  // Defensive: legacy inventory rows from the wizard's pre-fix path
+  // landed with isArmor/isWeapon=false because item-index.json's
+  // source-suffixed type code (`LA|XPHB`) skipped the equality check.
+  // Re-derive from the type code so an old character still exports
+  // its leather armor as `type: 'equipment'` and can actually be
+  // equipped in Foundry.
+  const typeCode = String(item.type || '').split('|')[0]
+  if (!item.isArmor && ['LA','MA','HA','S'].includes(typeCode)) item = { ...item, isArmor: true }
+  if (!item.isWeapon && ['M','R'].includes(typeCode))           item = { ...item, isWeapon: true }
   // item.value ist in CP gespeichert → in GP umrechnen (gerundet auf 4 Dezimalstellen)
   const priceGp = item.value != null ? +(item.value / 100).toFixed(4) : 0
 
@@ -2104,10 +2139,15 @@ function makeInventoryItem(item, edition) {
   // Fall back to 5etools `entries` when the Foundry item index gives us
   // nothing — e.g. Leather Armor||XPHB ships with an empty description
   // string in foundry-item-foundry-index.json so the equipment item
-  // arrives in Foundry with no rules text and (per dnd5e UI) can't be
-  // toggled equipped on its sheet row. The Description tab needs HTML.
+  // arrives in Foundry with no rules text. Try the item's own entries
+  // first (newer inventory rows carry these now), then items-base.json
+  // by name+source, then a freeform `description` override.
+  const baseEntries = ITEM_ENTRIES_BY_KEY?.[`${item.name}||${item.source || ''}`]
+                   || ITEM_ENTRIES_BY_KEY?.[item.name]
+                   || null
   const itemDesc = itemFoundryDesc
     || (Array.isArray(item.entries) && item.entries.length ? entriesToHtml(item.entries) : '')
+    || (baseEntries ? entriesToHtml(baseEntries) : '')
     || (item.description && String(item.description).trim() ? item.description : '')
 
   const baseSystem = {
@@ -2228,6 +2268,18 @@ function makeInventoryItem(item, edition) {
                      : rawType === 'S'  ? 'shield' : 'clothing'
     const dexCap     = rawType === 'MA' ? 2 : rawType === 'HA' ? 0 : null
 
+    // dnd5e's CONFIG.DND5E.armorIds uses camelCase slugs without the
+    // trailing " Armor" — e.g. Studded Leather → studdedLeather,
+    // Chain Mail → chainMail, Shield → shield. Foundry's equip toggle
+    // and proficiency check both key off this slug; without it the
+    // item arrives as a generic "Equipment" and the row's equipped
+    // checkbox stays inert.
+    const baseItem = (item.name || '')
+      .replace(/\s+Armor\s*$/i, '')
+      .trim()
+      .replace(/[^a-zA-Z0-9]+([a-zA-Z0-9])/g, (_, c) => c.toUpperCase())
+      .replace(/^([A-Z])/, c => c.toLowerCase())
+
     return {
       _id:  makeId(`inv_${item.id || item.name}`),
       name: item.name || 'Unknown Item',
@@ -2236,11 +2288,11 @@ function makeInventoryItem(item, edition) {
       system: {
         ...baseSystem,
         crewed:     false,
-        armor:      { value: item.ac ?? null, dex: dexCap },
+        armor:      { value: item.ac ?? null, magicalBonus: null, dex: dexCap },
         proficient: null,
         properties: [],
         strength:   item.strength || 0,
-        type:       { value: armorType, baseItem: '' },
+        type:       { value: armorType, baseItem },
       },
       effects: [],
       folder:  null,

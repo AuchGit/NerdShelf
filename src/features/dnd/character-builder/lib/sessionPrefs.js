@@ -47,6 +47,11 @@ export const STAT_OPTIONS = [
   // Konzentration ist immer sichtbar (siehe SessionPage) — kein Toggle nötig.
   { id: 'encumbrance', label: 'Encumbrance-Bar',      default: false },
   { id: 'currency',    label: 'Currency / Coins',     default: false },
+  // Damage resistance / immunity / vulnerability pills — useful when
+  // the GM needs to see at a glance whether a spell will be halved /
+  // absorbed by the PC. Off by default because most encounters don't
+  // require it; the GM opts in per-table.
+  { id: 'resistances', label: 'Resistance / Vulnerability Pills', default: false },
 ]
 
 export function getDefaults() {

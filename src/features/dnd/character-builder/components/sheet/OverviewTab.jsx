@@ -12,6 +12,8 @@ import { modStr, masteryShortDesc, collectCharacterSpells, computeSpellSlots } f
 import { undoLevelUp } from '../../lib/levelUpEngine'
 import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
 import { loadItemIndex, loadSpellList } from '../../lib/dataLoader'
+import { getFavorites, parseFavoriteKey, toggleFavorite } from '../../lib/favorites'
+import EntryRenderer from '../ui/EntryRenderer'
 import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
@@ -235,6 +237,11 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
               <div style={S.hpBarTrack}>
                 <div style={{ ...S.hpBarFill, width: `${hpPct}%` }} />
               </div>
+              {/* Resistance / vulnerability pills tuck inside the HP card
+                  itself — at a glance the player sees "how much HP, and
+                  what's it cushioned against?" without scanning down to
+                  a separate section. */}
+              <DamageResistancePills character={character} compact />
             </div>
             {!readOnly && (
               <HpControls hp={hp} baseMaxHp={baseMaxHp} maxHpBonus={maxHpBonus}
@@ -247,7 +254,6 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             <DetailChip label="Hit Dice" value={character.classes.map(c => `${c.level}d${c.hitDie}`).join(' + ')} />
             <DetailChip label="CON" value={modStr(getModifier(abilityScores.con))} />
           </div>
-          <DamageResistancePills character={character} />
           <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
 
           {/* Death saves */}
@@ -266,29 +272,17 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         </Section>
         </div>
 
-        <div style={combatTileColumn}>
-          <CombatTile
-            label="AC"
-            value={ac}
-            color="var(--accent-blue)"
-            tooltip={acTooltip}
-            badge={acHasNotes ? '✦' : null}
+        {/* Favorites — replaces the old AC / Init / Speed / Prof Bonus
+            tile column. Players pin feats / items / spells / class
+            features / racial traits from anywhere in the sheet via
+            their star buttons; this is where they show up for at-a-
+            glance reference and full-text expansion. */}
+        <div style={{ flex: '2 1 480px', minWidth: 0 }}>
+          <FavoritesSection
+            character={character}
+            computed={computed}
+            applyCharacter={applyCharacter}
           />
-          <CombatTile
-            label="Initiative"
-            value={modStr(initiative)}
-            color="var(--accent-purple)"
-            tooltip={initTooltip}
-            badge={initFeatureNotes.length > 0 ? '✦' : null}
-          />
-          <CombatTile
-            label={extraSpeeds.length > 0 ? `Speed · +${extraSpeeds.length}` : 'Speed'}
-            value={speedValue}
-            color="var(--accent-green)"
-            tooltip={speedTooltip}
-            badge={extraSpeeds.length > 0 ? '↪' : null}
-          />
-          <CombatTile label="Prof Bonus" value={modStr(profBonus)} color="var(--accent-yellow)" />
         </div>
       </div>
 
@@ -1428,7 +1422,7 @@ const DMG_TYPE_COLOR = {
 }
 const colorFor = (t) => DMG_TYPE_COLOR[String(t).toLowerCase()] || 'var(--text-secondary)'
 
-function DamageResistancePills({ character }) {
+export function DamageResistancePills({ character, compact = false }) {
   const m = getMechanicalEffects(character)
   // Immunity is a stronger resistance — display in the same column,
   // pill carries an "immune" tooltip so the rule difference isn't
@@ -1438,7 +1432,7 @@ function DamageResistancePills({ character }) {
   if (resSet.size === 0 && vulSet.size === 0) return null
 
   const renderPills = (set, label, isImmune) => (
-    <div style={drCol}>
+    <div style={compact ? drColCompact : drCol}>
       <div style={drColLabel}>{label}</div>
       <div style={drPillRow}>
         {[...set].map(t => {
@@ -1465,7 +1459,7 @@ function DamageResistancePills({ character }) {
   )
 
   return (
-    <div style={drWrap}>
+    <div style={compact ? drWrapCompact : drWrap}>
       {resSet.size > 0 && renderPills(resSet, 'Resistance', true)}
       {vulSet.size > 0 && renderPills(vulSet, 'Vulnerability', false)}
     </div>
@@ -1475,20 +1469,219 @@ const drWrap = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 8, marginTop: 8,
 }
+// Compact variant used inside the HP card — drops the inset background
+// box and tightens spacing so the pills look like a natural continuation
+// of the HP bar instead of a second tile.
+const drWrapCompact = {
+  display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10,
+}
 const drCol = {
   background: 'var(--bg-inset)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 6, padding: '4px 6px 6px',
 }
+const drColCompact = {
+  // No outer box — sits flush against the HP card's own border.
+  display: 'flex', flexDirection: 'column', gap: 2,
+}
 const drColLabel = {
   fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
   letterSpacing: 0.5, color: 'var(--text-muted)', marginBottom: 4,
 }
-const drPillRow = { display: 'flex', gap: 4, flexWrap: 'wrap' }
+const drPillRow = { display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }
 const drPill = {
   padding: '1px 7px', borderRadius: 999, fontSize: 10,
   border: '1px solid', textTransform: 'capitalize',
 }
+
+// ─────────────────────────────────────────────────────────────────
+// FAVORITES — player-pinned feats / items / spells / class features
+// / racial traits, rendered as expandable cards in the Overview tab.
+// Keys are stored on `character.status.favorites` (see lib/favorites.js)
+// and resolved here against the live sources (no stale snapshots).
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Star button used everywhere the player can pin something. Compact
+ * 18×18 inline glyph; outlined when off, filled when on.
+ */
+export function FavoriteToggle({ favKey, character, applyCharacter, title }) {
+  if (!favKey || !applyCharacter) return null
+  const on = (character?.status?.favorites || []).includes(favKey)
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); toggleFavorite(applyCharacter, favKey) }}
+      title={title || (on ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen')}
+      style={{
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        padding: 2, fontSize: 14, lineHeight: 1,
+        color: on ? 'var(--accent-yellow, gold)' : 'var(--text-dim)',
+        opacity: on ? 1 : 0.55,
+      }}
+    >
+      {on ? '★' : '☆'}
+    </button>
+  )
+}
+
+/**
+ * Renders a single favorite as an expandable card. Resolves the
+ * key against whichever live source matches its kind, so removing
+ * the underlying item (selling, deleveling, retraining a feat)
+ * naturally clears the card on the next render.
+ */
+function FavoriteCard({ favKey, resolved, character, applyCharacter }) {
+  const [open, setOpen] = useState(false)
+  if (!resolved) return null
+  const { title, badge, entries, html } = resolved
+  const hasBody = (Array.isArray(entries) && entries.length > 0) || (typeof html === 'string' && html.trim())
+  return (
+    <div style={favCard}>
+      <div style={favCardHeader} onClick={() => hasBody && setOpen(o => !o)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+          <FavoriteToggle favKey={favKey} character={character} applyCharacter={applyCharacter} />
+          <span style={favCardName}>{title}</span>
+          {badge && <span style={favCardBadge}>{badge}</span>}
+        </div>
+        {hasBody && (
+          <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
+        )}
+      </div>
+      {open && hasBody && (
+        <div style={favCardBody}>
+          {entries
+            ? <EntryRenderer entries={entries} />
+            : <div dangerouslySetInnerHTML={{ __html: html }} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function resolveFavorite(favKey, character, extras = {}) {
+  const { featData, spellData } = extras
+  const parsed = parseFavoriteKey(favKey)
+  if (!parsed) return null
+  const { kind, id } = parsed
+  if (kind === 'feat') {
+    const feat = (character.feats || []).find(f => (f.featId || f.name) === id)
+    if (!feat) return null
+    const fd = featData?.[id]
+    return {
+      title: feat.featId || feat.name,
+      badge: 'Feat',
+      entries: fd?.entries || null,
+      html: feat.description || '',
+    }
+  }
+  if (kind === 'item') {
+    const all = [
+      ...((character.inventory?.items) || []),
+      ...((character.custom?.items)    || []),
+    ]
+    const it = all.find(x => (x.id || x._id || x.name) === id)
+    if (!it) return null
+    return {
+      title: it.name,
+      badge: it.equipped ? 'Item · Equipped' : 'Item',
+      entries: (Array.isArray(it.entries) && it.entries.length > 0) ? it.entries : null,
+      html: it.description || '',
+    }
+  }
+  if (kind === 'spell') {
+    const sp = spellData?.get(String(id).toLowerCase())
+    return {
+      title: id,
+      badge: sp ? `Spell · Lv ${sp.level}` : 'Spell',
+      entries: sp?.entries || null,
+      html: '',
+    }
+  }
+  if (kind === 'feature') {
+    const [classId, name, lvl] = id.split(':')
+    const feat = (character.__activeFeatures || []).find(f =>
+      f.classId === classId && f.name === name && String(f.level || '') === (lvl || ''))
+    if (!feat) return null
+    return { title: feat.name, badge: `${classId} · Lv ${feat.level}`, entries: feat.entries, html: '' }
+  }
+  if (kind === 'trait') {
+    const tr = (character.species?.__traits || []).find(t => t.name === id)
+    if (!tr) return null
+    return { title: tr.name, badge: 'Species', entries: tr.entries, html: '' }
+  }
+  return null
+}
+
+function FavoritesSection({ character, computed, applyCharacter }) {
+  const favs = getFavorites(character)
+
+  // Lazy data fetches — only when there's at least one favorite of
+  // the relevant kind. Keyed by edition so re-renders don't refetch.
+  const edition = character?.meta?.edition || '5e'
+  const [featData, setFeatData] = useState(null)
+  const [spellData, setSpellData] = useState(null)
+  const needFeats  = favs.some(k => k.startsWith('feat:'))
+  const needSpells = favs.some(k => k.startsWith('spell:'))
+  useEffect(() => {
+    if (!needFeats || featData) return
+    let cancelled = false
+    import('../../lib/dataLoader').then(m => m.loadFeatList(edition)).then(list => {
+      if (cancelled) return
+      const map = {}
+      for (const f of list) map[f.name] = f
+      setFeatData(map)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [edition, needFeats, featData])
+  useEffect(() => {
+    if (!needSpells || spellData) return
+    let cancelled = false
+    import('../../lib/dataLoader').then(m => m.loadSpellList(edition)).then(list => {
+      if (cancelled) return
+      const map = new Map()
+      for (const sp of list) map.set(sp.name.toLowerCase(), sp)
+      setSpellData(map)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [edition, needSpells, spellData])
+
+  return (
+    <Section title={`Favoriten${favs.length ? ` (${favs.length})` : ''}`}>
+      {favs.length === 0 ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '4px 2px' }}>
+          Markiere Feats, Items, Spells, Class Features oder Species-Traits mit dem ☆-Knopf, um sie hier zur Hand zu haben.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
+          {favs.map(key => (
+            <FavoriteCard
+              key={key}
+              favKey={key}
+              resolved={resolveFavorite(key, character, { featData, spellData })}
+              character={character}
+              applyCharacter={applyCharacter}
+            />
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+const favCard = {
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  overflow: 'hidden',
+}
+const favCardHeader = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 10px', cursor: 'pointer',
+}
+const favCardName = { fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+const favCardBadge = { fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.4 }
+const favCardBody = { padding: '8px 12px 10px', borderTop: '1px solid var(--border-subtle)', fontSize: 12, lineHeight: 1.55, color: 'var(--text-secondary)' }
 
 // ── Combat-stat tile (AC, Initiative, Speed, Prof Bonus) ──────────
 // `tooltip` puts a native title on the element; used by the Speed tile

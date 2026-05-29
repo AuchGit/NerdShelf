@@ -8,6 +8,8 @@ import { Section, TraitPill } from './SheetKit'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
 import { parseFeatureChoices } from '../../lib/choiceParser'
+import { favoriteKey } from '../../lib/favorites'
+import { FavoriteToggle } from './OverviewTab'
 
 function getFeatBonusSummary(character) {
   const result = []
@@ -36,7 +38,7 @@ function getFeatBonusSummary(character) {
 
 const SIZE_LABELS = { M: 'Medium', S: 'Small', L: 'Large', T: 'Tiny', H: 'Huge' }
 
-export default function FeaturesTab({ character, updateCharacter }) {
+export default function FeaturesTab({ character, updateCharacter, applyCharacter }) {
   const featBonuses = getFeatBonusSummary(character)
   const [featDataMap, setFeatDataMap] = useState({})
   const [expandedFeat, setExpandedFeat] = useState(null)
@@ -135,6 +137,28 @@ export default function FeaturesTab({ character, updateCharacter }) {
     load()
     return () => { cancelled = true }
   }, [character.meta?.edition])
+
+  // Pull the active background's `entries` so we can render its
+  // feature text inline. 5e backgrounds have a named feature
+  // (Soldier → Military Rank, Acolyte → Shelter of the Faithful);
+  // 5.5e backgrounds replaced that with an Origin Feat — both end up
+  // here as collapsible cards driven by whatever the data file
+  // declares.
+  const [bgEntries, setBgEntries] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const id = character.background?.backgroundId
+      if (!id) { setBgEntries(null); return }
+      const { loadBackgroundList } = await import('../../lib/dataLoader')
+      const list = await loadBackgroundList(character.meta?.edition || '5e')
+      if (cancelled) return
+      const match = list.find(b => b.id === id || b.name === id.split('__')[0])
+      setBgEntries(match?.entries || null)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [character.meta?.edition, character.background?.backgroundId])
 
   const raceName = character.species.raceId?.split('__')[0] || '—'
   const subraceName = character.species.subraceId?.split('__')[0] || ''
@@ -270,6 +294,24 @@ export default function FeaturesTab({ character, updateCharacter }) {
                 </span>
               </div>
             )}
+
+            {/* Full race + subrace trait list, collapsible. Hydrated
+                by CharacterSheetPage's loadRaceTraits — the source of
+                truth that drives the synthetic note scanner too. */}
+            {(character.species.__traits || []).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                {character.species.__traits.map(tr => (
+                  <ExpandableEntryCard
+                    key={`sp-${tr.name}`}
+                    title={tr.name}
+                    entries={tr.entries}
+                    favKey={favoriteKey('trait', tr.name)}
+                    character={character}
+                    applyCharacter={applyCharacter}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Section>
@@ -327,6 +369,35 @@ export default function FeaturesTab({ character, updateCharacter }) {
                 </div>
               </div>
             )}
+
+            {/* Background feature blocks — 5etools nests them as
+                `{ name, type: 'entries', entries: […] }` items inside
+                the top-level `entries` array, e.g. Soldier's "Feature:
+                Military Rank". 5.5e backgrounds skip these in favour
+                of the Origin Feat (rendered in the Feats section). */}
+            {Array.isArray(bgEntries) && (() => {
+              const features = bgEntries.filter(e =>
+                e && typeof e === 'object' && e.type === 'entries' && e.name && Array.isArray(e.entries)
+              )
+              if (features.length === 0) return null
+              return (
+                <div style={{ marginTop: 12 }}>
+                  {features.map((feat, i) => {
+                    const cleanName = feat.name.replace(/^Feature:\s*/i, '')
+                    return (
+                      <ExpandableEntryCard
+                        key={`bg-${feat.name}-${i}`}
+                        title={cleanName}
+                        entries={feat.entries}
+                        favKey={favoriteKey('feature', `Background:${cleanName}:`)}
+                        character={character}
+                        applyCharacter={applyCharacter}
+                      />
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
       </Section>
@@ -347,6 +418,45 @@ export default function FeaturesTab({ character, updateCharacter }) {
         </Section>
       )}
 
+      {/* ── Class & Subclass Features ── */}
+      {/* Hydrated into character.__activeFeatures by CharacterSheetPage's
+          collectActiveClassFeatures pass (XPHB-preferred for 5.5e). One
+          collapsible card per feature so the player can read the rule
+          text on demand without leaving the sheet. */}
+      {(() => {
+        const features = character?.__activeFeatures || []
+        if (features.length === 0) return null
+        const byClass = new Map()
+        for (const f of features) {
+          const k = f.classId || '—'
+          if (!byClass.has(k)) byClass.set(k, [])
+          byClass.get(k).push(f)
+        }
+        for (const list of byClass.values()) {
+          list.sort((a, b) => (a.level || 0) - (b.level || 0) || a.name.localeCompare(b.name))
+        }
+        return (
+          <Section title="Class Features">
+            {[...byClass.entries()].map(([classId, list]) => (
+              <div key={classId} style={{ marginBottom: 12 }}>
+                <div style={S.featureCardSource}>{classId}</div>
+                {list.map(f => (
+                  <ExpandableEntryCard
+                    key={`cf-${classId}-${f.name}-${f.level || 0}`}
+                    title={f.name}
+                    badge={f.level ? `Lv ${f.level}` : null}
+                    entries={f.entries}
+                    favKey={favoriteKey('feature', `${classId}:${f.name}:${f.level || ''}`)}
+                    character={character}
+                    applyCharacter={applyCharacter}
+                  />
+                ))}
+              </div>
+            ))}
+          </Section>
+        )
+      })()}
+
       {/* ── Feats ── */}
       {(featBonuses.length > 0 || (character.custom?.feats || []).length > 0) && (
         <Section title="Feats">
@@ -356,7 +466,12 @@ export default function FeaturesTab({ character, updateCharacter }) {
             return (
               <div key={i} style={S.featCard}>
                 <div style={S.featCardHeader} onClick={() => setExpandedFeat(isExpanded ? null : feat.name)}>
-                  <div style={S.featCardName}>
+                  <div style={{ ...S.featCardName, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <FavoriteToggle
+                      favKey={favoriteKey('feat', feat.name)}
+                      character={character}
+                      applyCharacter={applyCharacter}
+                    />
                     {feat.isOrigin && <span style={S.originTag}>ORIGIN</span>}
                     {feat.name}
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
@@ -414,6 +529,43 @@ export default function FeaturesTab({ character, updateCharacter }) {
             )
           })}
         </Section>
+      )}
+    </div>
+  )
+}
+
+// Collapsible card showing a feature name and (when expanded) its
+// 5etools-style entries rendered to HTML. Used for class features and
+// species traits so the player can pull the rule text inline without
+// jumping to an external reference.
+function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCharacter }) {
+  const [open, setOpen] = useState(false)
+  const hasBody = Array.isArray(entries) && entries.length > 0
+  return (
+    <div style={S.featCard}>
+      <div
+        style={{ ...S.featCardHeader, cursor: hasBody ? 'pointer' : 'default' }}
+        onClick={() => hasBody && setOpen(o => !o)}
+      >
+        <div style={{ ...S.featCardName, display: 'flex', alignItems: 'center', gap: 4 }}>
+          {favKey && (
+            <FavoriteToggle favKey={favKey} character={character} applyCharacter={applyCharacter} />
+          )}
+          {title}
+          {badge && (
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>{badge}</span>
+          )}
+          {hasBody && (
+            <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>
+              {open ? '▲' : '▼'}
+            </span>
+          )}
+        </div>
+      </div>
+      {open && hasBody && (
+        <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+          <EntryRenderer entries={entries} />
+        </div>
       )}
     </div>
   )

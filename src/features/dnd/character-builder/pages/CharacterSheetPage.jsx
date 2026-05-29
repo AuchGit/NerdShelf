@@ -156,7 +156,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     // (Text-based grants like the Ranger Hunter's Mark are picked
     // up by the regex scanner in collectCharacterSpells; this
     // covers the table-shaped grants.)
-    const grantedSpells = collectClassGrantedSpells(charData, map)
+    const grantedSpells = collectClassGrantedSpells(charData, map, activeFeatures)
     if (traitNames.length > 0 || activeFeatures.length > 0 || grantedSpells.length > 0) {
       const speciesPatch = traitNames.length > 0
         ? { __traitNames: traitNames, __traits: rawTraits }
@@ -232,10 +232,24 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       if (!byName.has(k)) byName.set(k, it)
     }
     const lists = [charData?.inventory?.items, charData?.custom?.items].filter(Array.isArray)
+    // Type-code → flag for the legacy-wizard fix: old characters were
+    // saved with isArmor=false on XPHB armor because item-index.json's
+    // source-suffixed type ('LA|XPHB') skipped the strict equality
+    // check the wizard used. We re-derive from the type code so the
+    // sheet and Foundry export both see the right item kind.
+    const needsArmorFlag = (w) => {
+      const code = String(w.type || '').split('|')[0]
+      return ['LA','MA','HA','S'].includes(code) && !w.isArmor
+    }
+    const needsWeaponFlag = (w) => {
+      const code = String(w.type || '').split('|')[0]
+      return ['M','R'].includes(code) && !w.isWeapon
+    }
     let needsPatch = false
     outer: for (const list of lists) {
       for (const w of list) {
         if (!w?.name) continue
+        if (needsArmorFlag(w) || needsWeaponFlag(w)) { needsPatch = true; break outer }
         const ref = byName.get(w.name.toLowerCase())
         if (!ref) continue
         const wantsMastery = ref.isWeapon && Array.isArray(ref.mastery) && ref.mastery.length > 0
@@ -251,6 +265,8 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       for (const list of draftLists) {
         for (const w of list) {
           if (!w?.name) continue
+          if (needsArmorFlag(w))  w.isArmor  = true
+          if (needsWeaponFlag(w)) w.isWeapon = true
           const ref = byName.get(w.name.toLowerCase())
           if (!ref) continue
           if (ref.isWeapon && Array.isArray(ref.mastery) && ref.mastery.length > 0
@@ -367,7 +383,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // class level. Output shape: `[{name, classId, sourceFeature}]`.
   // The character-level keyed table is filtered against `cls.level`,
   // so a Cleric 1 Twilight gets the L1 row and a Cleric 5 gets L1+3+5.
-  function collectClassGrantedSpells(charData, classDataMap) {
+  function collectClassGrantedSpells(charData, classDataMap, activeFeatures = null) {
     const out = []
     const seen = new Set()
     const push = (name, classId, sourceFeature) => {
@@ -412,6 +428,51 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       )
       if (sub) consumeAdditional(sub.additionalSpells, cls.level, cls.classId, subId)
     }
+
+    // XPHB (5.5e) shift: subclasses like Archfey, Fiend, Celestial,
+    // Twilight Cleric, etc. encode "you always have these spells
+    // prepared" as an inline `{type: 'table'}` entry on the feature
+    // instead of `additionalSpells.prepared`. Walk every active
+    // feature looking for a 2-column table whose first column header
+    // matches "<class> Level"; treat each row as a "thereafter
+    // always have these spells prepared" grant for the listed level.
+    const SPELL_TAG_RE = /\{@spell\s+([^|}]+)(?:\|[^}]*)?\}/g
+    const scanFeatureForSpellTables = (feature, classId, classLevel) => {
+      if (!feature?.entries) return
+      const walk = (node) => {
+        if (!node || typeof node !== 'object') return
+        if (Array.isArray(node)) { for (const x of node) walk(x); return }
+        if (node.type === 'table' && Array.isArray(node.colLabels) && Array.isArray(node.rows)) {
+          const isLevelCol = /\blevel\b/i.test(node.colLabels[0] || '')
+          const isSpellCol = /\bspell/i.test(node.colLabels[1] || '')
+          if (isLevelCol && isSpellCol) {
+            for (const row of node.rows) {
+              const lvCell = row?.[0]
+              const spCell = row?.[1]
+              const lv = parseInt(typeof lvCell === 'string' ? lvCell : (lvCell?.roll?.exact ?? lvCell), 10)
+              if (!Number.isFinite(lv) || lv > classLevel) continue
+              const cellText = typeof spCell === 'string'
+                ? spCell
+                : JSON.stringify(spCell || '')
+              for (const m of cellText.matchAll(SPELL_TAG_RE)) {
+                const name = String(m[1] || '').trim()
+                if (name) push(name, classId, feature.name)
+              }
+            }
+          }
+        }
+        if (Array.isArray(node.entries)) walk(node.entries)
+        if (Array.isArray(node.items))   walk(node.items)
+      }
+      walk(feature.entries)
+    }
+    for (const f of (activeFeatures || charData?.__activeFeatures || [])) {
+      if (!f?.classId) continue
+      const cls = (charData.classes || []).find(c => c.classId === f.classId)
+      if (!cls) continue
+      scanFeatureForSpellTables(f, f.classId, cls.level)
+    }
+
     return out
   }
 
@@ -1129,7 +1190,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               <InventoryTab character={character} computed={computed}
                 updateCharacter={updateCharacter} applyCharacter={applyCharacter} />
             )}
-            {activeTab === 'features' && <FeaturesTab character={character} updateCharacter={updateCharacter} />}
+            {activeTab === 'features' && <FeaturesTab character={character} updateCharacter={updateCharacter} applyCharacter={applyCharacter} />}
             {activeTab === 'personality' && (
               <PersonalityTab character={character} updateCharacter={updateCharacter} />
             )}

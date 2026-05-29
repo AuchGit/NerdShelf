@@ -775,6 +775,11 @@ export async function loadItemIndex(edition) {
     if (baseData) {
       const scfMap = {}
       const masteryMap = {}
+      // item-index.json strips `entries` to keep the file small, but
+      // the sheet's expandable item rows and the Foundry export both
+      // want rules text. Pull it back from items-base.json. Falls back
+      // gracefully — items with no entries here keep an empty array.
+      const entriesMap = {}
       for (const b of (baseData.baseitem || [])) {
         const key = `${b.name?.toLowerCase()}::${b.source}`
         if (b.scfType) scfMap[key] = b.scfType
@@ -783,12 +788,24 @@ export async function loadItemIndex(edition) {
             .map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0])
             .filter(Boolean)
         }
+        if (Array.isArray(b.entries) && b.entries.length > 0) {
+          entriesMap[key] = b.entries
+        }
       }
       items = items.map(i => {
         const key = `${i.name?.toLowerCase()}::${i.source}`
         const patch = {}
         if (i.type === 'SCF' && !i.scfType && scfMap[key]) patch.scfType = scfMap[key]
         if (masteryMap[key]) patch.mastery = masteryMap[key]
+        if ((!i.entries || i.entries.length === 0) && entriesMap[key]) patch.entries = entriesMap[key]
+        // item-index.json stripped its isArmor/isWeapon flags by source-
+        // exact `type === 'LA'` checks, so XPHB armors (`type: 'LA|XPHB'`)
+        // ended up with isArmor=false. Re-derive from the type code so
+        // every consumer (Step9 wizard, Inventory tab, Foundry export)
+        // sees consistent flags regardless of source suffix.
+        const code = String(i.type || '').split('|')[0]
+        if (['LA','MA','HA','S'].includes(code) && !i.isArmor) patch.isArmor = true
+        if (['M','R'].includes(code) && !i.isWeapon)           patch.isWeapon = true
         return Object.keys(patch).length > 0 ? { ...i, ...patch } : i
       })
     }
