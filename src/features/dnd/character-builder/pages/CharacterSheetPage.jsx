@@ -327,7 +327,16 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       // other subclass-feature mechanic) never reached the scanner.
       const subId = cls.subclassId
       if (!subId) continue
-      const sub = (cd.subclasses || []).find(s => s.id === subId || s.name === subId)
+      // Strip any `__SOURCE` / `|SOURCE` suffix some legacy data
+      // appended to the subclass id ("Fey Wanderer__TCE"); we only
+      // match by the bare subclass name. Without this stripping a
+      // single character's old subclassId could miss every load.
+      const cleanSubId = String(subId).split(/__|\|/)[0].trim()
+      const sub = (cd.subclasses || []).find(s =>
+        s.id === subId || s.name === subId
+        || s.id === cleanSubId || s.name === cleanSubId
+        || s.shortName === cleanSubId
+      )
       if (!sub) continue
       if (Array.isArray(sub.features)) {
         for (const f of sub.features) {
@@ -395,7 +404,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       consumeAdditional(cd.additionalSpells, cls.level, cls.classId, cls.classId)
       const subId = cls.subclassId
       if (!subId) continue
-      const sub = (cd.subclasses || []).find(s => s.id === subId || s.name === subId)
+      const cleanSubId = String(subId).split(/__|\|/)[0].trim()
+      const sub = (cd.subclasses || []).find(s =>
+        s.id === subId || s.name === subId
+        || s.id === cleanSubId || s.name === cleanSubId
+        || s.shortName === cleanSubId
+      )
       if (sub) consumeAdditional(sub.additionalSpells, cls.level, cls.classId, subId)
     }
     return out
