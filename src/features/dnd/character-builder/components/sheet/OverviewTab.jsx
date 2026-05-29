@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
-import { modStr, masteryShortDesc, collectCharacterSpells } from '../../lib/sheetUtils'
+import { modStr, masteryShortDesc, collectCharacterSpells, computeSpellSlots } from '../../lib/sheetUtils'
 import { undoLevelUp } from '../../lib/levelUpEngine'
 import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
 import { loadItemIndex, loadSpellList } from '../../lib/dataLoader'
@@ -314,12 +314,17 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         <Section title="Combat-Aktionen">
           <CombatEconomy
             value={economy}
+            character={character}
             onChange={(next) => updateCharacter('status.economy', next)}
           />
           {/* Collapsible explorer: 3 tabs (Action / Bonus / Reaction)
               listing every attack, prepared spell, and class-feature
               action available, grouped by action economy slot. */}
-          <CombatActionsExplorer character={character} computed={computed} />
+          <CombatActionsExplorer
+            character={character}
+            computed={computed}
+            applyCharacter={applyCharacter}
+          />
         </Section>
         <Section title="Konzentration">
           <ConcentrationTracker
@@ -761,10 +766,106 @@ const STANDARD_ACTIONS = {
   },
 }
 
-function CombatActionsExplorer({ character, computed }) {
+function CombatActionsExplorer({ character, computed, applyCharacter }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab]   = useState('action')
   const [expanded, setExpanded] = useState(null)
+  // Per-row slot picker: which row's "Cast" prompt is currently
+  // open. Single string keyed by row.id so only one expand pops at
+  // a time; clicking elsewhere collapses.
+  const [castingFor, setCastingFor] = useState(null)
+  const slots = useMemo(() => computeSpellSlots(character), [character])
+  const usedSlots = character?.status?.usedSpellSlots || {}
+  const usedPact  = character?.status?.usedPactSlots || 0
+
+  // ── Use / cast handlers ──
+  // Each turn-economy action toggles its slot on character.status.
+  // economy and (for spells) consumes a spell slot + sets
+  // concentration. Mirrors the existing castSpell logic in
+  // SpellsTab; kept inline so the explorer doesn't have to depend
+  // on the spells tab's internals.
+  function markActionUsed(slot) {
+    if (!applyCharacter || !slot) return
+    applyCharacter(d => {
+      if (!d.status) d.status = {}
+      if (!d.status.economy) d.status.economy = {}
+      d.status.economy[slot] = true
+    })
+  }
+  // Special: feature-row activation that creates a *new* pill on
+  // the action-economy bar. Currently:
+  //   • Action Surge → adds an "Action Surge" pill (second action)
+  // Detected by row name match because the underlying mechanic is
+  // identical across editions and class data tags it consistently.
+  function applyRowSideEffects(row) {
+    if (!row?.name) return
+    const lower = row.name.toLowerCase()
+    if (/\baction\s*surge\b/.test(lower)) {
+      applyCharacter(d => {
+        if (!d.status) d.status = {}
+        if (!d.status.economy) d.status.economy = {}
+        d.status.economy.surgeActive = true
+        d.status.economy.surgeAction = false
+      })
+    }
+  }
+  function castSpellFromExplorer(spell, slotLevel, opts = {}) {
+    if (!applyCharacter) return
+    const slotName = opts.economySlot
+    const concName = character?.status?.concentration?.spell
+      || character?.status?.concentration?.name
+    if (spell.concentration && concName && concName !== spell.name) {
+      if (!window.confirm(`Du konzentrierst gerade auf ${concName}. Durch ${spell.name} ersetzen?`)) return
+    }
+    // 5e "one leveled spell per turn" rule: if you cast a leveled
+    // spell with a casting time of 1 action OR 1 bonus action, the
+    // other slot in the same turn must be a cantrip. We track the
+    // first leveled cast on `status.economy.leveledCast` and warn
+    // before allowing a second. Reset happens automatically on
+    // "Neue Runde". 5.5e relaxed this rule, so we ask rather than
+    // hard-block — the player can override if they're playing 5.5e.
+    if (slotLevel > 0 && character?.status?.economy?.leveledCast) {
+      if (!window.confirm(
+        'Du hast in dieser Runde bereits einen Levelzauber gewirkt.\n\n'
+        + 'Regel (5e): Nur ein Levelzauber pro Runde — der andere Slot darf nur einen Cantrip wirken.\n\n'
+        + 'Trotzdem wirken?'
+      )) return
+    }
+    applyCharacter(d => {
+      if (!d.status) d.status = {}
+      if (opts.usePact) {
+        d.status.usedPactSlots = (d.status.usedPactSlots || 0) + 1
+      } else if (slotLevel > 0) {
+        if (!d.status.usedSpellSlots) d.status.usedSpellSlots = {}
+        d.status.usedSpellSlots[slotLevel] = (d.status.usedSpellSlots[slotLevel] || 0) + 1
+      }
+      if (spell.concentration) {
+        d.status.concentration = {
+          spell: spell.name, level: slotLevel,
+          since: new Date().toISOString(),
+        }
+      }
+      if (!d.status.economy) d.status.economy = {}
+      if (slotName) d.status.economy[slotName] = true
+      if (slotLevel > 0) d.status.economy.leveledCast = true
+    })
+    setCastingFor(null)
+  }
+  function consumeResource(resourceId) {
+    if (!applyCharacter || !resourceId) return
+    const res = (computed?.resources || []).find(r => r.id === resourceId)
+    const max = res?.max ?? Infinity
+    applyCharacter(d => {
+      if (!d.status) d.status = {}
+      if (!d.status.usedResources) d.status.usedResources = {}
+      const cur = d.status.usedResources[resourceId] || 0
+      // Clamp at max so spamming "Verwenden" doesn't push the counter
+      // past the resource cap (which would render harmlessly thanks
+      // to Math.max in the display, but persisting an out-of-range
+      // number is just noise on the row).
+      if (cur < max) d.status.usedResources[resourceId] = cur + 1
+    })
+  }
 
   // Lazy-load the full spell list so we know each spell's casting
   // time and metadata. Without this, prepared spells fall through
@@ -796,6 +897,7 @@ function CombatActionsExplorer({ character, computed }) {
           id: `std-${slot}-${a.name}`, name: a.name,
           damage: '', attack: '', range: '', target: '',
           kind: 'standard', notes: a.notes,
+          economySlot: slot,
         })
       }
     }
@@ -813,6 +915,7 @@ function CombatActionsExplorer({ character, computed }) {
         range: atk.range,
         target: '1 Ziel',
         kind: 'attack',
+        economySlot: slot,
         notes: [
           atk.markedAs && `${atk.markedAs.label}: ${atk.markedAs.note}`,
           atk.mastery?.length > 0 && `Mastery: ${atk.mastery.join(', ')}`,
@@ -871,6 +974,13 @@ function CombatActionsExplorer({ character, computed }) {
         target: '—',
         kind: isAlways ? 'always-spell' : 'spell',
         badge: isAlways ? 'Always' : null,
+        // Cast / use machinery — used by the row's button cluster.
+        spell: {
+          name: c.name,
+          level: full?.level ?? 0,
+          concentration: !!full?.concentration,
+        },
+        economySlot: slot,
         notes: [
           desc ? (desc.length > 200 ? desc.slice(0, 200) + '…' : desc) : null,
           full?.duration && `Dauer: ${full.duration}`,
@@ -901,6 +1011,7 @@ function CombatActionsExplorer({ character, computed }) {
         name: `${f.name}`,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'feature',
+        economySlot: slot,
         notes: firstString ? String(firstString).slice(0, 200).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
       })
     }
@@ -919,6 +1030,7 @@ function CombatActionsExplorer({ character, computed }) {
         name: t.name,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'species',
+        economySlot: slot,
         notes: firstString ? String(firstString).slice(0, 200).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1') : '',
       })
     }
@@ -949,6 +1061,9 @@ function CombatActionsExplorer({ character, computed }) {
         if (!res || !res.max) continue
         const used = usedResources[res.id] || 0
         row.uses = { remaining: Math.max(0, res.max - used), max: res.max, label: res.name }
+        // resourceId on the row so the "Use" button knows what to
+        // increment (consumeResource(row.resourceId)).
+        row.resourceId = res.id
       }
     }
 
@@ -965,7 +1080,31 @@ function CombatActionsExplorer({ character, computed }) {
     return b
   }, [character, computed, spellMap])
 
+  // Hasted Action tab: only available while concentrating on Haste,
+  // and filtered to the restricted set the spell allows — "one
+  // Attack, Dash, Disengage, Hide, or Use Object". Single attack
+  // means we surface ONE weapon attack chip (the first one we have
+  // available) rather than the whole attack list. Restrictions are
+  // visual only; the player still drives the game socially.
+  const concSpell = String(character?.status?.concentration?.spell || character?.status?.concentration?.name || '').toLowerCase()
+  const hasted = /\bhaste\b/.test(concSpell)
+  const HASTED_NAMES = /^(attack|dash|disengage|hide|use\s*object|utilize|magic)$/i
+  if (hasted) {
+    const seenAttack = { v: false }
+    buckets.hastedAction = []
+    for (const r of buckets.action) {
+      if (r.kind === 'attack') {
+        if (seenAttack.v) continue
+        seenAttack.v = true
+        buckets.hastedAction.push({ ...r, id: `hasted-${r.id}`, economySlot: 'hastedAction' })
+      } else if (r.kind === 'standard' && HASTED_NAMES.test(r.name)) {
+        buckets.hastedAction.push({ ...r, id: `hasted-${r.id}`, economySlot: 'hastedAction' })
+      }
+    }
+  }
+
   const total = buckets.action.length + buckets.bonusAction.length + buckets.reaction.length
+    + (buckets.hastedAction?.length || 0)
   if (total === 0) return null
 
   const tabs = [
@@ -973,6 +1112,16 @@ function CombatActionsExplorer({ character, computed }) {
     { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
     { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
   ]
+  if (hasted && buckets.hastedAction?.length > 0) {
+    tabs.push({ id: 'hastedAction', label: 'Hasted Action', color: 'var(--accent-blue)' })
+  }
+  // If the currently-selected tab vanished (e.g. concentration on
+  // Haste dropped while the player was on the Hasted tab), fall back
+  // to Action so we never render against an empty bucket.
+  useEffect(() => {
+    if (!tabs.some(t => t.id === tab)) setTab('action')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs.map(t => t.id).join('|')])
   const rows = buckets[tab] || []
 
   return (
@@ -1051,10 +1200,34 @@ function CombatActionsExplorer({ character, computed }) {
                           {r.uses.remaining}/{r.uses.max}
                         </span>
                       )}
+                      <CombatActionButton
+                        row={r}
+                        slots={slots}
+                        usedSlots={usedSlots}
+                        usedPact={usedPact}
+                        castingFor={castingFor}
+                        setCastingFor={setCastingFor}
+                        onCastSpell={castSpellFromExplorer}
+                        onUseAction={() => {
+                          if (r.economySlot) markActionUsed(r.economySlot)
+                          if (r.resourceId)  consumeResource(r.resourceId)
+                          applyRowSideEffects(r)
+                        }}
+                      />
                     </div>
                   </div>
                   {expanded === r.id && r.notes && (
                     <div style={caeRowBody}>{r.notes}</div>
+                  )}
+                  {castingFor === r.id && r.spell && r.spell.level > 0 && (
+                    <SpellSlotPicker
+                      row={r}
+                      slots={slots}
+                      usedSlots={usedSlots}
+                      usedPact={usedPact}
+                      onCast={castSpellFromExplorer}
+                      onCancel={() => setCastingFor(null)}
+                    />
                   )}
                     </div>
                   </div>
@@ -1067,6 +1240,126 @@ function CombatActionsExplorer({ character, computed }) {
     </div>
   )
 }
+// Inline Cast/Use button cluster on each explorer row. Three modes:
+//   • spell cantrip   → single "Cast" button (no slot picker)
+//   • spell L1+       → "Cast ▾" opens the SpellSlotPicker below
+//   • non-spell row   → "Verwenden" toggles the row's economy slot
+//                       and (if applicable) increments the matching
+//                       resource counter
+function CombatActionButton({
+  row, slots, usedSlots, usedPact,
+  castingFor, setCastingFor,
+  onCastSpell, onUseAction,
+}) {
+  const stop = (e) => e.stopPropagation()
+  if (row.spell) {
+    // Cantrip: cast immediately. No slot consumed; concentration
+    // still toggles if the cantrip is concentration.
+    if (row.spell.level === 0) {
+      return (
+        <button type="button" style={caeUseBtn} onClick={(e) => {
+          stop(e); onCastSpell(row.spell, 0, { economySlot: row.economySlot })
+        }} title="Cantrip wirken (kein Slot benötigt)">Cast</button>
+      )
+    }
+    // Leveled spell: toggle the slot picker.
+    const isOpen = castingFor === row.id
+    return (
+      <button type="button" style={caeUseBtn} onClick={(e) => {
+        stop(e); setCastingFor(isOpen ? null : row.id)
+      }} title="Spell wirken">{isOpen ? 'Cast ▴' : 'Cast ▾'}</button>
+    )
+  }
+  // Non-spell row: only show a button when this row actually does
+  // something on activation. Attacks have an economy slot; class /
+  // species / standard rows have economySlot too. Granted-but-passive
+  // rows would lack economySlot.
+  if (!row.economySlot) return null
+  return (
+    <button type="button" style={caeUseBtn} onClick={(e) => { stop(e); onUseAction() }}
+      title={`Aktion verbrauchen — markiert die ${row.economySlot}-Pille`}>
+      Verwenden
+    </button>
+  )
+}
+
+// Pop-out beneath a leveled-spell row: a chip per available slot
+// level the player can upcast at, plus a Pact-slot chip for warlocks.
+// Used slots are greyed out and disabled.
+function SpellSlotPicker({ row, slots, usedSlots, usedPact, onCast, onCancel }) {
+  const baseLevel = row.spell.level || 1
+  const stop = (e) => e.stopPropagation()
+  const list = []
+  for (let lv = baseLevel; lv <= 9; lv++) {
+    const max = slots?.slots?.[lv - 1] || 0
+    if (!max) continue
+    const used = usedSlots[lv] || 0
+    list.push({ lv, max, remaining: Math.max(0, max - used) })
+  }
+  const pact = slots?.warlockSlots
+  if (pact && pact.level >= baseLevel) {
+    list.push({
+      lv: pact.level, max: pact.slots,
+      remaining: Math.max(0, pact.slots - usedPact),
+      isPact: true,
+    })
+  }
+  if (list.length === 0) {
+    return (
+      <div style={caePickerWrap} onClick={stop}>
+        <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+          Keine passenden Slots verfügbar.
+        </span>
+        <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
+      </div>
+    )
+  }
+  return (
+    <div style={caePickerWrap} onClick={stop}>
+      <span style={{ color: 'var(--text-muted)', fontSize: 11, marginRight: 4 }}>Slot:</span>
+      {list.map(s => {
+        const dead = s.remaining === 0
+        return (
+          <button key={`${s.isPact ? 'p' : 'L'}-${s.lv}`} type="button"
+            disabled={dead} style={{ ...caeSlotChip, opacity: dead ? 0.35 : 1 }}
+            onClick={(e) => {
+              stop(e)
+              onCast(row.spell, s.lv, { economySlot: row.economySlot, usePact: !!s.isPact })
+            }}
+            title={s.isPact ? `Pact Slot L${s.lv}` : `Spell Slot L${s.lv}`}>
+            {s.isPact ? `P${s.lv}` : `L${s.lv}`}
+            <span style={{ marginLeft: 4, color: 'var(--text-dim)' }}>{s.remaining}/{s.max}</span>
+          </button>
+        )
+      })}
+      <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
+    </div>
+  )
+}
+
+const caeUseBtn = {
+  marginLeft: 6, padding: '2px 8px', borderRadius: 4, fontSize: 10,
+  fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+  background: 'var(--bg-elevated)', border: '1px solid var(--accent)',
+  color: 'var(--accent)',
+}
+const caePickerWrap = {
+  display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4,
+  padding: '6px 10px', borderTop: '1px solid var(--border-subtle)',
+  background: 'var(--bg-inset)',
+}
+const caeSlotChip = {
+  padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+  border: '1px solid var(--accent)', background: 'transparent',
+  color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit',
+}
+const caeCancelBtn = {
+  marginLeft: 'auto', width: 20, height: 20, borderRadius: 4,
+  border: '1px solid var(--border)', background: 'transparent',
+  color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit',
+  fontSize: 12, padding: 0,
+}
+
 const caeToggle = {
   cursor: 'pointer', background: 'transparent',
   border: '1px solid var(--border-subtle)', borderRadius: 6,
@@ -1215,19 +1508,46 @@ function CombatTile({ label, value, color, tooltip, badge }) {
 // One button per slot. Click toggles "used" state. "Neue Runde" resets
 // all three to unused at the start of the player's next turn. State
 // lives at character.status.economy.
-function CombatEconomy({ value, onChange }) {
+function CombatEconomy({ value, onChange, character }) {
+  // Conditional extra pills:
+  //  • Action Surge — a flag the Fighter sets via the explorer when
+  //    they spend their Action Surge resource; gives a second
+  //    Action this turn. Goes away on `reset`.
+  //  • Hasted Action — automatic while the character is concentrating
+  //    on `Haste`. Lets you take ONE of {Attack (1×), Dash, Disengage,
+  //    Hide, Use Object}. The pill is the tracker; restrictions are
+  //    enforced socially.
+  // The leveled-spell-this-turn flag (`value.leveledCast`) is read
+  // when the explorer wants to warn the player, and cleared here.
+  const concSpell = String(character?.status?.concentration?.spell || character?.status?.concentration?.name || '').toLowerCase()
+  const hasted    = /\bhaste\b/.test(concSpell)
   const slots = [
     { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
     { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
     { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
   ]
+  if (value?.surgeActive) {
+    slots.push({ id: 'surgeAction', label: 'Action Surge', color: 'var(--accent-orange, #ff9533)' })
+  }
+  if (hasted) {
+    slots.push({ id: 'hastedAction', label: 'Hasted Action', color: 'var(--accent-blue)' })
+  }
   function toggle(id) {
     onChange({ ...(value || {}), [id]: !value?.[id] })
   }
   function reset() {
-    onChange({ action: false, bonusAction: false, reaction: false })
+    // Clear EVERY per-turn flag including the conditional pills and
+    // the leveledCast guard. `surgeActive` clears too — Action Surge
+    // is single-use-per-turn (refreshes on short/long rest, not the
+    // round).
+    onChange({
+      action: false, bonusAction: false, reaction: false,
+      surgeAction: false, hastedAction: false,
+      surgeActive: false, leveledCast: false,
+    })
   }
-  const anyUsed = !!(value?.action || value?.bonusAction || value?.reaction)
+  const anyUsed = !!(value?.action || value?.bonusAction || value?.reaction
+    || value?.surgeAction || value?.hastedAction || value?.surgeActive || value?.leveledCast)
 
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -693,7 +693,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       d.status.temporaryHp = 0
       d.status.deathSaves = { successes: 0, failures: 0 }
       d.status.concentration = null
-      d.status.economy = { action: false, bonusAction: false, reaction: false }
+      d.status.economy = {
+        action: false, bonusAction: false, reaction: false,
+        // Per-turn / conditional pill flags also reset on long rest.
+        surgeAction: false, hastedAction: false,
+        surgeActive: false, leveledCast: false,
+      }
     })
   }
 
