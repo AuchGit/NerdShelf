@@ -531,6 +531,29 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
   // Filter out classes that grant 0 mastery slots — only show the
   // picker when there's something to actually pick.
   const eligibleClasses = (wm?.perClass || []).filter(pc => (pc.count || 0) > 0)
+
+  // Modal-driven picker state — which class is being edited right now.
+  // Declared up here (before any early return) so React always sees
+  // the same hook order on every render of this component; once `wm`
+  // arrives the picker promotes from "no picks" to "has picks" and
+  // moving these hooks below a conditional return triggered React #310.
+  const [pickerFor, setPickerFor] = useState(null)
+  const pickerClass = eligibleClasses.find(p => p.classIndex === pickerFor)
+
+  // Set of weapon names already picked by OTHER classes — they're
+  // disabled in this class's picker so the same Mastery can't be
+  // double-counted. The eligible class itself can still toggle its
+  // own picks freely.
+  const pickedElsewhere = useMemo(() => {
+    if (!pickerClass) return new Set()
+    const out = new Set()
+    for (const pc of eligibleClasses) {
+      if (pc.classIndex === pickerClass.classIndex) continue
+      for (const w of (pc.picked || [])) out.add(w.toLowerCase())
+    }
+    return out
+  }, [eligibleClasses, pickerClass])
+
   if (!wm || eligibleClasses.length === 0) return null
 
   function togglePick(classIndex, weaponName, max) {
@@ -572,24 +595,6 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
     }
     return out
   }
-
-  // Modal-driven picker state — which class is being edited right now.
-  const [pickerFor, setPickerFor] = useState(null)
-  const pickerClass = eligibleClasses.find(p => p.classIndex === pickerFor)
-
-  // Set of weapon names already picked by OTHER classes — they're
-  // disabled in this class's picker so the same Mastery can't be
-  // double-counted. The eligible class itself can still toggle its
-  // own picks freely.
-  const pickedElsewhere = useMemo(() => {
-    if (!pickerClass) return new Set()
-    const out = new Set()
-    for (const pc of eligibleClasses) {
-      if (pc.classIndex === pickerClass.classIndex) continue
-      for (const w of (pc.picked || [])) out.add(w.toLowerCase())
-    }
-    return out
-  }, [eligibleClasses, pickerClass])
 
   return (
     <Section title="Weapon Mastery">
@@ -1323,7 +1328,6 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
 
   const total = buckets.action.length + buckets.bonusAction.length + buckets.reaction.length
     + (buckets.hastedAction?.length || 0)
-  if (total === 0) return null
 
   const tabs = [
     { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
@@ -1335,11 +1339,15 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   }
   // If the currently-selected tab vanished (e.g. concentration on
   // Haste dropped while the player was on the Hasted tab), fall back
-  // to Action so we never render against an empty bucket.
+  // to Action so we never render against an empty bucket. Must stay
+  // ABOVE any early return — total flips between 0 and >0 between
+  // renders, and a hook below a conditional return triggers React #310.
   useEffect(() => {
     if (!tabs.some(t => t.id === tab)) setTab('action')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.map(t => t.id).join('|')])
+
+  if (total === 0) return null
   const rows = buckets[tab] || []
 
   return (
