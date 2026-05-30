@@ -11,7 +11,8 @@ import { getModifier } from '../../lib/characterModel'
 import { modStr, masteryShortDesc, collectCharacterSpells, computeSpellSlots, COIN_TYPES, totalGoldValue } from '../../lib/sheetUtils'
 import { undoLevelUp } from '../../lib/levelUpEngine'
 import { getEffectsForSlot, getMechanicalEffects } from '../../lib/featureEffects'
-import { loadItemIndex, loadSpellList } from '../../lib/dataLoader'
+import { loadItemIndex, loadSpellList, loadOptionalFeatureList } from '../../lib/dataLoader'
+import { FEATURE_TYPE_LABEL } from '../../lib/choiceParser'
 import { getFavorites, parseFavoriteKey, toggleFavorite } from '../../lib/favorites'
 import EntryRenderer from '../ui/EntryRenderer'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
@@ -22,6 +23,7 @@ import { getSpellcastingInfo } from '../../lib/spellcastingRules'
 import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList, SheetModal } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
+import SpellPrepareModal from './SpellPrepareModal'
 
 // ── Clickable pip row (death saves, resources) ─────────────────
 function Pips({ count, filled, color, onSet }) {
@@ -1874,9 +1876,15 @@ function CombatActionButton({
 // Pop-out beneath a leveled-spell row: a chip per available slot
 // level the player can upcast at, plus a Pact-slot chip for warlocks.
 // Used slots are greyed out and disabled.
+//
+// Wenn der Spell in den 5etools-Daten `entriesHigherLevel` mitbringt
+// (= das "At Higher Levels"-Block), zeigen wir den hier über den
+// Slot-Chips an — der Spieler soll vor der Slot-Wahl sehen was ein
+// Upcast bringt. EntryRenderer löst die 5etools-Tags auf.
 function SpellSlotPicker({ row, slots, usedSlots, usedPact, onCast, onCancel }) {
   const baseLevel = row.spell.level || 1
   const stop = (e) => e.stopPropagation()
+  const higherLevel = row.spellMeta?.entriesHigherLevel
   const list = []
   for (let lv = baseLevel; lv <= 9; lv++) {
     const max = slots?.slots?.[lv - 1] || 0
@@ -1892,35 +1900,47 @@ function SpellSlotPicker({ row, slots, usedSlots, usedPact, onCast, onCancel }) 
       isPact: true,
     })
   }
-  if (list.length === 0) {
-    return (
-      <div style={caePickerWrap} onClick={stop}>
-        <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
-          Keine passenden Slots verfügbar.
-        </span>
-        <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
-      </div>
-    )
-  }
   return (
-    <div style={caePickerWrap} onClick={stop}>
-      <span style={{ color: 'var(--text-muted)', fontSize: 11, marginRight: 4 }}>Slot:</span>
-      {list.map(s => {
-        const dead = s.remaining === 0
-        return (
-          <button key={`${s.isPact ? 'p' : 'L'}-${s.lv}`} type="button"
-            disabled={dead} style={{ ...caeSlotChip, opacity: dead ? 0.35 : 1 }}
-            onClick={(e) => {
-              stop(e)
-              onCast(row.spell, s.lv, { economySlot: row.economySlot, usePact: !!s.isPact })
-            }}
-            title={s.isPact ? `Pact Slot L${s.lv}` : `Spell Slot L${s.lv}`}>
-            {s.isPact ? `P${s.lv}` : `L${s.lv}`}
-            <span style={{ marginLeft: 4, color: 'var(--text-dim)' }}>{s.remaining}/{s.max}</span>
-          </button>
-        )
-      })}
-      <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
+    <div style={{ ...caePickerWrap, flexDirection: 'column', alignItems: 'stretch' }} onClick={stop}>
+      {Array.isArray(higherLevel) && higherLevel.length > 0 && (
+        <div style={{
+          fontSize: 11, lineHeight: 1.5,
+          color: 'var(--text-secondary)',
+          background: 'color-mix(in srgb, var(--accent-blue) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent)',
+          borderRadius: 6, padding: '6px 8px', marginBottom: 6,
+        }}>
+          <EntryRenderer entries={higherLevel} />
+        </div>
+      )}
+      {list.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ color: 'var(--text-dim)', fontSize: 11, flex: 1 }}>
+            Keine passenden Slots verfügbar.
+          </span>
+          <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginRight: 4 }}>Slot:</span>
+          {list.map(s => {
+            const dead = s.remaining === 0
+            return (
+              <button key={`${s.isPact ? 'p' : 'L'}-${s.lv}`} type="button"
+                disabled={dead} style={{ ...caeSlotChip, opacity: dead ? 0.35 : 1 }}
+                onClick={(e) => {
+                  stop(e)
+                  onCast(row.spell, s.lv, { economySlot: row.economySlot, usePact: !!s.isPact })
+                }}
+                title={s.isPact ? `Pact Slot L${s.lv}` : `Spell Slot L${s.lv}`}>
+                {s.isPact ? `P${s.lv}` : `L${s.lv}`}
+                <span style={{ marginLeft: 4, color: 'var(--text-dim)' }}>{s.remaining}/{s.max}</span>
+              </button>
+            )
+          })}
+          <button type="button" style={caeCancelBtn} onClick={(e) => { stop(e); onCancel() }}>×</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2753,10 +2773,108 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
     }).filter(Boolean)
   }, [character.classes, computed, edition])
 
+  // Class-Abkürzungen für die Multiclass-Pills. Datengetrieben: nimm
+  // den ersten Buchstaben jeder Klasse, bei Kollision (Wizard +
+  // Warlock = beide W) auf 2 Buchstaben hoch — kein hardcoded
+  // Klassen→Buchstabe-Mapping.
+  const classAbbr = useMemo(() => {
+    const ids = casterClasses.map(c => c.classId)
+    for (let n = 1; n <= 4; n++) {
+      const candidate = {}
+      let collision = false
+      for (const cid of ids) {
+        const abbr = cid.slice(0, n).toUpperCase()
+        if (candidate[abbr] && candidate[abbr] !== cid) { collision = true; break }
+        candidate[abbr] = cid
+      }
+      if (!collision) {
+        const out = {}
+        for (const cid of ids) out[cid] = cid.slice(0, n).toUpperCase()
+        return out
+      }
+    }
+    const out = {}
+    for (const cid of ids) out[cid] = cid.toUpperCase().slice(0, 4)
+    return out
+  }, [casterClasses])
+
   const preparedByClass = character?.status?.preparedSpells || {}
   const { slots: slotsArr, warlockSlots } = computeSpellSlots(character)
   const usedSlots = character?.status?.usedSpellSlots || {}
   const usedPact  = character?.status?.usedPactSlots  || 0
+
+  // ── Optional-Features-Katalog lazy laden (Maneuvers, Invocations,
+  //    Metamagic, Fighting Styles, Arcane Shots, …). Wird genutzt um
+  //    die Beschreibungen / Entries zur picked Option anzuzeigen.
+  //    Per Edition gecached, identisch zum SpellMap-Lazy-Load.
+  const [optFeatMap, setOptFeatMap] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    loadOptionalFeatureList(edition).then(list => {
+      if (cancelled) return
+      const m = new Map()
+      for (const f of (list || [])) {
+        const key = `${String(f.name || '').toLowerCase()}|${String(f.source || '').toUpperCase()}`
+        m.set(key, f)
+        // Auch ohne Source mappen — manche Charakter-Speicher haben
+        // die source nicht mitgespeichert, dann fallback per name.
+        const nameKey = String(f.name || '').toLowerCase()
+        if (!m.has(nameKey)) m.set(nameKey, f)
+      }
+      setOptFeatMap(m)
+    }).catch(() => { if (!cancelled) setOptFeatMap(new Map()) })
+    return () => { cancelled = true }
+  }, [edition])
+
+  // ── Pro Klasse die Optional-Features einsammeln (Maneuvers etc.).
+  //    Datenpfad: cls.levelChoices[lv].optionalFeatures[]. Gruppiert
+  //    nach dem 5etools featureType-Label (Maneuver, Invocation,
+  //    Metamagic, Fighting Style, Arcane Shot, …) — kein hardcoded
+  //    Mapping pro Klasse, das Label kommt direkt aus FEATURE_TYPE_LABEL.
+  const classPicks = useMemo(() => {
+    const out = {}
+    for (const cls of (character.classes || [])) {
+      const map = {}
+      for (const [lvStr, ch] of Object.entries(cls.levelChoices || {})) {
+        const lv = parseInt(lvStr, 10) || 0
+        for (const f of (ch.optionalFeatures || [])) {
+          const ft = String(f.featureType || '').toUpperCase()
+          const labelEntry = FEATURE_TYPE_LABEL[ft]
+          const label = labelEntry?.label || ft || 'Other'
+          if (!map[label]) map[label] = []
+          map[label].push({
+            name: f.name,
+            source: f.source,
+            level: lv,
+            featureType: ft,
+          })
+        }
+      }
+      if (Object.keys(map).length > 0) out[cls.classId] = map
+    }
+    return out
+  }, [character.classes])
+
+  // Klassen die ihren eigenen Tab bekommen — alles mit Caster-Status
+  // ODER mit picked Optional-Features. Reihenfolge entspricht der
+  // Klassenreihenfolge auf dem Charakter (multiclass-Order).
+  const tabbedClasses = useMemo(() => {
+    const orderedIds = (character.classes || []).map(c => c.classId)
+    const set = new Set()
+    for (const c of casterClasses) set.add(c.classId)
+    for (const cid of Object.keys(classPicks)) set.add(cid)
+    return orderedIds.filter(cid => set.has(cid))
+  }, [character.classes, casterClasses, classPicks])
+
+  // Tab-State. 'all' = aktueller Combined-View; sonst classId.
+  // Bei Single-Class brauchen wir keine Tabs.
+  const [tab, setTab] = useState('all')
+  const showTabs = tabbedClasses.length > 1
+  // Verschwindet die aktuelle Tab-Klasse (Multi→Single nach Level-
+  // Up-Undo o.ä.), zurück auf 'all'.
+  useEffect(() => {
+    if (tab !== 'all' && !tabbedClasses.includes(tab)) setTab('all')
+  }, [tab, tabbedClasses])
   const maxSpellLvl = useMemo(() => {
     let mx = 0
     if (Array.isArray(slotsArr)) for (let i = 0; i < 9; i++) if (slotsArr[i] > 0) mx = i + 1
@@ -2895,52 +3013,185 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
     if (!updateCharacter) return
     if (row.always) return            // cosmetic, but guard cantrips and granted
     if (row.spell.level === 0) return // cantrips never need prep
-    // Which class should claim this prep slot? Prefer a prepared
-    // caster that already lists the spell (Wizard spellbook case),
-    // then any prepared caster whose class list contains it.
+    // Welche Klasse beansprucht diesen Prep-Slot?
+    // Reihenfolge:
+    //   1. Klassen die den Spell schon prepped haben (für Unprep-Klick)
+    //   2. Klassen die diesen Spell laut row.knownByClass führen können
+    //   3. Fallback: irgendeine Prepared-Caster-Klasse des Charakters
+    //      — fängt 5e-Edge-Cases wo der Spell nur über das
+    //      sourceClasses-Set ohne canonical case angekommen ist.
     const preparedCasterIds = casterClasses
       .filter(c => c.info?.type === 'prepared')
       .map(c => c.classId)
-    const eligible = preparedCasterIds.filter(cid => row.knownByClass.has(cid))
-    if (eligible.length === 0) return
+    if (preparedCasterIds.length === 0) return
+    const knownByClassLower = new Set([...(row.knownByClass || [])].map(s => String(s).toLowerCase()))
+    const eligible = preparedCasterIds.filter(cid =>
+      row.knownByClass.has(cid) || knownByClassLower.has(cid.toLowerCase()),
+    )
+    const finalEligible = eligible.length > 0 ? eligible : preparedCasterIds
     const isPrepped = !!row.prepared
     const target = isPrepped
-      ? (eligible.find(cid => (preparedByClass[cid] || []).some(n => n.toLowerCase() === row.key)) || eligible[0])
-      : eligible[0]
-    const list = preparedByClass[target] || []
-    const has = list.some(n => n.toLowerCase() === row.key)
-    const next = has
-      ? list.filter(n => n.toLowerCase() !== row.key)
-      : [...list, row.spell.name]
-    updateCharacter(`status.preparedSpells.${target}`, next)
+      ? (finalEligible.find(cid => (preparedByClass[cid] || []).some(n => n.toLowerCase() === row.key)) || finalEligible[0])
+      : finalEligible[0]
+    prepWithClass(row, target)
   }
 
-  // Header counter — small "Class: x/y" per prepared caster. Replaces
-  // the old "Spells preparen" button entirely (the modal is gone).
+  // Mutually exclusive Per-Class-Toggle. Wird vom Multiclass-Pill-
+  // Layout gerufen: Klick auf Pille X → Spell wird bei Klasse X
+  // prepared und falls vorher bei einer anderen Klasse prepared,
+  // dort entfernt. Klick auf bereits aktive Pille → unprep.
+  function prepWithClass(row, classId) {
+    if (!updateCharacter || !classId) return
+    if (row.always || row.spell.level === 0) return
+    const listOfTarget = preparedByClass[classId] || []
+    const hasInTarget = listOfTarget.some(n => n.toLowerCase() === row.key)
+    if (hasInTarget) {
+      // Aktive Pille → unprep bei dieser Klasse.
+      updateCharacter(
+        `status.preparedSpells.${classId}`,
+        listOfTarget.filter(n => n.toLowerCase() !== row.key),
+      )
+      return
+    }
+    // Andere Pille → bei alter Klasse(n) entfernen, bei neuer
+    // hinzufügen. Iterieren über ALLE Caster, damit auch Legacy-
+    // Doppeleinträge sauber konsolidiert werden.
+    for (const cc of casterClasses) {
+      if (cc.classId === classId) continue
+      const list = preparedByClass[cc.classId] || []
+      if (list.some(n => n.toLowerCase() === row.key)) {
+        updateCharacter(
+          `status.preparedSpells.${cc.classId}`,
+          list.filter(n => n.toLowerCase() !== row.key),
+        )
+      }
+    }
+    updateCharacter(`status.preparedSpells.${classId}`, [...listOfTarget, row.spell.name])
+  }
+
+  // Modal-State: welche Klasse hat gerade ihr Prepare/Spellbook-
+  // Modal offen. Eine pro Klick auf eine Header-Pille.
+  const [modalClassId, setModalClassId] = useState(null)
+
+  // Header-Pillen: pro Prepare-Caster eine klickbare Pille die ihr
+  // Modal öffnet. Wizard wird mit "Spellbook" beschriftet, alle
+  // anderen mit "Prepare ClassName". Zeigt zusätzlich den
+  // Counter "x/y" — gelb wenn das Limit erreicht ist.
   const headerCounter = classCounters.length > 0 ? (
-    <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-      {classCounters.map((c, i) => (
-        <span key={c.classId} style={{ whiteSpace: 'nowrap' }}>
-          {i > 0 && <span style={{ color: 'var(--text-dim)', margin: '0 4px' }}>·</span>}
-          <span style={{ color: 'var(--text-secondary)' }}>{c.classId}:</span>{' '}
-          <span style={{ color: c.current >= c.max ? 'var(--accent-yellow)' : 'var(--accent-green)', fontWeight: 700 }}>
-            {c.current}/{c.max}
-          </span>
-        </span>
-      ))}
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
+      {classCounters.map(c => {
+        const isWizard = c.classId === 'Wizard'
+        const overLimit = c.current >= c.max && c.max > 0
+        return (
+          <button
+            key={c.classId}
+            type="button"
+            onClick={() => setModalClassId(c.classId)}
+            title={isWizard ? 'Spellbook öffnen' : `${c.classId}-Spells preparen`}
+            style={{
+              fontSize: 10, fontWeight: 700, padding: '3px 8px',
+              borderRadius: 999, fontFamily: 'inherit', cursor: 'pointer',
+              background: 'transparent',
+              border: `1px solid ${overLimit ? 'var(--accent-yellow)' : 'var(--accent-green)'}`,
+              color: overLimit ? 'var(--accent-yellow)' : 'var(--accent-green)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {isWizard ? 'Spellbook' : c.classId}{c.max > 0 ? ` ${c.current}/${c.max}` : ''}
+          </button>
+        )
+      })}
     </span>
   ) : null
 
+  // Tab-Filter: für jeden Spell-Level die Rows auf die aktive Tab-
+  // Klasse kürzen. 'all' belässt alle. Always-prepared Rows ohne
+  // knownByClass werden in jedem Tab gezeigt (race/feat grants).
+  const visibleRowsByLevel = useMemo(() => {
+    if (tab === 'all' || !showTabs) return rowsByLevel
+    const out = {}
+    for (const lv of Object.keys(rowsByLevel)) {
+      out[lv] = rowsByLevel[lv].filter(row =>
+        row.knownByClass?.has(tab) || !row.knownByClass || row.knownByClass.size === 0,
+      )
+    }
+    return out
+  }, [tab, showTabs, rowsByLevel])
+  const visibleLevelOrder = useMemo(
+    () => Object.keys(visibleRowsByLevel).map(Number).sort((a, b) => a - b),
+    [visibleRowsByLevel],
+  )
+
+  // Class-Picks für den aktiven Tab. 'all' sammelt alles aus allen
+  // Klassen, sonst nur die der aktiven Klasse.
+  const visibleClassPicks = useMemo(() => {
+    if (tab === 'all') {
+      const combined = {}
+      for (const [cid, groups] of Object.entries(classPicks)) {
+        for (const [label, items] of Object.entries(groups)) {
+          if (!combined[label]) combined[label] = []
+          for (const it of items) combined[label].push({ ...it, classId: cid })
+        }
+      }
+      return combined
+    }
+    const g = classPicks[tab] || {}
+    const out = {}
+    for (const [label, items] of Object.entries(g)) {
+      out[label] = items.map(it => ({ ...it, classId: tab }))
+    }
+    return out
+  }, [tab, classPicks])
+  const pickLabels = Object.keys(visibleClassPicks)
+
   return (
+    <>
     <Section title="Spells" action={headerCounter}>
       <div style={fixedHeightScroll}>
-        {levelOrder.length === 0 && (
+        {showTabs && (
+          <div style={{
+            display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap',
+          }}>
+            <button
+              type="button"
+              onClick={() => setTab('all')}
+              style={spellTabStyle(tab === 'all')}
+              title="Alle Klassen kombiniert"
+            >All</button>
+            {tabbedClasses.map(cid => (
+              <button
+                key={cid}
+                type="button"
+                onClick={() => setTab(cid)}
+                style={spellTabStyle(tab === cid)}
+                title={cid}
+              >{classAbbr[cid] || cid.slice(0, 2).toUpperCase()}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Class-Picks (Maneuvers, Invocations, Metamagic, Fighting
+            Styles, Arcane Shots, …) als eigene Kategorie VOR den
+            Spell-Levels. Datengetrieben aus levelChoices →
+            optionalFeatures, gelabelt via FEATURE_TYPE_LABEL. */}
+        {pickLabels.map(label => (
+          <ClassPickCategory
+            key={label}
+            label={label}
+            items={visibleClassPicks[label]}
+            optFeatMap={optFeatMap}
+            showClassBadge={tab === 'all'}
+            classAbbr={classAbbr}
+          />
+        ))}
+
+        {visibleLevelOrder.length === 0 && pickLabels.length === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '4px 2px' }}>
             Keine Spells.
           </div>
         )}
-        {levelOrder.map(lv => {
-          const rows = rowsByLevel[lv]
+        {visibleLevelOrder.map(lv => {
+          const rows = visibleRowsByLevel[lv]
           const open = openLevels.has(lv)
           const label = lv === 0 ? 'Cantrips' : `Level ${lv}`
           const slotInfo = slotInfoByLevel[lv]
@@ -2959,6 +3210,10 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
                   isExpanded={expandedKey === row.key}
                   onExpand={() => setExpandedKey(k => k === row.key ? null : row.key)}
                   onTogglePrep={() => togglePrep(row)}
+                  onPrepWithClass={(cid) => prepWithClass(row, cid)}
+                  casterClasses={casterClasses}
+                  classAbbr={classAbbr}
+                  preparedByClass={preparedByClass}
                   ritualClassExists={ritualClassExists}
                 />
               ))}
@@ -2967,6 +3222,21 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
         })}
       </div>
     </Section>
+    <SpellPrepareModal
+      open={!!modalClassId}
+      onClose={() => setModalClassId(null)}
+      character={character}
+      computed={computed}
+      classId={modalClassId}
+      casterClasses={casterClasses}
+      classAbbr={classAbbr}
+      preparedByClass={preparedByClass}
+      maxSpellLvl={maxSpellLvl}
+      updateCharacter={updateCharacter}
+      applyCharacter={applyCharacter}
+      prepWithClass={prepWithClass}
+    />
+    </>
   )
 }
 
@@ -2977,13 +3247,27 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
 //   • slot label (At-Will / N/M)
 //   • expanded panel: full chips (cast/range/duration/components) +
 //     5etools entries
-function SpellListRow({ row, isExpanded, onExpand, onTogglePrep, ritualClassExists }) {
+function SpellListRow({
+  row, isExpanded, onExpand, onTogglePrep, onPrepWithClass,
+  casterClasses = [], classAbbr = {}, preparedByClass = {},
+  ritualClassExists,
+}) {
   const sp = row.spell
   const lv = row.level
   const isCantrip = lv === 0
   const grayed = !row.prepared && !row.always && !isCantrip
   const canToggle = !row.always && !isCantrip
   const dotKind = row.always ? 'always' : (row.prepared ? 'on' : 'off')
+
+  // Multiclass-Modus: wenn mehr als eine Caster-Klasse diesen Spell
+  // preparen darf, zeige Per-Klasse-Pills statt des einzelnen Dots.
+  // Mutually exclusive — eine Klasse hat den Slot, Klick auf andere
+  // Pille verschiebt ihn dorthin. Cantrips & Always-Prepared rendern
+  // weiterhin den Single-Dot (kein Prep-Toggle nötig / sinnvoll).
+  const eligiblePrepClasses = canToggle
+    ? casterClasses.filter(c => c.info?.type === 'prepared' && row.knownByClass?.has(c.classId))
+    : []
+  const showMulticlassPills = eligiblePrepClasses.length > 1
 
   // Pills
   const ct = String(sp.castingTime || '').toLowerCase()
@@ -3014,19 +3298,44 @@ function SpellListRow({ row, isExpanded, onExpand, onTogglePrep, ritualClassExis
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px' }}>
-        {/* Prep dot — left of the name as requested */}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); if (canToggle) onTogglePrep() }}
-          disabled={!canToggle}
-          title={
-            dotKind === 'always' ? 'Always Prepared'
-            : isCantrip ? 'Cantrip — always available'
-            : dotKind === 'on' ? 'Prepared (klick zum Unpreparen)'
-            : 'Nicht prepared (klick zum Preparen)'
-          }
-          style={prepDot(dotKind, canToggle)}
-        >{dotKind === 'on' ? '●' : dotKind === 'always' ? '◆' : '○'}</button>
+        {/* Single-Caster oder Cantrip / Always-Prepared → klassischer
+            Dot. Bei Multiclass mit ≥2 Prep-Klassen rendern wir
+            stattdessen Per-Klasse-Pills (s. unten). */}
+        {!showMulticlassPills && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); if (canToggle) onTogglePrep() }}
+            disabled={!canToggle}
+            title={
+              dotKind === 'always' ? 'Always Prepared'
+              : isCantrip ? 'Cantrip — always available'
+              : dotKind === 'on' ? 'Prepared (klick zum Unpreparen)'
+              : 'Nicht prepared (klick zum Preparen)'
+            }
+            style={prepDot(dotKind, canToggle)}
+          >{dotKind === 'on' ? '●' : dotKind === 'always' ? '◆' : '○'}</button>
+        )}
+        {showMulticlassPills && (
+          <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
+            {eligiblePrepClasses.map(c => {
+              const cid     = c.classId
+              const list    = preparedByClass[cid] || []
+              const active  = list.some(n => n.toLowerCase() === row.key)
+              const abbr    = classAbbr[cid] || cid.slice(0, 1).toUpperCase()
+              return (
+                <button
+                  key={cid}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onPrepWithClass?.(cid) }}
+                  title={active
+                    ? `Prepared via ${cid} — klick zum Unpreparen`
+                    : `Prepare via ${cid}`}
+                  style={classPillStyle(active)}
+                >{abbr}</button>
+              )
+            })}
+          </div>
+        )}
 
         <span
           onClick={onExpand}
@@ -3080,6 +3389,112 @@ function SpellListRow({ row, isExpanded, onExpand, onTogglePrep, ritualClassExis
       )}
     </div>
   )
+}
+
+// ── Spells-Spalten-Tab-Pille (All / W / Wi / Wa / R / …) ────────
+// Visuell parallel zu den Action-Spalten-Tabs gehalten: oben in der
+// Spells-Spalte sitzt für Multiclass-Charaktere eine Reihe Pills, die
+// die Liste auf die jeweilige Klasse filtern.
+function spellTabStyle(active) {
+  return {
+    padding: '3px 9px', borderRadius: 6,
+    fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+    border: `1px solid ${active ? 'var(--accent-green)' : 'var(--border)'}`,
+    background: active
+      ? 'color-mix(in srgb, var(--accent-green) 18%, transparent)'
+      : 'transparent',
+    color: active ? 'var(--accent-green)' : 'var(--text-muted)',
+    cursor: 'pointer', fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+  }
+}
+
+// ── Class-Pick-Kategorie (Maneuvers / Invocations / Metamagic / …) ─
+// Eine Klapp-Kategorie pro featureType-Label. Items werden so
+// kompakt wie Spell-Rows gerendert: linker Marker + Name + (im
+// 'All'-Tab) ein Klassen-Badge rechts. Klick öffnet ein Sub-Panel
+// mit der vollen Entry-Beschreibung aus optionalfeatures.json.
+function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr }) {
+  const [open, setOpen] = useState(true)
+  const [expandedKey, setExpandedKey] = useState(null)
+  if (!items || items.length === 0) return null
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div onClick={() => setOpen(o => !o)} style={categoryHead}>
+        <span style={{ flex: 1 }}>{open ? '▼' : '▶'} {label}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{items.length}</span>
+      </div>
+      {open && items.map(it => {
+        const key = `${it.classId || ''}|${it.name}|${it.level || ''}`
+        const expanded = expandedKey === key
+        const lookupKey = `${String(it.name).toLowerCase()}|${String(it.source || '').toUpperCase()}`
+        const featData = optFeatMap?.get(lookupKey) || optFeatMap?.get(String(it.name).toLowerCase()) || null
+        const hasEntries = Array.isArray(featData?.entries) && featData.entries.length > 0
+        return (
+          <div key={key} style={{
+            margin: '2px 0',
+            border: '1px solid var(--border-subtle)', borderRadius: 6,
+            background: 'var(--bg-elevated)',
+          }}>
+            <div
+              onClick={() => setExpandedKey(k => k === key ? null : key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 8px',
+                cursor: hasEntries ? 'pointer' : 'default',
+              }}
+            >
+              <span style={{ color: 'var(--text-dim)', fontSize: 10, width: 10, textAlign: 'center' }}>
+                {hasEntries ? (expanded ? '▼' : '▶') : '·'}
+              </span>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {it.name}
+              </span>
+              {it.level > 0 && (
+                <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>Lv {it.level}</span>
+              )}
+              {showClassBadge && it.classId && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800,
+                  padding: '1px 5px', borderRadius: 4,
+                  background: 'var(--bg-inset)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                }}>{classAbbr[it.classId] || it.classId.slice(0, 2).toUpperCase()}</span>
+              )}
+            </div>
+            {expanded && hasEntries && (
+              <div style={{
+                padding: '6px 10px 10px',
+                borderTop: '1px solid var(--border-subtle)',
+                fontSize: 11, lineHeight: 1.55, color: 'var(--text-secondary)',
+              }}>
+                <EntryRenderer entries={featData.entries} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Per-Klasse-Pille (W/R/P/C/...) für den Multiclass-Modus. Aktive
+// Klasse = gefüllt + Akzentfarbe; inaktive = nur Border + dim. Klein
+// genug damit 3–4 Pillen in derselben Höhe wie der alte Single-Dot
+// nebeneinander passen.
+function classPillStyle(active) {
+  return {
+    minWidth: 18, height: 18, padding: '0 4px',
+    borderRadius: 9, border: '1.5px solid var(--accent-green)',
+    background: active ? 'var(--accent-green)' : 'transparent',
+    color: active ? 'var(--bg-base, #111)' : 'var(--text-dim)',
+    cursor: 'pointer', fontSize: 10, fontWeight: 800,
+    lineHeight: 1, fontFamily: 'inherit',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+    borderColor: active ? 'var(--accent-green)' : 'var(--text-dim)',
+  }
 }
 
 function prepDot(kind, enabled) {
