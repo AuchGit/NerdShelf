@@ -17,7 +17,12 @@ const RECHECK_HOURS   = 6        // periodic re-check while app is running
 const DISMISS_KEY     = 'nerdshelf-update-dismissed-version'
 
 export default function UpdateChecker() {
-  const [updateInfo, setUpdateInfo] = useState(null)   // { version, body, update } | null
+  // `entries` holds one {version, body} per release the user skipped,
+  // newest first. The Tauri updater only surfaces the latest body —
+  // so for users who skipped several releases, we also pull the
+  // GitHub Releases list and aggregate. Falls back to just the
+  // latest body if GitHub is unreachable.
+  const [updateInfo, setUpdateInfo] = useState(null)   // { version, body, update, entries } | null
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress]     = useState(null)   // { downloaded, total } | null
   const [error, setError]           = useState(null)
@@ -35,9 +40,21 @@ export default function UpdateChecker() {
       const dismissed = sessionStorage.getItem(DISMISS_KEY)
       if (dismissed === update.version) return
 
+      // Pull the currently-installed version so we know which range
+      // of releases to aggregate. Without this we'd default to "just
+      // the latest body" which loses skipped-version notes.
+      let currentVersion = ''
+      try {
+        const { getVersion } = await import('@tauri-apps/api/app')
+        currentVersion = await getVersion()
+      } catch { /* ignore */ }
+
+      const entries = await fetchSkippedChangelogs(currentVersion, update.version, update.body)
+
       setUpdateInfo({
         version: update.version,
         body:    update.body,
+        entries,
         update,
       })
     } catch (e) {
@@ -115,6 +132,15 @@ export default function UpdateChecker() {
                 ? `Lade herunter… ${pct}%`
                 : 'Installation läuft…'}
             </div>
+          ) : (updateInfo.entries && updateInfo.entries.length > 0) ? (
+            <div style={S.changelogList}>
+              {updateInfo.entries.map(e => (
+                <div key={e.version} style={S.changelogBlock}>
+                  <div style={S.changelogVer}>v{e.version}</div>
+                  <div style={S.subtitle}>{formatChangelog(e.body)}</div>
+                </div>
+              ))}
+            </div>
           ) : updateInfo.body ? (
             <div style={S.subtitle}>{formatChangelog(updateInfo.body)}</div>
           ) : null}
@@ -144,6 +170,56 @@ export default function UpdateChecker() {
 function formatChangelog(s) {
   if (!s) return ''
   return String(s).split(/;\s+/).map(line => line.trim()).filter(Boolean).join('\n')
+}
+
+// GitHub Releases API zwischen `currentVersion` (exklusiv) und
+// `latestVersion` (inklusiv) abfragen, sodass das Popup für jeden
+// übersprungenen Release dessen Notes mit anzeigen kann. Fällt auf
+// `[{version, body: latestBody}]` zurück, falls die API hängt oder
+// die Versionsspanne nicht auflösbar ist.
+async function fetchSkippedChangelogs(currentVersion, latestVersion, latestBody) {
+  const fallback = [{ version: latestVersion, body: latestBody || '' }]
+  if (!latestVersion) return fallback
+  try {
+    // per_page=30 reicht ohne Auth bequem — ein Release dauert ein
+    // Patch-Bump, und 30 Releases zwischen zwei App-Starts wäre
+    // ohnehin Sondersituation.
+    const res = await fetch('https://api.github.com/repos/AuchGit/NerdShelf/releases?per_page=30', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+    if (!res.ok) return fallback
+    const list = await res.json()
+    if (!Array.isArray(list)) return fallback
+    const out = []
+    for (const r of list) {
+      const v = String(r.tag_name || '').replace(/^v/, '').trim()
+      if (!v) continue
+      if (compareVersions(v, latestVersion) > 0) continue
+      // Wenn wir die aktuelle Version kennen, exklusive Untergrenze;
+      // sonst zeig nur den Latest-Release (Fallback weiter unten).
+      if (currentVersion && compareVersions(v, currentVersion) <= 0) continue
+      out.push({ version: v, body: String(r.body || '') })
+    }
+    if (out.length === 0) return fallback
+    out.sort((a, b) => compareVersions(b.version, a.version))
+    return out
+  } catch {
+    return fallback
+  }
+}
+
+// Semver-Compare auf x.y.z. Reicht für die App, die kein Pre-Release
+// / Build-Metadata-Schema benutzt; die Release-Pipeline erlaubt nur
+// reine SemVer-Triples.
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0)
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0)
+  for (let i = 0; i < 3; i++) {
+    const ai = pa[i] || 0
+    const bi = pb[i] || 0
+    if (ai !== bi) return ai - bi
+  }
+  return 0
 }
 
 const S = {
@@ -196,6 +272,30 @@ const S = {
     // dann wie eine echte Aufzählung.
     whiteSpace: 'pre-line',
     lineHeight: 1.4,
+  },
+  // Container für die Pro-Version-Blöcke. Wird scrollbar, wenn der
+  // User mehrere Releases übersprungen hat — der Banner soll auch
+  // mit langer History nicht den halben Screen einnehmen.
+  changelogList: {
+    marginTop: 4,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    maxHeight: 260,
+    overflowY: 'auto',
+    paddingRight: 4,
+  },
+  changelogBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  changelogVer: {
+    fontSize: 'var(--fs-xs, 11px)',
+    fontWeight: 'var(--fw-semibold)',
+    color: 'var(--color-accent)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   error: {
     fontSize: 'var(--fs-sm)',

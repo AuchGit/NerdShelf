@@ -3181,11 +3181,20 @@ export async function downloadFoundryJSON(character) {
     try {
       const { save }          = await import('@tauri-apps/plugin-dialog')
       const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+      const { downloadDir }   = await import('@tauri-apps/api/path')
 
-      // Letzten Ordner als Vorschlag wiederverwenden.
-      let defaultPath = filename
+      // Letzten Ordner als Vorschlag wiederverwenden; sonst Downloads.
+      // OHNE expliziten Ordner würde der Dialog im CWD des Prozesses
+      // öffnen, was bei "als Admin starten" zu C:\Windows\System32
+      // führt. Daher ist ein absoluter Default-Pfad Pflicht.
       const lastDir = localStorage.getItem('dndbuilder_export_path')
-      if (lastDir) defaultPath = `${lastDir.replace(/[\\/]+$/, '')}/${filename}`
+      let baseDir = lastDir
+      if (!baseDir) {
+        try { baseDir = await downloadDir() } catch { baseDir = null }
+      }
+      const defaultPath = baseDir
+        ? `${baseDir.replace(/[\\/]+$/, '')}/${filename}`
+        : filename
 
       const target = await save({
         title: 'FoundryVTT Actor speichern',

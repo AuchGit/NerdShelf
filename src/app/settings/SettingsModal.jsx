@@ -294,13 +294,12 @@ function DndSettings() {
     let cancelled = false;
     (async () => {
       try {
-        const { appDataDir, resolve, resourceDir } = await import('@tauri-apps/api/path');
-        let p;
-        try {
-          p = await resolve(await resourceDir(), '..', 'export', 'foundry');
-        } catch {
-          p = await resolve(await appDataDir(), 'export', 'foundry');
-        }
+        // Downloads ist der Erwartungswert, den User aus jedem
+        // anderen Programm kennen. resourceDir() / appDataDir() lagen
+        // bei per-machine-Installs in Program Files bzw. AppData —
+        // beides ungeeignet als "klingt nach Foundry-Export"-Default.
+        const { downloadDir } = await import('@tauri-apps/api/path');
+        const p = await downloadDir();
         if (!cancelled) setDefaultPath(p);
       } catch {
         /* ignore */

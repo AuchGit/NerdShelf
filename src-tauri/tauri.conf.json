@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NerdShelf",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "io.github.auchgit.nerdshelf",
   "build": {
     "frontendDist": "../dist",
@@ -38,7 +38,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -46,6 +46,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

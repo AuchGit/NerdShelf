@@ -180,10 +180,19 @@ export default function CampaignDetailPage({ session, campaignId }) {
       try {
         const { writeTextFile, mkdir } = await import('@tauri-apps/plugin-fs')
         const { open } = await import('@tauri-apps/plugin-dialog')
+        const { downloadDir } = await import('@tauri-apps/api/path')
 
         let baseDir = localStorage.getItem('dndbuilder_export_path')
         if (!baseDir) {
-          const picked = await open({ directory: true, title: 'Export-Ordner wählen' })
+          // Downloads als Default für den Ordner-Picker, sonst öffnet
+          // Tauri im CWD (System32 bei Admin-Start).
+          let dialogDefault
+          try { dialogDefault = await downloadDir() } catch { dialogDefault = undefined }
+          const picked = await open({
+            directory: true,
+            title: 'Export-Ordner wählen',
+            defaultPath: dialogDefault,
+          })
           if (!picked) return
           baseDir = picked
           localStorage.setItem('dndbuilder_export_path', baseDir)
