@@ -40,7 +40,7 @@ function blankItem() {
     name: '', type: 'G', quantity: 1, weight: null, value: null,
     ac: null, strength: null, dmg1: '', dmgType: 'slashing', weaponCategory: 'simple',
     range: '', properties: [], rarity: 'common', description: '',
-    equipped: false, attuned: false, isContainer: false,
+    equipped: false, attuned: false, reqAttune: false, isContainer: false,
     isWeapon: false, isArmor: false,
   }
 }
@@ -243,6 +243,11 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       range: typeof entry.range === 'string' ? entry.range : '',
       properties, rarity: entry.rarity || 'common',
       equipped: false, attuned: false,
+      // reqAttune from the 5etools catalog — `true` or a string with
+      // the attunement-condition prose. UI gates the Attune checkbox
+      // and counter on this being truthy, so non-attunable items
+      // never carry an unused control.
+      reqAttune: entry.reqAttune || false,
       isWeapon: !!meta.isWeapon || !!entry.isWeapon,
       isArmor: !!meta.isArmor || !!entry.isArmor,
       isShield: entry.type === 'S',
@@ -318,7 +323,10 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
     ...containers.filter(c => c._key !== item._key).map(c => ({ value: c._key, label: c.customName || c.name })),
   ]
 
-  const attunedCount = items.filter(i => i.attuned).length
+  // Nur Items zählen, die laut 5etools-Daten überhaupt attunbar
+  // sind. Legacy-Charaktere haben attuned=true auf Items ohne
+  // reqAttune (z.B. weil die alte UI den Toggle ungefiltert anbot).
+  const attunedCount = items.filter(i => i.reqAttune && i.attuned).length
   const attuneMax = character.inventory?.attunementSlots || 3
 
   return (
@@ -637,7 +645,7 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
               const d = masteryShortDesc(m); return d ? `${m} (${d})` : m
             }).join(', ')}
             {item.equipped ? ' · Equipped' : ''}
-            {item.attuned ? ' · Attuned' : ''}
+            {item.reqAttune && item.attuned ? ' · Attuned' : ''}
           </div>
         </div>
         {/* Singleton items (weapons, armor, shields) live one-per-row so
@@ -654,7 +662,18 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
         <div style={{ padding: '8px 12px 12px', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
             {canEquip && <Checkbox checked={item.equipped} label="Equipped" onChange={v => onPatch(item, { equipped: v })} />}
-            <Checkbox checked={item.attuned} label="Attuned" onChange={v => onPatch(item, { attuned: v })} />
+            {/* Attune nur wenn das Item laut 5etools-Daten überhaupt
+                attunbar ist (reqAttune = true ODER ein String mit
+                Bedingung). Für gewöhnliche Items wird der Toggle
+                weggelassen, statt einen funktionslos-bleibenden
+                Haken anzubieten. */}
+            {item.reqAttune && (
+              <Checkbox
+                checked={item.attuned}
+                label={typeof item.reqAttune === 'string' ? `Attuned (${item.reqAttune})` : 'Attuned'}
+                onChange={v => onPatch(item, { attuned: v })}
+              />
+            )}
             {/* Quick-Access pins this item into the Overview's potion /
                 quick-access sidebar. Separate from the ☆-favorite (which
                 lives in its own panel) — items can be quick-access without
@@ -858,7 +877,17 @@ function ItemFormModal({ item, isNew, onClose, onSave }) {
         {(isWeapon || isArmor) && (
           <Checkbox checked={form.equipped} label="Equipped" onChange={v => set('equipped', v)} />
         )}
-        <Checkbox checked={form.attuned} label="Attuned" onChange={v => set('attuned', v)} />
+        {/* Custom-Items: erst sagen, dass Attunement nötig ist, dann
+            den eigentlichen Attuned-Haken anbieten. So bleibt das
+            UI-Verhalten identisch zu Katalog-Items. */}
+        <Checkbox
+          checked={!!form.reqAttune}
+          label="Requires attunement"
+          onChange={v => set('reqAttune', v)}
+        />
+        {!!form.reqAttune && (
+          <Checkbox checked={form.attuned} label="Attuned" onChange={v => set('attuned', v)} />
+        )}
         <Checkbox checked={form.isContainer} label="Is a container (backpack / pouch)" onChange={v => set('isContainer', v)} />
       </div>
 

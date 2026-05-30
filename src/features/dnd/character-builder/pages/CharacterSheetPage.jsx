@@ -258,6 +258,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       const code = String(w.type || '').split('|')[0]
       return ['M','R'].includes(code) && !w.isWeapon
     }
+    // `reqAttune` was added later — characters created before it
+    // exists need it backfilled so the Attune checkbox / sidebar
+    // counter can decide per item whether attunement applies at all.
+    // 5etools stores `reqAttune` as `true` OR a string ("by a wizard"
+    // etc.); we keep whichever form the catalog has so future UI can
+    // surface the conditions verbatim if it wants to.
+    const needsAttuneFlag = (w, ref) =>
+      ref && ref.reqAttune && w.reqAttune === undefined
     let needsPatch = false
     outer: for (const list of lists) {
       for (const w of list) {
@@ -269,7 +277,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           && !(Array.isArray(w.mastery) && w.mastery.length > 0)
         const wantsEntries = Array.isArray(ref.entries) && ref.entries.length > 0
           && !(Array.isArray(w.entries) && w.entries.length > 0)
-        if (wantsMastery || wantsEntries) { needsPatch = true; break outer }
+        if (wantsMastery || wantsEntries || needsAttuneFlag(w, ref)) {
+          needsPatch = true
+          break outer
+        }
       }
     }
     if (!needsPatch) return false
@@ -290,6 +301,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               && !(Array.isArray(w.entries) && w.entries.length > 0)) {
             w.entries = ref.entries
           }
+          if (needsAttuneFlag(w, ref)) w.reqAttune = ref.reqAttune
         }
       }
     }, { changedPaths: ['inventory.items', 'custom.items'] })
@@ -903,6 +915,15 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const initiative    = computed?.initiative ?? modifiers.dex
   const speed         = computed?.speed?.walk || character.species?.speed || 30
   const raceName      = character.species.raceId?.split('__')[0] || '—'
+  // Attunement-Counter unter dem Sidebar-Portrait — nur Items mit
+  // reqAttune zählen, damit Legacy-attuned=true auf nicht-attunbaren
+  // Items nicht mitgezählt wird. Slots-Default 3 entspricht 5e RAW.
+  const allInvItems   = [
+    ...((character.inventory?.items) || []),
+    ...((character.custom?.items)    || []),
+  ]
+  const attunedCount  = allInvItems.filter(i => i.reqAttune && i.attuned).length
+  const attuneMax     = character.inventory?.attunementSlots || 3
   const subraceName   = character.species.subraceId?.split('__')[0] || ''
   const speciesDisplay = subraceName ? `${subraceName} (${raceName})` : raceName
   const className     = character.classes.map(c => `${c.classId} ${c.level}`).join(' / ')
@@ -1166,6 +1187,22 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               />
             </div>
           )}
+
+          {/* Attunement-Counter. Mittig unter dem Portrait, knappes
+              "Attuned X/Y" — über Limit wird's rot, damit ein
+              Overflow sofort auffällt. Nur Items mit reqAttune
+              tragen zur Zählung bei (s. Berechnung oben). */}
+          <div style={{
+            textAlign: 'center',
+            fontSize: 11,
+            color: attunedCount > attuneMax ? 'var(--accent-red)' : 'var(--text-muted)',
+            marginTop: 4,
+            marginBottom: 6,
+            letterSpacing: 0.3,
+          }}
+          title={attunedCount > attuneMax ? 'Über dem Attunement-Limit' : 'Attunement-Slots'}>
+            Attuned {attunedCount}/{attuneMax}
+          </div>
 
           <SideSection title="Ability Scores" defaultOpen>
             <div style={S.abilityGrid}>

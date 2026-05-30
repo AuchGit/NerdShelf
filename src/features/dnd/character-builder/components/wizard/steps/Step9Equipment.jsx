@@ -338,6 +338,10 @@ export default function Step9Equipment({ character, updateCharacter }) {
       quantity: item.quantity || 1,
       equipped: item.isArmor || item.isWeapon || false,
       attuned: false,
+      // reqAttune comes straight from 5etools data — `true` or a
+      // string ("by a wizard", …). UI uses truthiness to decide
+      // whether the Attune checkbox should appear at all.
+      reqAttune: item.reqAttune || false,
       grantedBy,
       type: item.type || null,
       weight: item.weight ?? null,
@@ -371,6 +375,7 @@ export default function Step9Equipment({ character, updateCharacter }) {
       quantity: 1,
       equipped: false,
       attuned: false,
+      reqAttune: item.reqAttune || false,
       grantedBy: 'manual',
       type: item.type || null,
       weight: item.weight ?? null,

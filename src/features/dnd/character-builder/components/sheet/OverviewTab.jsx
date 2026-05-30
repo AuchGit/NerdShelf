@@ -1205,6 +1205,40 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       })
     }
 
+    // Attunete Magic Items mit Action-Economy. Wand of Magic Missiles,
+    // Cloak of Displacement, Ring of Invisibility etc. — alle haben
+    // ihre Aktivierung als "As an action, …" / "As a bonus action, …"
+    // / "As a reaction, …" in den entries. Wir scannen den gleichen
+    // detectActionSlot-Pfad wie für Klassen-Features, damit jedes
+    // neu hinzukommende Item automatisch erkannt wird ohne Catalog-
+    // Maintenance.
+    //
+    // Bedingungen:
+    //   • Item ist auf dem Charakter
+    //   • Item ist laut 5etools-Daten attunbar (reqAttune truthy)
+    //   • Spieler hat sich attuned (attuned === true)
+    //   • Item hat `entries` (vom backfillItemMetadata gefüllt)
+    const inventoryItems = [
+      ...((character?.inventory?.items) || []),
+      ...((character?.custom?.items)    || []),
+    ]
+    for (const item of inventoryItems) {
+      if (!item || !item.reqAttune || !item.attuned) continue
+      if (!Array.isArray(item.entries) || item.entries.length === 0) continue
+      const slot = detectActionSlot(item.entries)
+      if (!slot) continue
+      b[slot].push({
+        id: `item-${item.id || item._id || item.name}`,
+        name: item.customName || item.name,
+        damage: '—', attack: '', range: '—', target: '—',
+        kind: 'item',
+        economySlot: slot,
+        entries: item.entries,
+        sub: 'Item · Attuned',
+        notes: '',
+      })
+    }
+
     // Feats with action economy. Entries come from the lazy-loaded
     // feat catalog (`featMap`); when it hasn't arrived yet the rows
     // pop in on the next render. Recursive walk picks up Magic
@@ -1294,7 +1328,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     // feature) get their own slot above regular spells so they
     // visually group as an "Always" category at a glance. Standard
     // actions stay pinned at the top.
-    const kindOrder = { standard: 0, attack: 1, 'always-spell': 2, spell: 3, feature: 4, species: 5 }
+    const kindOrder = { standard: 0, attack: 1, 'always-spell': 2, spell: 3, feature: 4, species: 5, item: 6 }
     for (const k of Object.keys(b)) {
       b[k].sort((a, c) =>
         ((kindOrder[a.kind] ?? 99) - (kindOrder[c.kind] ?? 99))
@@ -1432,6 +1466,7 @@ function CombatActionsCategorisedList({
     const features    = byKind['feature']  || []
     const species     = byKind['species']  || []
     const attacks     = byKind['attack']   || []
+    const items       = byKind['item']     || []
     const spells      = [...(byKind['spell'] || []), ...(byKind['always-spell'] || [])]
 
     // Menu features (Cunning Action etc.) get promoted into the
@@ -1449,6 +1484,14 @@ function CombatActionsCategorisedList({
     const combinedFeatures = [...otherFeatures, ...species]
     if (combinedFeatures.length > 0) {
       out.push({ id: 'features', label: 'Class & Species Features', items: combinedFeatures })
+    }
+
+    // 2b. Magic Items — eigene Kategorie, damit attunete Items
+    // (Wand of Magic Missiles, Cloak of Displacement, Ring of
+    // Invisibility, …) als Block lesbar zwischen Features und
+    // Attacks/Cantrips sitzen statt vermischt zu erscheinen.
+    if (items.length > 0) {
+      out.push({ id: 'items', label: 'Magic Items', items })
     }
 
     // 3. Attacks & Cantrips together
@@ -1722,7 +1765,7 @@ function ActionRowExpandedBody({ row }) {
       </div>
     )
   }
-  if (row.kind === 'feature' || row.kind === 'species') {
+  if (row.kind === 'feature' || row.kind === 'species' || row.kind === 'item') {
     return (
       <div style={caeRowBody}>
         {row.sub && (
@@ -2420,68 +2463,15 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
     </button>
   )
 
-  const renderTile = ({ it, isPotion }) => {
-    const qty = it.quantity || 0
-    const isEquippable = !!(it.isWeapon || it.isArmor || it.isShield)
-    const equipped = !!it.equipped
-    // Inventory-tab item rows show a left tag stripe by user-pick;
-    // mirror that into the QA tile so visual organisation carries
-    // through. Empty string = transparent (no stripe).
-    const tagStripe = it.tagColor
-      ? { boxShadow: `inset 4px 0 0 ${it.tagColor}`, paddingLeft: 10 }
-      : null
-    return (
-      <button
-        key={`qa-${it.id || it._id || it.name}`}
-        type="button"
-        onClick={() => {
-          if (isEquippable) toggleEquip(it)
-          else bumpQty(it, -1)
-        }}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          if (!isEquippable) bumpQty(it, +1)
-        }}
-        title={
-          isEquippable
-            ? `${it.customName || it.name}\nKlick: ${equipped ? 'Ablegen' : 'Anlegen'}`
-            : `${it.customName || it.name}\nLinksklick: −1   ·   Rechtsklick: +1`
-        }
-        style={{
-          ...qaTile,
-          ...(tagStripe || {}),
-          display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'space-between',
-          borderColor: isPotion ? 'var(--accent-red)'
-            : (isEquippable && equipped) ? 'var(--accent-green)'
-            : 'var(--border)',
-          background: isPotion
-            ? 'color-mix(in srgb, var(--accent-red) 10%, transparent)'
-            : (isEquippable && equipped)
-              ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)'
-              : 'var(--bg-elevated)',
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.25,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'left' }}>
-          {isPotion && '🧪 '}{it.customName || it.name}
-        </span>
-        {isEquippable ? (
-          <span style={{
-            fontSize: 10, fontWeight: 700,
-            color: equipped ? 'var(--accent-green)' : 'var(--text-dim)',
-            whiteSpace: 'nowrap',
-            letterSpacing: 0.3,
-          }}>{equipped ? 'EQ' : '—'}</span>
-        ) : (
-          <span style={{
-            fontSize: 12, fontWeight: 800,
-            color: qty > 0 ? (isPotion ? 'var(--accent-red)' : 'var(--accent)') : 'var(--text-dim)',
-            whiteSpace: 'nowrap',
-          }}>×{qty}</span>
-        )}
-      </button>
-    )
-  }
+  const renderTile = ({ it, isPotion }) => (
+    <QaItemRow
+      key={`qa-${it.id || it._id || it.name}`}
+      it={it}
+      isPotion={isPotion}
+      onToggleEquip={() => toggleEquip(it)}
+      onBumpQty={(d) => bumpQty(it, d)}
+    />
+  )
 
   const body = tiles.length === 0 ? (
     <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 4px' }}>
@@ -2522,6 +2512,178 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
     </>
   )
 }
+// Einzeilige Item-Zeile für die Overview-Items-Spalte.
+//   • ▸ links: Expand-Chevron — klick öffnet ein Detail-Panel
+//     unter der Zeile mit Stats + EntryRenderer-Beschreibung.
+//   • Mitte: Name (kleinere Schrift, darf umbrechen statt
+//     abgeschnitten zu werden — der Player soll lange Namen wie
+//     "Cloak of Elvenkind" komplett lesen können).
+//   • Rechts: Stack-Anzahl ×N, oder EQ/— bei Equippables.
+// Right-click auf die Zeile bumpt Stack-Items um +1 (Behavior
+// vom alten Tile-Layout übernommen). Linksklick aufs Equip-Badge
+// toggelt equipped.
+function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
+  const [open, setOpen] = useState(false)
+  const qty = it.quantity || 0
+  const isEquippable = !!(it.isWeapon || it.isArmor || it.isShield)
+  const equipped = !!it.equipped
+  const tagStripe = it.tagColor
+    ? { boxShadow: `inset 4px 0 0 ${it.tagColor}`, paddingLeft: 10 }
+    : null
+  // Stat-Zeile fürs Detail-Panel: dynamisch zusammengebaut aus
+  // den Feldern die das Item tatsächlich trägt — keine
+  // Hardcoded-Liste, kein Vorrendern leerer Slots.
+  const statBits = [
+    it.dmg1       && `${it.dmg1}${it.dmgType ? ' ' + it.dmgType : ''}`,
+    it.ac != null && `AC ${it.ac}`,
+    it.range      && `Range ${it.range}`,
+    it.weight  != null && `${it.weight} lb`,
+    it.value   != null && `${it.value} gp`,
+    it.rarity && it.rarity !== 'none' && it.rarity !== 'common' && it.rarity,
+    it.reqAttune && (typeof it.reqAttune === 'string'
+      ? `Attunement (${it.reqAttune})`
+      : 'Attunement'),
+  ].filter(Boolean)
+  const masteryBits = Array.isArray(it.mastery)
+    ? it.mastery.map(m => {
+        const d = masteryShortDesc(m)
+        return d ? `${m} (${d})` : m
+      })
+    : []
+  const propBits = Array.isArray(it.properties)
+    ? it.properties.filter(Boolean)
+    : []
+  const hasEntries = Array.isArray(it.entries) && it.entries.length > 0
+  const hasDescription = typeof it.description === 'string' && it.description.trim().length > 0
+
+  // Klick-Regeln (vom User explizit so verlangt):
+  //   • Chevron ODER Name  → expand/collapse toggle
+  //   • Zahl linksklick    → 1× verbrauchen (Stack)  /  Equip toggeln (Equippable)
+  //   • Zahl rechtsklick   → +1 (Stack); bei Equippable ohne Wirkung
+  // Daher NUR der Header-Slot links (chevron + name) ist klickbar, die
+  // Zahl rechts ist ein eigener Button mit eigenem onClick /
+  // onContextMenu — kein onClick auf der ganzen Zeile mehr.
+  return (
+    <div
+      style={{
+        ...qaTile,
+        ...(tagStripe || {}),
+        padding: 0,                            // Padding wird von Header / Body separat gesetzt
+        cursor: 'default',
+        borderColor: isPotion ? 'var(--accent-red)'
+          : (isEquippable && equipped) ? 'var(--accent-green)'
+          : 'var(--border)',
+        background: isPotion
+          ? 'color-mix(in srgb, var(--accent-red) 10%, transparent)'
+          : (isEquippable && equipped)
+            ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)'
+            : 'var(--bg-elevated)',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 8px',
+          minHeight: 22,
+        }}
+      >
+        <div
+          onClick={() => setOpen(o => !o)}
+          title={`${it.customName || it.name} — Details ein/ausklappen`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            flex: 1, minWidth: 0, cursor: 'pointer',
+          }}
+        >
+          <span style={{
+            color: 'var(--text-dim)', fontSize: 10, lineHeight: 1,
+            width: 10, textAlign: 'center', flexShrink: 0,
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 120ms',
+          }}>▶</span>
+          <span style={{
+            fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+            lineHeight: 1.3, flex: 1,
+            // Lange Namen umbrechen statt abschneiden — auch
+            // mehrwortige Magic-Item-Namen sollen voll lesbar sein.
+            whiteSpace: 'normal', wordBreak: 'break-word',
+          }}>
+            {isPotion && '🧪 '}{it.customName || it.name}
+          </span>
+        </div>
+        {isEquippable ? (
+          <button
+            type="button"
+            onClick={onToggleEquip}
+            title={equipped ? 'Klick: Ablegen' : 'Klick: Anlegen'}
+            style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+              color: equipped ? 'var(--accent-green)' : 'var(--text-dim)',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              padding: '0 2px', fontFamily: 'inherit', flexShrink: 0,
+            }}
+          >{equipped ? 'EQ' : '—'}</button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onBumpQty(-1)}
+            onContextMenu={(e) => { e.preventDefault(); onBumpQty(+1) }}
+            disabled={qty <= 0}
+            title={qty > 0 ? 'Linksklick: −1   ·   Rechtsklick: +1' : 'Rechtsklick: +1'}
+            style={{
+              fontSize: 11, fontWeight: 800,
+              color: qty > 0 ? (isPotion ? 'var(--accent-red)' : 'var(--accent)') : 'var(--text-dim)',
+              whiteSpace: 'nowrap', flexShrink: 0,
+              background: 'transparent', border: 'none',
+              padding: '0 2px', fontFamily: 'inherit',
+              cursor: 'pointer',
+            }}
+          >×{qty}</button>
+        )}
+      </div>
+
+      {open && (
+        <div style={{
+          padding: '6px 10px 8px 22px',         // 22px Indent für die Chevron-Spalte
+          borderTop: '1px solid var(--border-subtle)',
+          background: 'color-mix(in srgb, var(--bg-inset) 70%, transparent)',
+          fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5,
+          cursor: 'default',
+        }}>
+          {statBits.length > 0 && (
+            <div style={{ marginBottom: 4, color: 'var(--text-muted)' }}>
+              {statBits.join(' · ')}
+            </div>
+          )}
+          {masteryBits.length > 0 && (
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: 'var(--accent-yellow)', fontWeight: 700 }}>Mastery:</span>{' '}
+              {masteryBits.join(', ')}
+            </div>
+          )}
+          {propBits.length > 0 && (
+            <div style={{ marginBottom: 4 }}>
+              <span style={{ color: 'var(--text-muted)' }}>Properties:</span>{' '}
+              {propBits.join(', ')}
+            </div>
+          )}
+          {hasEntries && (
+            <div style={{ marginTop: 4 }}>
+              <EntryRenderer entries={it.entries} />
+            </div>
+          )}
+          {!hasEntries && hasDescription && (
+            <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
+              {it.description}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Collapsible category wrapper used inside Quick Access — keeps the
 // Equipment / Loot split readable when the player has many items.
 function QaCategory({ title, count, defaultOpen = true, children }) {

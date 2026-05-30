@@ -907,6 +907,19 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     const attackBonus = baseAtk + (marks.attackBonus || 0)
     const damageExtra = (weapon.attackBonus || 0) + (marks.damageBonus || 0)
 
+    // Reach-Property erweitert die Nahkampf-Reichweite per RAW von
+    // 5 auf 10 ft. 5etools füllt `range` nur bei Ranged/Thrown-Waffen
+    // (Longbow "150/600", Dagger "20/60"), Nahkampf-Reach-Waffen wie
+    // Whip / Glaive / Halberd / Lance / Pike haben kein `range`-Feld
+    // — der alte Fallback `|| '5 ft.'` hat das verschluckt. Daher:
+    //   1. explizite range aus den Daten → wie sie ist
+    //   2. Reach-Property gesetzt          → 10 ft
+    //   3. sonst                            → 5 ft
+    // Damit funktioniert das automatisch für jede Reach-Waffe in den
+    // 5e- und 5.5e-Datendateien, ohne Whitelist.
+    const computedRange = weapon.range
+      ? weapon.range
+      : (props.includes('Reach') ? '10 ft.' : '5 ft.')
     attacks.push({
       id: weapon.id,
       name: weapon.customName || weapon.name,
@@ -914,7 +927,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       attackDisplay: `${attackBonus >= 0 ? '+' : ''}${attackBonus}`,
       damage: `${weapon.dmg1} + ${abilityMod}${damageExtra ? ` + ${damageExtra}` : ''}`,
       damageType: weapon.dmgType || 'unknown',
-      range: weapon.range || '5 ft.',
+      range: computedRange,
       properties: props,
       // 5.5e Weapon Mastery — empty on 5e weapons. Surfaced as a small
       // pill on the attack row of the player sheet. Hidden unless the
