@@ -1902,23 +1902,22 @@ function ShortRestPrompt({ character, computed, abilityScores, maxHp, currentHp,
 // Returns array of `{ classId, restPhase: 'long'|'short'|'any', text }`.
 function extractPrepHints(character) {
   const features = character?.__activeFeatures || []
-  // Words that mark a feature as the prep entry-point for a class.
   const headerRe = /\b(?:spellcasting|prepared\s+spells|preparation|change\s+(?:your\s+)?prepared|pact\s+magic)\b/i
+  // 5etools wraps rule-link words in tags like "{@variantrule Long
+  // Rest|XPHB}", so the plain-text `long rest` regex would never
+  // match the wrapped form. Strip tags BEFORE every match.
+  const stripTags = (s) => String(s || '').replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
   const out = []
   for (const f of features) {
     if (!f?.classId || !Array.isArray(f.entries)) continue
-    // Walk the feature's entries; pull paragraphs that mention
-    // preparing/changing spells in proximity to a rest phase. Skip
-    // any string that isn't about prep at all.
     const walk = (node, hits) => {
       if (typeof node === 'string') {
-        const low = node.toLowerCase()
+        const clean = stripTags(node)
+        const low = clean.toLowerCase()
         if (!/\b(prepar|prepared|change(?:s|d)?\s+(?:your\s+)?(?:list\s+of\s+)?prepared|swap)\b/.test(low)) return
         const restMatch = low.match(/\b(long|short)\s+rest\b/)
         if (!restMatch && !/\b(daily|each\s+day|after\s+each\s+adventure)\b/.test(low)) return
         const phase = restMatch ? restMatch[1] : 'any'
-        // Strip 5etools tags before showing.
-        const clean = node.replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
         hits.push({ phase, text: clean.length > 240 ? clean.slice(0, 238) + '…' : clean })
       } else if (Array.isArray(node)) {
         for (const x of node) walk(x, hits)
@@ -1927,12 +1926,10 @@ function extractPrepHints(character) {
         if (Array.isArray(node.items))   walk(node.items, hits)
       }
     }
-    // Only mine features that look like the spellcasting / prep
-    // declaration — skip random class features that happen to
-    // mention preparing. Header tested on the feature NAME first
-    // (cheap), fallback to the first string entry.
-    const firstStr = (f.entries || []).find(e => typeof e === 'string') || ''
-    if (!headerRe.test(f.name || '') && !headerRe.test(firstStr)) continue
+    // Header gating tested on tag-stripped strings too — XPHB wraps
+    // the parent feature names in {@variantrule …} occasionally.
+    const firstStr = stripTags((f.entries || []).find(e => typeof e === 'string') || '')
+    if (!headerRe.test(stripTags(f.name || '')) && !headerRe.test(firstStr)) continue
     const hits = []
     walk(f.entries, hits)
     for (const h of hits) {

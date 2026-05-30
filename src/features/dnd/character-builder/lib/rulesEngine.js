@@ -1065,7 +1065,12 @@ function parseWeaponMasteryCount(feature) {
     Array.isArray(e?.entries) ? flat(e.entries) :
     Array.isArray(e?.items)   ? flat(e.items)   : []
   )
-  const text = flat(feature.entries || []).join(' ').toLowerCase()
+  // Strip 5etools rule-link tags ({@variantrule Weapons|XPHB} etc.) so
+  // wording like "kinds of {@variantrule Weapons|XPHB} of your choice"
+  // still matches the "two weapons of your choice" pattern.
+  const text = flat(feature.entries || []).join(' ')
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    .toLowerCase()
   const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
   // Match "two kinds of", "three different weapons", "two weapons of your choice", etc.
   const m = text.match(/\b(one|two|three|four|five|six|\d+)\b\s+(?:kinds?\s+of|different|weapons?\s+of\s+your\s+choice)/i)
