@@ -1,18 +1,40 @@
 # release.ps1 — Auto-increment version, commit, tag, push
+#
+# Usage:
+#   release              → patch bump (x.y.Z+1)
+#   release minor        → minor bump (x.Y+1.0)
+#   release major        → major bump (X+1.0.0)
+param(
+    [string]$Bump = "patch"
+)
 $ErrorActionPreference = "Stop"
 
+# Normalise the bump argument so empty / unknown values fall through to
+# the default patch behaviour instead of silently doing nothing.
+$Bump = $Bump.Trim().ToLower()
+if ([string]::IsNullOrEmpty($Bump)) { $Bump = "patch" }
+if ($Bump -notin @("patch", "minor", "major")) {
+    Write-Host "FEHLER: Unbekannter Bump '$Bump'. Erlaubt: patch (default), minor, major." -ForegroundColor Red
+    Read-Host "Enter druecken"
+    exit 1
+}
+
 Write-Host ""
-Write-Host "=== Auto-Release ===" -ForegroundColor Cyan
+Write-Host "=== Auto-Release ($Bump) ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Read current version from tauri.conf.json
 $conf = Get-Content 'src-tauri\tauri.conf.json' -Raw
 if ($conf -match '"version": "(\d+)\.(\d+)\.(\d+)"') {
-    $major = $Matches[1]
-    $minor = $Matches[2]
-    $patch = [int]$Matches[3] + 1
-    $old = "$major.$minor.$($Matches[3])"
-    $new = "$major.$minor.$patch"
+    $curMajor = [int]$Matches[1]
+    $curMinor = [int]$Matches[2]
+    $curPatch = [int]$Matches[3]
+    $old = "$curMajor.$curMinor.$curPatch"
+    switch ($Bump) {
+        "major" { $new = "$($curMajor + 1).0.0" }
+        "minor" { $new = "$curMajor.$($curMinor + 1).0" }
+        default { $new = "$curMajor.$curMinor.$($curPatch + 1)" }
+    }
 } else {
     Write-Host "FEHLER: Version nicht gefunden in tauri.conf.json" -ForegroundColor Red
     Read-Host "Enter druecken"
@@ -50,6 +72,15 @@ if ($confirm -ne "j") {
     exit 0
 }
 
+# Einzeiliger Changelog. Leer lassen, um den Default-Text zu behalten.
+# "; " wird im In-App-Update-Popup zu einem Zeilenumbruch — also kann
+# man hier mehrere Punkte aneinander reihen, z.B.:
+#   Steady-Aim-Fix; React Hook-Order-Crash; Release-Script: minor/major
+Write-Host ""
+Write-Host "Changelog (einzeilig; '; ' wird im Popup zu Zeilenumbruch). Enter = leer."
+$changelog = Read-Host "Changelog"
+$changelog = $changelog.Trim()
+
 Write-Host ""
 
 # Update Cargo.toml
@@ -66,7 +97,15 @@ Set-Content 'src-tauri\tauri.conf.json' $conf -NoNewline
 # Git
 Write-Host "[3/5] Git commit..."
 git add -A
-git commit -m "v$new"
+if ([string]::IsNullOrEmpty($changelog)) {
+    git commit -m "v$new"
+} else {
+    # Erste -m = Commit-Title, zweite -m = Body. Der Workflow liest
+    # den Body via `git log -1 --format=%b` und gibt ihn als
+    # releaseBody an tauri-action weiter, sodass das Popup im Client
+    # ihn aus latest.json anzeigt.
+    git commit -m "v$new" -m "$changelog"
+}
 
 Write-Host "[4/5] Git tag v$new..."
 git tag "v$new"

@@ -22,6 +22,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need the tag commit's full message body, not just the
+          # squashed --depth=1 title, so the changelog the release
+          # script wrote into the commit survives.
+          fetch-depth: 2
+
+      # Pull the changelog the release script stashed in the tag
+      # commit's body. Empty body → fall back to the boilerplate so
+      # latest.json still has something readable.
+      - name: Extract changelog from tag commit
+        id: changelog
+        shell: bash
+        run: |
+          BODY=$(git log -1 --format=%b)
+          if [ -z "$BODY" ]; then
+            BODY='Siehe Asset `latest.json` für Update-Details.'
+          fi
+          {
+            echo "body<<NERDSHELF_EOF"
+            echo "$BODY"
+            echo "NERDSHELF_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -63,7 +85,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'NerdShelf ${{ github.ref_name }}'
-          releaseBody: 'Siehe Asset `latest.json` für Update-Details.'
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

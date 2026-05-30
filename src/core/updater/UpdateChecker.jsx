@@ -116,7 +116,7 @@ export default function UpdateChecker() {
                 : 'Installation läuft…'}
             </div>
           ) : updateInfo.body ? (
-            <div style={S.subtitle}>{truncate(updateInfo.body, 140)}</div>
+            <div style={S.subtitle}>{formatChangelog(updateInfo.body)}</div>
           ) : null}
         </div>
       </div>
@@ -137,9 +137,13 @@ export default function UpdateChecker() {
   )
 }
 
-function truncate(s, n) {
+// Release-Skript schreibt mehrere Changelog-Punkte mit "; " als
+// Trenner in eine Zeile. Hier in echte Zeilenumbrüche auflösen, damit
+// der Updater-Banner sie untereinander listet. CSS handhabt das
+// Wrapping per `whiteSpace: 'pre-line'` im subtitle-Style.
+function formatChangelog(s) {
   if (!s) return ''
-  return s.length > n ? s.slice(0, n - 1) + '…' : s
+  return String(s).split(/;\s+/).map(line => line.trim()).filter(Boolean).join('\n')
 }
 
 const S = {
@@ -187,6 +191,11 @@ const S = {
     fontSize: 'var(--fs-sm)',
     color: 'var(--color-text-muted)',
     marginTop: 2,
+    // `pre-line` ehrt die Newlines die formatChangelog aus "; "
+    // erzeugt, ohne Spaces zu kollabieren — Punktelisten lesen sich
+    // dann wie eine echte Aufzählung.
+    whiteSpace: 'pre-line',
+    lineHeight: 1.4,
   },
   error: {
     fontSize: 'var(--fs-sm)',
