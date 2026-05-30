@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
-import { getProficiencyBonus, getTotalLevel } from '../lib/characterModel'
+import { getProficiencyBonus, getTotalLevel, getModifier } from '../lib/characterModel'
 import { loadClassData, loadItemIndex, loadRaceList } from '../lib/dataLoader'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
@@ -37,6 +37,7 @@ const TABS = [
   { id: 'inventory',   label: 'Inventory' },
   { id: 'features',    label: 'Features' },
   { id: 'personality', label: 'Personality' },
+  { id: 'history',     label: 'Class History' },
 ]
 
 // ═══════════════════════════════════════════════════════════════
@@ -72,6 +73,15 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  // Desktop header is hidden by default and pops down as an overlay
+  // when the player clicks the chevron in the top toggle bar. Mobile
+  // keeps the existing compact header (no toggle).
+  const [headerOpen, setHeaderOpen] = useState(false)
+  // Guided rest prompts replace the old "confirm"-style rests. Short
+  // Rest collects hit-die rolls + previews HP gain; Long Rest reminds
+  // about spell prep + free recovery before committing.
+  const [shortRestOpen, setShortRestOpen] = useState(false)
+  const [longRestOpen, setLongRestOpen] = useState(false)
   const { isPwaMobile } = usePwaMobile()
   const saveTimer = useRef(null)
   const portraitRef = useRef(null)
@@ -750,10 +760,32 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   }
 
   // ── Rests ─────────────────────────────────────────────────
+  // Rest handlers now just open the guided prompts; the actual state
+  // changes happen on confirm inside each modal.
   function shortRest() {
-    if (!window.confirm('Take a short rest? Restores Pact Magic slots and short-rest resources.')) return
+    if (readOnly) return
+    setShortRestOpen(true)
+  }
+  function longRest() {
+    if (readOnly) return
+    setLongRestOpen(true)
+  }
+
+  // Commit handlers called from the modals — wrapping applyCharacter
+  // so the modals stay UI-only and the persistence logic lives next
+  // to the rest of the character mutators.
+  function commitShortRest({ hpGain, diceSpent }) {
     applyCharacter(d => {
       if (!d.status) d.status = {}
+      const maxHp = computed?.hp?.max || 1
+      const cur = d.status.currentHp ?? maxHp
+      d.status.currentHp = Math.min(maxHp, cur + hpGain)
+      // Track spent hit dice per class — Long Rest will recover half.
+      d.status.hitDiceUsed = { ...(d.status.hitDiceUsed || {}) }
+      for (const [classId, n] of Object.entries(diceSpent || {})) {
+        if (n > 0) d.status.hitDiceUsed[classId] = (d.status.hitDiceUsed[classId] || 0) + n
+      }
+      // Resources flagged short-rest plus pact slots refresh.
       d.status.usedPactSlots = 0
       const used = { ...(d.status.usedResources || {}) }
       for (const res of (computed?.resources || [])) {
@@ -761,10 +793,9 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
       d.status.usedResources = used
     })
+    setShortRestOpen(false)
   }
-
-  function longRest() {
-    if (!window.confirm('Take a long rest? Restores HP, spell slots and all resources.')) return
+  function commitLongRest() {
     const maxHp = Math.max(1, (computed?.hp?.max || 1) + (character.status?.maxHpBonus || 0))
     applyCharacter(d => {
       if (!d.status) d.status = {}
@@ -777,11 +808,20 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       d.status.concentration = null
       d.status.economy = {
         action: false, bonusAction: false, reaction: false,
-        // Per-turn / conditional pill flags also reset on long rest.
         surgeAction: false, hastedAction: false,
         surgeActive: false, leveledCast: false,
       }
+      // Long Rest recovers half (round-up) of each class's max hit dice.
+      const used = { ...(d.status.hitDiceUsed || {}) }
+      for (const cls of (character.classes || [])) {
+        const max = cls.level
+        const spent = used[cls.classId] || 0
+        const recover = Math.ceil(max / 2)
+        used[cls.classId] = Math.max(0, spent - recover)
+      }
+      d.status.hitDiceUsed = used
     })
+    setLongRestOpen(false)
   }
 
   // ── Portrait ──────────────────────────────────────────────
@@ -892,8 +932,31 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           </div>
           <button type="button" style={S.headerIconBtn} onClick={() => setShowMobileMenu(true)} aria-label="Optionen" title="Optionen">⋯</button>
         </div>
-      ) : (
-        <div data-pwa-target="dnd-sheet-header" style={S.header}>
+      ) : (<>
+        {/* Slim always-visible toggle: chevron + character name. The
+            full header (Dashboard back-link, name editor, Export /
+            Level Up / Custom buttons) appears as an overlay below when
+            the chevron is opened, so the bar doesn't eat vertical
+            space during play. */}
+        <div style={headerToggleBar}>
+          <button
+            type="button"
+            onClick={() => setHeaderOpen(o => !o)}
+            title={headerOpen ? 'Header schließen' : 'Header öffnen'}
+            style={headerToggleBtn}
+          >{headerOpen ? '▲' : '▼'}</button>
+          <span style={headerToggleTitle}>
+            {character.info.name || 'Unbenannt'}
+            <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 8 }}>
+              {speciesDisplay} · {className} · L{totalLevel}
+            </span>
+          </span>
+        </div>
+        {headerOpen && (
+        <div data-pwa-target="dnd-sheet-header"
+          style={{ ...S.header, position: 'absolute', top: 32, left: 0, right: 0, zIndex: 20, boxShadow: '0 6px 12px rgba(0,0,0,0.4)' }}
+          onMouseLeave={() => setHeaderOpen(false)}
+        >
           <button style={S.headerBackBtn} onClick={() => navigate(backTo)}>
             {readOnly && campaignId ? '← Campaign' : '← Dashboard'}
           </button>
@@ -958,7 +1021,8 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             <HeaderButtons session={session} />
           </div>
         </div>
-      )}
+        )}
+      </>)}
 
       {/* Mobile overflow menu */}
       <ActionSheet
@@ -1003,6 +1067,27 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         </Suspense>
       )}
 
+      {/* ═══ REST PROMPTS ═══ */}
+      {shortRestOpen && (
+        <ShortRestPrompt
+          character={character}
+          computed={computed}
+          abilityScores={abilityScores}
+          maxHp={hp.max}
+          currentHp={hp.current}
+          onClose={() => setShortRestOpen(false)}
+          onConfirm={commitShortRest}
+        />
+      )}
+      {longRestOpen && (
+        <LongRestPrompt
+          character={character}
+          computed={computed}
+          onClose={() => setLongRestOpen(false)}
+          onConfirm={commitLongRest}
+        />
+      )}
+
       {/* ═══ CONCENTRATION-SAVE PROMPT ═══
           Fires after any HP drop while concentrating. Lets the player
           choose the save outcome — failing auto-clears concentration. */}
@@ -1018,38 +1103,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         />
       )}
 
-      {/* ═══ COMBAT BAR ═══ */}
-      <div style={S.combatBar}>
-        <CombatStat label="Armor Class" value={ac} color="var(--accent-blue)" />
-        <CombatStat label="Initiative" value={modStr(initiative)} color="var(--accent-purple)" />
-        <CombatStat label="Speed" value={`${speed} ft.`} color="var(--accent-green)" />
-        <CombatStat label="Hit Points" value={`${hp.current}/${hp.max}`} color="var(--accent-red)"
-          sub={hp.temporary ? `+${hp.temporary} temp` : null} onClick={() => setActiveTab('overview')} />
-        <CombatStat label="Proficiency" value={modStr(profBonus)} color="var(--accent-yellow)" />
-        <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="var(--text-muted)" />
-      </div>
-
-      {/* ═══ PLAY TOOLBAR ═══ */}
-      {readOnly ? (
+      {/* Play toolbar replaced by corner icons on the sidebar portrait
+          (short rest / long rest / inspiration / level). GM read-only
+          notice still shows in its own slim banner. */}
+      {readOnly && (
         <div style={{ ...S.playBar, color: 'var(--accent-yellow)', fontSize: 12 }}>
           Spielleiter-Ansicht — schreibgeschützt. Änderungen werden nicht gespeichert.
-        </div>
-      ) : (
-        <div style={S.playBar}>
-          <button type="button" style={S.playBtn} onClick={shortRest}>Short Rest</button>
-          <button type="button" style={S.playBtn} onClick={longRest}>Long Rest</button>
-          <button type="button"
-            title={character.meta?.edition === '5.5e'
-              ? 'Heroic Inspiration (2024 PHB): erlaubt einmal pro Rast einen Wurf zu wiederholen. Wird oft bei Nat 1 verliehen.'
-              : 'Inspiration (PHB 2014): erlaubt einen Roll mit Advantage. Vom DM verliehen.'}
-            style={{
-              ...S.playBtn,
-              borderColor: inspiration ? 'var(--accent-yellow)' : 'var(--border)',
-              color: inspiration ? 'var(--accent-yellow)' : 'var(--text-secondary)',
-            }}
-            onClick={() => updateCharacter('status.inspiration', !inspiration)}>
-            {character.meta?.edition === '5.5e' ? 'Heroic Inspiration' : 'Inspiration'}: {inspiration ? 'On' : 'Off'}
-          </button>
         </div>
       )}
 
@@ -1065,9 +1124,46 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         {/* ── SIDEBAR ── */}
         <div className="dnd-sheet-sidebar" style={S.sidebar} inert={readOnly ? '' : undefined}>
           {portrait && (
-            <div style={S.sidePortrait}>
+            <div style={{ ...S.sidePortrait, position: 'relative', display: 'inline-block', width: '100%' }}>
               <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait"
                 onClick={() => portraitRef.current?.click()} title="Portrait ändern" />
+              {/* Corner icons replace the old play-toolbar buttons:
+                    TL: short rest  ·  TR: long rest
+                    BL: inspiration ·  BR: total level
+                  Each is absolutely positioned so the portrait stays
+                  the same size; click handlers stop propagation so the
+                  portrait-upload picker doesn't pop up. */}
+              <PortraitCornerIcon
+                pos="tl"
+                title={readOnly
+                  ? `Total Level ${totalLevel}`
+                  : `Total Level ${totalLevel} — Level Up öffnen`}
+                glyph={`Lv${totalLevel}`}
+                onClick={readOnly ? undefined : () => navigate(`/character/${id}/levelup`)}
+                static={readOnly}
+              />
+              <PortraitCornerIcon
+                pos="tr"
+                title={character.meta?.edition === '5.5e'
+                  ? 'Heroic Inspiration — toggle on / off'
+                  : 'Inspiration — toggle on / off'}
+                onClick={() => updateCharacter('status.inspiration', !inspiration)}
+                glyph="★"
+                active={!!inspiration}
+                activeColor="var(--accent-yellow)"
+              />
+              <PortraitCornerIcon
+                pos="bl"
+                title="Long Rest — HP, Spell Slots & Resources reset."
+                onClick={longRest}
+                glyph="LR"
+              />
+              <PortraitCornerIcon
+                pos="br"
+                title="Short Rest — Hit Dice & matching resources recover."
+                onClick={shortRest}
+                glyph="SR"
+              />
             </div>
           )}
 
@@ -1076,45 +1172,41 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               {['str','dex','con','int','wis','cha'].map(key => {
                 const score = abilityScores[key]
                 const mod = modifiers[key]
-                const base = character.abilityScores.base[key] || 8
-                const racial = character.species?.abilityScoreImprovements?.[key] || 0
-                const bg = character.background?.abilityScoreImprovements?.[key] || 0
-                const featBonus = (character.feats || []).reduce((sum, f) =>
-                  sum + (f.abilityBonus?.[key] || 0) + (f.choices?.abilityBonus?.[key] || 0), 0)
-                const hasBonuses = racial || bg || featBonus
+                // The old box showed the breakdown (base / racial /
+                // background / feat). The dedicated "Saving Throws"
+                // section below was redundant info for the same six
+                // abilities, so we merged: each box now carries its
+                // ability mod (top) + score (middle) + the matching
+                // saving throw with a proficiency dot (bottom).
+                const save = computed?.savingThrows?.[key]
                 return (
                   <div key={key} style={S.abilityBox}>
                     <div style={S.abilityAbbr}>{key.toUpperCase()}</div>
                     <div style={S.abilityMod}>{modStr(mod)}</div>
                     <div style={S.abilityScore}>{score}</div>
-                    {hasBonuses && (
-                      <div style={S.abilityBreakdown}>
-                        {base}
-                        {racial !== 0 && <span style={{ color: 'var(--accent-green)' }}>{racial > 0 ? '+' : ''}{racial}</span>}
-                        {bg !== 0 && <span style={{ color: 'var(--accent-purple)' }}>{bg > 0 ? '+' : ''}{bg}</span>}
-                        {featBonus !== 0 && <span style={{ color: 'var(--accent)' }}>{featBonus > 0 ? '+' : ''}{featBonus}</span>}
+                    {save && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: 4, marginTop: 4,
+                        fontSize: 11, color: 'var(--text-muted)',
+                      }} title={save.proficient ? 'Proficient' : 'Not Proficient'}>
+                        <span style={{
+                          width: 7, height: 7, borderRadius: '50%',
+                          background: save.proficient ? 'var(--accent)' : 'var(--border-strong)',
+                        }} />
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>SAVE</span>
+                        <span style={{ color: save.proficient ? 'var(--accent)' : 'var(--text-primary)', fontWeight: 700 }}>
+                          {modStr(save.total)}
+                        </span>
                       </div>
                     )}
                   </div>
                 )
               })}
             </div>
-          </SideSection>
-
-          <SideSection title="Saving Throws">
-            {computed && Object.entries(computed.savingThrows).map(([key, save]) => (
-              <div key={key} style={S.saveRow}>
-                <span style={{ ...S.profDot, background: save.proficient ? 'var(--accent)' : 'var(--border-strong)' }} />
-                <span style={S.saveName}>{key.toUpperCase()}</span>
-                <span style={S.saveValue}>{modStr(save.total)}</span>
-              </div>
-            ))}
-            {/* All save notes — per-ability and all-saves — rendered as
-                a single small list below the table. Replaces the
-                old ★-with-tooltip pattern: at-a-glance instead of
-                hover-to-find. Each per-ability note is prefixed with
-                the ability (e.g. "DEX · Evasion: …") so the player
-                can tell at a glance which save it applies to. */}
+            {/* Save notes (Evasion etc.) were lost when the dedicated
+                section was removed — keep them right under the ability
+                grid so the player can still see them. */}
             <ScopedNoteList
               character={character}
               slots={['str','dex','con','int','wis','cha'].map(a => ({ slot: `save:${a}`, prefix: a.toUpperCase() }))}
@@ -1138,6 +1230,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                   </span>
                   <span style={{ ...S.skillValue, color: data.proficiency ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
                     {modStr(data.total)}
+                    {/* Passive score = 10 + total modifier (incl.
+                        observant / proficiency / etc. baked into
+                        data.total by computeSkills). Slightly muted
+                        so the active modifier reads as the primary
+                        number; old "Senses" section retired. */}
+                    <span style={{ marginLeft: 6, color: 'var(--text-muted)', fontWeight: 500, fontSize: 11 }}>
+                      ({10 + (data.total || 0)})
+                    </span>
                   </span>
                 </div>
               )
@@ -1174,18 +1274,32 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             </SideSection>
           )}
 
-          <SideSection title="Senses">
-            <SenseRow label="Passive Perception" value={computed?.passivePerception ?? 10} />
-            <SenseRow label="Passive Investigation" value={computed?.passiveInvestigation ?? 10} />
-            <SenseRow label="Passive Insight" value={computed?.passiveInsight ?? 10} />
-            {character.species?.darkvision && (
-              <SenseRow label="Darkvision" value={`${character.species.darkvision} ft.`} />
-            )}
-          </SideSection>
+          {/* Senses section removed — passive Perception is now shown
+              inline next to the Perception skill ("+8 (18)"), the
+              same pattern works for Investigation and Insight. */}
         </div>
 
         {/* ── MAIN ── */}
         <div className="dnd-sheet-main" style={S.main}>
+          {/* Combat stat tiles — moved INTO the right pane so the
+              sidebar can stretch up to the very top of the page. The
+              tiles auto-fit across the remaining width, sidebar edge
+              to right edge. */}
+          <div style={{
+            ...S.combatBar,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(0, 1fr))',
+            gap: 8,
+          }}>
+            <CombatStat label="Armor Class" value={ac} color="var(--accent-blue)" />
+            <CombatStat label="Initiative" value={modStr(initiative)} color="var(--accent-purple)" />
+            <CombatStat label="Speed" value={`${speed} ft.`} color="var(--accent-green)" />
+            <CombatStat label="Hit Points" value={`${hp.current}/${hp.max}`} color="var(--accent-red)"
+              sub={hp.temporary ? `+${hp.temporary} temp` : null} onClick={() => setActiveTab('overview')} />
+            <CombatStat label="Proficiency" value={modStr(profBonus)} color="var(--accent-yellow)" />
+            <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="var(--text-muted)" />
+          </div>
+
           <div data-pwa-target="dnd-sheet-tabs" style={S.tabs}>
             {TABS.map(tab => (
               <button key={tab.id}
@@ -1201,6 +1315,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               <OverviewTab character={character} computed={computed} abilityScores={abilityScores}
                 hp={hp} updateCharacter={updateCharacter} applyCharacter={applyCharacter}
                 charId={id} session={session} onReload={loadCharacter}
+                onNavigateTab={setActiveTab}
                 readOnly={readOnly} />
             )}
             {activeTab === 'spells' && (
@@ -1214,6 +1329,24 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             {activeTab === 'features' && <FeaturesTab character={character} updateCharacter={updateCharacter} applyCharacter={applyCharacter} />}
             {activeTab === 'personality' && (
               <PersonalityTab character={character} updateCharacter={updateCharacter} />
+            )}
+            {activeTab === 'history' && (
+              <LevelHistoryTab
+                character={character}
+                readOnly={readOnly}
+                onUndo={async () => {
+                  const { undoLevelUp } = await import('../lib/levelUpEngine')
+                  const restored = undoLevelUp(character, 0)
+                  if (!restored) { alert('Kein Snapshot verfügbar.'); return }
+                  if (character.appearance?.portrait) {
+                    restored.appearance = { ...(restored.appearance || {}), portrait: character.appearance.portrait }
+                  }
+                  await supabase.from('dnd_characters')
+                    .update({ data: restored, name: restored.info.name })
+                    .eq('id', id).eq('user_id', session.user.id)
+                  loadCharacter()
+                }}
+              />
             )}
           </div>
         </div>
@@ -1231,6 +1364,29 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
 // it's used inline in the saving-throws side-section.)
 const featureNoteDot = {
   marginLeft: 6, color: 'var(--accent-yellow)', fontSize: 11, cursor: 'help',
+}
+
+// Slim always-visible header strip — replaces the full desktop header
+// during play. Click the chevron to drop the full bar in as an overlay.
+const headerToggleBar = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  background: 'var(--bg-panel)',
+  borderBottom: '1px solid var(--border)',
+  padding: '4px 10px',
+  flexShrink: 0,
+  position: 'relative',
+  zIndex: 10,
+}
+const headerToggleBtn = {
+  background: 'transparent', border: 'none',
+  color: 'var(--accent)', cursor: 'pointer',
+  padding: '2px 8px', fontSize: 12, fontFamily: 'inherit', lineHeight: 1,
+}
+const headerToggleTitle = {
+  fontSize: 13, fontWeight: 700,
+  color: 'var(--text-primary)',
+  flex: 1, minWidth: 0,
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 
 // Aggregated inline note list for a Side section (Saves / Skills /
@@ -1255,17 +1411,181 @@ function ScopedNoteList({ character, slots, extraSlot }) {
     }
   }
   if (items.length === 0) return null
+  // Plain text lines — no pill chips, no extra wrapper section.
+  // The sidebar shrinks vertically when the player has lots of hints
+  // so seeing them at a glance beats hover-only access.
   return (
-    <ul style={scopedNoteList}>
+    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
       {items.map(n => (
-        <li key={n.id} style={scopedNoteItem}>
-          {n.prefix && <span style={scopedNotePrefix}>{n.prefix}</span>}
-          <span style={scopedNoteFeature}>{n.feature}</span>
-          <span> · {n.text}</span>
-        </li>
+        <div
+          key={n.id}
+          title={`${n.feature} — ${n.text}`}
+          style={{
+            fontSize: 11, lineHeight: 1.35, color: 'var(--text-secondary)',
+            cursor: 'help',
+          }}
+        >
+          {n.prefix && (
+            <span style={{ color: 'var(--text-dim)', fontWeight: 700, fontSize: 10, marginRight: 4 }}>
+              {n.prefix}
+            </span>
+          )}
+          <span style={{ color: 'var(--accent)' }}>{abbreviateNote(n.text)}</span>
+        </div>
       ))}
-    </ul>
+    </div>
   )
+}
+
+// Aggressive heuristic abbreviation — pure regex over both English
+// (5etools rule text) and German (curated catalog) phrasings.
+// Compresses noise to 2-3 word hints like "Adv vs. Charmed",
+// "Sleep Immune", "Darkvision 60ft", "Resist Fire". New traits with
+// similar wording benefit automatically — no per-feature table.
+function cap(w) { return w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '' }
+
+// Small German→English condition map used only inside the abbreviator
+// — keeps the chip readable in English even when the source catalog
+// is in German.  Not a "translation table" of all rules; just the
+// nouns that appear after "vs./Resist/Immune".
+const DE_NOUN = {
+  feuer: 'Fire', kälte: 'Cold', kaelte: 'Cold', säure: 'Acid', saeure: 'Acid',
+  blitz: 'Lightning', donner: 'Thunder', strahlend: 'Radiant', strahlenden: 'Radiant',
+  nekrotisch: 'Necrotic', nekrotischen: 'Necrotic',
+  gift: 'Poison', psychisch: 'Psychic', psychischen: 'Psychic',
+  kraft: 'Force', wucht: 'Bludgeoning',
+  hieb: 'Slashing', stich: 'Piercing',
+  bezaubert: 'Charmed', verängstigt: 'Frightened', verängstigung: 'Frightened',
+  gelähmt: 'Paralyzed', betäubt: 'Stunned',
+  blind: 'Blinded', taub: 'Deafened',
+  versteinert: 'Petrified', vergiftet: 'Poisoned',
+  schlaf: 'Sleep', erschöpfung: 'Exhaustion',
+  magie: 'Magic', initiative: 'Init',
+}
+function translateNoun(w) {
+  if (!w) return ''
+  const k = w.toLowerCase()
+  return DE_NOUN[k] || cap(w)
+}
+
+function abbreviateNote(text) {
+  let s = String(text || '').trim()
+  // Catch sense-range traits FIRST and replace the WHOLE string —
+  // these have noisy German/English explanation tails ("…in
+  // Dämmerlicht / 60 ft. schwach in Dunkelheit") we don't want.
+  // Player reads "Darkvision: 60 ft." and is done.
+  const senseMatch =
+    s.match(/\b(darkvision|blindsight|tremorsense|truesight)\b[^0-9]*?(\d+)\s*(?:ft|feet|foot|fuß)\.?/i)
+  if (senseMatch) {
+    return `${cap(senseMatch[1])}: ${senseMatch[2]} ft.`
+  }
+  // Drop the leading "FeatureName: " prefix only for non-canonical
+  // traits — keeping the prefix here would double up with the
+  // feature label that's already in the hover tooltip. For canonical
+  // sense traits the sense-match branch above already handled it.
+  s = s.replace(/^[A-ZÄÖÜ][\wäöüß'’\- ]{1,40}:\s+/, '').trim()
+
+  // ── High-frequency exact phrases ──
+  s = s
+    // English: "magic can't put you to sleep"
+    .replace(/\b(?:magic\s+)?(?:can(?:'t| not)|cannot)\s+(?:be\s+)?put(?:\s+you)?\s+to\s+sleep(?:\s+by\s+magic)?\b/gi, 'Sleep Immune')
+    .replace(/\byou\s+can(?:'t| not)\s+be\s+put\s+to\s+sleep\b/gi, 'Sleep Immune')
+    // German: "Magie kann dich nicht ... Schlaf"
+    .replace(/\bmagie\s+kann\s+(?:dich\s+)?nicht\s+(?:in\s+den\s+)?schlaf(?:\s+versetzen)?\b/gi, 'Sleep Immune')
+    // Speed — both English and German prefix.
+    .replace(/\b(?:your\s+|deine\s+|grund-?\s*)?(?:walking\s+|base\s+|grund-?)?(?:speed|geschwindigkeit)\s+(?:is\s+|of\s+|ist\s+)?(\d+)\s*(?:ft|feet|foot|fuß)\.?\b/gi,
+      (_, n) => `Speed ${n}ft`)
+    // HP per level
+    .replace(/\+\s*(\d+)\s+hp\s+(?:per|pro|each)\s+(?:character\s+|class\s+)?level\b/gi, '+$1 HP/Lv')
+    // English condition immunity
+    .replace(/\byou\s+can(?:'t| not)\s+be\s+(charmed|frightened|poisoned|paralyzed|stunned|deafened|blinded|grappled|petrified)\b/gi,
+      (_, cond) => `${cap(cond)} Immune`)
+    // German condition immunity ("immun gegen Gift")
+    .replace(/\bimmun(?:ität)?\s+gegen\s+([\wäöüß]+)/gi, (_, w) => `${translateNoun(w)} Immune`)
+
+  // ── Concentration saves ──
+  s = s
+    .replace(/\bkonzentrations(?:rettungswurf|saves)?\s*(?:durch|bei|gegen)?\s*schaden\b/gi, 'Conc. Dmg')
+    .replace(/\bconcentration\s+(?:saves?|saving throws?)?\s*(?:caused\s+by|from|on)?\s*damage\b/gi, 'Conc. Dmg')
+    .replace(/\bconcentration\s+(?:saves?|saving throws?)\b/gi, 'Conc. Save')
+
+  // ── Resistance / Immunity / Vulnerability + type ──
+  s = s
+    .replace(/\bresistance\s+to\s+(\w+)(?:\s+damage)?\b/gi, (_, w) => 'Resist ' + translateNoun(w))
+    .replace(/\bresistenz\s+gegen\s+([\wäöüß]+)(?:\s+schaden)?\b/gi, (_, w) => 'Resist ' + translateNoun(w))
+    .replace(/\bimmunity\s+to\s+(\w+)(?:\s+damage)?\b/gi, (_, w) => 'Immune ' + translateNoun(w))
+    .replace(/\bvulnerability\s+to\s+(\w+)(?:\s+damage)?\b/gi, (_, w) => 'Vuln. ' + translateNoun(w))
+    .replace(/\bverwundbarkeit\s+gegen\s+([\wäöüß]+)\b/gi, (_, w) => 'Vuln. ' + translateNoun(w))
+
+  // ── Multi-ability saves ──
+  s = s.replace(
+    /\b((?:str|dex|con|int|wis|cha)(?:\s*[\/, ]\s*(?:str|dex|con|int|wis|cha))+)\s+(?:saves?|saving throws?)\s+(?:vs|against)\s+(\w+)/gi,
+    (_, abils, against) => abils.toUpperCase().replace(/[\s,]+/g, '/') + ' vs. ' + translateNoun(against),
+  )
+
+  // ── Single saves (English) ──
+  s = s
+    .replace(/\b(?:saves?|saving throws?)\s+(?:vs|against)\s+being\s+(\w+)/gi, (_, w) => 'vs. ' + translateNoun(w))
+    .replace(/\b(?:saves?|saving throws?)\s+(?:vs|against)\s+(\w+)/gi, (_, w) => 'vs. ' + translateNoun(w))
+    .replace(/\b(\w+)\s+(?:saves?|saving throws?)\b/gi, (_, w) => 'vs. ' + translateNoun(w))
+
+  // ── German "Vorteil/Nachteil" patterns ──
+  s = s
+    // "Vorteil gegen X" / "Vorteil auf X" → "Adv vs. X"
+    .replace(/\bvorteil(?:\s+auf|gegen)?\s+(?:rettungswürfe[n]?\s+)?(?:gegen\s+)?([\wäöüß]+)/gi, (_, w) => 'Adv vs. ' + translateNoun(w))
+    .replace(/\bvorteil\b/gi, 'Adv')
+    .replace(/\bnachteil(?:\s+auf|gegen)?\s+(?:rettungswürfe[n]?\s+)?(?:gegen\s+)?([\wäöüß]+)/gi, (_, w) => 'Dis vs. ' + translateNoun(w))
+    .replace(/\bnachteil\b/gi, 'Dis')
+    .replace(/\brettungswürfe[n]?\s+gegen\s+([\wäöüß]+)/gi, (_, w) => 'vs. ' + translateNoun(w))
+    .replace(/\brettungswürfe[n]?\b/gi, 'Save')
+
+  // ── Adv / Dis ──
+  s = s
+    .replace(/\badvantage\s+on\b/gi, 'Adv')
+    .replace(/\badvantage\b/gi, 'Adv')
+    .replace(/\bdisadvantage\s+on\b/gi, 'Dis')
+    .replace(/\bdisadvantage\b/gi, 'Dis')
+
+  // ── Ability check shortenings ──
+  s = s
+    .replace(/\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+(?:ability\s+)?checks?\b/gi,
+      (_, ab) => ab.slice(0, 3).toUpperCase() + ' check')
+    .replace(/\bcharismaprob[a-zäöüß]+/gi, 'CHA check') // German "Charisma-Probe"
+    .replace(/\b(stärke|geschicklichkeit|konstitution|intelligenz|weisheit|charisma)\s*(?:-|\s)?prob(?:e|en|enwurf)?\b/gi, (_, ab) => {
+      const k = ab.toLowerCase()
+      return ({ stärke: 'STR', geschicklichkeit: 'DEX', konstitution: 'CON',
+                intelligenz: 'INT', weisheit: 'WIS', charisma: 'CHA' })[k] + ' check'
+    })
+
+  // ── Tidy leftovers ──
+  s = s
+    .replace(/\bwhenever\s+(?:you\s+)?make\s+(?:an?|a)\s+/gi, '')
+    .replace(/\byou\s+can\s+add\s+your\s+(\w+)\s+modifier\b/gi, '+ $1 mod')
+    .replace(/\byou\s+have\s+/gi, '')
+    .replace(/\byou\s+gain\s+/gi, '')
+    .replace(/\byou\s+/gi, '')
+    .replace(/\bdu\s+hast\s+/gi, '')
+    .replace(/\bdu\s+gewinnst\s+/gi, '')
+    .replace(/\bdu\s+/gi, '')
+    .replace(/\bbeing\s+/gi, '')
+    .replace(/\bgegen\s+das\s+/gi, 'vs. ')
+    .replace(/\bgegen\b/gi, 'vs.')
+    .replace(/\bagainst\b/gi, 'vs.')
+    .replace(/\b(damage|dmg|schaden|schadens?)\b/gi, 'Dmg')
+    .replace(/\bproficiency\b/gi, 'Prof')
+    .replace(/\bbonus\s+gleich\s+deinem?\s+(\w+)\b/gi, '+ $1 mod')
+    .replace(/\bdoppelte\s+(?:reichweite|distanz)\b/gi, 'doppelte Reichweite')
+    // Collapse double "vs."
+    .replace(/\bvs\.?\s+vs\.?/gi, 'vs.')
+    .replace(/\bvs\s+\./g, 'vs.')
+
+  s = s.replace(/\s+/g, ' ').trim()
+  if (s) s = s[0].toUpperCase() + s.slice(1)
+  // Sidebar hints render as plain text lines now (no pill chips), so
+  // the chip-fit truncation is gone — full hint is visible. The
+  // `title` tooltip still carries the original verbose text if the
+  // player wants the rule context.
+  return s
 }
 const scopedNoteList = {
   margin: '8px 0 0 0', padding: '6px 8px', listStyle: 'none',
@@ -1279,6 +1599,522 @@ const scopedNotePrefix = {
   letterSpacing: 0.5,
 }
 const scopedNoteFeature = { color: 'var(--accent)', fontWeight: 600 }
+
+// Small icon at a portrait corner. `pos` = tl/tr/bl/br; `glyph` is
+// the visible character (emoji or short string like "Lv7"); `active`
+// + `activeColor` colour the icon when toggled on; `static` makes the
+// icon non-clickable (used for the level badge).
+// Standalone "History" tab — the chronological level-up trail moved
+// out of Overview so the latter can stay focused on play. Only the
+// newest entry has an Undo button (per-snapshot restore).
+function LevelHistoryTab({ character, readOnly, onUndo }) {
+  const entries = character.levelHistory || []
+  const progLabel = (p) =>
+    p === 'full' ? 'Full'
+    : (p === 'half' || p === '1/2' || p === 'artificer') ? '½'
+    : p === '1/3' ? '⅓'
+    : p === 'pact' ? 'Pact' : p
+  // Class summary moved here from Overview — sits above the level
+  // history so the player sees "who am I + what did I take when".
+  const classSummary = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {(character.classes || []).map((c, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '8px 12px', background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)', borderRadius: 8,
+        }}>
+          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.classId}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Lv. {c.level}</span>
+          {c.subclassId && (
+            <span style={{
+              fontSize: 11, padding: '2px 8px', borderRadius: 999,
+              border: '1px solid var(--accent-purple)', color: 'var(--accent-purple)',
+            }} title={c.subclassTitle || 'Subclass'}>{c.subclassId.split('__')[0]}</span>
+          )}
+          <span style={{
+            fontSize: 11, padding: '2px 8px', borderRadius: 999,
+            border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
+          }} title="Hit Die">d{c.hitDie}</span>
+          {c.spellcastingAbility && (
+            <span style={{
+              fontSize: 11, padding: '2px 8px', borderRadius: 999,
+              border: '1px solid var(--accent-yellow)', color: 'var(--accent-yellow)',
+            }} title="Casting Ability">{c.spellcastingAbility.toUpperCase()}</span>
+          )}
+          {c.casterProgression && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }} title="Caster Progression">
+              {progLabel(c.casterProgression)}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+
+  if (entries.length === 0) {
+    return (
+      <div className="dnd-sheet-tab-body" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {classSummary}
+        <div style={{ color: 'var(--text-muted)' }}>Noch keine Level-Ups protokolliert.</div>
+      </div>
+    )
+  }
+  return (
+    <div className="dnd-sheet-tab-body" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {classSummary}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[...entries].reverse().map((entry, i) => {
+        const cls = character.classes.find(c => c.classId === entry.classId)
+        const lc = cls?.levelChoices?.[entry.classLevel] || {}
+        const details = []
+        if (lc.type === 'asi') {
+          const parts = Object.entries(lc.improvements || {}).map(([k, v]) => `${k.toUpperCase()} +${v}`)
+          if (parts.length > 0) details.push(`ASI: ${parts.join(', ')}`)
+        }
+        if (lc.type === 'feat' && lc.featId) details.push(`Feat: ${lc.featId}`)
+        if (lc.cantrips?.length > 0) details.push(`Cantrips: ${lc.cantrips.join(', ')}`)
+        if (lc.knownSpells?.length > 0) details.push(`Spells: ${lc.knownSpells.join(', ')}`)
+        if (lc.optionalFeatures?.length > 0) details.push(lc.optionalFeatures.map(f => f.name).join(', '))
+        return (
+          <div key={i} style={{
+            padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 8,
+            border: i === 0 ? '1px solid var(--accent-red)' : '1px solid var(--border)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 13 }}>
+                  {entry.classId} Lv.{entry.classLevel}
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', marginLeft: 8, fontSize: 11 }}>
+                    Total Lv.{entry.totalLevel} · {new Date(entry.timestamp).toLocaleDateString('de-DE')}
+                  </span>
+                </div>
+                {details.length > 0 && (
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 3 }}>{details.join(' · ')}</div>
+                )}
+              </div>
+              {!readOnly && i === 0 && entry.snapshot && (
+                <button
+                  type="button"
+                  onClick={onUndo}
+                  style={{
+                    padding: '4px 10px', fontSize: 11,
+                    background: 'transparent', border: '1px solid var(--accent-red)',
+                    color: 'var(--accent-red)', borderRadius: 4, cursor: 'pointer',
+                  }}
+                >Undo</button>
+              )}
+            </div>
+          </div>
+        )
+      })}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SHORT REST PROMPT
+// Guided modal: per-class hit-die rolls + dynamic HP preview. The
+// player rolls a die (or enters a value) for each die they want to
+// spend; the new HP is previewed live. Confirm commits the spent
+// dice (used for future displays + long-rest recovery) and gives
+// the matching HP back, capped at max.
+// ─────────────────────────────────────────────────────────────────
+function ShortRestPrompt({ character, computed, abilityScores, maxHp, currentHp, onClose, onConfirm }) {
+  const conMod = getModifier(abilityScores?.con ?? 10)
+  const hitDiceUsed = character.status?.hitDiceUsed || {}
+  const classes = (character.classes || []).filter(c => c.level > 0)
+
+  // Per-class roll state: array of integers (one per spent die).
+  const [rolls, setRolls] = useState(() =>
+    Object.fromEntries(classes.map(c => [c.classId, []]))
+  )
+
+  // Dynamic HP preview: each entered value contributes (roll + CON mod,
+  // minimum 1 per RAW). Empty inputs count as 0 (don't auto-add). Cap
+  // at maxHp; if we'd overflow we visually surface "voll" so the
+  // player knows the next die is wasted.
+  const totalGain = useMemo(() => {
+    let g = 0
+    for (const cls of classes) {
+      for (const r of (rolls[cls.classId] || [])) {
+        const n = Number(r)
+        if (!Number.isFinite(n) || n <= 0) continue
+        g += Math.max(1, n + conMod)
+      }
+    }
+    return g
+  }, [rolls, conMod, classes])
+  const previewedHp = Math.min(maxHp, currentHp + totalGain)
+  const wouldBeFull = previewedHp >= maxHp
+
+  function addRoll(classId) {
+    if (wouldBeFull) return
+    // Empty entry — the player types the rolled value.
+    setRolls(prev => ({ ...prev, [classId]: [...(prev[classId] || []), ''] }))
+  }
+  function setRoll(classId, idx, value) {
+    setRolls(prev => {
+      const arr = [...(prev[classId] || [])]
+      arr[idx] = value
+      return { ...prev, [classId]: arr }
+    })
+  }
+  function removeRoll(classId, idx) {
+    setRolls(prev => {
+      const arr = [...(prev[classId] || [])]
+      arr.splice(idx, 1)
+      return { ...prev, [classId]: arr }
+    })
+  }
+
+  function confirm() {
+    const diceSpent = {}
+    for (const cls of classes) {
+      // Only count entries with a real rolled value as spent — blank
+      // slots are uncommitted and the player keeps the die.
+      diceSpent[cls.classId] = (rolls[cls.classId] || []).filter(r => {
+        const n = Number(r); return Number.isFinite(n) && n > 0
+      }).length
+    }
+    onConfirm({ hpGain: totalGain, diceSpent })
+  }
+
+  // Short-rest resources that will reset (Pact slots, Channel Divinity etc.)
+  const shortResetResources = (computed?.resources || []).filter(r => r.recharge === 'short_rest')
+  // Classes whose Spellcasting feature allows spell-prep changes on a
+  // short rest — surface only the relevant hint. (e.g. some 5.5e
+  // class features that say "during a Short Rest, you can swap …")
+  const prepHintsAll = useMemo(() => extractPrepHints(character), [character])
+  const shortRestPrepHints = prepHintsAll.filter(h => h.restPhase === 'short')
+
+  return (
+    <div onClick={onClose} style={restOverlay}>
+      <div onClick={(e) => e.stopPropagation()} style={restModal}>
+        <div style={restTitle}>Short Rest</div>
+
+        <div style={restHpStrip}>
+          <span>HP: <b>{currentHp}</b> / {maxHp}</span>
+          <span style={{ color: 'var(--text-dim)' }}>→</span>
+          <span style={{ color: wouldBeFull ? 'var(--accent-green)' : 'var(--accent-yellow)', fontWeight: 700 }}>
+            {previewedHp} / {maxHp}
+            {wouldBeFull && ' (voll)'}
+          </span>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 12 }}>
+            CON-Mod {modStr(conMod)} pro Würfel
+          </span>
+        </div>
+
+        {classes.map(cls => {
+          const used = hitDiceUsed[cls.classId] || 0
+          const max = cls.level
+          const spent = (rolls[cls.classId] || []).length
+          const available = Math.max(0, max - used - spent)
+          return (
+            <div key={cls.classId} style={restClassBlock}>
+              <div style={restClassHead}>
+                <span style={{ fontWeight: 700 }}>{cls.classId}</span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  d{cls.hitDie} · verfügbar {available}/{max - used}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {(rolls[cls.classId] || []).map((r, i) => (
+                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="number" min="1" max={cls.hitDie} value={r}
+                      placeholder={`d${cls.hitDie}`}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === '') { setRoll(cls.classId, i, ''); return }
+                        const parsed = parseInt(v, 10)
+                        if (!Number.isFinite(parsed)) { setRoll(cls.classId, i, ''); return }
+                        setRoll(cls.classId, i, Math.max(1, Math.min(cls.hitDie, parsed)))
+                      }}
+                      style={restRollInput}
+                    />
+                    <span style={{ color: 'var(--text-dim)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                      {conMod >= 0 ? `+${conMod}` : `−${Math.abs(conMod)}`} CON
+                    </span>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addRoll(cls.classId)}
+                  disabled={available <= 0 || wouldBeFull}
+                  style={{
+                    ...restRollBtn,
+                    opacity: (available <= 0 || wouldBeFull) ? 0.4 : 1,
+                    cursor: (available <= 0 || wouldBeFull) ? 'not-allowed' : 'pointer',
+                  }}
+                  title={wouldBeFull ? 'HP wäre voll' : `Würfel d${cls.hitDie} verbrauchen — Wert eintragen`}
+                >+ d{cls.hitDie}</button>
+              </div>
+            </div>
+          )
+        })}
+
+        {shortResetResources.length > 0 && (
+          <div style={restNoteBox}>
+            <div style={restNoteTitle}>Außerdem refreshed:</div>
+            <ul style={restNoteList}>
+              <li>Pact-Slots (Warlock)</li>
+              {shortResetResources.map(r => <li key={r.id}>{r.name}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {shortRestPrepHints.length > 0 && (
+          <div style={{ ...restNoteBox, borderColor: 'var(--accent)' }}>
+            <div style={restNoteTitle}>Spell-Preparation</div>
+            <ul style={restNoteList}>
+              {shortRestPrepHints.map((h, i) => (
+                <li key={`${h.classId}-${i}`}>
+                  <b>{h.classId}</b>{h.featureName && h.featureName !== 'Spellcasting' ? ` · ${h.featureName}` : ''}: {h.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div style={restButtons}>
+          <button type="button" onClick={onClose} style={restBtnSecondary}>Abbrechen</button>
+          <button type="button" onClick={confirm} style={restBtnPrimary}>Short Rest bestätigen</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// LONG REST PROMPT
+// Reminders modal — lists what's about to refresh + prep reminders
+// per prepared caster class (no enforcement; player still chooses).
+// ─────────────────────────────────────────────────────────────────
+// Scan __activeFeatures for paragraphs in the class's Spellcasting /
+// Pact Magic / etc. that explain WHEN the player can prepare spells.
+// Pure regex over the 5etools rule text — no per-class catalogue, so
+// edition-specific wording (XPHB "during a Long Rest", PHB "after a
+// Long Rest", subclass "you may swap one prepared spell when you
+// finish a Short Rest") all surface for free.
+//
+// Returns array of `{ classId, restPhase: 'long'|'short'|'any', text }`.
+function extractPrepHints(character) {
+  const features = character?.__activeFeatures || []
+  // Words that mark a feature as the prep entry-point for a class.
+  const headerRe = /\b(?:spellcasting|prepared\s+spells|preparation|change\s+(?:your\s+)?prepared|pact\s+magic)\b/i
+  const out = []
+  for (const f of features) {
+    if (!f?.classId || !Array.isArray(f.entries)) continue
+    // Walk the feature's entries; pull paragraphs that mention
+    // preparing/changing spells in proximity to a rest phase. Skip
+    // any string that isn't about prep at all.
+    const walk = (node, hits) => {
+      if (typeof node === 'string') {
+        const low = node.toLowerCase()
+        if (!/\b(prepar|prepared|change(?:s|d)?\s+(?:your\s+)?(?:list\s+of\s+)?prepared|swap)\b/.test(low)) return
+        const restMatch = low.match(/\b(long|short)\s+rest\b/)
+        if (!restMatch && !/\b(daily|each\s+day|after\s+each\s+adventure)\b/.test(low)) return
+        const phase = restMatch ? restMatch[1] : 'any'
+        // Strip 5etools tags before showing.
+        const clean = node.replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+        hits.push({ phase, text: clean.length > 240 ? clean.slice(0, 238) + '…' : clean })
+      } else if (Array.isArray(node)) {
+        for (const x of node) walk(x, hits)
+      } else if (node && typeof node === 'object') {
+        if (Array.isArray(node.entries)) walk(node.entries, hits)
+        if (Array.isArray(node.items))   walk(node.items, hits)
+      }
+    }
+    // Only mine features that look like the spellcasting / prep
+    // declaration — skip random class features that happen to
+    // mention preparing. Header tested on the feature NAME first
+    // (cheap), fallback to the first string entry.
+    const firstStr = (f.entries || []).find(e => typeof e === 'string') || ''
+    if (!headerRe.test(f.name || '') && !headerRe.test(firstStr)) continue
+    const hits = []
+    walk(f.entries, hits)
+    for (const h of hits) {
+      out.push({ classId: f.classId, restPhase: h.phase, text: h.text, featureName: f.name })
+    }
+  }
+  return out
+}
+
+function LongRestPrompt({ character, computed, onClose, onConfirm }) {
+  const classes = character.classes || []
+  // Data-driven prep hints — show the actual rule text the class's
+  // Spellcasting feature uses for "when can I prepare", filtered to
+  // long-rest-relevant lines (plus "any" which fits both rests).
+  const prepHintsAll = useMemo(() => extractPrepHints(character), [character])
+  const prepHints = prepHintsAll.filter(h => h.restPhase === 'long' || h.restPhase === 'any')
+
+  const hitDiceUsed = character.status?.hitDiceUsed || {}
+  const hitDiceRecovery = classes.map(c => {
+    const max = c.level
+    const used = hitDiceUsed[c.classId] || 0
+    const recover = Math.min(used, Math.ceil(max / 2))
+    return { classId: c.classId, die: c.hitDie, recover, after: Math.max(0, used - recover), max }
+  }).filter(h => h.max > 0)
+
+  return (
+    <div onClick={onClose} style={restOverlay}>
+      <div onClick={(e) => e.stopPropagation()} style={restModal}>
+        <div style={restTitle}>Long Rest</div>
+
+        <div style={restNoteBox}>
+          <div style={restNoteTitle}>Folgendes wird wiederhergestellt:</div>
+          <ul style={restNoteList}>
+            <li>HP voll</li>
+            <li>Spell Slots</li>
+            <li>Pact-Slots</li>
+            <li>Alle Class Resources</li>
+            <li>Death Saves &amp; Concentration zurückgesetzt</li>
+          </ul>
+        </div>
+
+        {hitDiceRecovery.length > 0 && (
+          <div style={restNoteBox}>
+            <div style={restNoteTitle}>Hit Dice recoveriert (½ aufgerundet pro Klasse):</div>
+            <ul style={restNoteList}>
+              {hitDiceRecovery.map(h => (
+                <li key={h.classId}>
+                  {h.classId} d{h.die}: +{h.recover} → {h.max - h.after}/{h.max} verfügbar
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {prepHints.length > 0 && (
+          <div style={{ ...restNoteBox, borderColor: 'var(--accent)' }}>
+            <div style={restNoteTitle}>Spell-Preparation</div>
+            <ul style={restNoteList}>
+              {prepHints.map((h, i) => (
+                <li key={`${h.classId}-${i}`}>
+                  <b>{h.classId}</b>{h.featureName && h.featureName !== 'Spellcasting' ? ` · ${h.featureName}` : ''}: {h.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div style={restButtons}>
+          <button type="button" onClick={onClose} style={restBtnSecondary}>Abbrechen</button>
+          <button type="button" onClick={onConfirm} style={restBtnPrimary}>Long Rest bestätigen</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const restOverlay = {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+}
+const restModal = {
+  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+  padding: 18, width: 'min(540px, 92vw)', maxHeight: '88vh', overflowY: 'auto',
+  boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+  display: 'flex', flexDirection: 'column', gap: 10,
+}
+const restTitle = {
+  fontSize: 16, fontWeight: 700, color: 'var(--accent)',
+  textTransform: 'uppercase', letterSpacing: 0.5,
+}
+const restHpStrip = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  padding: '8px 10px', borderRadius: 8,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+  fontSize: 13,
+}
+const restClassBlock = {
+  padding: '8px 10px', borderRadius: 6,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+}
+const restClassHead = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6,
+  fontSize: 12,
+}
+// (restRollChip + restRollX removed — the chip wrapped the input with
+// transparent borders and the entered digit got visually buried; the
+// input now stands on its own with a real border, and the + CON label
+// sits beside it as a separate span.)
+const restRollInput = {
+  width: 48, background: 'var(--bg-inset)',
+  border: '1px solid var(--border)', outline: 'none', borderRadius: 4,
+  color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 13,
+  textAlign: 'center', fontWeight: 700,
+  padding: '4px 6px',
+}
+const restRollBtn = {
+  padding: '4px 10px', borderRadius: 999,
+  border: '1px solid var(--accent)', background: 'transparent',
+  color: 'var(--accent)', fontSize: 12, fontFamily: 'inherit',
+}
+const restNoteBox = {
+  padding: '8px 10px', borderRadius: 6,
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+  fontSize: 12,
+}
+const restNoteTitle = {
+  fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+  letterSpacing: 0.5, color: 'var(--text-muted)', marginBottom: 4,
+}
+const restNoteList = {
+  margin: 0, paddingLeft: 18,
+  color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.5,
+}
+const restButtons = {
+  display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4,
+}
+const restBtnPrimary = {
+  padding: '6px 14px', borderRadius: 6,
+  background: 'var(--accent)', border: '1px solid var(--accent)',
+  color: 'var(--bg-card)', fontWeight: 600, cursor: 'pointer',
+  fontFamily: 'inherit', fontSize: 13,
+}
+const restBtnSecondary = {
+  padding: '6px 14px', borderRadius: 6,
+  background: 'transparent', border: '1px solid var(--border)',
+  color: 'var(--text-secondary)', cursor: 'pointer',
+  fontFamily: 'inherit', fontSize: 13,
+}
+
+function PortraitCornerIcon({ pos, title, glyph, onClick, active = false, activeColor, static: isStatic = false }) {
+  const offset = 4
+  const placement = {
+    tl: { top: offset, left: offset },
+    tr: { top: offset, right: offset },
+    bl: { bottom: offset, left: offset },
+    br: { bottom: offset, right: offset },
+  }[pos] || {}
+  const baseColor = active ? (activeColor || 'var(--accent)') : 'var(--text-secondary)'
+  const borderCol = active ? (activeColor || 'var(--accent)') : 'var(--border)'
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); if (!isStatic && onClick) onClick() }}
+      title={title}
+      style={{
+        position: 'absolute', ...placement,
+        width: 28, height: 28, borderRadius: '50%',
+        background: 'color-mix(in srgb, var(--bg-elevated) 92%, transparent)',
+        border: `1.5px solid ${borderCol}`,
+        color: baseColor,
+        cursor: isStatic ? 'default' : 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: glyph.length > 2 ? 10 : 14,
+        fontWeight: 700, fontFamily: 'inherit',
+        padding: 0, lineHeight: 1,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+      }}
+    >
+      {glyph}
+    </button>
+  )
+}
 
 function CombatStat({ label, value, color, sub, onClick }) {
   return (

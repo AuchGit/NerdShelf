@@ -9,9 +9,12 @@ import { CONDITIONS } from '../../lib/conditions'
 
 export default function ConditionChips({ active = [], onToggle, compact = false }) {
   const set = new Set(active || [])
+  // Compact sizing is now between the old tiny version and the over-
+  // bumped one: just enough that the pills fill the HP-card slot
+  // without pushing the row below into a scroll.
   return (
     <div style={{
-      display: 'flex', gap: compact ? 4 : 6, flexWrap: 'wrap',
+      display: 'flex', gap: 5, flexWrap: 'wrap',
     }}>
       {CONDITIONS.map(c => {
         const on = set.has(c.id)
@@ -23,24 +26,21 @@ export default function ConditionChips({ active = [], onToggle, compact = false 
             title={`${c.label}\n${c.hint}`}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: compact ? '2px 7px' : '3px 9px',
+              padding: compact ? '3px 8px' : '3px 9px',
               border: `1px solid ${on ? 'var(--accent-red)' : 'var(--border)'}`,
               borderRadius: 999,
               background: on ? 'color-mix(in srgb, var(--accent-red) 18%, transparent)' : 'transparent',
               color: on ? 'var(--accent-red)' : 'var(--text-dim)',
-              fontSize: compact ? 10 : 11,
+              fontSize: compact ? 11 : 11,
               fontWeight: on ? 'bold' : 'normal',
               cursor: 'pointer',
               fontFamily: 'inherit',
               transition: 'all 120ms',
-              // Keep the label on a single line — long names like
-              // "Incapacitated" / "Unconscious" otherwise break mid-word
-              // when the flex container has limited width.
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: compact ? 10 : 12 }}>{c.symbol}</span>
+            <span style={{ fontSize: compact ? 11 : 12 }}>{c.symbol}</span>
             <span>{c.label}</span>
           </button>
         )

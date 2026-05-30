@@ -4,9 +4,18 @@
 
 export const S = {
   // ── Page ──
+  // `height: 100vh + overflow: hidden` pins the page to the viewport so
+  // inner panes (sidebar + main) own their own scroll context. Without
+  // this the body falls back to the page-level scrollbar and both
+  // panes track together, which the player can't independently scroll.
+  // `position: relative` anchors absolute children (the header
+  // dropdown overlay) to the sheet's own box, not the viewport — so
+  // the overlay stays inside the D&D module instead of spilling over
+  // the app shell's side nav.
   page: {
-    minHeight: '100vh', background: 'var(--bg-page)', color: 'var(--text-primary)',
-    display: 'flex', flexDirection: 'column',
+    height: '100vh', maxHeight: '100vh', background: 'var(--bg-page)', color: 'var(--text-primary)',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    position: 'relative',
   },
 
   // ── Header ──
@@ -108,7 +117,10 @@ export const S = {
   },
 
   // ── Body ──
-  body: { display: 'flex', flex: 1, overflow: 'hidden' },
+  // `minHeight: 0` is the magic incantation that lets a flex item host
+  // its own scroll container — without it the children's overflow:auto
+  // is meaningless and the page-level scrollbar wins.
+  body: { display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 },
   sidebar: {
     width: 256, flexShrink: 0, background: 'var(--bg-card)',
     borderRight: '1px solid var(--border)', overflowY: 'auto', padding: 12,
@@ -158,7 +170,7 @@ export const S = {
   senseValue: { color: 'var(--text-primary)', fontSize: 11, fontWeight: 'bold' },
 
   // ── Main / Tabs ──
-  main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   tabs: {
     display: 'flex', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)',
     flexShrink: 0, overflowX: 'auto',

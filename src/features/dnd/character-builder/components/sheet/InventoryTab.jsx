@@ -17,6 +17,7 @@ import {
 } from '../../lib/sheetUtils'
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
+import FiveEToolsLink from '../ui/FiveEToolsLink'
 import { computeAbilityScores } from '../../lib/rulesEngine'
 import {
   getAvailableMarkingRules, weaponEligibleForMark, setWeaponMark,
@@ -654,7 +655,21 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
             {canEquip && <Checkbox checked={item.equipped} label="Equipped" onChange={v => onPatch(item, { equipped: v })} />}
             <Checkbox checked={item.attuned} label="Attuned" onChange={v => onPatch(item, { attuned: v })} />
+            {/* Quick-Access pins this item into the Overview's potion /
+                quick-access sidebar. Separate from the ☆-favorite (which
+                lives in its own panel) — items can be quick-access without
+                being favorites and vice versa. */}
+            <Checkbox checked={!!item.quickAccess} label="Quick Access" onChange={v => onPatch(item, { quickAccess: v })} />
             <TagColorPicker value={item.tagColor} onChange={c => onPatch(item, { tagColor: c })} />
+            {item.source && !item._isCustom && (
+              <FiveEToolsLink
+                kind="item"
+                name={item.name}
+                source={item.source}
+                edition={character?.meta?.edition}
+                compact
+              />
+            )}
           </div>
           {item.properties?.length > 0 && (
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>

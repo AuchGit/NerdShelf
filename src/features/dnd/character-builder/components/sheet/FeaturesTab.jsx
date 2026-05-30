@@ -308,6 +308,10 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                     favKey={favoriteKey('trait', tr.name)}
                     character={character}
                     applyCharacter={applyCharacter}
+                    edition={character.meta?.edition}
+                    fiveeLink={raceName && character.species.source
+                      ? { kind: 'race', name: raceName, source: character.species.source }
+                      : null}
                   />
                 ))}
               </div>
@@ -392,6 +396,10 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                         favKey={favoriteKey('feature', `Background:${cleanName}:`)}
                         character={character}
                         applyCharacter={applyCharacter}
+                        edition={character.meta?.edition}
+                        fiveeLink={bgId && character.background.source
+                          ? { kind: 'background', name: bgId, source: character.background.source }
+                          : null}
                       />
                     )
                   })}
@@ -449,6 +457,10 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                     favKey={favoriteKey('feature', `${classId}:${f.name}:${f.level || ''}`)}
                     character={character}
                     applyCharacter={applyCharacter}
+                    edition={character.meta?.edition}
+                    fiveeLink={f.source
+                      ? { kind: 'class', name: classId, source: f.source }
+                      : null}
                   />
                 ))}
               </div>
@@ -538,7 +550,7 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
 // 5etools-style entries rendered to HTML. Used for class features and
 // species traits so the player can pull the rule text inline without
 // jumping to an external reference.
-function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCharacter }) {
+function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCharacter, fiveeLink, edition }) {
   const [open, setOpen] = useState(false)
   const hasBody = Array.isArray(entries) && entries.length > 0
   return (
@@ -565,6 +577,12 @@ function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCh
       {open && hasBody && (
         <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
           <EntryRenderer entries={entries} />
+          {fiveeLink && (
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}
+              onClick={(e) => e.stopPropagation()}>
+              <FiveEToolsLink {...fiveeLink} edition={edition} compact />
+            </div>
+          )}
         </div>
       )}
     </div>

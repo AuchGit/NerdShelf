@@ -23,23 +23,34 @@ export function Section({ title, action, children }) {
   )
 }
 
-export function SideSection({ title, children, defaultOpen = false }) {
-  // On phones (<=768px) render a collapsible <details> accordion; on
-  // desktop / Tauri the plain block renders, pixel-identical to before.
+export function SideSection({ title, children, defaultOpen = true }) {
+  // Mobile uses the native <details> accordion (PWA-friendly). Desktop
+  // now also collapses — click the title to toggle, chevron flips, body
+  // is mounted only when open. Default OPEN so a fresh sheet looks the
+  // same as before; closing is per-session (not persisted) which feels
+  // right for a play screen.
   const { mode } = useWindowWidth()
-  if (mode !== 'hidden') {
+  const [open, setOpen] = useState(defaultOpen)
+  if (mode === 'hidden') {
     return (
-      <div style={S.sideSection}>
-        <div style={S.sideSectionTitle}>{title}</div>
-        {children}
-      </div>
+      <details className="dnd-side-acc" open={defaultOpen}>
+        <summary>{title}</summary>
+        <div className="dnd-side-acc-body">{children}</div>
+      </details>
     )
   }
   return (
-    <details className="dnd-side-acc" open={defaultOpen}>
-      <summary>{title}</summary>
-      <div className="dnd-side-acc-body">{children}</div>
-    </details>
+    <div style={S.sideSection}>
+      <div
+        style={{ ...S.sideSectionTitle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+        onClick={() => setOpen(o => !o)}
+        role="button"
+      >
+        <span style={{ flex: 1 }}>{title}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{open ? '▾' : '▸'}</span>
+      </div>
+      {open && children}
+    </div>
   )
 }
 

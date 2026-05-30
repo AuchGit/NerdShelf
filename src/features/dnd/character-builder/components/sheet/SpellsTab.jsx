@@ -700,7 +700,7 @@ function PrepareRow({ spell, isPrep, note, atLimit, onToggle, edition }) {
   )
 }
 
-function PrepareModal({
+export function PrepareModal({
   classId, section, maxSpellLvl, allSpells, spellMap, character,
   preparedByClass, alwaysNames, edition, onClose, onChange,
 }) {
