@@ -25,6 +25,61 @@ import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
 import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
+import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
+import { parseFeatureEffect } from '../../lib/featureEffectParser'
+import { applySavedOrder, getSavedOrder, moveCategory, resetCategoryOrder } from '../../lib/categoryOrder'
+import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
+import { isPinnedAction, togglePinnedAction, getPinnedActions } from '../../lib/pinnedActions'
+import HoverDetailTooltip from '../ui/HoverDetailTooltip'
+import { CardColorPicker } from './SheetKit'
+
+// Composite-Key für einen Action-Row / Spells-Spalten-Eintrag im
+// Color-Marker-System. MUSS IDENTISCH sein zum favoriteKey()-Format
+// in lib/favorites.js, damit ein Spell/Feature seinen Farb-Tag
+// überall trägt (Action-Row, Spells-Spalte, Features-Tab-Card).
+//
+//   spell:Hunter's Mark
+//   feature:Rogue:Sneak Attack:1
+//   trait:Darkvision
+//   item:<inventoryItemId>
+//   feat:Alert
+//   attack:<weaponName>   (kein favoriteKey-Pendant — Marker-only)
+function rowMarkerKey(r) {
+  if (!r) return null
+  if (r.kind === 'spell' || r.kind === 'always-spell') {
+    return `spell:${r.spell?.name || r.name}`
+  }
+  // Bucket-Builder setzt r.markerKey für Klassen-Features, Race-
+  // Traits, Items und Feats — die haben strukturierte IDs die das
+  // favoriteKey-Format brauchen (Klasse/Name/Level).
+  if (r.markerKey) return r.markerKey
+  if (r.kind === 'attack') return `attack:${r.name}`
+  return r.id
+}
+
+// Multiclass-Helper: liefert die Klassen-ID die einen Spell für den
+// Spell-Effect-Parser "casten" soll. Reihenfolge:
+//   1. Eine Klasse aus collected.sourceClasses die Spellcasting kann
+//   2. Mit den besten Stats (DC + Attack-Bonus)
+//   3. Fallback auf irgendeine Caster-Klasse des Characters
+// Pure read, kein Side-Effect.
+function pickCasterClassFor(collectedSpell, computed) {
+  const candidates = new Set(collectedSpell?.sourceClasses || [])
+  const sc = computed?.spellcasting || {}
+  const score = (id) => (sc[id]?.spellSaveDC || 0) + (sc[id]?.spellAttackBonus || 0)
+  let best = null
+  for (const cid of candidates) {
+    if (!sc[cid]) continue
+    if (!best || score(cid) > score(best)) best = cid
+  }
+  if (best) return best
+  // Fallback: irgendeine Caster-Klasse (für race-/feat-granted Spells
+  // ohne Sourceklass).
+  const ids = Object.keys(sc)
+  if (ids.length === 1) return ids[0]
+  if (ids.length > 1) return ids.sort((a, b) => score(b) - score(a))[0]
+  return null
+}
 
 // ── Clickable pip row (death saves, resources) ─────────────────
 function Pips({ count, filled, color, onSet }) {
@@ -89,68 +144,153 @@ function ResourceCard({ res, used, onSetUsed }) {
 // Temp + Max-Adjust steppers, sized to sit alongside the HP card at the
 // same height. Current HP is intentionally absent — the big "56/56" on
 // the HP card already conveys it and the Damage/Heal buttons are the
-// canonical way to change it.
-function TempMaxControls({ hp, baseMaxHp, maxHpBonus, updateCharacter }) {
+// Temp / Max steht jetzt als zwei zentrierte schlanke Zeilen unter
+// der HP-Karte: jeweils ein simples Number-Input mit Label davor.
+// Statt Stepper, damit der Platz minimal bleibt und die Karten unten
+// sauber ausgerichtet sind. Werte spiegeln sich direkt mit
+// status.temporaryHp / status.maxHpBonus.
+function TempMaxControls({ hp, maxHpBonus, updateCharacter }) {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', gap: 6,
-      padding: '14px 16px', borderRadius: 12,
-      background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-      minWidth: 160, alignSelf: 'stretch', justifyContent: 'center',
+      display: 'flex', flexDirection: 'column', gap: 4,
+      alignItems: 'center', marginTop: 6,
     }}>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--text-muted)', fontSize: 11, width: 40 }}>Temp.</span>
-        <Stepper value={hp.temporary} min={0} max={999}
-          onChange={v => updateCharacter('status.temporaryHp', v)} width={56} />
+      <label style={hpMiniInputRow}>
+        <span style={hpMiniInputLabel}>temp:</span>
+        <input
+          type="number" min="0" max="999"
+          value={hp.temporary || 0}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => {
+            const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
+            updateCharacter('status.temporaryHp', v)
+          }}
+          style={hpMiniInputField}
+        />
       </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: 'var(--text-muted)', fontSize: 11, width: 40 }}>Max.</span>
-        <Stepper value={maxHpBonus} min={-999} max={999}
-          onChange={v => updateCharacter('status.maxHpBonus', v)} width={56} />
+      <label style={hpMiniInputRow}>
+        <span style={hpMiniInputLabel}>max:</span>
+        <input
+          type="number" min="-999" max="999"
+          value={maxHpBonus || 0}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => {
+            const v = e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0)
+            updateCharacter('status.maxHpBonus', v)
+          }}
+          style={hpMiniInputField}
+        />
       </label>
-      <div style={{ color: 'var(--text-dim)', fontSize: 10, lineHeight: 1.3 }}>
-        Base {baseMaxHp}
-        {maxHpBonus ? ` · eff. ${hp.max}` : ''}
-      </div>
     </div>
   )
 }
 
-// Damage / Heal entry — sits below the HP + Temp/Max block, spans the
-// whole HP card width. Temp HP soaks damage first; healing caps at
-// effective max.
+// Damage / Heal — kompakte Zeile direkt unter der HP-Karte: roter
+// Minus-Knopf links (= damage), Zahleingabe in der Mitte, grüner
+// Plus-Knopf rechts (= heal). Temp HP soaks damage first; healing
+// cappt bei eff. max.
 function DamageHealControls({ hp, applyCharacter }) {
   const [amount, setAmount] = useState(0)
-  function damage() {
-    if (amount <= 0) return
-    applyCharacter(d => {
-      if (!d.status) d.status = {}
-      let dmg = amount
-      let t = d.status.temporaryHp || 0
-      if (t > 0) { const a = Math.min(t, dmg); t -= a; dmg -= a; d.status.temporaryHp = t }
-      const cur = d.status.currentHp ?? hp.max
-      d.status.currentHp = Math.max(0, cur - dmg)
-    }, { changedPaths: ['status.temporaryHp', 'status.currentHp'] })
-    setAmount(0)
-  }
-  function heal() {
-    if (amount <= 0) return
-    applyCharacter(d => {
-      if (!d.status) d.status = {}
-      const cur = d.status.currentHp ?? hp.max
-      d.status.currentHp = Math.min(hp.max, cur + amount)
-    }, { changedPaths: ['status.currentHp'] })
+  function apply(sign) {
+    const n = Number(amount) || 0
+    if (n <= 0) return
+    if (sign < 0) {
+      applyCharacter(d => {
+        if (!d.status) d.status = {}
+        let dmg = n
+        let t = d.status.temporaryHp || 0
+        if (t > 0) { const a = Math.min(t, dmg); t -= a; dmg -= a; d.status.temporaryHp = t }
+        const cur = d.status.currentHp ?? hp.max
+        d.status.currentHp = Math.max(0, cur - dmg)
+      }, { changedPaths: ['status.temporaryHp', 'status.currentHp'] })
+    } else {
+      applyCharacter(d => {
+        if (!d.status) d.status = {}
+        const cur = d.status.currentHp ?? hp.max
+        d.status.currentHp = Math.min(hp.max, cur + n)
+      }, { changedPaths: ['status.currentHp'] })
+    }
     setAmount(0)
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-      <Stepper value={amount} min={0} max={999} onChange={setAmount} width={48} />
-      <Btn variant="danger"  disabled={amount <= 0} onClick={damage}
-        style={{ padding: '3px 8px', fontSize: 12, minWidth: 0 }}>Dmg</Btn>
-      <Btn variant="primary" disabled={amount <= 0} onClick={heal}
-        style={{ padding: '3px 8px', fontSize: 12, minWidth: 0 }}>Heal</Btn>
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 6, marginTop: 6,
+    }}>
+      <button
+        type="button"
+        onClick={() => apply(-1)}
+        disabled={!(Number(amount) > 0)}
+        title="Schaden anwenden"
+        style={hpDmgBtn}
+        aria-label="Damage anwenden"
+      >−</button>
+      <input
+        type="number" min="0" max="999"
+        value={amount}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
+          setAmount(v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter')      apply(+1)  // Enter heilt — kann man später noch flippen falls anders intuitiver
+          if (e.key === '-' && e.ctrlKey) apply(-1)
+        }}
+        style={hpDmgInput}
+      />
+      <button
+        type="button"
+        onClick={() => apply(+1)}
+        disabled={!(Number(amount) > 0)}
+        title="Heilung anwenden"
+        style={hpHealBtn}
+        aria-label="Heilung anwenden"
+      >+</button>
     </div>
   )
+}
+
+// Mini-Input-Row-Styles für Temp / Max / Damage. Alles bewusst auf
+// kompakte Höhe gehalten, damit die HP-Karte konstant bleibt.
+const hpMiniInputRow = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+}
+const hpMiniInputLabel = {
+  color: 'var(--text-muted)', fontSize: 11, minWidth: 36, textAlign: 'right',
+}
+const hpMiniInputField = {
+  width: 56, padding: '2px 6px', fontSize: 12,
+  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+  border: '1px solid var(--border)', borderRadius: 4,
+  textAlign: 'center', fontFamily: 'inherit',
+}
+const hpDmgInput = {
+  ...hpMiniInputField,
+  width: 60, padding: '4px 6px', fontSize: 14, fontWeight: 700,
+}
+const hpDmgBtn = {
+  width: 28, height: 28, padding: 0,
+  borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+  background: 'transparent',
+  border: '1.5px solid var(--accent-red)',
+  color: 'var(--accent-red)',
+  fontSize: 18, lineHeight: 1, fontWeight: 700,
+}
+const hpHealBtn = {
+  ...hpDmgBtn,
+  borderColor: 'var(--accent-green)',
+  color: 'var(--accent-green)',
+}
+// Fixer Temp-HP-Slot oben links in der HP-Karte. Hat immer die
+// gleiche Höhe (auch wenn leer), damit der HP-Wert darunter nicht
+// auf-/abspringt wenn Temp toggelt.
+const hpTempSlot = {
+  position: 'absolute', top: 6, left: 8,
+  fontSize: 11, fontWeight: 700,
+  color: 'var(--accent-green)',
+  minHeight: 14, lineHeight: '14px',
+  pointerEvents: 'none',
 }
 
 function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter }) {
@@ -289,59 +429,84 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           below this row (closing border across the whole page). */}
       <div style={isPwaMobile ? heroRowPwa : heroRow}>
         <div style={isPwaMobile ? heroColPwa : { flex: '0 0 240px', minWidth: 0 }}>
-        <Section title="Hit Points">
-          {/* HP card on the left, Resistance/Vulnerability pills as a
-              column to its right (inside the same Section so the
-              "what cushions this HP" link reads at a glance).
-              Damage/Heal sits below, Temp/Max-Adjust below that — the
-              steppers move to the bottom so the HP column stays narrow
-              and the Favorites column has room on the far right. */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <div style={{ ...S.hpMain, position: 'relative', flex: '0 0 auto' }}>
-              {(concentration?.spell || concentration?.name) && (
-                <ConcentrationGlyph
-                  value={concentration}
-                  onChange={(v) => updateCharacter('status.concentration', v || null)}
-                />
-              )}
-              <div style={S.hpLabel}>Hit Points</div>
-              <div style={S.hpValue}>{hp.current} / {hp.max}</div>
-              {hp.temporary > 0 && (
-                <div style={{ color: 'var(--accent-green)', fontSize: 12, fontWeight: 'bold' }}>+{hp.temporary} temp</div>
-              )}
-              <div style={S.hpBarTrack}>
-                <div style={{ ...S.hpBarFill, width: `${hpPct}%` }} />
+        <Section
+          title="Hit Points"
+          // height:100% damit die Section die volle Höhe der Hero-Row-
+          // Slot einnimmt; display:flex+column damit die Notes-Textarea
+          // unten via flex:1 runter bis zur Conditions-Bar wächst.
+          style={{ height: '100%', display: 'flex', flexDirection: 'column', marginBottom: 0 }}
+        >
+          {/* Layout (überarbeitet, image-driven):
+                ┌────────────────┬──────────────────┐
+                │ HP-Karte       │ Resistance/Vuln  │
+                │ (HP-Wert in    │ einspaltig,       │
+                │  rotem Border) │ scrollbar — füllt │
+                │                │ die volle Höhe    │
+                │ [ − N + ]      │ bis zum unteren   │
+                │ temp: N        │ Abschluss der     │
+                │ max:  N        │ HP-Section        │
+                └────────────────┴──────────────────┘
+              Die HP-Buttons sitzen direkt unter dem roten HP-Wert,
+              nicht spalten-übergreifend. Resistance/Vuln nimmt die
+              Spalte rechts daneben über die ganze Höhe in Anspruch. */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+            {/* Linker Block: HP-Karte + alle HP-Controls zentriert
+                darunter. Eigene Spalte mit fester Breite damit die
+                Buttons exakt unter dem HP-Wert sitzen. */}
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: 4,
+              flex: '0 0 auto', minWidth: 150,
+            }}>
+              <div style={{ ...S.hpMain, position: 'relative', alignSelf: 'stretch' }}>
+                {(concentration?.spell || concentration?.name) && (
+                  <ConcentrationGlyph
+                    value={concentration}
+                    onChange={(v) => updateCharacter('status.concentration', v || null)}
+                  />
+                )}
+                <div style={hpTempSlot}>
+                  {hp.temporary > 0 ? `+${hp.temporary} temp` : ''}
+                </div>
+                <div style={S.hpLabel}>Hit Points</div>
+                <div style={S.hpValue}>{hp.current} / {hp.max}</div>
+                <div style={S.hpBarTrack}>
+                  <div style={{ ...S.hpBarFill, width: `${hpPct}%` }} />
+                </div>
               </div>
+              {!readOnly && (
+                <DamageHealControls hp={hp} applyCharacter={applyCharacter} />
+              )}
+              {!readOnly && (
+                <TempMaxControls hp={hp} baseMaxHp={baseMaxHp} maxHpBonus={maxHpBonus}
+                  updateCharacter={updateCharacter} />
+              )}
             </div>
+            {/* Rechter Block: Resistance/Vulnerability. Stretcht über
+                die ganze Höhe der HP-Section bis zur unteren Border. */}
             <DamageResistancePills character={character} compact />
           </div>
-          {!readOnly && (
-            <DamageHealControls hp={hp} applyCharacter={applyCharacter} />
-          )}
-          {!readOnly && (
-            <div style={{ marginTop: 8 }}>
-              <TempMaxControls hp={hp} baseMaxHp={baseMaxHp} maxHpBonus={maxHpBonus}
-                updateCharacter={updateCharacter} />
-            </div>
-          )}
           <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
-
-          {/* Conditions live in the empty space under Temp/Max — laid
-              out as a grid so the 13 chips always fit even on
-              narrower screens. Section header omitted; the chips are
-              recognisable on their own. */}
-          <div style={{ marginTop: 12 }}>
-            <ConditionChips
-              active={character.status?.conditions || []}
-              onToggle={(id, on) => {
-                const cur = character.status?.conditions || []
-                const next = on ? [...cur.filter(x => x !== id), id] : cur.filter(x => x !== id)
-                updateCharacter('status.conditions', next)
+          {/* Spieler-Notizen: füllt den restlichen vertikalen Platz der
+              HP-Section bis zum Section-Ende. Kein eigener Page-
+              Scroll-Push — wenn der Text die Textarea überfüllt,
+              scrollt sie intern. resize ist deaktiviert da die Höhe
+              automatisch durch flex:1 verwaltet wird. */}
+          {!readOnly && (
+            <textarea
+              value={character.status?.hpNotes || ''}
+              placeholder="Notizen …"
+              onChange={(e) => updateCharacter('status.hpNotes', e.target.value)}
+              style={{
+                width: '100%', marginTop: 6,
+                flex: 1, minHeight: 32,
+                padding: '6px 8px', fontSize: 11, lineHeight: 1.4,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 6,
+                fontFamily: 'inherit', resize: 'none', overflowY: 'auto',
               }}
-              compact
             />
-            <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
-          </div>
+          )}
         </Section>
         </div>
 
@@ -357,7 +522,16 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         </div>
 
         <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
-          <Section title="Actions">
+          <Section
+            title={
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                {getSavedOrder(character, 'actions') && (
+                  <ResetOrderIcon onReset={() => resetCategoryOrder(applyCharacter, 'actions')} />
+                )}
+                Actions
+              </span>
+            }
+          >
             <div style={isPwaMobile ? flexibleScroll : fixedHeightScroll}>
               <CombatActionsExplorer
                 character={character}
@@ -388,6 +562,28 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             />
           </div>
         </div>
+      </div>
+
+      {/* Conditions-Footer: spannt horizontal die ganze hero-row und
+          schließt sie nach unten ab — passend zum Reference-Bild.
+          Section-Header wird weggelassen; die Chips sind selbst-
+          erklärend genug. */}
+      <div style={{
+        marginTop: 8, padding: '6px 10px',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 8,
+      }}>
+        <ConditionChips
+          active={character.status?.conditions || []}
+          onToggle={(id, on) => {
+            const cur = character.status?.conditions || []
+            const next = on ? [...cur.filter(x => x !== id), id] : cur.filter(x => x !== id)
+            updateCharacter('status.conditions', next)
+          }}
+          compact
+        />
+        <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
       </div>
 
       {/* ── Closing strip: HP details + Death Saves + Action pills ──
@@ -612,13 +808,11 @@ function WeaponMasteryPicker({ character, computed, updateCharacter }) {
           return (
             <div key={pc.classIndex} style={{
               ...S.resourceBox,
-              // CR cards display name + value + recharge stacked
-              // vertically (~3 lines). WM cards with only 1–2 picks
-              // visually came up shorter; pin a minHeight so both
-              // grids line up on the same baseline. The picks list
-              // can still grow past this if the player has more.
-              minHeight: 110,
-              display: 'flex', flexDirection: 'column',
+              // WM-Cards passen sich der Inhalts-Höhe an (kein fixes
+              // minHeight mehr) — so wird die Mastery-Sektion nur so
+              // hoch wie sie sein muss und der Overview-Tab passt
+              // eher ohne Page-Scroll.
+              display: 'flex', flexDirection: 'column', gap: 2,
             }}>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -997,6 +1191,11 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   const buckets = useMemo(() => {
     const b = { action: [], bonusAction: [], reaction: [] }
     const edition = character?.meta?.edition || '5e'
+    // Prof-Bonus für den Feature-Pill-Parser ableiten — dieselbe
+    // Formel die das Charakter-Modell auch verwendet. Wir leiten
+    // hier direkt aus den Klassen ab statt eine Prop durchzureichen,
+    // damit der Memo-Pfad self-contained bleibt.
+    const profBonus = Math.ceil(((character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)) / 4) + 1
 
     // Universal standard actions everyone can take. Marked as kind
     // 'standard' so the renderer can differentiate styling later.
@@ -1082,9 +1281,25 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       // groups them above the regular prepared/known spells and the
       // UI can tag them visually ("Always").
       const isAlways = !!c.granted
-      b[slot].push({
+      // Smart-Pill-Extraktion: Attack/Save/Damage werden aus dem
+      // 5etools-Eintrag rausgeparsed und mit dem Spellcasting-Profil
+      // der Caster-Klasse veredelt. Multiclass: bevorzugt die Klasse,
+      // die den Spell auf der Liste hat und die höchste DC/Bonus
+      // hat — Player-favoured. Cantrip-Dmg skaliert mit Char-Level.
+      const casterClassId = pickCasterClassFor(c, computed)
+      const sc = casterClassId ? computed?.spellcasting?.[casterClassId] : null
+      const totalCharLevel = (character.classes || []).reduce((s, x) => s + (x.level || 0), 0)
+      const fx = parseSpellEffect(full || m, {
+        spellAttackBonus: sc?.spellAttackBonus ?? null,
+        saveDC:           sc?.spellSaveDC ?? null,
+        totalCharLevel,
+      })
+      const spellPayload = {
         id: `spell-${c.name}`,
-        name: c.name + (full?.level === 0 ? ' (Cantrip)' : full?.level ? ` (L${full.level})` : ''),
+        // Spell-Level wandert in eine Pill statt als "(L1)"-Suffix
+        // hinter den Namen — der Eintrag bleibt damit kompakter und
+        // der Spellname ist nicht von Klammern zerschnitten.
+        name: c.name,
         damage: '—',
         attack: '',
         range: full?.range || m?.range || '—',
@@ -1095,6 +1310,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
           name: c.name,
           level: full?.level ?? 0,
           concentration: !!full?.concentration,
+          ritual: !!full?.ritual,
         },
         economySlot: slot,
         // Full spell meta surfaces in the expanded body: 5etools
@@ -1102,8 +1318,30 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         // ritual / concentration flags. Drives the rich description
         // panel and the per-spell slot count rendered as a pill.
         spellMeta: full || m || null,
+        effectPills: fx?.pills || [],
         notes: '',
-      })
+      }
+      b[slot].push(spellPayload)
+      // Wenn der Spell at-will/granted IST UND der Spieler ihn
+      // ZUSÄTZLICH manuell preparen wollte, kommt ein 2. Eintrag rein:
+      // einer als "Always" (gratis cast, kein Slot), einer als
+      // regulärer "Spell" der Slots verbraucht. Erlaubt z.B. Magic
+      // Initiate's Mage Armor zusätzlich aus dem Wizard-Spellslot zu
+      // wirken. Erkennung über status.preparedSpells — wird nur
+      // emitted wenn der Spell explizit zusätzlich geprep'd ist und
+      // nicht-Cantrip ist.
+      const preparedByClass = character?.status?.preparedSpells || {}
+      const explicitlyPrepped = isAlways
+        && (full?.level || 0) > 0
+        && Object.values(preparedByClass).some(list => (list || []).some(n => n.toLowerCase() === key))
+      if (explicitlyPrepped) {
+        b[slot].push({
+          ...spellPayload,
+          id: `spell-${c.name}-prepped`,
+          kind: 'spell',
+          badge: null,
+        })
+      }
     }
 
     // Shared text-walker + action-economy detector. Walks 5etools
@@ -1178,17 +1416,21 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         if (re.test(raw)) matched.push(a)
       }
       const subActions = matched.length >= 2 ? matched : null
+      const fxF = parseFeatureEffect(f, character, profBonus)
       b[slot].push({
         id: `feat-${f.classId}-${f.name}-${f.level}`,
+        // Color-Marker / Favoriten-Key im einheitlichen
+        // favoriteKey-Format. Identisch zu was die Features-Tab
+        // bei der ExpandableEntryCard nutzt.
+        markerKey: `feature:${f.classId}:${f.name}:${f.level || ''}`,
         name: `${f.name}`,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'feature',
         economySlot: slot,
-        // Full 5etools entries for the expand panel — far better than
-        // the 200-char preview the old notes string carried.
         entries: f.entries || null,
         sub: `${f.classId}${f.level ? ` · Lv ${f.level}` : ''}`,
         subActions,
+        effectPills: fxF?.pills || [],
         notes: '',
       })
     }
@@ -1197,14 +1439,17 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     for (const t of (character?.species?.__traits || [])) {
       const slot = detectActionSlot(t.entries)
       if (!slot) continue
+      const fxT = parseFeatureEffect({ ...t, classId: null }, character, profBonus)
       b[slot].push({
         id: `race-${t.name}`,
+        markerKey: `trait:${t.name}`,
         name: t.name,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'species',
         economySlot: slot,
         entries: t.entries || null,
         sub: 'Species',
+        effectPills: fxT?.pills || [],
         notes: '',
       })
     }
@@ -1233,6 +1478,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       if (!slot) continue
       b[slot].push({
         id: `item-${item.id || item._id || item.name}`,
+        markerKey: `item:${item.id || item._id || item.name}`,
         name: item.customName || item.name,
         damage: '—', attack: '', range: '—', target: '—',
         kind: 'item',
@@ -1257,6 +1503,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         if (!slot) continue
         b[slot].push({
           id: `feat-${key}`,
+          markerKey: `feat:${feat.featId || feat.name}`,
           name: feat.featId || feat.name,
           damage: '—', attack: '', range: '—', target: '—',
           kind: 'feature',
@@ -1430,6 +1677,8 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
               markActionUsed={markActionUsed}
               consumeResource={consumeResource}
               applyRowSideEffects={applyRowSideEffects}
+              character={character}
+              applyCharacter={applyCharacter}
             />
           )}
         </div>
@@ -1445,6 +1694,7 @@ function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
   castSpellFromExplorer, markActionUsed, consumeResource, applyRowSideEffects,
+  character, applyCharacter,
 }) {
   // Open/closed state per category id. Open by default — feels less
   // like a series of clicks to get going.
@@ -1518,8 +1768,28 @@ function CombatActionsCategorisedList({
         out.push({ id: `spell-${lv}`, label: `Level ${lv}`, items: byLevel[lv] })
       }
     }
+    // Pinned-Kategorie ganz oben. Greift in alle Kategorien rein und
+    // sammelt Rows deren markerKey im character.status.pinnedActions
+    // steht — emittiert sie als Duplikate mit `pinned-`-Prefix-ID damit
+    // React-Keys nicht kollidieren. Original-Rows bleiben in ihren
+    // strukturellen Kategorien.
+    const pinnedKeys = getPinnedActions(character)
+    if (pinnedKeys.length > 0) {
+      const pinnedItems = []
+      for (const cat of out) {
+        for (const r of cat.items) {
+          const k = rowMarkerKey(r)
+          if (k && pinnedKeys.includes(k)) {
+            pinnedItems.push({ ...r, id: `pinned-${r.id}` })
+          }
+        }
+      }
+      if (pinnedItems.length > 0) {
+        out.unshift({ id: 'pinned', label: '★ Pinned', items: pinnedItems })
+      }
+    }
     return out
-  }, [rows])
+  }, [rows, character])
 
   const toggleCat = (id) => setClosedCats(prev => {
     const next = new Set(prev)
@@ -1527,15 +1797,43 @@ function CombatActionsCategorisedList({
     return next
   })
 
+  // Per-Charakter persistierte Reihenfolge der Kategorien. Default
+  // entspricht der Computed-Reihenfolge (basic → features → items →
+  // attacks/cantrips → spells by level); der Spieler kann via ▲▼-
+  // Buttons jeden Eintrag verschieben und mit ↻ alles auf Default
+  // zurücksetzen.
+  const savedOrder = getSavedOrder(character, 'actions')
+  const orderedCats = applySavedOrder(cats, savedOrder, c => c.id)
+  const currentKeys = orderedCats.map(c => c.id)
+  const isCustomized = Array.isArray(savedOrder) && savedOrder.length > 0
+  const moveCat = (id, dir) => moveCategory(applyCharacter, 'actions', currentKeys, id, dir)
+  const resetOrder = () => resetCategoryOrder(applyCharacter, 'actions')
+
   return (
     <div style={caeList}>
-      {cats.map(cat => {
+      {/* Reset-Icon ist im Section-Titel (Actions ↻) — keine eigene
+          Zeile innerhalb der Liste mehr. */}
+      {orderedCats.map((cat, catIdx) => {
         const isOpen = !closedCats.has(cat.id)
+        const canMoveUp   = catIdx > 0
+        const canMoveDown = catIdx < orderedCats.length - 1
         return (
           <div key={cat.id} style={{ marginBottom: 6 }}>
-            <div onClick={() => toggleCat(cat.id)} style={categoryHead}>
-              <span style={{ flex: 1 }}>{isOpen ? '▼' : '▶'} {cat.label}</span>
+            <div style={categoryHead}>
+              <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => toggleCat(cat.id)}>
+                {isOpen ? '▼' : '▶'} {cat.label}
+              </span>
               <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{cat.items.length}</span>
+              <button type="button" disabled={!canMoveUp}
+                onClick={(e) => { e.stopPropagation(); moveCat(cat.id, 'up') }}
+                style={catReorderBtn(!canMoveUp)} title="Nach oben"
+                aria-label="Kategorie hoch"
+              >▲</button>
+              <button type="button" disabled={!canMoveDown}
+                onClick={(e) => { e.stopPropagation(); moveCat(cat.id, 'down') }}
+                style={catReorderBtn(!canMoveDown)} title="Nach unten"
+                aria-label="Kategorie runter"
+              >▼</button>
             </div>
             {isOpen && (cat.consolidated
               ? (
@@ -1565,81 +1863,141 @@ function CombatActionsCategorisedList({
                 </div>
               )
               : cat.items.map(r => {
-                const metaPills = []
-                if (r.attack) metaPills.push(<span key="att" style={caeMetaPart} title="Attack-Bonus">{r.attack}</span>)
-                if (r.damage && r.damage !== '—') metaPills.push(
-                  <span key="dmg" style={{ ...caeMetaPart, color: 'var(--accent-red)' }}>{r.damage}</span>
+                // Pill-Aufteilung neu strukturiert:
+                //   TOP  (rechts neben dem Namen): Slot-Pill ODER
+                //        Always-Badge ODER Charges-Pill (für resource-
+                //        gebundene Features).
+                //   LEFT (untere Reihe, links):  Attack/Save/DC, Damage
+                //        (in Damage-Type-Farbe), Range. Mastery-Sterne
+                //        auch hier (Attacks-Rows).
+                //   RIGHT (untere Reihe, rechts): Conc / Ritual.
+                const topPills = []
+                const leftPills = []
+                const rightPills = []
+
+                // Slot- oder Always- oder Uses-Pill oben — eine
+                // Auswahl, keine Doppel-Anzeige.
+                if (r.slotLabel) {
+                  topPills.push(
+                    <span key="slot" style={{
+                      ...caePill,
+                      border: `1px solid ${r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)'}`,
+                      color: r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)',
+                    }} title={`Spell Slots: ${r.slotLabel}`}>{r.slotLabel}</span>
+                  )
+                }
+                if (r.badge === 'Always') {
+                  topPills.push(
+                    <span key="always" style={{
+                      ...caePill,
+                      border: '1px solid var(--accent-purple)',
+                      color: 'var(--accent-purple)',
+                    }} title="Immer vorbereitet">Always</span>
+                  )
+                }
+                if (r.uses) {
+                  const c = r.uses.remaining === 0 ? 'var(--accent-red)'
+                    : r.uses.remaining < r.uses.max ? 'var(--accent-yellow)'
+                    : 'var(--accent-green)'
+                  topPills.push(
+                    <span key="uses" style={{ ...caePill, border: `1px solid ${c}`, color: c, fontWeight: 700 }}
+                      title={`${r.uses.label}: ${r.uses.remaining}/${r.uses.max} übrig`}>
+                      {r.uses.remaining}/{r.uses.max}
+                    </span>
+                  )
+                }
+
+                // Smart-Effect-Pills (Attack/Save/Damage) ins LEFT.
+                if (Array.isArray(r.effectPills) && r.effectPills.length > 0) {
+                  for (const p of r.effectPills) {
+                    const color = p.kind === 'attack'
+                      ? 'var(--accent-blue)'
+                      : p.kind === 'save'
+                        ? 'var(--accent-purple)'
+                        : (p.damageType && DAMAGE_TYPE_COLOR[p.damageType]) || 'var(--accent-red)'
+                    leftPills.push(
+                      <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
+                        ...caePill,
+                        border: `1px solid ${color}`,
+                        color,
+                        background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                      }}>
+                        {p.value != null ? `${p.label} ${p.value}` : p.label}
+                      </span>
+                    )
+                  }
+                }
+                // Legacy-Felder (Weapon-Attack-Rows): atk/dmg sind reine
+                // Strings — wenn vorhanden, einfügen.
+                if (r.attack) leftPills.push(
+                  <span key="att-legacy" style={{
+                    ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
+                  }} title="Attack-Bonus">{r.attack}</span>
                 )
-                if (r.range) metaPills.push(<span key="rng" style={caeMetaPart}>{r.range}</span>)
+                if (r.damage && r.damage !== '—') leftPills.push(
+                  <span key="dmg-legacy" style={{
+                    ...caePill, border: '1px solid var(--accent-red)', color: 'var(--accent-red)',
+                  }}>{r.damage}</span>
+                )
+                if (r.range && r.range !== '—') leftPills.push(
+                  <span key="rng" style={{
+                    ...caePill, border: '1px solid var(--text-dim)', color: 'var(--text-secondary)',
+                  }} title={`Reichweite: ${r.range}`}>{r.range}</span>
+                )
                 if (r.mastery && r.mastery.length > 0) {
                   for (const m of r.mastery) {
                     const desc = masteryShortDesc(m)
-                    metaPills.push(
+                    leftPills.push(
                       <span key={`m-${m}`} style={{
-                        ...caeMetaPart,
-                        border: '1px solid var(--accent-yellow)',
-                        color: 'var(--accent-yellow)',
-                        borderRadius: 999, padding: '0 6px',
+                        ...caePill, border: '1px solid var(--accent-yellow)', color: 'var(--accent-yellow)',
                       }} title={desc ? `Weapon Mastery: ${m} — ${desc}` : `Weapon Mastery: ${m}`}>
                         ★ {m}
                       </span>
                     )
                   }
                 }
-                if (r.uses) metaPills.push(
-                  <span key="uses" style={{
-                    ...caeMetaPart,
-                    color: r.uses.remaining === 0 ? 'var(--accent-red)'
-                      : r.uses.remaining < r.uses.max ? 'var(--accent-yellow)'
-                      : 'var(--accent-green)',
-                    fontWeight: 700,
-                  }} title={`${r.uses.label}: ${r.uses.remaining}/${r.uses.max} übrig`}>
-                    {r.uses.remaining}/{r.uses.max}
-                  </span>
-                )
-                if (r.slotLabel) metaPills.push(
-                  <span key="slot" style={{
-                    ...caeMetaPart,
-                    border: `1px solid ${r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)'}`,
-                    color: r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)',
-                    borderRadius: 999, padding: '0 6px',
-                  }}>{r.slotLabel}</span>
-                )
-                // Concentration pill — sits next to the slot info on
-                // spell rows so the player sees at a glance "casting
-                // this drops my current concentration".
-                if (r.spell?.concentration) metaPills.push(
+
+                // RIGHT: Concentration und Ritual.
+                if (r.spell?.concentration) rightPills.push(
                   <span key="conc" style={{
-                    ...caeMetaPart,
-                    border: '1px solid var(--accent-purple)',
-                    color: 'var(--accent-purple)',
-                    borderRadius: 999, padding: '0 6px',
+                    ...caePill, border: '1px solid var(--accent-purple)', color: 'var(--accent-purple)',
                   }} title="Concentration">conc.</span>
                 )
+                if (r.spell?.ritual) rightPills.push(
+                  <span key="ritual" style={{
+                    ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
+                  }} title="Ritual">R★</span>
+                )
+
+                const hasBottomRow = leftPills.length > 0 || rightPills.length > 0
+                // Color-Marker: persistiert per rowMarkerKey →
+                // `character.colorMarkers`. Stripe links wenn gesetzt,
+                // Picker im Expanded-Body.
+                const mKey = rowMarkerKey(r)
+                const mColor = mKey ? getColorMarker(character, mKey) : null
                 return (
                   <div key={r.id} style={{
                     ...caeRow,
+                    ...(colorStripeStyle(mColor) || {}),
                     opacity: r.slotAvailable === false ? 0.55 : 1,
                   }}>
-                    {/* Two-line layout — keeps the row readable when the
-                        column is narrow:
-                          Row 1: chevron + name + Always badge + Use button
-                          Row 2: small pills (attack / damage / range /
-                                 mastery / uses / slot) */}
                     <div
                       style={{ ...caeRowHead, flexDirection: 'column', alignItems: 'stretch', gap: 3 }}
                       onClick={() => setExpanded(e => e === r.id ? null : r.id)}
                     >
+                      {/* TOP ROW: chevron + name + top-pills + Use-Button */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>
                           {expanded === r.id ? '▼' : '▶'}
                         </span>
                         <span style={{ ...caeRowName, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {r.name}
-                          {r.badge && (
-                            <span style={caeAlwaysBadge} title="Immer vorbereitet">{r.badge}</span>
-                          )}
                         </span>
+                        {topPills.length > 0 && (
+                          <span style={{ display: 'inline-flex', gap: 4, flexShrink: 0 }}>
+                            {topPills}
+                          </span>
+                        )}
                         <CombatActionButton
                           row={r}
                           slots={slots} usedSlots={usedSlots} usedPact={usedPact}
@@ -1652,15 +2010,67 @@ function CombatActionsCategorisedList({
                           }}
                         />
                       </div>
-                      {metaPills.length > 0 && (
+                      {/* BOTTOM ROW: left-pills (range/dice/save) │ right-pills (conc/ritual) */}
+                      {hasBottomRow && (
                         <div style={{
-                          display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: 16,
-                          fontSize: 11,
-                        }}>{metaPills}</div>
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          paddingLeft: 16, fontSize: 11,
+                        }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, flex: 1, minWidth: 0 }}>
+                            {leftPills}
+                          </div>
+                          {rightPills.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                              {rightPills}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     {expanded === r.id && (
-                      <ActionRowExpandedBody row={r} />
+                      <>
+                        <ActionRowExpandedBody row={r} />
+                        {mKey && applyCharacter && (
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '4px 10px 6px',
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                            onClick={(e) => e.stopPropagation()}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Farb-Tag:</span>
+                              <CardColorPicker
+                                color={mColor}
+                                onChange={(c) => setColorMarker(applyCharacter, mKey, c)}
+                                compact
+                              />
+                            </span>
+                            {/* Pin-Toggle: gepinnte Actions erscheinen
+                                ZUSÄTZLICH oben in der "★ Pinned"-
+                                Kategorie. Original-Eintrag bleibt. */}
+                            <button
+                              type="button"
+                              onClick={() => togglePinnedAction(applyCharacter, mKey)}
+                              title={isPinnedAction(character, mKey)
+                                ? 'Aus Pinned entfernen'
+                                : 'Oben in Pinned anheften'}
+                              style={{
+                                fontSize: 11, padding: '2px 8px',
+                                background: isPinnedAction(character, mKey)
+                                  ? 'color-mix(in srgb, var(--accent-yellow) 18%, transparent)'
+                                  : 'transparent',
+                                color: isPinnedAction(character, mKey)
+                                  ? 'var(--accent-yellow)' : 'var(--text-muted)',
+                                border: `1px solid ${isPinnedAction(character, mKey)
+                                  ? 'var(--accent-yellow)' : 'var(--border)'}`,
+                                borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+                              }}
+                            >
+                              {isPinnedAction(character, mKey) ? '★ Pinned' : '☆ Pin'}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                     {castingFor === r.id && r.spell && r.spell.level > 0 && (
                       <SpellSlotPicker
@@ -1996,6 +2406,53 @@ const caeRowHead = {
 const caeRowName = { color: 'var(--text-primary)', fontWeight: 600, fontSize: 12 }
 const caeRowMeta = { display: 'flex', gap: 8, color: 'var(--text-secondary)', fontSize: 11 }
 const caeMetaPart = { color: 'var(--text-muted)' }
+// Einheitliche kompakte Pill für Action-Rows (slot/atk/dmg/save/range/
+// mastery/conc/ritual). Border + Farbe werden inline überschrieben.
+const caePill = {
+  display: 'inline-flex', alignItems: 'center',
+  padding: '0 7px', borderRadius: 999,
+  fontSize: 10, fontWeight: 700, lineHeight: '16px',
+  whiteSpace: 'nowrap', fontFamily: 'inherit',
+}
+// ▲▼ Reorder-Buttons im Kategorie-Header. Disabled wenn schon am
+// Anfang/Ende. Pure-Inline-Style, kein eigenes Component nötig.
+function catReorderBtn(disabled) {
+  return {
+    width: 18, height: 18, marginLeft: 2,
+    padding: 0,
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    borderRadius: 3,
+    color: 'var(--text-muted)',
+    fontSize: 9, lineHeight: 1, fontFamily: 'inherit',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.35 : 1,
+  }
+}
+
+// ↻-Reset-Icon — wird VOR dem Section-Titel gerendert wenn die
+// Kategorie-Reihenfolge der Spalte vom Default abweicht. Nur Icon,
+// kein Text, fügt sich nahtlos in den Titel ein.
+function ResetOrderIcon({ onReset }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onReset?.() }}
+      title="Reihenfolge zurücksetzen"
+      style={{
+        width: 18, height: 18, padding: 0, marginRight: 6,
+        background: 'transparent',
+        border: '1px solid var(--border)',
+        borderRadius: 3,
+        color: 'var(--text-muted)',
+        fontSize: 12, lineHeight: 1, fontFamily: 'inherit',
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        verticalAlign: 'middle',
+      }}
+    >↻</button>
+  )
+}
 const caeRowBody = {
   padding: '6px 10px 8px 22px',
   fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5,
@@ -2050,7 +2507,7 @@ export function DamageResistancePills({ character, compact = false }) {
   const renderPills = (set, label, isImmune) => (
     <div style={compact ? drColCompact : drCol}>
       <div style={drColLabel}>{label}</div>
-      <div style={drPillRow}>
+      <div style={compact ? drPillRowCompact : drPillRow}>
         {[...set].map(t => {
           const tn = String(t).toLowerCase()
           const immune = isImmune && m.damageImmunity.has(tn)
@@ -2085,12 +2542,18 @@ const drWrap = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 8, marginTop: 8,
 }
-// Compact variant — drops the inset background box and renders as a
-// narrow vertical column meant to sit beside the HP card. The pills
-// flow naturally beside the HP value instead of below it.
+// Compact variant: einspaltig untereinander, füllt die volle Höhe
+// des HP-Section-Containers (alignSelf: stretch im Flex-Parent).
+// Conditions sitzen jetzt unten als eigener Footer der hero-row, also
+// kann Resistance den vorhandenen Vertikal-Platz komplett nutzen.
+// overflow: auto greift erst wenn die Pillen-Liste die Höhe der
+// HP-Karte+Controls überschreitet.
 const drWrapCompact = {
   display: 'flex', flexDirection: 'column', gap: 6,
-  flex: '0 0 auto', alignSelf: 'stretch',
+  flex: '1 1 0', minWidth: 0, minHeight: 0,
+  alignSelf: 'stretch',
+  overflowY: 'auto',
+  paddingRight: 2,
 }
 const drCol = {
   background: 'var(--bg-inset)',
@@ -2106,6 +2569,10 @@ const drColLabel = {
   letterSpacing: 0.5, color: 'var(--text-muted)', marginBottom: 4,
 }
 const drPillRow = { display: 'flex', gap: 4, flexWrap: 'wrap' }
+// Compact-Variante: Pills stapeln vertikal einzeilig, je eine Pille
+// pro Zeile. So bleibt der "yellow area"-Bereich neben der HP-Karte
+// schmal und scrollt anstatt zu wrappen.
+const drPillRowCompact = { display: 'flex', flexDirection: 'column', gap: 2 }
 const drPill = {
   padding: '1px 7px', borderRadius: 999, fontSize: 10,
   border: '1px solid', textTransform: 'capitalize',
@@ -2342,14 +2809,18 @@ const favCardBody = { padding: '8px 12px 10px', borderTop: '1px solid var(--bord
 // Actions/Spells/Favorites lists show more content before scrolling
 // while still leaving room for the Combat Tracker bar and the
 // Weapon Mastery / Class Resources row underneath.
-const COLUMN_HEIGHT = 440
+// Reagiert auf die Viewport-Höhe via CSS-min(). Bei 1080p (≈960px
+// nutzbar) bleibt der alte 440-Wert; bei kleineren Browser-Fenstern
+// schrumpft die Spalte automatisch damit der Overview nie
+// page-scrollt. Innenscroll der Spalte fängt das überlaufende auf.
+const COLUMN_HEIGHT_MAX = 420
 const fixedHeightScroll = {
-  maxHeight: COLUMN_HEIGHT,
+  maxHeight: `min(${COLUMN_HEIGHT_MAX}px, calc(100vh - 460px))`,
   overflowY: 'auto',
   paddingRight: 4,
 }
 const fixedHeightSection = {
-  maxHeight: COLUMN_HEIGHT + 48,
+  maxHeight: `min(${COLUMN_HEIGHT_MAX + 48}px, calc(100vh - 410px))`,
   overflowY: 'auto',
 }
 
@@ -2496,24 +2967,63 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
     />
   )
 
+  // Item-Spalten-Kategorien (Equipment / Loot) reorderbar machen,
+  // gleicher Pattern wie Actions/Spells.
+  const itemCats = [
+    { id: 'items:equipment', label: 'Equipment', tiles: equipmentTiles },
+    { id: 'items:loot',      label: 'Loot',      tiles: lootTiles },
+  ]
+  const savedItemOrder = getSavedOrder(character, 'items')
+  const orderedItemCats = applySavedOrder(itemCats, savedItemOrder, c => c.id)
+  const itemKeys = orderedItemCats.map(c => c.id)
+  const isItemOrderCustom = Array.isArray(savedItemOrder) && savedItemOrder.length > 0
+  const moveItemCat = (id, dir) => moveCategory(applyCharacter, 'items', itemKeys, id, dir)
+  const resetItemOrder = () => resetCategoryOrder(applyCharacter, 'items')
+
   const body = tiles.length === 0 ? (
     <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '8px 4px' }}>
       Markiere Items im Inventar mit "Quick&nbsp;Access" — Heilungstränke erscheinen automatisch.
     </div>
   ) : (
     <div style={{ ...(isPwaMobile ? flexibleScroll : fixedHeightScroll), display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <QaCategory title="Equipment" count={equipmentTiles.length} defaultOpen>
-        {equipmentTiles.map(renderTile)}
-      </QaCategory>
-      <QaCategory title="Loot" count={lootTiles.length} defaultOpen>
-        {lootTiles.map(renderTile)}
-      </QaCategory>
+      {orderedItemCats.map((cat, idx) => {
+        const canUp = idx > 0
+        const canDown = idx < orderedItemCats.length - 1
+        return (
+          <QaCategory
+            key={cat.id}
+            title={cat.label}
+            count={cat.tiles.length}
+            defaultOpen
+            headerExtras={
+              <>
+                <button type="button" disabled={!canUp}
+                  onClick={(e) => { e.stopPropagation(); moveItemCat(cat.id, 'up') }}
+                  style={catReorderBtn(!canUp)} title="Nach oben">▲</button>
+                <button type="button" disabled={!canDown}
+                  onClick={(e) => { e.stopPropagation(); moveItemCat(cat.id, 'down') }}
+                  style={catReorderBtn(!canDown)} title="Nach unten">▼</button>
+              </>
+            }
+          >
+            {cat.tiles.map(renderTile)}
+          </QaCategory>
+        )
+      })}
     </div>
   )
 
   return (
     <>
-      <Section title="Items" action={action}>
+      <Section
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            {isItemOrderCustom && <ResetOrderIcon onReset={resetItemOrder} />}
+            Items
+          </span>
+        }
+        action={action}
+      >
         {body}
       </Section>
       <SheetModal
@@ -2579,6 +3089,43 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
   const hasEntries = Array.isArray(it.entries) && it.entries.length > 0
   const hasDescription = typeof it.description === 'string' && it.description.trim().length > 0
 
+  // Hover-Tooltip-Content: dieselbe Info wie das Inline-Expand-Panel,
+  // damit der User mit Hover die komplette Beschreibung lesen kann
+  // ohne aufklappen zu müssen.
+  const tooltipContent = (
+    <div style={{ fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+      <div style={{
+        fontSize: 12, fontWeight: 700, color: 'var(--text-primary)',
+        marginBottom: 4,
+      }}>{it.customName || it.name}</div>
+      {statBits.length > 0 && (
+        <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>
+          {statBits.join(' · ')}
+        </div>
+      )}
+      {masteryBits.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          <span style={{ color: 'var(--accent-yellow)', fontWeight: 700 }}>Mastery:</span>{' '}
+          {masteryBits.join(', ')}
+        </div>
+      )}
+      {propBits.length > 0 && (
+        <div style={{ marginBottom: 4, color: 'var(--text-muted)' }}>
+          Properties: {propBits.join(', ')}
+        </div>
+      )}
+      {hasEntries && <EntryRenderer entries={it.entries} />}
+      {!hasEntries && hasDescription && (
+        <div style={{ whiteSpace: 'pre-wrap' }}>{it.description}</div>
+      )}
+      {!hasEntries && !hasDescription && statBits.length === 0 && (
+        <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+          Keine Beschreibung verfügbar.
+        </div>
+      )}
+    </div>
+  )
+
   // Klick-Regeln (vom User explizit so verlangt):
   //   • Chevron ODER Name  → expand/collapse toggle
   //   • Zahl linksklick    → 1× verbrauchen (Stack)  /  Equip toggeln (Equippable)
@@ -2613,7 +3160,6 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
       >
         <div
           onClick={() => setOpen(o => !o)}
-          title={`${it.customName || it.name} — Details ein/ausklappen`}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             flex: 1, minWidth: 0, cursor: 'pointer',
@@ -2625,15 +3171,17 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
             transform: open ? 'rotate(90deg)' : 'none',
             transition: 'transform 120ms',
           }}>▶</span>
-          <span style={{
-            fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
-            lineHeight: 1.3, flex: 1,
-            // Lange Namen umbrechen statt abschneiden — auch
-            // mehrwortige Magic-Item-Namen sollen voll lesbar sein.
-            whiteSpace: 'normal', wordBreak: 'break-word',
-          }}>
-            {isPotion && '🧪 '}{it.customName || it.name}
-          </span>
+          <HoverDetailTooltip content={tooltipContent}>
+            <span style={{
+              fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+              lineHeight: 1.3,
+              // Lange Namen umbrechen statt abschneiden — auch
+              // mehrwortige Magic-Item-Namen sollen voll lesbar sein.
+              whiteSpace: 'normal', wordBreak: 'break-word',
+            }}>
+              {isPotion && '🧪 '}{it.customName || it.name}
+            </span>
+          </HoverDetailTooltip>
         </div>
         {isEquippable ? (
           <button
@@ -2709,13 +3257,16 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
 
 // Collapsible category wrapper used inside Quick Access — keeps the
 // Equipment / Loot split readable when the player has many items.
-function QaCategory({ title, count, defaultOpen = true, children }) {
+function QaCategory({ title, count, defaultOpen = true, children, headerExtras }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div>
-      <div onClick={() => setOpen(o => !o)} style={categoryHead}>
-        <span style={{ flex: 1 }}>{open ? '▼' : '▶'} {title}</span>
+      <div style={categoryHead}>
+        <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+          {open ? '▼' : '▶'} {title}
+        </span>
         <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{count}</span>
+        {headerExtras}
       </div>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3015,8 +3566,11 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
 
   function togglePrep(row) {
     if (!updateCharacter) return
-    if (row.always) return            // cosmetic, but guard cantrips and granted
     if (row.spell.level === 0) return // cantrips never need prep
+    // Always-prepared (race/feat/feature grants) DARF jetzt ZUSÄTZLICH
+    // gepreped werden — der Spell erscheint dann als 2. Eintrag in der
+    // Action-Spalte (siehe Bucket-Builder), einer für den at-will Cast
+    // ohne Slot, einer für den Slot-castbaren Eintrag.
     // Welche Klasse beansprucht diesen Prep-Slot?
     // Reihenfolge:
     //   1. Klassen die den Spell schon prepped haben (für Unprep-Klick)
@@ -3046,7 +3600,7 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
   // dort entfernt. Klick auf bereits aktive Pille → unprep.
   function prepWithClass(row, classId) {
     if (!updateCharacter || !classId) return
-    if (row.always || row.spell.level === 0) return
+    if (row.spell.level === 0) return
     const listOfTarget = preparedByClass[classId] || []
     const hasInTarget = listOfTarget.some(n => n.toLowerCase() === row.key)
     if (hasInTarget) {
@@ -3148,9 +3702,44 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
   }, [tab, classPicks])
   const pickLabels = Object.keys(visibleClassPicks)
 
+  // Vereinheitlichte Kategorien-Liste (Class-Picks + Spell-Levels)
+  // damit der User per ▲▼ Reihenfolge ändern + per ↻ resetten kann.
+  // Stable IDs: `pick:<label>` für Maneuvers/Invocations etc.,
+  // `lvl:<n>` für Spell-Level-Gruppen.
+  const allCategories = useMemo(() => {
+    const out = []
+    for (const label of pickLabels) {
+      out.push({ id: `pick:${label}`, label, kind: 'pick' })
+    }
+    for (const lv of visibleLevelOrder) {
+      out.push({
+        id: `lvl:${lv}`,
+        label: lv === 0 ? 'Cantrips' : `Level ${lv}`,
+        kind: 'level',
+        lv,
+      })
+    }
+    return out
+  }, [pickLabels.join('|'), visibleLevelOrder.join('|')])
+
+  const savedSpellOrder = getSavedOrder(character, 'spells')
+  const orderedSpellCats = applySavedOrder(allCategories, savedSpellOrder, c => c.id)
+  const orderedKeys = orderedSpellCats.map(c => c.id)
+  const isSpellOrderCustom = Array.isArray(savedSpellOrder) && savedSpellOrder.length > 0
+  const moveSpellCat = (id, dir) => moveCategory(applyCharacter, 'spells', orderedKeys, id, dir)
+  const resetSpellOrder = () => resetCategoryOrder(applyCharacter, 'spells')
+
   return (
     <>
-    <Section title="Spells" action={headerCounter}>
+    <Section
+      title={
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {isSpellOrderCustom && <ResetOrderIcon onReset={resetSpellOrder} />}
+          Spells
+        </span>
+      }
+      action={headerCounter}
+    >
       <div style={isPwaMobile ? flexibleScroll : fixedHeightScroll}>
         {showTabs && (
           <div style={{
@@ -3174,38 +3763,54 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
           </div>
         )}
 
-        {/* Class-Picks (Maneuvers, Invocations, Metamagic, Fighting
-            Styles, Arcane Shots, …) als eigene Kategorie VOR den
-            Spell-Levels. Datengetrieben aus levelChoices →
-            optionalFeatures, gelabelt via FEATURE_TYPE_LABEL. */}
-        {pickLabels.map(label => (
-          <ClassPickCategory
-            key={label}
-            label={label}
-            items={visibleClassPicks[label]}
-            optFeatMap={optFeatMap}
-            showClassBadge={tab === 'all'}
-            classAbbr={classAbbr}
-          />
-        ))}
-
+        {/* Unified Render: orderedSpellCats vermischt Class-Picks
+            und Spell-Levels in der vom Spieler gewählten Reihenfolge.
+            Jedes Element trägt ▲▼ zum Verschieben. */}
         {visibleLevelOrder.length === 0 && pickLabels.length === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '4px 2px' }}>
             Keine Spells.
           </div>
         )}
-        {visibleLevelOrder.map(lv => {
+        {orderedSpellCats.map((cat, catIdx) => {
+          const canUp   = catIdx > 0
+          const canDown = catIdx < orderedSpellCats.length - 1
+          const Arrows = (
+            <>
+              <button type="button" disabled={!canUp}
+                onClick={(e) => { e.stopPropagation(); moveSpellCat(cat.id, 'up') }}
+                style={catReorderBtn(!canUp)} title="Nach oben">▲</button>
+              <button type="button" disabled={!canDown}
+                onClick={(e) => { e.stopPropagation(); moveSpellCat(cat.id, 'down') }}
+                style={catReorderBtn(!canDown)} title="Nach unten">▼</button>
+            </>
+          )
+          if (cat.kind === 'pick') {
+            return (
+              <ClassPickCategory
+                key={cat.id}
+                label={cat.label}
+                items={visibleClassPicks[cat.label]}
+                optFeatMap={optFeatMap}
+                showClassBadge={tab === 'all'}
+                classAbbr={classAbbr}
+                headerExtras={Arrows}
+              />
+            )
+          }
+          const lv = cat.lv
           const rows = visibleRowsByLevel[lv]
           const open = openLevels.has(lv)
-          const label = lv === 0 ? 'Cantrips' : `Level ${lv}`
           const slotInfo = slotInfoByLevel[lv]
           return (
-            <div key={lv} style={{ marginBottom: 6 }}>
-              <div onClick={() => toggleLevel(lv)} style={categoryHead}>
-                <span style={{ flex: 1 }}>{open ? '▼' : '▶'} {label}</span>
+            <div key={cat.id} style={{ marginBottom: 6 }}>
+              <div style={categoryHead}>
+                <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => toggleLevel(lv)}>
+                  {open ? '▼' : '▶'} {cat.label}
+                </span>
                 <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
                   {rows.length}{slotInfo ? ` · ${slotInfo.remain}/${slotInfo.total} slots` : ''}
                 </span>
+                {Arrows}
               </div>
               {open && rows.map(row => (
                 <SpellListRow
@@ -3219,6 +3824,8 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
                   classAbbr={classAbbr}
                   preparedByClass={preparedByClass}
                   ritualClassExists={ritualClassExists}
+                  character={character}
+                  applyCharacter={applyCharacter}
                 />
               ))}
             </div>
@@ -3255,13 +3862,26 @@ function SpellListRow({
   row, isExpanded, onExpand, onTogglePrep, onPrepWithClass,
   casterClasses = [], classAbbr = {}, preparedByClass = {},
   ritualClassExists,
+  character, applyCharacter,
 }) {
+  // Color-Marker fuer den Spell — gleicher Key wie in der Action-
+  // Spalte UND wie favoriteKey('spell', name) damit der gleiche
+  // Farb-Tag bei Spells-Spalte, Action-Spalte und Features-Tab
+  // synchron läuft. KEIN lowercase — favoriteKey ist case-preserving.
+  const mKey = `spell:${row.spell?.name || row.key || ''}`
+  const mColor = getColorMarker(character, mKey)
   const sp = row.spell
   const lv = row.level
   const isCantrip = lv === 0
   const grayed = !row.prepared && !row.always && !isCantrip
-  const canToggle = !row.always && !isCantrip
-  const dotKind = row.always ? 'always' : (row.prepared ? 'on' : 'off')
+  // Cantrips brauchen kein Prep. Always-prepared Spells durften früher
+  // auch nicht togglen — neu: man kann sie zusätzlich preparen, damit
+  // sie als 2. Eintrag (Slot-castbar) in der Action-Spalte erscheinen.
+  // Dies wird im Bucket-Builder via Duplikat-Row umgesetzt.
+  const canToggle = !isCantrip
+  const dotKind = row.always
+    ? (row.prepared ? 'always-prep' : 'always')
+    : (row.prepared ? 'on' : 'off')
 
   // Multiclass-Modus: wenn mehr als eine Caster-Klasse diesen Spell
   // preparen darf, zeige Per-Klasse-Pills statt des einzelnen Dots.
@@ -3299,6 +3919,7 @@ function SpellListRow({
         borderRadius: 6,
         background: 'var(--bg-elevated)',
         opacity: grayed ? 0.55 : 1,
+        ...(colorStripeStyle(mColor) || {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px' }}>
@@ -3389,6 +4010,22 @@ function SpellListRow({
               <EntryRenderer entries={sp.entriesHigherLevel} />
             </div>
           )}
+          {applyCharacter && (
+            <div
+              style={{
+                marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
+                paddingTop: 6, borderTop: '1px solid var(--border-subtle)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Farb-Tag:</span>
+              <CardColorPicker
+                color={mColor}
+                onChange={(c) => setColorMarker(applyCharacter, mKey, c)}
+                compact
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -3418,15 +4055,18 @@ function spellTabStyle(active) {
 // kompakt wie Spell-Rows gerendert: linker Marker + Name + (im
 // 'All'-Tab) ein Klassen-Badge rechts. Klick öffnet ein Sub-Panel
 // mit der vollen Entry-Beschreibung aus optionalfeatures.json.
-function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr }) {
+function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr, headerExtras }) {
   const [open, setOpen] = useState(true)
   const [expandedKey, setExpandedKey] = useState(null)
   if (!items || items.length === 0) return null
   return (
     <div style={{ marginBottom: 6 }}>
-      <div onClick={() => setOpen(o => !o)} style={categoryHead}>
-        <span style={{ flex: 1 }}>{open ? '▼' : '▶'} {label}</span>
+      <div style={categoryHead}>
+        <span style={{ flex: 1, cursor: 'pointer' }} onClick={() => setOpen(o => !o)}>
+          {open ? '▼' : '▶'} {label}
+        </span>
         <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{items.length}</span>
+        {headerExtras}
       </div>
       {open && items.map(it => {
         const key = `${it.classId || ''}|${it.name}|${it.level || ''}`
@@ -3503,12 +4143,13 @@ function classPillStyle(active) {
 
 function prepDot(kind, enabled) {
   const color =
-    kind === 'on'     ? 'var(--accent-green)' :
-    kind === 'always' ? 'var(--accent-blue)'  :
+    kind === 'on'         ? 'var(--accent-green)' :
+    kind === 'always-prep' ? 'var(--accent-green)' :
+    kind === 'always'     ? 'var(--accent-blue)'  :
     'var(--text-dim)'
   return {
     width: 18, height: 18, borderRadius: '50%',
-    background: 'transparent',
+    background: kind === 'always-prep' ? 'var(--accent-blue)' : 'transparent',
     border: `1.5px solid ${color}`,
     color,
     cursor: enabled ? 'pointer' : 'default',

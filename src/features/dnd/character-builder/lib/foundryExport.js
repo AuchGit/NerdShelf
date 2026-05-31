@@ -153,18 +153,33 @@ async function ensureIndexes(edition = '5e') {
       fetch(`${root}/foundry-feats.json`).then(r => r.json()).catch(() => ({ feat: [] })),
     ])
 
-  // items-base.json holds the raw 5etools `entries` for armor, weapons
-  // and adventuring gear. We use it as the description fallback when
-  // foundry-item-foundry-index ships an empty string (Leather Armor
-  // XPHB and several other XPHB-source items).
-  const itemsBase = await fetch(`${root}/items-base.json`).then(r => r.json()).catch(() => ({ baseitem: [] }))
+  // Fallback-Entries-Index für Item-Descriptions im Foundry-Export.
+  // Wird gezogen wenn foundry-item-foundry-index.json einen leeren
+  // description-String hat (passiert für Leather Armor|XPHB + viele
+  // XPHB-Items) ODER der Charakter-Eintrag selbst noch keine
+  // `entries` trägt (Legacy-Chars von vor backfillItemMetadata).
+  //
+  // Magic Items leben in items.json (≈2400 Einträge), Standard-Items
+  // (Waffen, Rüstung, Gear) in items-base.json. Bei einem Mage-Item
+  // wie "Cloak of Elvenkind" oder "Wand of Magic Missiles" hätte
+  // der frühere items-base.json-only-Pfad GAR keinen Fallback gehabt
+  // — der Foundry-Export landete dann mit leerer Description. Jetzt
+  // mergen wir beide Quellen, items.json gewinnt bei Kollisionen
+  // (sollte aber nicht passieren — disjunkte Namespaces).
+  const [itemsBase, itemsFull] = await Promise.all([
+    fetch(`${root}/items-base.json`).then(r => r.json()).catch(() => ({ baseitem: [] })),
+    fetch(`${root}/items.json`).then(r => r.json()).catch(() => ({ item: [] })),
+  ])
   ITEM_ENTRIES_BY_KEY = {}
-  for (const it of (itemsBase.baseitem || [])) {
-    if (!it?.name || !Array.isArray(it.entries) || it.entries.length === 0) continue
+  const addToIndex = (it) => {
+    if (!it?.name || !Array.isArray(it.entries) || it.entries.length === 0) return
     const k = `${it.name}||${it.source || ''}`
     ITEM_ENTRIES_BY_KEY[k] = it.entries
     if (!ITEM_ENTRIES_BY_KEY[it.name]) ITEM_ENTRIES_BY_KEY[it.name] = it.entries
   }
+  for (const it of (itemsBase.baseitem || [])) addToIndex(it)
+  for (const it of (itemsBase.item     || [])) addToIndex(it)
+  for (const it of (itemsFull.item     || [])) addToIndex(it)
 
   // Index foundry-feats by `Name||Source` so makeFeatItem can pull
   // effects/system patches the same way it pulls FEAT_INDEX img/desc.

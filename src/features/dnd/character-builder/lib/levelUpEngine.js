@@ -219,7 +219,16 @@ export function meetsPrerequisites(prereqs, character, classId, classLevel) {
     if (prereq.spell) {
       const known = getAllKnownSpellNames(character)
       for (const sp of prereq.spell) {
-        const name = sp.replace(/#c$/, '').split('|')[0].replace(/\b\w/g, c => c.toUpperCase())
+        // 5e: Strings wie "minor illusion#c" oder "fly|XPHB".
+        // 5.5e: teilweise Objekte mit { name, source } / { choose: [...] }.
+        // Wir akzeptieren beide Formen, fallen sonst auf Skip zurück
+        // (kein Crash mehr — der Eintrag wird einfach als nicht-prüfbar
+        // behandelt und der User bekommt die Option trotzdem zu sehen).
+        const raw = typeof sp === 'string'
+          ? sp
+          : (sp?.name || sp?.uid || (Array.isArray(sp?.choose) ? '' : ''))
+        if (!raw || typeof raw !== 'string') continue
+        const name = raw.replace(/#c$/, '').split('|')[0].replace(/\b\w/g, c => c.toUpperCase())
         if (!known.has(name)) return false
       }
     }

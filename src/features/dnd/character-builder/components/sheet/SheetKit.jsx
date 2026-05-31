@@ -6,14 +6,15 @@
 import { useState, useEffect, useRef } from 'react'
 import useWindowWidth from '../../../../../shared/hooks/useWindowWidth'
 import { S } from './sheetStyles'
+import { TAG_COLORS } from '../../lib/cardColors'
 
 // ═══════════════════════════════════════════════════════════════
 // LAYOUT PRIMITIVES
 // ═══════════════════════════════════════════════════════════════
 
-export function Section({ title, action, children }) {
+export function Section({ title, action, children, style }) {
   return (
-    <div style={S.section}>
+    <div style={{ ...S.section, ...(style || {}) }}>
       <div style={S.sectionHead}>
         <div style={S.sectionTitle}>{title}</div>
         {action}
@@ -175,6 +176,66 @@ const featureNoteList = {
 }
 const featureNoteItem = { fontSize: 11, lineHeight: 1.4, color: 'var(--text-secondary)' }
 const featureNoteFeature = { color: 'var(--accent)', fontWeight: 600 }
+
+// ── Card-Color-Picker ──────────────────────────────────────────
+// Universeller Color-Tag-Picker für alles ausklappbare. Persistiert
+// in `character.colorMarkers[key]` via setColorMarker. Hover/Click
+// auf den kleinen Dot öffnet eine Reihe Swatches; aktive Farbe ist
+// am gefüllten Dot zu erkennen.
+// (useState ist bereits oben im File importiert.)
+
+export function CardColorPicker({ color, onChange, compact = false }) {
+  const [open, setOpen] = useState(false)
+  const size = compact ? 14 : 16
+  const swatch = {
+    width: size, height: size, borderRadius: 4, cursor: 'pointer',
+    border: '1px solid var(--border)', padding: 0,
+  }
+  if (!open) {
+    return (
+      <button
+        type="button"
+        title="Farb-Tag setzen"
+        onClick={(e) => { e.stopPropagation(); setOpen(true) }}
+        style={{
+          ...swatch,
+          background: color || 'transparent',
+          outline: color ? 'none' : '1px dashed var(--border-strong)',
+        }}
+      >
+        {!color && <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>+</span>}
+      </button>
+    )
+  }
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}
+    >
+      <button type="button" aria-label="Kein Tag"
+        onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false) }}
+        style={{ ...swatch, background: 'transparent',
+                 outline: !color ? '2px solid var(--accent)' : 'none' }}>
+        <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>×</span>
+      </button>
+      {TAG_COLORS.map(c => (
+        <button key={c.value} type="button" title={c.label}
+          onClick={(e) => { e.stopPropagation(); onChange(c.value); setOpen(false) }}
+          style={{ ...swatch, background: c.value,
+                   outline: color === c.value ? '2px solid var(--accent)' : 'none' }} />
+      ))}
+      <button type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+        title="Schließen"
+        style={{
+          fontSize: 10, color: 'var(--text-dim)',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          marginLeft: 2, padding: 0, lineHeight: 1, fontFamily: 'inherit',
+        }}
+      >✕</button>
+    </div>
+  )
+}
 
 // ═══════════════════════════════════════════════════════════════
 // BUTTONS

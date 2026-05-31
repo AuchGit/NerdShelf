@@ -4,12 +4,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
-import { Section, TraitPill } from './SheetKit'
+import { Section, TraitPill, CardColorPicker } from './SheetKit'
+import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
 import { parseFeatureChoices } from '../../lib/choiceParser'
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
+import { parseFeatureEffect } from '../../lib/featureEffectParser'
+import { DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
 
 function getFeatBonusSummary(character) {
   const result = []
@@ -38,10 +41,21 @@ function getFeatBonusSummary(character) {
 
 const SIZE_LABELS = { M: 'Medium', S: 'Small', L: 'Large', T: 'Tiny', H: 'Huge' }
 
-export default function FeaturesTab({ character, updateCharacter, applyCharacter }) {
+export default function FeaturesTab({ character, updateCharacter, applyCharacter, expanded, setExpanded }) {
   const featBonuses = getFeatBonusSummary(character)
   const [featDataMap, setFeatDataMap] = useState({})
   const [expandedFeat, setExpandedFeat] = useState(null)
+  // ExpandedSet wird vom Parent geliefert (CharacterSheetPage hält den
+  // Set damit er Tab-Switches überlebt). Fallback auf lokalen State
+  // wenn die Props mal nicht gesetzt sind (z.B. anderer Aufrufer in
+  // der GM-Session-Ansicht).
+  const [localExpanded, setLocalExpanded] = useState(() => new Set())
+  const expandedSet = expanded || localExpanded
+  const toggleExpand = (key) => {
+    const next = new Set(expandedSet)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    if (setExpanded) setExpanded(next); else setLocalExpanded(next)
+  }
 
   // Unresolved subclass-feature choices. CharacterSheetPage attaches
   // `character.__activeFeatures` = [{name, entries, classId, …}]; we
@@ -300,20 +314,26 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                 truth that drives the synthetic note scanner too. */}
             {(character.species.__traits || []).length > 0 && (
               <div style={{ marginTop: 12 }}>
-                {character.species.__traits.map(tr => (
-                  <ExpandableEntryCard
-                    key={`sp-${tr.name}`}
-                    title={tr.name}
-                    entries={tr.entries}
-                    favKey={favoriteKey('trait', tr.name)}
-                    character={character}
-                    applyCharacter={applyCharacter}
-                    edition={character.meta?.edition}
-                    fiveeLink={raceName && character.species.source
-                      ? { kind: 'race', name: raceName, source: character.species.source }
-                      : null}
-                  />
-                ))}
+                {character.species.__traits.map(tr => {
+                  const key = `sp-${tr.name}`
+                  return (
+                    <ExpandableEntryCard
+                      key={key}
+                      title={tr.name}
+                      entries={tr.entries}
+                      favKey={favoriteKey('trait', tr.name)}
+                      character={character}
+                      applyCharacter={applyCharacter}
+                      edition={character.meta?.edition}
+                      fiveeLink={raceName && character.species.source
+                        ? { kind: 'race', name: raceName, source: character.species.source }
+                        : null}
+                      expandKey={key}
+                      isExpanded={expandedSet.has(key)}
+                      onToggle={toggleExpand}
+                    />
+                  )
+                })}
               </div>
             )}
           </div>
@@ -388,9 +408,10 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                 <div style={{ marginTop: 12 }}>
                   {features.map((feat, i) => {
                     const cleanName = feat.name.replace(/^Feature:\s*/i, '')
+                    const key = `bg-${feat.name}-${i}`
                     return (
                       <ExpandableEntryCard
-                        key={`bg-${feat.name}-${i}`}
+                        key={key}
                         title={cleanName}
                         entries={feat.entries}
                         favKey={favoriteKey('feature', `Background:${cleanName}:`)}
@@ -400,6 +421,9 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                         fiveeLink={bgId && character.background.source
                           ? { kind: 'background', name: bgId, source: character.background.source }
                           : null}
+                        expandKey={key}
+                        isExpanded={expandedSet.has(key)}
+                        onToggle={toggleExpand}
                       />
                     )
                   })}
@@ -448,21 +472,29 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
             {[...byClass.entries()].map(([classId, list]) => (
               <div key={classId} style={{ marginBottom: 12 }}>
                 <div style={S.featureCardSource}>{classId}</div>
-                {list.map(f => (
-                  <ExpandableEntryCard
-                    key={`cf-${classId}-${f.name}-${f.level || 0}`}
-                    title={f.name}
-                    badge={f.level ? `Lv ${f.level}` : null}
-                    entries={f.entries}
-                    favKey={favoriteKey('feature', `${classId}:${f.name}:${f.level || ''}`)}
-                    character={character}
-                    applyCharacter={applyCharacter}
-                    edition={character.meta?.edition}
-                    fiveeLink={f.source
-                      ? { kind: 'class', name: classId, source: f.source }
-                      : null}
-                  />
-                ))}
+                {list.map(f => {
+                  const key = `cf-${classId}-${f.name}-${f.level || 0}`
+                  return (
+                    <ExpandableEntryCard
+                      key={key}
+                      title={f.name}
+                      badge={f.level ? `Lv ${f.level}` : null}
+                      entries={f.entries}
+                      favKey={favoriteKey('feature', `${classId}:${f.name}:${f.level || ''}`)}
+                      character={character}
+                      applyCharacter={applyCharacter}
+                      edition={character.meta?.edition}
+                      fiveeLink={f.source
+                        ? { kind: 'class', name: classId, source: f.source }
+                        : null}
+                      classId={classId}
+                      level={f.level || null}
+                      expandKey={key}
+                      isExpanded={expandedSet.has(key)}
+                      onToggle={toggleExpand}
+                    />
+                  )
+                })}
               </div>
             ))}
           </Section>
@@ -550,16 +582,44 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
 // 5etools-style entries rendered to HTML. Used for class features and
 // species traits so the player can pull the rule text inline without
 // jumping to an external reference.
-function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCharacter, fiveeLink, edition }) {
-  const [open, setOpen] = useState(false)
+function ExpandableEntryCard({
+  title, entries, badge, favKey, character, applyCharacter, fiveeLink, edition,
+  expandKey, isExpanded, onToggle,
+  classId, level,
+}) {
+  // Smart-Pill-Extraktion: dieselben Pills die schon in der Action-
+  // Spalte gerendert werden — Trigger / Damage / Uses / Class-Level-
+  // skalierte Dice — werden auch im Features-Tab als Quick-Glance-
+  // Info im Card-Header gezeigt. Datengetrieben aus den entries,
+  // kein Featurename hardcoded.
+  const fx = parseFeatureEffect(
+    { name: title, entries, classId: classId || null, level: level || null },
+    character,
+    Math.ceil(((character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)) / 4) + 1,
+  )
+  // Wenn der Parent expandKey + isExpanded + onToggle gibt, läuft der
+  // Toggle gegen den Parent-State (überlebt Tab-Wechsel). Sonst
+  // fallback auf lokalen State (z.B. wenn die Card im GM-Session-
+  // Sheet ohne Parent-Set verwendet wird).
+  const [localOpen, setLocalOpen] = useState(false)
+  const controlled = !!expandKey && typeof onToggle === 'function'
+  const open = controlled ? !!isExpanded : localOpen
+  const setOpen = controlled
+    ? () => onToggle(expandKey)
+    : (next) => setLocalOpen(typeof next === 'function' ? next(localOpen) : next)
   const hasBody = Array.isArray(entries) && entries.length > 0
+  // Color-Marker: persistiert über favKey (gleicher composite-Key
+  // wie Favoriten — so kann derselbe Feature-Eintrag gleichzeitig
+  // gefavt UND farbgetaggt werden).
+  const markerKey = favKey || null
+  const markerColor = markerKey ? getColorMarker(character, markerKey) : null
   return (
-    <div style={S.featCard}>
+    <div style={{ ...S.featCard, ...(colorStripeStyle(markerColor) || {}) }}>
       <div
         style={{ ...S.featCardHeader, cursor: hasBody ? 'pointer' : 'default' }}
         onClick={() => hasBody && setOpen(o => !o)}
       >
-        <div style={{ ...S.featCardName, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ ...S.featCardName, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
           {favKey && (
             <FavoriteToggle favKey={favKey} character={character} applyCharacter={applyCharacter} />
           )}
@@ -567,6 +627,29 @@ function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCh
           {badge && (
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-dim)' }}>{badge}</span>
           )}
+          {/* Smart-Pills aus parseFeatureEffect — gleiche Form wie in
+              der Action-Spalte (Trigger / Damage / Uses). Werden hier
+              im Card-Header gezeigt damit der Spieler die wichtigsten
+              Mechanik-Eckdaten lesen kann ohne aufzuklappen. */}
+          {Array.isArray(fx?.pills) && fx.pills.map(p => {
+            const color = p.kind === 'trigger'
+              ? 'var(--accent-yellow)'
+              : p.kind === 'uses'
+                ? 'var(--accent-green)'
+                : (p.damageType && DAMAGE_TYPE_COLOR[p.damageType]) || 'var(--accent-red)'
+            return (
+              <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
+                fontSize: 10, fontWeight: 700, padding: '1px 7px',
+                borderRadius: 999, marginLeft: 6,
+                border: `1px solid ${color}`,
+                color,
+                background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                whiteSpace: 'nowrap',
+              }}>
+                {p.label}
+              </span>
+            )
+          })}
           {hasBody && (
             <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>
               {open ? '▲' : '▼'}
@@ -577,10 +660,25 @@ function ExpandableEntryCard({ title, entries, badge, favKey, character, applyCh
       {open && hasBody && (
         <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
           <EntryRenderer entries={entries} />
-          {fiveeLink && (
-            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}
+          {(fiveeLink || markerKey) && (
+            <div style={{
+              marginTop: 8, display: 'flex',
+              alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}
               onClick={(e) => e.stopPropagation()}>
-              <FiveEToolsLink {...fiveeLink} edition={edition} compact />
+              {markerKey ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Farb-Tag:</span>
+                  <CardColorPicker
+                    color={markerColor}
+                    onChange={(c) => setColorMarker(applyCharacter, markerKey, c)}
+                    compact
+                  />
+                </span>
+              ) : <span />}
+              {fiveeLink && (
+                <FiveEToolsLink {...fiveeLink} edition={edition} compact />
+              )}
             </div>
           )}
         </div>

@@ -199,6 +199,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // genug horizontalen Platz, ein vertikaler Stack schluckt aber zu
   // viel vertikalen — Drawer ist der Mittelweg.
   const [sheetSidebarOpen, setSheetSidebarOpen] = useState(false)
+  // Features-Tab ExpandedSet: bleibt erhalten wenn der User zwischen
+  // Tabs wechselt (FeaturesTab selbst unmounted, CharacterSheetPage
+  // bleibt aber gemounted, also überlebt der State hier oben).
+  const [featuresExpanded, setFeaturesExpanded] = useState(() => new Set())
   const { isPwaMobile, isPopout } = usePwaMobile()
   const { mode: winMode } = useWindowWidth()
   const sheetSidebarAsDrawer = winMode === 'hidden'
@@ -1540,8 +1544,22 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             <CombatStat label="Armor Class" value={ac} color="var(--accent-blue)" />
             <CombatStat label="Initiative" value={modStr(initiative)} color="var(--accent-purple)" />
             <CombatStat label="Speed" value={`${speed} ft.`} color="var(--accent-green)" />
-            <CombatStat label="Hit Points" value={`${hp.current}/${hp.max}`} color="var(--accent-red)"
-              sub={hp.temporary ? `+${hp.temporary} temp` : null} onClick={() => setActiveTab('overview')} />
+            <CombatStat
+              label="Hit Points"
+              color="var(--accent-red)"
+              onClick={() => setActiveTab('overview')}
+              value={
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                  <span>{hp.current}/{hp.max}</span>
+                  {hp.temporary > 0 && (
+                    <span style={{
+                      fontSize: '0.55em', fontWeight: 700,
+                      color: 'var(--accent-green)',
+                    }}>+{hp.temporary}</span>
+                  )}
+                </span>
+              }
+            />
             <CombatStat label="Proficiency" value={modStr(profBonus)} color="var(--accent-yellow)" />
             <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="var(--text-muted)" />
           </div>
@@ -1572,7 +1590,15 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               <InventoryTab character={character} computed={computed}
                 updateCharacter={updateCharacter} applyCharacter={applyCharacter} />
             )}
-            {activeTab === 'features' && <FeaturesTab character={character} updateCharacter={updateCharacter} applyCharacter={applyCharacter} />}
+            {activeTab === 'features' && (
+              <FeaturesTab
+                character={character}
+                updateCharacter={updateCharacter}
+                applyCharacter={applyCharacter}
+                expanded={featuresExpanded}
+                setExpanded={setFeaturesExpanded}
+              />
+            )}
             {activeTab === 'personality' && (
               <PersonalityTab character={character} updateCharacter={updateCharacter} />
             )}

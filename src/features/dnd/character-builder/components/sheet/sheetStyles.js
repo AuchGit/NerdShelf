@@ -258,13 +258,14 @@ export const S = {
   spellcastClass: { color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 14, minWidth: 80 },
 
   // ── Resources ──
-  resourceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 },
+  resourceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8 },
   resourceBox: {
-    background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px',
+    background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8,
+    padding: '6px 10px',
   },
-  resourceName: { color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 13, marginBottom: 4 },
-  resourceValue: { color: 'var(--accent)', fontSize: 16, fontWeight: 'bold' },
-  resourceRecharge: { color: 'var(--text-muted)', fontSize: 11, marginTop: 2 },
+  resourceName: { color: 'var(--text-primary)', fontWeight: 'bold', fontSize: 12, marginBottom: 2 },
+  resourceValue: { color: 'var(--accent)', fontSize: 15, fontWeight: 'bold' },
+  resourceRecharge: { color: 'var(--text-muted)', fontSize: 10, marginTop: 1 },
   pipRow: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 },
   pip: { width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--border-strong)', cursor: 'pointer', padding: 0 },
 

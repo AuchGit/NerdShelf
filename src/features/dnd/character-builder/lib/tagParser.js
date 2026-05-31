@@ -62,8 +62,16 @@ export function parseTags(text) {
     .replace(/\{@scaledamage [^|]+\|[^|]+\|([^}]+)\}/g, '$1')
     .replace(/\{@scaledice [^|]+\|[^|]+\|([^}]+)\}/g, '$1')
 
-    // ── Alles Übrige entfernen ───────────────────────────────
-    .replace(/\{@[^}]+\}/g, '')
+    // ── Unbekannte {@...}-Tags: Inhalt behalten, Tag stripppen ──
+    // Vorher: kompletter Tag wurde durch '' ersetzt. Dann verschwand
+    // bei einem neuen 5etools-Tagtyp den parseTags noch nicht kennt
+    // (z.B. {@homebrew foo} oder {@5etools bar}) der gesamte Text-
+    // inhalt. Jetzt fischen wir wenigstens den ersten Content-Token
+    // raus.
+    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    // ── Letzter Sicherheits-Sweep: tag-only Patterns ohne Content
+    //    ({@h}, {@adventure ...} mit komischer Form, …) entfernen ──
+    .replace(/\{@[^}]*\}/g, '')
 
     // ── Bare source suffixes (z.B. "longsword|phb") entfernen ──
     // Entfernt |SOURCE Suffixe die nicht in {@...} Tags stehen

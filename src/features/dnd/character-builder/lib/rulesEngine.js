@@ -1293,7 +1293,156 @@ export function computeResources(character, modifiers, profBonus, totalLevel, cl
     resources.push(r)
   }
 
+  // Class/subclass features mit eingebetteter Resource-Tabelle —
+  // Soulknife Energy Dice, Battle Master Superiority Dice, alles
+  // wo 5etools eine `{type: 'table'}` mit Level-Spalte + Count-Spalte
+  // im feature.entries hat. Erkennung läuft rein über die Tabellen-
+  // Form, nicht über Klassen- oder Featurenamen.
+  const existingIds = new Set(resources.map(r => r.id))
+  for (const r of synthesizeFeatureTableResources(character)) {
+    if (existingIds.has(r.id)) continue
+    existingIds.add(r.id)
+    resources.push(r)
+  }
+
   return resources
+}
+
+// ── Class/Subclass-Feature-Tabellen-Synthesizer ─────────────────
+// Viele 5etools-Subklassen-Features ("Psionic Power" mit Soulknife
+// Energy Dice, "Combat Superiority" mit Superiority Dice, …) tragen
+// ihre Mechanik als Inline-Tabelle innerhalb der feature.entries.
+// Spalten sind typischerweise:
+//   • [Klassen-]Level — z.B. "Rogue Level", "Fighter Level"
+//   • Count           — "Number", "Dice", "Uses", "Points", "Charges"
+//   • Optional Die    — "Die Size", "Die"
+//
+// Wir suchen Tables in jedem aktiven Feature, identifizieren diese
+// drei Spalten datengetrieben (Regex auf die colLabels), picken die
+// Zeile mit dem höchsten Level ≤ Character-Class-Level, und emiten
+// eine Resource. Recharge kommt aus dem umgebenden Prosatext
+// ("short rest"/"long rest"). Keine Hardcoded-Featurenamen, keine
+// Whitelist — alles was die Form hat wird erfasst.
+// 5etools-Tag-Stripper für inline-Werte aus Tabellenzellen
+// (z.B. "{@dice D6}" → "D6"). Lokal definiert damit der Synthesizer
+// keine externe Abhängigkeit braucht.
+function stripTraitTags(s) {
+  return String(s || '').replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+}
+
+function synthesizeFeatureTableResources(character) {
+  const features = character?.__activeFeatures || []
+  if (features.length === 0) return []
+
+  // Class-Level pro classId — brauchen wir um die richtige Zeile in
+  // der Tabelle zu finden. Multiclass-sauber: ein Soulknife-Rogue 5 +
+  // Fighter 3 picked die Zeile für Level 5 aus der Rogue-Tabelle, nicht
+  // den Gesamtlevel.
+  const levelByClass = {}
+  for (const cls of (character.classes || [])) levelByClass[cls.classId] = cls.level
+
+  const out = []
+  for (const f of features) {
+    if (!Array.isArray(f.entries)) continue
+    const classLevel = levelByClass[f.classId] || 0
+    if (classLevel < 1) continue
+    const tables = []
+    collectTables(f.entries, tables)
+    if (tables.length === 0) continue
+    const flat = flattenTraitForResources(f.entries).toLowerCase()
+    // Recharge-Erkennung: short rest gewinnt wenn beide erwähnt, weil
+    // Features die teilweise auf Short Rest recovern (Soulknife: "regain
+    // one … finish a Short Rest") für den Spieler so geführt werden
+    // wie Short-Rest-Resources — er sieht zumindest, dass der Pool
+    // bewegt werden kann ohne Long Rest.
+    const recharge = /short(?:\s+or\s+long)?\s+rest|finish\s+a\s+short\s+rest/.test(flat)
+      ? 'short_rest'
+      : 'long_rest'
+    for (const table of tables) {
+      const row = pickTableRowForLevel(table, classLevel)
+      if (!row) continue
+      const { count, dieSize, captionUsed } = row
+      if (!Number.isFinite(count) || count <= 0) continue
+      // Name bevorzugt Tabellen-Caption (z.B. "Soulknife Energy Dice"),
+      // sonst Featurename. Caption ist meist die saubere Spielregel-
+      // Bezeichnung, die der Spieler kennt.
+      const name = (table.caption ? stripTraitTags(String(table.caption)) : f.name).trim()
+      const id = `tbl-${slugForResource(f.classId)}-${slugForResource(name)}`
+      out.push({
+        id, name, max: count, current: 0, recharge,
+        die: dieSize || undefined,
+        source: `${f.classId}${captionUsed ? '' : ''}`,
+      })
+    }
+  }
+  return out
+}
+
+function collectTables(entries, acc) {
+  if (!entries) return
+  if (Array.isArray(entries)) {
+    for (const e of entries) collectTables(e, acc)
+    return
+  }
+  if (typeof entries !== 'object') return
+  if (entries.type === 'table' && Array.isArray(entries.colLabels) && Array.isArray(entries.rows)) {
+    acc.push(entries)
+  }
+  if (Array.isArray(entries.entries)) collectTables(entries.entries, acc)
+  if (Array.isArray(entries.items))   collectTables(entries.items, acc)
+}
+
+// Versucht aus einer Tabelle die richtige Zeile für `classLevel` zu
+// extrahieren. Liefert { count, dieSize } oder null wenn die Tabelle
+// nicht die Resource-Pattern-Form hat.
+//
+// Pattern:
+//   • Eine Spalte deren Label "level" enthält → Level-Spalte
+//   • Eine numerische Spalte ("number", "dice", "uses", "points",
+//     "charges") → Count-Spalte
+//   • Optional: "die size" / "die" → Die-Spalte
+function pickTableRowForLevel(table, classLevel) {
+  const labels = (table.colLabels || []).map(l => stripTraitTags(String(l)).toLowerCase().trim())
+  // Level-Spalte: enthält das Wort "level" (egal in welcher Sprache
+  // das Klassen-Präfix steht — "Rogue Level", "Class Level", oder
+  // einfach "Level").
+  const levelIdx = labels.findIndex(l => /\blevel\b/.test(l))
+  if (levelIdx < 0) return null
+  // Count-Spalte: Standard-Namen für nutzbare Ressourcen.
+  const countIdx = labels.findIndex(l =>
+    /\b(number|dice|uses|points|charges|invocations|maneuvers known|maneuvers)\b/.test(l),
+  )
+  if (countIdx < 0) return null
+  const dieIdx = labels.findIndex(l => /\b(die\s*size|die)\b/.test(l) && labels.indexOf(l) !== countIdx)
+
+  // Beste passende Zeile: höchstes Level ≤ classLevel.
+  let best = null
+  for (const row of (table.rows || [])) {
+    if (!Array.isArray(row)) continue
+    const lvlRaw = stripTraitTags(String(row[levelIdx] ?? '')).trim()
+    // Eine Zeile kann "3" oder "3-4" oder "3–4" stehen haben (Range).
+    // Wir picken die untere Grenze als Breakpoint.
+    const lvlMatch = lvlRaw.match(/(\d+)/)
+    if (!lvlMatch) continue
+    const lvl = parseInt(lvlMatch[1], 10)
+    if (!Number.isFinite(lvl) || lvl > classLevel) continue
+    if (!best || lvl > best.level) best = { level: lvl, row }
+  }
+  if (!best) return null
+  const countCell = stripTraitTags(String(best.row[countIdx] ?? '')).trim()
+  const countMatch = countCell.match(/(\d+)/)
+  const count = countMatch ? parseInt(countMatch[1], 10) : NaN
+  let dieSize = null
+  if (dieIdx >= 0) {
+    const dieCell = stripTraitTags(String(best.row[dieIdx] ?? '')).trim()
+    const dieMatch = dieCell.match(/d\s*(\d+)/i)
+    if (dieMatch) dieSize = `d${dieMatch[1]}`
+  }
+  return { count, dieSize, captionUsed: !!table.caption }
+}
+
+function slugForResource(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
 }
 
 // ── Race-trait resource synthesizer ─────────────────────────────

@@ -348,13 +348,11 @@ export const FEATURE_EFFECTS = [
     classLevel: 9,
     effects: [{ slot: 'saves', text: 'Indomitable: 1×/Long Rest einen gescheiterten Save neu würfeln' }],
   },
-  {
-    id: 'second-wind',
-    feature: 'Second Wind',
-    className: 'Fighter',
-    classLevel: 1,
-    effects: [{ slot: 'hp', text: 'Bonusaktion: heile 1d10 + Fighter-Level HP (kurze Rast lädt nach)' }],
-  },
+  // Second Wind: keine separate HP-Slot-Notiz mehr — die Resource-Karte
+  // (Class Resources) und der Action-Eintrag zeigen die Info bereits.
+  // Die alte Notiz erschien nur in 5e (5.5e-Featuredaten haben einen
+  // anderen Namen) und nahm Platz unter der HP-Karte weg den der
+  // Player jetzt für eigene Notizen nutzt.
   {
     id: 'action-surge',
     feature: 'Action Surge',

@@ -16,16 +16,32 @@ async function fetchData(edition, path) {
     return null
   }
   const key = `${edition}:${path}`
-  if (cache[key]) return cache[key]
+  if (cache[key] !== undefined) return cache[key]
   const url = `${SOURCES[edition]}/${path}`
   try {
     const res = await fetch(url)
-    if (!res.ok) { console.warn(`[dataLoader] ${res.status}: ${url}`); return null }
-    const data = await res.json()
+    if (!res.ok) { console.warn(`[dataLoader] ${res.status}: ${url}`); cache[key] = null; return null }
+    // Vite dev-server + Tauri serve den SPA-index.html als Fallback für
+    // fehlende statische Dateien. Wenn der content-type HTML ist oder
+    // der Body mit `<` anfängt, ist das Datei-Fetch ins Leere gegangen.
+    // Wir behandeln das als "Datei existiert nicht" (cached) damit die
+    // Konsole nicht mit fehlgeschlagenen JSON-Parses zugespammt wird.
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('html')) {
+      cache[key] = null
+      return null
+    }
+    const text = await res.text()
+    if (text.trimStart().startsWith('<')) {
+      cache[key] = null
+      return null
+    }
+    const data = JSON.parse(text)
     cache[key] = data
     return data
   } catch (e) {
     console.error(`[dataLoader] Failed: ${url}`, e)
+    cache[key] = null
     return null
   }
 }
