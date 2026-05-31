@@ -83,11 +83,36 @@ function isTauriShell() {
   return ('__TAURI_INTERNALS__' in window) || ('__TAURI__' in window);
 }
 
+// Popout-Modus: separates Tauri-Fenster (alwaysOnTop, borderless),
+// das das Sheet in PWA-Layout rendert um daneben zu einem VTT
+// (Foundry / Roll20 etc.) zu sitzen. Erkennung läuft über den
+// URL-Parameter `?popout=1` — gesetzt vom Popout-Button, der via
+// `@tauri-apps/api/webviewWindow` ein neues Fenster spawnt. Greift
+// auch im Browser-Fenster falls jemand den Param manuell setzt
+// (Dev/Diag).
+function readPopout() {
+  if (typeof window === 'undefined') return false;
+  try {
+    // hash-router → URL kann `#/character/abc?popout=1` sein. Search
+    // im normalen window.location reicht da nicht; wir checken
+    // beides um über alle Routing-Stile zu funktionieren.
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('popout') === '1') return true;
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      const hashParams = new URLSearchParams(hash.slice(qIdx + 1));
+      if (hashParams.get('popout') === '1') return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
 function readSnapshot() {
   if (typeof window === 'undefined') {
     return {
       isMobile: false, isTouch: false, isStandalone: false,
-      isPwaMobile: false, pwaLayouts: false,
+      isPwaMobile: false, pwaLayouts: false, isPopout: false,
       orientation: 'portrait', isLandscape: false,
     };
   }
@@ -107,11 +132,13 @@ function readSnapshot() {
   // / out of mobile mode regardless of the device.
   const override = readOverride();
   const layoutsOverride = readLayoutsOverride();
+  const isPopout = readPopout();
   if (override !== null) {
     return {
       isMobile, isTouch, isStandalone, orientation, isLandscape,
       isPwaMobile: override,
       pwaLayouts: override && (layoutsOverride !== false),
+      isPopout,
     };
   }
 
@@ -134,9 +161,17 @@ function readSnapshot() {
   // by default whenever PWA-mobile is active; can be disabled
   // independently via ?pwaLayouts=0 if the user prefers the desktop-
   // style layout on their phone.
-  const pwaLayouts = isPwaMobile && (layoutsOverride !== false);
+  //
+  // Popout-Modus: aktiviert das PWA-Layout (kompakt, vertikaler Stack)
+  // auch im Tauri-Shell, ohne dass es als "Phone" gewertet wird —
+  // wichtig damit der Layout-Wrapper trotzdem keinen BottomNav rendert
+  // (das übernimmt der Popout-Check separat im Layout).
+  const pwaLayouts = (isPwaMobile || isPopout) && (layoutsOverride !== false);
   return {
-    isMobile, isTouch, isStandalone, isPwaMobile, pwaLayouts,
+    isMobile, isTouch, isStandalone,
+    isPwaMobile: isPwaMobile || isPopout,
+    pwaLayouts,
+    isPopout,
     orientation, isLandscape,
   };
 }

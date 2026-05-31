@@ -249,6 +249,10 @@ export function createEmptyCharacter() {
       deathSaves: { successes: 0, failures: 0 },
       conditions: [],
       usedSpellSlots: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 },
+      // Keyed by classId, e.g. { Cleric: ['Bless', …] }. Must exist so the
+      // deep-set in updateCharacter('status.preparedSpells.<classId>', …)
+      // has an object to write into for L1 prepared casters.
+      preparedSpells: {},
       usedPactSlots: 0,
       usedResources: {},
       usedHitDice: {},

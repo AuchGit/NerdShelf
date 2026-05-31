@@ -47,6 +47,11 @@ function RouteTracker() {
   useEffect(() => {
     if (!location.pathname || location.pathname === '/') return;
     if (isEphemeralRoute(location.pathname)) return;
+    // Popout-Routen NICHT als letzte Route persistieren — sonst startet
+    // das Hauptfenster beim nächsten Launch versehentlich im Popout-
+    // Modus (kein Sidebar, kein Header) und der User sieht "nur das
+    // Sheet" ohne zu wissen warum.
+    if (/[?&]popout=1\b/.test(location.search || '')) return;
     try {
       localStorage.setItem(LAST_ROUTE_KEY, location.pathname + location.search);
     } catch { /* ignore */ }

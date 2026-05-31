@@ -4,7 +4,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import Sidebar from './Sidebar';
 import useCalendarNotification from './calendar/useCalendarNotification';
 import { BottomNav } from '../shared/ui';
-import useWindowWidth from '../shared/hooks/useWindowWidth';
+import useSidebarMode, { nextSidebarPref } from '../shared/hooks/useSidebarMode';
 import usePwaMobile from '../shared/hooks/usePwaMobile';
 
 // Lazy-load the three pop-up modals — they're rendered on every page but
@@ -19,33 +19,43 @@ export default function Layout() {
   const [bugOpen, setBugOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarReloadKey, setCalendarReloadKey] = useState(0);
-  const [overlayOpen, setOverlayOpen] = useState(false);
   const calendarNotif = useCalendarNotification(calendarReloadKey);
-  const { mode } = useWindowWidth();
-  const { isPwaMobile } = usePwaMobile();
+  const { userPref, setUserPref, effective, overlay } = useSidebarMode();
+  const { isPwaMobile, isPopout } = usePwaMobile();
 
-  // Auto-close overlay if window grows back into compact/full mode.
+  // ESC schließt den Overlay-Drawer wenn aufgeklappt.
   useEffect(() => {
-    if (mode !== 'hidden' && overlayOpen) setOverlayOpen(false);
-  }, [mode, overlayOpen]);
-
-  // ESC closes overlay.
-  useEffect(() => {
-    if (!overlayOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setOverlayOpen(false); };
+    if (!overlay) return;
+    const onKey = (e) => { if (e.key === 'Escape') setUserPref('collapsed'); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [overlayOpen]);
+  }, [overlay, setUserPref]);
 
-  const sidebarVariant = mode === 'compact' ? 'compact' : 'full';
+  const toggleSidebar = () => setUserPref(nextSidebarPref(userPref, effective));
+
   const sidebarProps = {
-    onOpenSettings: () => { setSettingsOpen(true); if (overlayOpen) setOverlayOpen(false); },
-    onOpenBugReport: () => { setBugOpen(true); if (overlayOpen) setOverlayOpen(false); },
-    onOpenCalendar: () => { setCalendarOpen(true); if (overlayOpen) setOverlayOpen(false); },
+    onOpenSettings: () => { setSettingsOpen(true); if (overlay) setUserPref('collapsed'); },
+    onOpenBugReport: () => { setBugOpen(true); if (overlay) setUserPref('collapsed'); },
+    onOpenCalendar: () => { setCalendarOpen(true); if (overlay) setUserPref('collapsed'); },
     calendarNotif,
+    onToggle: toggleSidebar,
   };
 
   const closeCalendar = () => { setCalendarOpen(false); setCalendarReloadKey(k => k + 1); };
+
+  // Popout-Modus: ein separat gespawntes Tauri-Fenster (alwaysOnTop,
+  // borderless) das nur das Sheet im PWA-Layout zeigt — gedacht als
+  // Overlay neben einem VTT. Hier keine App-Sidebar, kein BottomNav,
+  // keine Modals — pure Sheet-View.
+  if (isPopout) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--color-bg)' }}>
+        <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   // Layout selection:
   //   - PWA on a phone → bottom tab bar, no sidebar. One-handed native feel.
@@ -67,70 +77,46 @@ export default function Layout() {
     );
   }
 
+  // Layout-Komposition:
+  //   • Rail = die kompakte 60px-Sidebar. IMMER inline gemountet (auch
+  //     bei sehr schmalen Fenstern, ersetzt den alten Hamburger).
+  //   • Drawer = die ausgeklappte 240px-Sidebar. Bei autoMode === 'hidden'
+  //     wird sie ALS OVERLAY über dem Content gerendert, sonst inline
+  //     (verdrängt die Rail). Klick auf Backdrop oder ESC collapsed wieder.
+  const showDrawerInline = effective === 'full' && !overlay;
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--color-bg)' }}>
-      {mode !== 'hidden' && (
-        <Sidebar variant={sidebarVariant} {...sidebarProps} />
+      {/* Inline-Rail: compact zeigt immer, full nur wenn nicht Overlay. */}
+      {!showDrawerInline && (
+        <Sidebar variant="compact" {...sidebarProps} />
+      )}
+      {showDrawerInline && (
+        <Sidebar variant="full" {...sidebarProps} />
       )}
 
-      {mode === 'hidden' && (
+      {/* Overlay-Drawer: bei schmalem Fenster + effective === 'full'.
+          Backdrop schließt durch Click. */}
+      {overlay && (
         <>
-          <button
-            onClick={() => setOverlayOpen(v => !v)}
-            aria-label="Menü öffnen"
-            style={{
-              position: 'fixed',
-              top: 12,
-              left: 12,
-              zIndex: 1001,
-              width: 40,
-              height: 40,
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              boxShadow: 'var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.15))',
-            }}
-          >
-            ☰
-          </button>
-
-          {overlayOpen && (
-            <div
-              onClick={() => setOverlayOpen(false)}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.4)',
-                backdropFilter: 'blur(4px)',
-                WebkitBackdropFilter: 'blur(4px)',
-                zIndex: 999,
-              }}
-            />
-          )}
-
           <div
+            onClick={() => setUserPref('collapsed')}
             style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              height: '100vh',
-              zIndex: 1000,
-              transform: overlayOpen ? 'translateX(0)' : 'translateX(-100%)',
-              transition: 'transform 200ms ease-out',
-              pointerEvents: overlayOpen ? 'auto' : 'none',
-              boxShadow: overlayOpen ? 'var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.3))' : 'none',
+              position: 'fixed', inset: 0,
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              zIndex: 999,
             }}
-          >
+          />
+          <div style={{
+            position: 'fixed', top: 0, left: 0, height: '100vh',
+            zIndex: 1000,
+            boxShadow: 'var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.3))',
+          }}>
             <Sidebar
               variant="full"
               {...sidebarProps}
-              onNavigate={() => setOverlayOpen(false)}
+              onNavigate={() => setUserPref('collapsed')}
             />
           </div>
         </>
@@ -140,7 +126,6 @@ export default function Layout() {
         flex: 1,
         overflow: 'auto',
         minWidth: 0,
-        paddingTop: mode === 'hidden' ? 64 : 0,
       }}>
         <Outlet />
       </main>

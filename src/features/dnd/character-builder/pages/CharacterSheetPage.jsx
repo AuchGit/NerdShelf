@@ -9,6 +9,115 @@ import { loadClassData, loadItemIndex, loadRaceList } from '../lib/dataLoader'
 // converters) and only runs when the user clicks "Foundry Export".
 // Defer the import to click time so the initial sheet bundle stays small.
 const importFoundryExport = () => import('../lib/foundryExport')
+
+// Sheet-Popout: spawnt im Tauri-Shell ein eigenes Always-on-Top
+// Fenster mit dem Sheet im PWA-Layout — gedacht für die Nutzung
+// neben einem VTT. URL bekommt `?popout=1` mit, was über usePwaMobile
+// & Layout die App-Sidebar / BottomNav abschaltet und das PWA-
+// Layout im Sheet erzwingt. Im Browser ohne Tauri fällt's auf
+// window.open() zurück (kein alwaysOnTop dort, aber sonst gleich).
+async function openPopout(characterId) {
+  const url = `${window.location.origin}${window.location.pathname}#/character/${characterId}?popout=1`
+  const isTauri = typeof window !== 'undefined'
+    && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+  if (isTauri) {
+    try {
+      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+      // Label sollte pro Character eindeutig sein, aber Tauri erlaubt
+      // keine Sonderzeichen im Label. UUID-Fragment + Timestamp tun's.
+      const label = `sheet-popout-${String(characterId).replace(/[^a-z0-9]/gi, '')}-${Date.now()}`
+      const w = new WebviewWindow(label, {
+        url,
+        title: 'NerdShelf — Character Sheet',
+        width: 420,
+        height: 760,
+        alwaysOnTop: true,
+        decorations: false,
+        resizable: true,
+        skipTaskbar: false,
+      })
+      w.once('tauri://error', (e) => {
+        console.error('[popout] WebviewWindow error', e)
+        // Fallback wenn das Spawn schief geht.
+        try { window.open(url, '_blank', 'width=420,height=760') } catch { /* ignore */ }
+      })
+      return
+    } catch (e) {
+      console.error('[popout] WebviewWindow import failed', e)
+      // Fallthrough auf window.open.
+    }
+  }
+  try {
+    window.open(url, 'nerdshelf-popout', 'width=420,height=760,toolbar=no,menubar=no,location=no,status=no')
+  } catch (e) {
+    console.error('[popout] window.open failed', e)
+    alert('Popout konnte nicht geöffnet werden.')
+  }
+}
+
+// Schließt das aktuelle Popout-Fenster. Tauri-Shell: schließt das
+// WebviewWindow via `getCurrentWindow().close()` — funktioniert weil
+// das Popout sein eigenes Window-Label hat. Browser-Fallback:
+// `window.close()` greift bei Fenstern die durch `window.open` aus
+// einem User-Gesture entstanden sind.
+async function closePopoutWindow() {
+  const isTauri = typeof window !== 'undefined'
+    && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+  if (isTauri) {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      await getCurrentWindow().close()
+      return
+    } catch (e) {
+      console.error('[popout] close failed', e)
+    }
+  }
+  try { window.close() } catch { /* ignore */ }
+}
+
+// Mini-Drag-Bar-Styles für das Popout-Fenster.
+//   • height bewusst klein (22px) damit sie kaum Platz frisst
+//   • data-tauri-drag-region macht den ganzen Bereich draggable
+//   • Close-Button bekommt eigenes Click-Handling und damit
+//     `app-region: no-drag` — wäre nur in CSS-Win-Style relevant,
+//     Tauri respektiert Click-Targets automatisch.
+const popoutDragBar = {
+  height: 22,
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  background: 'var(--bg-elevated)',
+  borderBottom: '1px solid var(--border)',
+  padding: '0 4px 0 10px',
+  cursor: 'grab',
+  userSelect: 'none',
+  WebkitUserSelect: 'none',
+}
+const popoutDragTitle = {
+  flex: 1,
+  fontSize: 11,
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  letterSpacing: 0.3,
+  pointerEvents: 'none',  // Click geht durch zum Drag-Bereich
+}
+const popoutCloseBtn = {
+  width: 22, height: 22,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'transparent',
+  color: 'var(--text-muted)',
+  border: 'none',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontSize: 16,
+  lineHeight: 1,
+  fontFamily: 'inherit',
+  padding: 0,
+}
 import { parseTags } from '../lib/tagParser'
 import { undoLastLevelUp } from '../lib/levelUpEngine'
 import { getEffectsForSlot } from '../lib/featureEffects'
@@ -20,6 +129,7 @@ import { lazy, Suspense } from 'react'
 // rules-engine that drives it doesn't sit in the initial sheet bundle.
 const CustomEditModal = lazy(() => import('../components/ui/CustomEditModal'))
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
+import useWindowWidth from '../../../../shared/hooks/useWindowWidth'
 import { ActionSheet } from '../../../../shared/ui'
 import { SideSection, ProfBlock, SenseRow } from '../components/sheet/SheetKit'
 import { S } from '../components/sheet/sheetStyles'
@@ -82,7 +192,27 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // about spell prep + free recovery before committing.
   const [shortRestOpen, setShortRestOpen] = useState(false)
   const [longRestOpen, setLongRestOpen] = useState(false)
-  const { isPwaMobile } = usePwaMobile()
+  // Sheet-Sidebar (Ability Scores / Saves / Skills / Senses / Profs)
+  // läuft bei schmalen Fenstern als Slide-in-Drawer von links statt
+  // oberhalb des Mains gestapelt. Trigger = useWindowWidth.mode
+  // 'hidden' (= viewport < 768px); dort hat ein inliner Sidebar nicht
+  // genug horizontalen Platz, ein vertikaler Stack schluckt aber zu
+  // viel vertikalen — Drawer ist der Mittelweg.
+  const [sheetSidebarOpen, setSheetSidebarOpen] = useState(false)
+  const { isPwaMobile, isPopout } = usePwaMobile()
+  const { mode: winMode } = useWindowWidth()
+  const sheetSidebarAsDrawer = winMode === 'hidden'
+  // Drawer schließt automatisch, wenn das Fenster wieder breit wird.
+  useEffect(() => {
+    if (!sheetSidebarAsDrawer && sheetSidebarOpen) setSheetSidebarOpen(false)
+  }, [sheetSidebarAsDrawer, sheetSidebarOpen])
+  // ESC schließt den Drawer.
+  useEffect(() => {
+    if (!sheetSidebarOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setSheetSidebarOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sheetSidebarOpen])
   const saveTimer = useRef(null)
   const portraitRef = useRef(null)
 
@@ -954,11 +1084,38 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           <button type="button" style={S.headerIconBtn} onClick={() => setShowMobileMenu(true)} aria-label="Optionen" title="Optionen">⋯</button>
         </div>
       ) : (<>
+        {/* Im Popout-Fenster eine kleine Drag-/Close-Leiste oben.
+            Tauri liefert keine OS-Decorations (decorations: false beim
+            Spawn), also brauchen wir eine eigene Möglichkeit zum
+            Verschieben und Schließen. `data-tauri-drag-region` macht
+            den Bereich zur Window-Drag-Handle; der × ruft
+            getCurrentWindow().close() (Browser-Fallback: window.close()).
+            Im Hauptfenster wird das nicht gerendert — dort gibt's die
+            normale OS-Titelleiste. */}
+        {isPopout && (
+          <div
+            data-tauri-drag-region
+            style={popoutDragBar}
+          >
+            <span style={popoutDragTitle}>{character.info.name || 'Character'}</span>
+            <button
+              type="button"
+              onClick={closePopoutWindow}
+              title="Popout schließen"
+              aria-label="Popout schließen"
+              style={popoutCloseBtn}
+            >×</button>
+          </div>
+        )}
         {/* Slim always-visible toggle: chevron + character name. The
             full header (Dashboard back-link, name editor, Export /
             Level Up / Custom buttons) appears as an overlay below when
             the chevron is opened, so the bar doesn't eat vertical
-            space during play. */}
+            space during play.
+            Im Popout-Fenster wird die ganze Toolbar weggelassen —
+            das Popout zeigt nur das Sheet selbst, kein Header / keine
+            Action-Buttons (die liegen im Haupt-Fenster). */}
+        {!isPopout && (<>
         <div style={headerToggleBar}>
           <button
             type="button"
@@ -966,6 +1123,18 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             title={headerOpen ? 'Header schließen' : 'Header öffnen'}
             style={headerToggleBtn}
           >{headerOpen ? '▲' : '▼'}</button>
+          {sheetSidebarAsDrawer && (
+            // Slide-out-Knopf für die Sheet-Sidebar. Nur sichtbar wenn
+            // wir gerade im Drawer-Modus sind (sonst läuft die Sidebar
+            // inline und braucht keinen Toggle). Beschriftung mit ›/‹
+            // matched die App-Sidebar-Chevrons.
+            <button
+              type="button"
+              onClick={() => setSheetSidebarOpen(o => !o)}
+              title={sheetSidebarOpen ? 'Sidebar schließen' : 'Sidebar öffnen'}
+              style={{ ...headerToggleBtn, marginLeft: 6 }}
+            >{sheetSidebarOpen ? '‹' : '›'}</button>
+          )}
           <span style={headerToggleTitle}>
             {character.info.name || 'Unbenannt'}
             <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 8 }}>
@@ -1037,12 +1206,21 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                   <button style={{ ...S.headerBtn, borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
                     onClick={levelDown}>Level Down</button>
                 )}
+                {/* Popout: spawnt im Tauri-Shell ein separates Always-on-Top
+                    Borderless-Fenster mit dem Sheet im PWA-Layout. Im
+                    Browser fällt es auf window.open() zurück. */}
+                <button
+                  style={{ ...S.headerBtn, borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }}
+                  onClick={() => openPopout(id)}
+                  title="Sheet als Popout-Fenster für VTT-Spiel öffnen"
+                >Popout</button>
               </>
             )}
             <HeaderButtons session={session} />
           </div>
         </div>
         )}
+        </>)}
       </>)}
 
       {/* Mobile overflow menu */}
@@ -1142,8 +1320,39 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           and prevents portrait-picker dialogs from popping up. The tab
           BAR above is NOT inert so the GM can still switch tabs. */}
       <div className="dnd-sheet-body" style={S.body}>
+        {/* Drawer-Backdrop: nur im narrow + offen. */}
+        {sheetSidebarAsDrawer && sheetSidebarOpen && (
+          <div
+            onClick={() => setSheetSidebarOpen(false)}
+            style={{
+              position: 'fixed', inset: 0,
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+              zIndex: 30,
+            }}
+          />
+        )}
         {/* ── SIDEBAR ── */}
-        <div className="dnd-sheet-sidebar" style={S.sidebar} inert={readOnly ? '' : undefined}>
+        <div
+          className="dnd-sheet-sidebar"
+          style={
+            sheetSidebarAsDrawer
+              ? {
+                  ...S.sidebar,
+                  position: 'fixed',
+                  top: 0, left: 0, bottom: 0,
+                  width: 280, maxWidth: '85vw',
+                  zIndex: 31,
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+                  transform: sheetSidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+                  transition: 'transform 200ms ease-out',
+                  pointerEvents: sheetSidebarOpen ? 'auto' : 'none',
+                }
+              : S.sidebar
+          }
+          inert={readOnly ? '' : undefined}
+        >
           {portrait && (
             <div style={{ ...S.sidePortrait, position: 'relative', display: 'inline-block', width: '100%' }}>
               <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait"

@@ -374,7 +374,7 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
             this collapses to a single column — same look as before.
             The order of sections (containers + Carried) is driven by
             sectionOrder. ↑/↓ buttons on each header rearrange. */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
+        <div data-grid="inventory-sections" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
           {sectionOrder.map((sectionKey) => {
             if (sectionKey === CARRIED_KEY) {
               if (carried.length === 0) return null

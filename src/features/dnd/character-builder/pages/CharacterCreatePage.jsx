@@ -199,7 +199,13 @@ export default function CharacterCreatePage({ session }) {
 
       const parts = path.split('.')
       let obj = next
-      for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]]
+      for (let i = 0; i < parts.length - 1; i++) {
+        // Auto-create missing intermediate objects so deep-set paths with
+        // runtime keys (e.g. status.preparedSpells.<classId>) don't crash on
+        // a character whose shape predates that container.
+        if (obj[parts[i]] == null || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {}
+        obj = obj[parts[i]]
+      }
       obj[parts[parts.length - 1]] = value
       return next
     })
@@ -294,13 +300,24 @@ export default function CharacterCreatePage({ session }) {
   async function handleFinish() {
     setSaving(true)
     setError(null)
-    const { error } = await supabase.from('dnd_characters').insert({
+    // .select().single() forces PostgREST to return the inserted row. If RLS
+    // blocks the write (e.g. expired session → auth.uid() is null), we get an
+    // error / no row back instead of a silent "success" that saved nothing.
+    const { data, error } = await supabase.from('dnd_characters').insert({
       user_id: session.user.id,
       name:    character.info.name,
       data:    character,
       share_token: newShareToken(),
-    })
-    if (error) { setError(t('errSave')); setSaving(false); return }
+    }).select().single()
+    if (error || !data) {
+      // Surface the real cause — message/code/details/hint all matter for
+      // RLS / size / constraint failures. console.error feeds the bug-report
+      // collector, so a failed save is diagnosable instead of a blank "errSave".
+      console.error('[CharacterCreate] save failed:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint)
+      setError(error ? `${t('errSave')} (${error.message})` : `${t('errSave')} — nichts gespeichert. Evtl. Sitzung abgelaufen, bitte neu einloggen.`)
+      setSaving(false)
+      return
+    }
     navigate('/')
   }
 

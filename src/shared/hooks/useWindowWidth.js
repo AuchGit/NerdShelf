@@ -57,7 +57,14 @@ export default function useWindowWidth() {
   }, []);
 
   const mode = computeMode(width);
-  const contentWidth = Math.max(0, width - SIDEBAR_WIDTH[mode]);
+  // Seit der Sidebar-Refaktorierung ist die Sidebar IMMER mindestens
+  // als 60px-Rail sichtbar (Compact-Modus) — der frühere komplett-
+  // versteckte 'hidden'-Modus mit Hamburger existiert nicht mehr.
+  // contentWidth zieht entsprechend mindestens 60px ab.
+  // Für genauere Werte mit dem manuellen Collapse-Toggle nutze
+  // useSidebarMode statt dieses Hooks.
+  const effectiveSidebarWidth = Math.max(SIDEBAR_WIDTH[mode], SIDEBAR_WIDTH.compact);
+  const contentWidth = Math.max(0, width - effectiveSidebarWidth);
   const mtgMode = computeMtgMode(contentWidth);
 
   return { width, mode, contentWidth, mtgMode };

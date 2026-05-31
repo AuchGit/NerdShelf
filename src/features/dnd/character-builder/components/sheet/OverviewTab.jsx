@@ -24,6 +24,7 @@ import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList, SheetModal }
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
 import SpellPrepareModal from './SpellPrepareModal'
+import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 
 // ── Clickable pip row (death saves, resources) ─────────────────
 function Pips({ count, filled, color, onSet }) {
@@ -166,6 +167,7 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
 }
 
 export default function OverviewTab({ character, computed, abilityScores, hp, updateCharacter, applyCharacter, charId, session, onReload, onNavigateTab, readOnly = false }) {
+  const { isPwaMobile } = usePwaMobile()
   const deathSaves = character.status?.deathSaves || { successes: 0, failures: 0 }
   const usedResources = character.status?.usedResources || {}
   const baseMaxHp = computed?.hp?.max || 1
@@ -285,8 +287,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             • Blue / Green / Yellow — Available Actions, Spells, Favorites
           Death saves + action pills are a separate full-width strip
           below this row (closing border across the whole page). */}
-      <div style={heroRow}>
-        <div style={{ flex: '0 0 240px', minWidth: 0 }}>
+      <div style={isPwaMobile ? heroRowPwa : heroRow}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 240px', minWidth: 0 }}>
         <Section title="Hit Points">
           {/* HP card on the left, Resistance/Vulnerability pills as a
               column to its right (inside the same Section so the
@@ -346,7 +348,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         {/* Quick Access — narrow single column. Items render one per
             row instead of the previous auto-grid; potions + pinned
             items stack vertically. */}
-        <div style={{ flex: '0 0 160px', minWidth: 0 }}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 160px', minWidth: 0 }}>
           <PotionAndQuickAccessColumn
             character={character}
             applyCharacter={applyCharacter}
@@ -354,9 +356,9 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           />
         </div>
 
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
           <Section title="Actions">
-            <div style={fixedHeightScroll}>
+            <div style={isPwaMobile ? flexibleScroll : fixedHeightScroll}>
               <CombatActionsExplorer
                 character={character}
                 computed={computed}
@@ -367,7 +369,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           </Section>
         </div>
 
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
           <FeaturesAndPreparedSpellsColumn
             character={character}
             computed={computed}
@@ -377,8 +379,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         </div>
 
         {/* Yellow — Favorites, now in the top row as the 5th column. */}
-        <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-          <div style={fixedHeightSection}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 240px', minWidth: 0 }}>
+          <div style={isPwaMobile ? flexibleScroll : fixedHeightSection}>
             <FavoritesSection
               character={character}
               computed={computed}
@@ -2402,6 +2404,7 @@ function ConcentrationGlyph({ value, onChange }) {
 // non-stacking entry, but the tile gets out of the way).
 // ─────────────────────────────────────────────────────────────────
 function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter }) {
+  const { isPwaMobile } = usePwaMobile()
   const [inventoryOpen, setInventoryOpen] = useState(false)
   // Lazy-load InventoryTab — it's a heavy module and the Overview only
   // wants it on demand when the player clicks the inventory button.
@@ -2498,7 +2501,7 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
       Markiere Items im Inventar mit "Quick&nbsp;Access" — Heilungstränke erscheinen automatisch.
     </div>
   ) : (
-    <div style={{ ...fixedHeightScroll, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ ...(isPwaMobile ? flexibleScroll : fixedHeightScroll), display: 'flex', flexDirection: 'column', gap: 6 }}>
       <QaCategory title="Equipment" count={equipmentTiles.length} defaultOpen>
         {equipmentTiles.map(renderTile)}
       </QaCategory>
@@ -2741,6 +2744,7 @@ const qaTile = {
 // goes grey when the level's slots are spent.
 // ─────────────────────────────────────────────────────────────────
 function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, updateCharacter }) {
+  const { isPwaMobile } = usePwaMobile()
   const [expandedKey, setExpandedKey] = useState(null)
   const [openLevels, setOpenLevels] = useState(() => new Set([0, 1]))
   const [spellMap, setSpellMap] = useState(null)
@@ -3147,7 +3151,7 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
   return (
     <>
     <Section title="Spells" action={headerCounter}>
-      <div style={fixedHeightScroll}>
+      <div style={isPwaMobile ? flexibleScroll : fixedHeightScroll}>
         {showTabs && (
           <div style={{
             display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap',
@@ -3781,6 +3785,22 @@ const overviewCoinInput = {
 // only the whole column.
 const heroRow = {
   display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap',
+}
+// PWA-Mobile: vertikaler Stack. Auf einem Phone-Screen wird die
+// 5-spaltige Hero-Reihe sonst zu 5 Blöcken mit JEWEILS eigener
+// 440px-Innen-Scroll-Box — extrem unangenehm zu bedienen. Stattdessen
+// stapeln wir die Sections vertikal und überlassen das Scrollen der
+// Seite. flexibleScroll ersetzt die Fixed-Height-Caps, damit jede
+// Section ihren vollen Inhalt ohne Inner-Scroll rendert.
+const heroRowPwa = {
+  display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'stretch',
+}
+const heroColPwa = {
+  width: '100%', minWidth: 0,
+}
+const flexibleScroll = {
+  // Kein Max-Height: Inhalt fließt natürlich, Seite scrollt.
+  paddingRight: 4,
 }
 const combatTileColumn = {
   display: 'grid', gridTemplateColumns: 'repeat(2, minmax(100px, 1fr))', gap: 8,

@@ -24,22 +24,13 @@
 
 /* ═══ TABLET / PHONE (portrait & narrow windows) ═══════════════════════ */
 @media (max-width: 768px) {
-  /* Stack sidebar above main; let the page scroll normally. */
-  .dnd-sheet-body {
-    flex-direction: column !important;
-    overflow: visible !important;
-  }
-  .dnd-sheet-sidebar {
-    width: 100% !important;
-    max-height: none !important;
-    overflow-y: visible !important;
-    border-right: none !important;
-    border-bottom: 1px solid var(--border) !important;
-    padding: 10px 12px !important;
-  }
-  .dnd-sheet-main { overflow: visible !important; }
-  .dnd-sheet-sidebar .dnd-sheet-portrait { width: 110px !important; height: 110px !important; }
+  /* Sidebar wird vom JS als Slide-in-Drawer gerendert (siehe
+     CharacterSheetPage.jsx: sheetSidebarAsDrawer). Hier nur noch
+     Padding fürs Tab-Body anpassen, damit der Content nicht
+     gegen die Bildschirmkante klebt. Die früheren !important-
+     Stack-Regeln sind raus, weil sie den Drawer überschrieben hätten. */
   .dnd-sheet-tab-body { padding: 14px 12px !important; }
+  .dnd-sheet-sidebar .dnd-sheet-portrait { width: 110px !important; height: 110px !important; }
 }
 
 /* ═══ SMALL PHONE ═══════════════════════════════════════════════════════ */
@@ -96,3 +87,17 @@
 .dnd-sheet-root textarea,
 .dnd-sheet-root select { font-family: inherit; }
 .dnd-sheet-root textarea { font-size: 13px; }
+
+/* ═══ PWA-MOBILE-Refinements ════════════════════════════════════════════
+   body[data-pwa-mobile="true"] wird von usePwaMobile gesetzt. Greift
+   sowohl für echte PWA-Phones als auch für das Popout-Fenster (das
+   `?popout=1` setzt isPwaMobile auf true). */
+body[data-pwa-mobile="true"] .dnd-sheet-root .dnd-sheet-tab-body {
+  padding: 10px 8px !important;
+}
+/* Inventory: Equipment-Grid kollabiert sofort auf eine einzelne
+   Spalte, statt darauf zu warten dass das Viewport unter den
+   minmax(360px) Schwellenwert fällt. Mehr Platz pro Container-Karte. */
+body[data-pwa-mobile="true"] .dnd-sheet-root [data-grid="inventory-sections"] {
+  grid-template-columns: 1fr !important;
+}

@@ -93,7 +93,13 @@ export default function CharacterEditPage({ session }) {
       }
       const parts = path.split('.')
       let obj = next
-      for (let i = 0; i < parts.length - 1; i++) obj = obj[parts[i]]
+      for (let i = 0; i < parts.length - 1; i++) {
+        // Auto-create missing intermediate objects so deep-set paths with
+        // runtime keys (e.g. status.preparedSpells.<classId>) don't crash on
+        // a character whose shape predates that container.
+        if (obj[parts[i]] == null || typeof obj[parts[i]] !== 'object') obj[parts[i]] = {}
+        obj = obj[parts[i]]
+      }
       obj[parts[parts.length - 1]] = value
       return next
     })
@@ -173,11 +179,20 @@ export default function CharacterEditPage({ session }) {
       .eq('id', id).eq('user_id', session.user.id).maybeSingle()
     const update = { data: character, name: character.info.name }
     if (!existing?.share_token) update.share_token = newShareToken()
-    const { error: err } = await supabase
+    // .select('id') returns the rows the UPDATE actually touched. Under RLS a
+    // non-matching update (e.g. expired session → auth.uid() null) affects 0
+    // rows and reports NO error — that's how edits silently vanish. An empty
+    // result therefore has to be treated as a failure, not a success.
+    const { data: rows, error: err } = await supabase
       .from('dnd_characters')
       .update(update)
       .eq('id', id).eq('user_id', session.user.id)
-    if (err) { setError('Speichern fehlgeschlagen'); setSaving(false); return }
+      .select('id')
+    if (err || !rows?.length) {
+      console.error('[CharacterEdit] save failed:', err?.message, '| code:', err?.code, '| details:', err?.details, '| hint:', err?.hint, '| rows:', rows?.length ?? 0)
+      setError(err ? `Speichern fehlgeschlagen (${err.message})` : 'Speichern fehlgeschlagen — keine Zeile aktualisiert. Evtl. Sitzung abgelaufen, bitte neu einloggen.')
+      setSaving(false); return
+    }
     navigate(`/character/${id}`)
   }
 

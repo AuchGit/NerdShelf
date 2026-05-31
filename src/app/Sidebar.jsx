@@ -10,10 +10,12 @@ const NAV = [
 ];
 
 /**
- * variant: 'full' | 'compact'
+ * variant:    'full' | 'compact'
  * onNavigate: optional callback fired when a nav link is clicked (used to close overlay).
+ * onToggle:   optional — wenn gesetzt, zeigen wir einen Chevron-Knopf
+ *             oben in der Sidebar, der zwischen full/compact toggled.
  */
-export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalendar, calendarNotif, variant = 'full', onNavigate }) {
+export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalendar, calendarNotif, variant = 'full', onNavigate, onToggle }) {
   const { user, signOut } = useAuth();
   const compact = variant === 'compact';
 
@@ -52,8 +54,34 @@ export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalenda
         textAlign: compact ? 'center' : 'left',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: compact ? 'center' : 'space-between',
+        gap: 6,
       }}>
-        {compact ? 'NS' : 'NerdShelf'}
+        <span>{compact ? 'NS' : 'NerdShelf'}</span>
+        {onToggle && (
+          // Chevron-Toggle. Beim Full-Modus zeigt's "‹" (collapse), beim
+          // Compact-Modus "›" (expand). Persistiert per useSidebarMode.
+          // Bei Compact + sehr schmalem Fenster geht "›" auf Overlay-
+          // Drawer auf, sodass User auch da seine volle Sidebar bekommt.
+          <button
+            type="button"
+            onClick={onToggle}
+            title={compact ? 'Sidebar ausklappen' : 'Sidebar einklappen'}
+            aria-label={compact ? 'Sidebar ausklappen' : 'Sidebar einklappen'}
+            style={{
+              width: 22, height: 22, padding: 0,
+              borderRadius: 6,
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              fontSize: 14, lineHeight: 1, fontFamily: 'inherit',
+              flexShrink: 0,
+            }}
+          >{compact ? '›' : '‹'}</button>
+        )}
       </div>
 
       <nav style={{ flex: 1, padding: 'var(--space-2)', overflowY: 'auto' }}>
