@@ -520,61 +520,75 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
 
   return (
     <div className="dnd-sheet-tab-body" style={S.tabBody}>
-      {/* ── Compact identity strip ──
-          Species · Subrace · Background · Alignment · Experience —
-          tiny badges, single row. The big InfoCard grid that used to
-          eat half the screen for info that never changes mid-session
-          is gone. Detailed traits live in the Features tab. */}
-      <div style={identityStrip}>
-        <span style={identityBadge}>
-          <span style={identityBadgeLabel}>Species</span>
-          <span style={identityBadgeValue}>
-            {character.species.subraceId
-              ? `${character.species.subraceId.split('__')[0]} (${character.species.raceId?.split('__')[0]})`
-              : character.species.raceId?.split('__')[0] || '—'}
-          </span>
-        </span>
-        <span style={identityBadge}>
-          <span style={identityBadgeLabel}>Background</span>
-          <span style={identityBadgeValue}>{character.background.backgroundId?.split('__')[0] || '—'}</span>
-        </span>
-        {character.info.alignment && (
-          <span style={identityBadge}>
-            <span style={identityBadgeLabel}>Alignment</span>
-            <span style={identityBadgeValue}>{character.info.alignment}</span>
-          </span>
-        )}
-        <span style={identityBadge}>
-          <span style={identityBadgeLabel}>Edition</span>
-          <span style={identityBadgeValue}>{character.meta.edition === '5.5e' ? 'D&D 2024' : 'D&D 2014'}</span>
-        </span>
-        {!!character.info.experience && (
-          <span style={identityBadge}>
-            <span style={identityBadgeLabel}>XP</span>
-            <span style={identityBadgeValue}>{character.info.experience}</span>
-          </span>
-        )}
-        {/* Currency strip — same compact cells as the Inventory tab so
-            the player can tweak coin counts without leaving Overview.
-            Pushed to the right with auto-margin so it sits on the same
-            row as the identity badges. */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
-          {COIN_TYPES.map(({ key, label, color }) => (
-            <label key={key} style={overviewCoinCell}>
-              <span style={{ ...overviewCoinLabel, color }}>{label.slice(0, 2).toUpperCase()}</span>
-              <input
-                type="number" min="0" inputMode="numeric"
-                value={(character.inventory?.currency || {})[key] ?? 0}
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => {
-                  const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
-                  updateCharacter(`inventory.currency.${key}`, v)
-                }}
-                style={overviewCoinInput}
-              />
-            </label>
-          ))}
+      {/* ── Combat-Tracker-Bar (oberhalb der Hero-Row) ──
+          flexWrap: nowrap zwingt die Bar einzeilig zu bleiben — die
+          Slots schrumpfen via flex-shrink statt umzubrechen. Inhalte
+          sind klein genug dass sie auch bei knappem Platz lesbar
+          bleiben.
+          Slot 1 (HD + Death Saves zusammen) — spannt über HP + Items.
+          Slot 2 (Actions): Action Economy + Neue Runde.
+          Slot 3 (rechts): Spell Atk/DC — bleibt rechts unabhaengig
+                  vom Spells/Favoriten-Swap. */}
+      <div
+        data-tauri-drag-region={isPopoutEnv() ? '' : undefined}
+        style={{
+          display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'nowrap',
+          padding: '6px 10px', marginBottom: 10,
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Slot 1 — Hit Dice + Death Saves zusammen, deckt die Breite
+            von HP (240) + Items (160) + gap (12) = 412px ab. */}
+        <div style={{
+          flex: '0 1 412px', minWidth: 0,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap',
+        }}>
+          <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <DetailChip label="HD" value={character.classes.map(c => `${c.level}d${c.hitDie}`).join('+')} />
+          </div>
+          {/* S/F nebeneinander damit der Slot single-line bleibt. */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={S.deathSaveLabel}>S</span>
+              <Pips count={3} filled={deathSaves.successes} color="var(--accent-green)"
+                onSet={n => updateCharacter('status.deathSaves', { ...deathSaves, successes: n })} />
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={S.deathSaveLabel}>F</span>
+              <Pips count={3} filled={deathSaves.failures} color="var(--accent-red)"
+                onSet={n => updateCharacter('status.deathSaves', { ...deathSaves, failures: n })} />
+            </div>
+          </div>
         </div>
+        {/* Slot 2 — Action Economy + Neue Runde */}
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+          <CombatEconomy
+            value={economy}
+            character={character}
+            onChange={(next) => updateCharacter('status.economy', next)}
+          />
+        </div>
+        {/* Slot 3 — Spell Atk/DC. */}
+        {computed?.spellcasting && Object.keys(computed.spellcasting).length > 0 && (
+          <div style={{
+            flex: '0 1 auto', minWidth: 0,
+            display: 'flex', flexDirection: 'column', gap: 1,
+            overflow: 'hidden',
+          }}>
+            {Object.entries(computed.spellcasting).map(([cls, data]) => (
+              <div key={cls} style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 700 }}>{cls}:</span>{' '}
+                <span style={{ color: 'var(--text-muted)' }}>{data.ability.toUpperCase()}</span>{' '}
+                <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>Atk {data.spellAttackDisplay}</span>
+                <span style={{ color: 'var(--text-dim)' }}> · </span>
+                <span style={{ color: 'var(--accent-purple)', fontWeight: 700 }}>DC {data.spellSaveDC}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Top row: HP card, Quick-Access grid, then 3 action columns ──
@@ -646,9 +660,25 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             <DamageResistancePills character={character} compact />
           </div>
           <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
-          {/* HP-Notiz-Feld komplett entfernt (User-Request) —
-              wer Free-Form-Notizen will, nutzt die Custom-Notes pro
-              Eintrag oder den Personality/Basic-Info-Tab. */}
+          {/* Spieler-Notizen unter den HP-Buttons. flex:1 sorgt dafür
+              dass die Textarea den restlichen Platz der HP-Section
+              füllt bis zur Conditions-Bar. Debounced damit jeder
+              Tastendruck nicht den ganzen Char recomputed. */}
+          {!readOnly && (
+            <DebouncedTextArea
+              value={character.status?.hpNotes || ''}
+              onCommit={(v) => updateCharacter('status.hpNotes', v)}
+              placeholder="Notizen …"
+              style={{
+                width: '100%', marginTop: 6,
+                flex: 1, minHeight: 32,
+                padding: '6px 8px', fontSize: 11, lineHeight: 1.4,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 6,
+                fontFamily: 'inherit', resize: 'none', overflowY: 'auto',
+              }}
+            />
+          )}
         </Section>
         </div>
 
@@ -685,25 +715,40 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           </Section>
         </div>
 
-        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
-          <FeaturesAndPreparedSpellsColumn
-            character={character}
-            computed={computed}
-            applyCharacter={applyCharacter}
-            updateCharacter={updateCharacter}
-          />
-        </div>
-
-        {/* Yellow — Favorites, now in the top row as the 5th column. */}
-        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 240px', minWidth: 0 }}>
-          <div style={isPwaMobile ? flexibleScroll : fixedHeightSection}>
-            <FavoritesSection
-              character={character}
-              computed={computed}
-              applyCharacter={applyCharacter}
-            />
-          </div>
-        </div>
+        {/* Spells/Favorites — Reihenfolge der beiden letzten Spalten
+            ist per Pfeil-Button im Header der jeweiligen Section
+            swap-bar (persistent in status.heroColSwap). Default:
+            Spells links, Favorites rechts. */}
+        {(() => {
+          const swapped = !!character?.status?.heroColSwap
+          const swapColumns = () => updateCharacter('status.heroColSwap', !swapped)
+          const spellsCol = (
+            <div key="spells" style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
+              <FeaturesAndPreparedSpellsColumn
+                character={character}
+                computed={computed}
+                applyCharacter={applyCharacter}
+                updateCharacter={updateCharacter}
+                swapHeroCol={swapColumns}
+                heroColSwapped={swapped}
+              />
+            </div>
+          )
+          const favCol = (
+            <div key="favs" style={isPwaMobile ? heroColPwa : { flex: '1 1 240px', minWidth: 0 }}>
+              <div style={isPwaMobile ? flexibleScroll : fixedHeightSection}>
+                <FavoritesSection
+                  character={character}
+                  computed={computed}
+                  applyCharacter={applyCharacter}
+                  swapHeroCol={swapColumns}
+                  heroColSwapped={swapped}
+                />
+              </div>
+            </div>
+          )
+          return swapped ? [favCol, spellsCol] : [spellsCol, favCol]
+        })()}
       </div>
 
       {/* Conditions-Footer: spannt horizontal die ganze hero-row und
@@ -728,70 +773,9 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
       </div>
 
-      {/* ── Closing strip: HP details + Death Saves + Action pills ──
-          One single full-width row, no section header:
-            HP Method · Hit Dice · Successes · Failures · Action pills
-          The "Combat-Tracker" title was deliberately removed — the
-          strip is its own visual divider between the play columns
-          and whatever sits below them.
-          Im Popout-Fenster ist der Strip zusätzlich Drag-Handle
-          (data-tauri-drag-region), damit das Popout per Combat-
-          Tracker verschoben werden kann ohne extra UI. Buttons /
-          Inputs darin behalten ihre Klick-Targets. */}
-      <div
-        {...(isPwaMobile ? {} : {})}
-        data-tauri-drag-region={isPopoutEnv() ? '' : undefined}
-        style={{
-        display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
-        padding: '8px 12px',
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 8, marginTop: 10, marginBottom: 10,
-      }}>
-        <DetailChip label="HP Method" value={character.hpPreference?.method === 'roll' ? 'Roll' : 'Average'} />
-        <DetailChip label="Hit Dice" value={character.classes.map(c => `${c.level}d${c.hitDie}`).join(' + ')} />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-subtle)' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={S.deathSaveRow}>
-            <span style={S.deathSaveLabel}>Successes</span>
-            <Pips count={3} filled={deathSaves.successes} color="var(--accent-green)"
-              onSet={n => updateCharacter('status.deathSaves', { ...deathSaves, successes: n })} />
-          </div>
-          <div style={S.deathSaveRow}>
-            <span style={S.deathSaveLabel}>Failures</span>
-            <Pips count={3} filled={deathSaves.failures} color="var(--accent-red)"
-              onSet={n => updateCharacter('status.deathSaves', { ...deathSaves, failures: n })} />
-          </div>
-        </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-subtle)' }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <CombatEconomy
-            value={economy}
-            character={character}
-            onChange={(next) => updateCharacter('status.economy', next)}
-          />
-        </div>
-        {/* Spellcasting — compact inline summary inside the same
-            tracker bar. Per class: "Cleric: WIS +7/13". Skip when the
-            character has no spellcasting class so the bar stays tight
-            on martials. */}
-        {computed?.spellcasting && Object.keys(computed.spellcasting).length > 0 && (
-          <>
-            <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-subtle)' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {Object.entries(computed.spellcasting).map(([cls, data]) => (
-                <div key={cls} style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontWeight: 700 }}>{cls}:</span>{' '}
-                  <span style={{ color: 'var(--text-muted)' }}>{data.ability.toUpperCase()}</span>{' '}
-                  <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{data.spellAttackDisplay}</span>
-                  <span style={{ color: 'var(--text-dim)' }}>/</span>
-                  <span style={{ color: 'var(--accent-purple)', fontWeight: 700 }}>{data.spellSaveDC}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      {/* Closing strip entfernt — die Inhalte (Hit Dice, Death Saves,
+          Action Economy, Spell-Stats) sitzen jetzt oben in der
+          Combat-Tracker-Bar und sind dort spalten-aligned. */}
 
       {/* Conditions row removed — moved into the HP column above
           (under Temp/Max) so the free space there gets used and the
@@ -1766,13 +1750,46 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   const total = buckets.action.length + buckets.bonusAction.length + buckets.reaction.length
     + (buckets.hastedAction?.length || 0)
 
-  const tabs = [
-    { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
-    { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
-    { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
-  ]
+  // Pinned-Set live ableiten — wir aggregieren über alle Buckets,
+  // damit "★" der zentrale Anlaufpunkt für gepinnte Einträge ist.
+  // Sub-Gruppen pro Action-Type bleiben innerhalb des Tabs erhalten.
+  const pinnedKeys = useMemo(() => getPinnedActions(character), [character?.status?.pinnedActions])
+  const pinnedByEconomy = useMemo(() => {
+    if (!pinnedKeys.length) return null
+    const slots = ['action', 'bonusAction', 'reaction', 'hastedAction']
+    const out = {}
+    let total = 0
+    for (const s of slots) {
+      const src = buckets[s] || []
+      const hit = src.filter(r => {
+        const k = rowMarkerKey(r)
+        return k && pinnedKeys.includes(k)
+      })
+      if (hit.length > 0) {
+        out[s] = hit
+        total += hit.length
+      }
+    }
+    out.__total = total
+    return out
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinnedKeys.join('|'), buckets.action, buckets.bonusAction, buckets.reaction, buckets.hastedAction])
+
+  // Tab-Labels jetzt abgekürzt (Act / BA / Re / Hast) plus ★-Tab als
+  // erster Eintrag wenn überhaupt etwas gepinnt ist. Vollnamen über
+  // `title` Attribut für Accessibility.
+  const tabs = []
+  const pinnedTotal = pinnedByEconomy?.__total || 0
+  if (pinnedTotal > 0) {
+    tabs.push({ id: 'pinned', label: '★', title: 'Pinned', color: 'var(--accent-cyan)' })
+  }
+  tabs.push(
+    { id: 'action',      label: 'A',  title: 'Action',       color: 'var(--accent-red)' },
+    { id: 'bonusAction', label: 'BA', title: 'Bonus Action', color: 'var(--accent-yellow)' },
+    { id: 'reaction',    label: 'R',  title: 'Reaction',     color: 'var(--accent-purple)' },
+  )
   if (hasted && buckets.hastedAction?.length > 0) {
-    tabs.push({ id: 'hastedAction', label: 'Hasted Action', color: 'var(--accent-blue)' })
+    tabs.push({ id: 'hastedAction', label: 'HA', title: 'Hasted Action', color: 'var(--accent-blue)' })
   }
   // If the currently-selected tab vanished (e.g. concentration on
   // Haste dropped while the player was on the Hasted tab), fall back
@@ -1780,12 +1797,12 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   // ABOVE any early return — total flips between 0 and >0 between
   // renders, and a hook below a conditional return triggers React #310.
   useEffect(() => {
-    if (!tabs.some(t => t.id === tab)) setTab('action')
+    if (!tabs.some(t => t.id === tab)) setTab(pinnedTotal > 0 ? 'pinned' : 'action')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.map(t => t.id).join('|')])
 
   if (total === 0) return null
-  const rows = buckets[tab] || []
+  const rows = tab === 'pinned' ? [] : (buckets[tab] || [])
 
   return (
     <div style={embedded ? { marginTop: 0 } : { marginTop: 10 }}>
@@ -1799,9 +1816,10 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
           <div style={caeTabs}>
             {tabs.map(t => {
               const sel = tab === t.id
-              const n = buckets[t.id].length
+              const n = t.id === 'pinned' ? pinnedTotal : (buckets[t.id]?.length || 0)
               return (
                 <button key={t.id} type="button" onClick={() => setTab(t.id)}
+                  title={t.title || t.label}
                   style={{
                     ...caeTab,
                     borderColor: sel ? t.color : 'var(--border)',
@@ -1813,7 +1831,54 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
               )
             })}
           </div>
-          {rows.length === 0 ? (
+          {tab === 'pinned' ? (
+            // ★-Tab: gruppiert die gepinnten Rows zuerst nach Action-
+            // Type (Action / Bonus Action / Reaction / Hasted Action)
+            // und reicht jede Untergruppe an die normale CategorisedList
+            // weiter, damit Sub-Kategorien (Features, Items, Spells by
+            // level) unverändert greifen.
+            ['action', 'bonusAction', 'reaction', 'hastedAction']
+              .filter(s => pinnedByEconomy?.[s]?.length > 0)
+              .map(slot => {
+                const slotLabel = slot === 'action' ? 'Action'
+                  : slot === 'bonusAction' ? 'Bonus Action'
+                  : slot === 'reaction' ? 'Reaction'
+                  : 'Hasted Action'
+                const slotColor = slot === 'action' ? 'var(--accent-red)'
+                  : slot === 'bonusAction' ? 'var(--accent-yellow)'
+                  : slot === 'reaction' ? 'var(--accent-purple)'
+                  : 'var(--accent-blue)'
+                return (
+                  <div key={slot} style={{ marginBottom: 10 }}>
+                    <div style={{
+                      fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+                      textTransform: 'uppercase',
+                      color: slotColor,
+                      padding: '4px 0 4px',
+                      borderBottom: `1px dashed ${slotColor}`,
+                      marginBottom: 4,
+                    }}>{slotLabel}</div>
+                    <CombatActionsCategorisedList
+                      rows={pinnedByEconomy[slot]}
+                      expanded={expanded}
+                      setExpanded={setExpanded}
+                      slots={slots}
+                      usedSlots={usedSlots}
+                      usedPact={usedPact}
+                      castingFor={castingFor}
+                      setCastingFor={setCastingFor}
+                      castSpellFromExplorer={castSpellFromExplorer}
+                      markActionUsed={markActionUsed}
+                      consumeResource={consumeResource}
+                      applyRowSideEffects={applyRowSideEffects}
+                      character={character}
+                      applyCharacter={applyCharacter}
+                      hidePinnedCategory
+                    />
+                  </div>
+                )
+              })
+          ) : rows.length === 0 ? (
             <div style={caeEmpty}>Nichts in dieser Kategorie.</div>
           ) : (
             <CombatActionsCategorisedList
@@ -1842,11 +1907,135 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
 // `kind` becomes its own header; standard actions are consolidated
 // into a single "Basic Actions" expandable; spells subdivide by
 // level (Cantrip / Level 1 / …). All groups are open by default.
+// Erweiterter Expand-Body fuer Action-Rows mit Desc/Notes-Toggle.
+// Desc = standard ActionRowExpandedBody, Notes = freie Textarea die
+// in customNotes[mKey].body schreibt. Plus die Editor-Zeile unten
+// (Color-Picker + Custom-Pill + Pin-Button) bleibt da wie gehabt.
+function ActionExpandedBlock({ r, character, applyCharacter, mKey, mColor }) {
+  const [mode, setMode] = useState('desc')
+  const note = mKey ? getCustomNote(character, mKey) : null
+  return (
+    <>
+      {mKey && (
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end',
+          padding: '4px 8px 0',
+        }} onClick={(e) => e.stopPropagation()}>
+          <div style={viewToggleWrapInline}>
+            <button type="button"
+              onClick={() => setMode('desc')}
+              style={viewToggleBtnInline(mode === 'desc')}>Desc</button>
+            <button type="button"
+              onClick={() => setMode('notes')}
+              style={viewToggleBtnInline(mode === 'notes')}>Notes</button>
+          </div>
+        </div>
+      )}
+      {mode === 'desc' && <ActionRowExpandedBody row={r} />}
+      {mode === 'notes' && mKey && (
+        <div style={{ padding: '6px 10px' }} onClick={(e) => e.stopPropagation()}>
+          <textarea
+            value={note?.body || ''}
+            placeholder="Deine Notizen zu diesem Eintrag …"
+            onChange={(e) => setCustomNote(applyCharacter, mKey, { body: e.target.value })}
+            style={{
+              width: '100%', minHeight: 80,
+              padding: '6px 8px', fontSize: 12, lineHeight: 1.45,
+              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+              border: '1px solid var(--border-subtle)', borderRadius: 6,
+              fontFamily: 'inherit', resize: 'vertical',
+            }}
+          />
+        </div>
+      )}
+      {mKey && applyCharacter && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+          padding: '4px 10px 6px',
+          borderTop: '1px solid var(--border-subtle)',
+        }}
+          onClick={(e) => e.stopPropagation()}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Stripe:</span>
+            <CardColorPicker
+              color={mColor}
+              onChange={(c) => setColorMarker(applyCharacter, mKey, c)}
+              compact
+            />
+          </span>
+          <input
+            type="text"
+            defaultValue={note?.pillText || ''}
+            placeholder="Pill-Hinweis"
+            onBlur={(e) => setCustomNote(applyCharacter, mKey, { pillText: e.target.value })}
+            style={{
+              width: 110, padding: '2px 6px', fontSize: 11,
+              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+              border: '1px solid var(--border-subtle)', borderRadius: 4,
+              fontFamily: 'inherit',
+            }}
+          />
+          <input
+            type="color"
+            value={note?.pillColor || mColor || '#888888'}
+            onChange={(e) => setCustomNote(applyCharacter, mKey, { pillColor: e.target.value })}
+            title="Pill-Farbe"
+            style={{
+              width: 22, height: 20, padding: 0,
+              background: 'transparent',
+              border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => togglePinnedAction(applyCharacter, mKey)}
+            title={isPinnedAction(character, mKey)
+              ? 'Aus Pinned entfernen'
+              : 'Oben in Pinned anheften'}
+            style={{
+              fontSize: 11, padding: '2px 8px',
+              background: isPinnedAction(character, mKey)
+                ? 'color-mix(in srgb, var(--accent-yellow) 18%, transparent)'
+                : 'transparent',
+              color: isPinnedAction(character, mKey)
+                ? 'var(--accent-yellow)' : 'var(--text-muted)',
+              border: `1px solid ${isPinnedAction(character, mKey)
+                ? 'var(--accent-yellow)' : 'var(--border)'}`,
+              borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+              marginLeft: 'auto',
+            }}
+          >
+            {isPinnedAction(character, mKey) ? '★ Pinned' : '☆ Pin'}
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
+const viewToggleWrapInline = {
+  display: 'inline-flex',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  overflow: 'hidden',
+}
+function viewToggleBtnInline(active) {
+  return {
+    padding: '2px 8px', fontSize: 10, fontWeight: 700,
+    letterSpacing: 0.3, textTransform: 'uppercase',
+    background: active ? 'var(--bg-card, var(--bg-inset))' : 'transparent',
+    color: active ? 'var(--accent)' : 'var(--text-muted)',
+    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+  }
+}
+
 function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
   castSpellFromExplorer, markActionUsed, consumeResource, applyRowSideEffects,
   character, applyCharacter,
+  hidePinnedCategory = false,
 }) {
   // Pill-Farben sind lokal-state, also Hook hier separat aufrufen
   // statt durch Props zu reichen — vermeidet eine Prop-Drilling-
@@ -1929,23 +2118,29 @@ function CombatActionsCategorisedList({
     // steht — emittiert sie als Duplikate mit `pinned-`-Prefix-ID damit
     // React-Keys nicht kollidieren. Original-Rows bleiben in ihren
     // strukturellen Kategorien.
-    const pinnedKeys = getPinnedActions(character)
-    if (pinnedKeys.length > 0) {
-      const pinnedItems = []
-      for (const cat of out) {
-        for (const r of cat.items) {
-          const k = rowMarkerKey(r)
-          if (k && pinnedKeys.includes(k)) {
-            pinnedItems.push({ ...r, id: `pinned-${r.id}` })
+    //
+    // Im ★-Tab oben in der Explorer-Leiste passiert die Pin-Aggregation
+    // bereits eine Ebene drüber; dann unterdrücken wir hier die
+    // Duplikat-Kategorie via `hidePinnedCategory`.
+    if (!hidePinnedCategory) {
+      const pinnedKeys = getPinnedActions(character)
+      if (pinnedKeys.length > 0) {
+        const pinnedItems = []
+        for (const cat of out) {
+          for (const r of cat.items) {
+            const k = rowMarkerKey(r)
+            if (k && pinnedKeys.includes(k)) {
+              pinnedItems.push({ ...r, id: `pinned-${r.id}` })
+            }
           }
         }
-      }
-      if (pinnedItems.length > 0) {
-        out.unshift({ id: 'pinned', label: '★ Pinned', items: pinnedItems })
+        if (pinnedItems.length > 0) {
+          out.unshift({ id: 'pinned', label: '★ Pinned', items: pinnedItems })
+        }
       }
     }
     return out
-  }, [rows, character])
+  }, [rows, character, hidePinnedCategory])
 
   const toggleCat = (id) => setClosedCats(prev => {
     const next = new Set(prev)
@@ -2195,21 +2390,43 @@ function CombatActionsCategorisedList({
                 const hasBottomRow = leftPills.length > 0 || rightPills.length > 0
                 // (mKey + mColor sind oben am Anfang des map-Body
                 // schon deklariert — gleicher Wert, eine Quelle.)
+                //
+                // Row "nicht verfügbar" wenn entweder Spell-Slot leer
+                // ist ODER der zugehörige Action-Economy-Slot diese
+                // Runde schon verbraucht wurde. Wir grauen die ganze
+                // Zeile etwas aus damit klar ist "das geht gerade
+                // nicht" — bleibt aber komplett lesbar (kein
+                // line-through, opacity nur 0.55).
+                const economyUsed = !!(r.economySlot && character?.status?.economy?.[r.economySlot])
+                const unavailable = r.slotAvailable === false || economyUsed
                 return (
                   <div key={r.id} style={{
                     ...caeRow,
                     ...(colorStripeStyle(mColor) || {}),
-                    opacity: r.slotAvailable === false ? 0.55 : 1,
-                  }}>
+                    opacity: unavailable ? 0.55 : 1,
+                  }} title={economyUsed && r.economySlot
+                    ? `${r.economySlot === 'action' ? 'Action'
+                       : r.economySlot === 'bonusAction' ? 'Bonus Action'
+                       : r.economySlot === 'reaction' ? 'Reaction'
+                       : 'Hasted Action'} diese Runde bereits verbraucht`
+                    : undefined}>
                     <div
                       style={{ ...caeRowHead, flexDirection: 'column', alignItems: 'stretch', gap: 3 }}
-                      onClick={() => setExpanded(e => e === r.id ? null : r.id)}
                     >
-                      {/* TOP ROW: chevron + name + top-pills + Use-Button */}
+                      {/* TOP ROW: chevron (klickbar zum Expand) + name + top-pills + Use-Button.
+                          Row-Klick außerhalb des Chevrons triggert NICHTS mehr —
+                          nur der Chevron-Klick toggled. */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>
-                          {expanded === r.id ? '▼' : '▶'}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setExpanded(prev => prev === r.id ? null : r.id) }}
+                          title={expanded === r.id ? 'Einklappen' : 'Aufklappen'}
+                          style={{
+                            background: 'transparent', border: 'none', cursor: 'pointer',
+                            color: 'var(--text-dim)', fontSize: 10, padding: '0 2px',
+                            fontFamily: 'inherit',
+                          }}
+                        >{expanded === r.id ? '▼' : '▶'}</button>
                         {(() => {
                           const tip = actionRowTooltipContent(r)
                           const nameEl = (
@@ -2258,6 +2475,15 @@ function CombatActionsCategorisedList({
                       )}
                     </div>
                     {expanded === r.id && (
+                      <ActionExpandedBlock
+                        r={r}
+                        character={character}
+                        applyCharacter={applyCharacter}
+                        mKey={mKey}
+                        mColor={mColor}
+                      />
+                    )}
+                    {false && (
                       <>
                         <ActionRowExpandedBody row={r} />
                         {mKey && applyCharacter && (
@@ -2699,6 +2925,18 @@ function catReorderBtn(disabled) {
   }
 }
 
+// Swap-Pfeil im Section-Titel — Spells <→> Favorites tauschen.
+// Persistiert in character.status.heroColSwap.
+const swapColBtnStyle = {
+  width: 18, height: 18, padding: 0, marginRight: 6,
+  background: 'transparent',
+  border: '1px solid var(--border)', borderRadius: 3,
+  color: 'var(--text-muted)', fontSize: 12, lineHeight: 1,
+  cursor: 'pointer', fontFamily: 'inherit',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  verticalAlign: 'middle',
+}
+
 // ↻-Reset-Icon — wird VOR dem Section-Titel gerendert wenn die
 // Kategorie-Reihenfolge der Spalte vom Default abweicht. Nur Icon,
 // kein Text, fügt sich nahtlos in den Titel ein.
@@ -2896,32 +3134,178 @@ export function FavoriteToggle({ favKey, character, applyCharacter, title }) {
  * the underlying item (selling, deleveling, retraining a feat)
  * naturally clears the card on the next render.
  */
-function FavoriteCard({ favKey, resolved, character, applyCharacter }) {
+function FavoriteCard({ favKey, resolved, character, computed, applyCharacter }) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState('desc')
+  const pillColors = usePillColors()
   if (!resolved) return null
   const { title, badge, entries, html, fiveeLink } = resolved
   const hasBody = (Array.isArray(entries) && entries.length > 0) || (typeof html === 'string' && html.trim())
+  // Favorites teilen sich denselben markerKey (= favoriteKey) wie alle
+  // anderen ausklappbaren Cards → Custom-Pill + Notes landen im
+  // gleichen character.customNotes-Bucket.
+  const note  = favKey ? getCustomNote(character, favKey) : null
+  const mColor = favKey ? getColorMarker(character, favKey) : null
+  const notePillColor = note?.pillColor || mColor || 'var(--accent)'
+
+  // Smart-Pills aus dem Eintrag-Text. Per favKey-Präfix entscheiden
+  // wir welcher Parser passt — Spells gehen durch parseSpellEffect
+  // (braucht DC/Atk vom Caster), Features/Traits/Feats durch
+  // parseFeatureEffect. Items haben kein konsistentes Schema, deshalb
+  // keine Pill-Extraktion dort.
+  const favPills = useMemo(() => {
+    if (!favKey || !Array.isArray(entries) || entries.length === 0) return []
+    const kind = favKey.split(':')[0]
+    try {
+      if (kind === 'spell') {
+        const sc = computed?.spellcasting || {}
+        // Beste Caster-Klasse (höchste DC+Atk-Summe) als Stat-Quelle.
+        let best = null
+        let bestScore = -Infinity
+        for (const cid of Object.keys(sc)) {
+          const s = (sc[cid]?.spellSaveDC || 0) + (sc[cid]?.spellAttackBonus || 0)
+          if (s > bestScore) { bestScore = s; best = sc[cid] }
+        }
+        const totalCharLevel = (character?.classes || []).reduce((acc, c) => acc + (c.level || 0), 0)
+        const fx = parseSpellEffect({ ...resolved, entries, name: title }, {
+          spellAttackBonus: best?.spellAttackBonus ?? null,
+          saveDC:           best?.spellSaveDC ?? null,
+          totalCharLevel,
+        })
+        return fx?.pills || []
+      }
+      if (kind === 'feature' || kind === 'trait' || kind === 'feat') {
+        // Klassen-ID aus favKey ziehen wenn vorhanden (`feature:Class:Name:Lv`).
+        const classId = kind === 'feature' ? favKey.split(':')[1] || null : null
+        const fx = parseFeatureEffect(
+          { name: title, entries, classId },
+          character,
+          computed?.proficiencyBonus || 0,
+        )
+        return fx?.pills || []
+      }
+    } catch { /* ignore – parser shouldn't crash a render */ }
+    return []
+  }, [favKey, entries, resolved, title, character, computed])
+
   return (
-    <div style={favCard}>
-      <div style={favCardHeader} onClick={() => hasBody && setOpen(o => !o)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+    <div style={{ ...favCard, ...(colorStripeStyle(mColor) || {}) }}>
+      <div style={{ ...favCardHeader, cursor: 'default' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
           <FavoriteToggle favKey={favKey} character={character} applyCharacter={applyCharacter} />
           <span style={favCardName}>{title}</span>
           {badge && <span style={favCardBadge}>{badge}</span>}
+          {favPills.map(p => {
+            const color = p.kind === 'attack'
+              ? (pillColors['pill.attack'] || 'var(--accent-blue)')
+              : p.kind === 'save'
+                ? (pillColors['pill.save'] || 'var(--accent-purple)')
+                : (p.damageType && pillColors[`damage.${p.damageType}`])
+                  || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
+                  || 'var(--accent-red)'
+            return (
+              <span key={`favfx-${p.kind}-${p.label}-${p.value || ''}`}
+                title={p.title} style={{
+                  ...spellPill(color),
+                  background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                }}>
+                {p.value != null ? `${p.label} ${p.value}` : p.label}
+              </span>
+            )
+          })}
+          {note?.pillText && (
+            <span style={{
+              padding: '1px 6px', borderRadius: 4,
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+              border: `1px solid ${notePillColor}`,
+              color: notePillColor,
+              background: `color-mix(in srgb, ${notePillColor} 14%, transparent)`,
+              whiteSpace: 'nowrap', textTransform: 'uppercase',
+            }} title={note.pillText}>{note.pillText}</span>
+          )}
         </div>
-        {hasBody && (
-          <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
-        )}
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          title={open ? 'Einklappen' : 'Aufklappen'}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--text-dim)', fontSize: 11, padding: '0 4px',
+            fontFamily: 'inherit',
+          }}
+        >{open ? '▲' : '▼'}</button>
       </div>
-      {open && hasBody && (
-        <div style={favCardBody}>
-          {entries
-            ? <EntryRenderer entries={entries} />
-            : <div dangerouslySetInnerHTML={{ __html: html }} />}
-          {fiveeLink && (
-            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}
-              onClick={(e) => e.stopPropagation()}>
-              <FiveEToolsLink {...fiveeLink} edition={character?.meta?.edition} compact />
+      {open && (
+        <div style={favCardBody} onClick={(e) => e.stopPropagation()}>
+          {/* Desc/Notes-Toggle nur wenn echte Beschreibung vorhanden ist. */}
+          {hasBody && favKey && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <div style={viewToggleWrapInline}>
+                <button type="button" onClick={() => setMode('desc')}
+                  style={viewToggleBtnInline(mode === 'desc')}>Desc</button>
+                <button type="button" onClick={() => setMode('notes')}
+                  style={viewToggleBtnInline(mode === 'notes')}>Notes</button>
+              </div>
+            </div>
+          )}
+          {(mode === 'desc' || !favKey) && hasBody && (
+            entries
+              ? <EntryRenderer entries={entries} />
+              : <div dangerouslySetInnerHTML={{ __html: html }} />
+          )}
+          {(mode === 'notes' || !hasBody) && favKey && (
+            <textarea
+              value={note?.body || ''}
+              placeholder="Deine Notizen zu diesem Eintrag …"
+              onChange={(e) => setCustomNote(applyCharacter, favKey, { body: e.target.value })}
+              style={{
+                width: '100%', minHeight: 80,
+                padding: '6px 8px', fontSize: 12, lineHeight: 1.45,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 6,
+                fontFamily: 'inherit', resize: 'vertical',
+              }}
+            />
+          )}
+          {favKey && applyCharacter && (
+            <div style={{
+              marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+              paddingTop: 6, borderTop: '1px dashed var(--border-subtle)',
+            }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Stripe:</span>
+              <CardColorPicker
+                color={mColor}
+                onChange={(c) => setColorMarker(applyCharacter, favKey, c)}
+                compact
+              />
+              <input
+                type="text"
+                defaultValue={note?.pillText || ''}
+                placeholder="Pill-Hinweis"
+                onBlur={(e) => setCustomNote(applyCharacter, favKey, { pillText: e.target.value })}
+                style={{
+                  width: 110, padding: '2px 6px', fontSize: 11,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 4,
+                  fontFamily: 'inherit',
+                }}
+              />
+              <input
+                type="color"
+                value={note?.pillColor || mColor || '#888888'}
+                onChange={(e) => setCustomNote(applyCharacter, favKey, { pillColor: e.target.value })}
+                title="Pill-Farbe"
+                style={{
+                  width: 22, height: 20, padding: 0,
+                  background: 'transparent',
+                  border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+                }}
+              />
+              {fiveeLink && (
+                <span style={{ marginLeft: 'auto' }}>
+                  <FiveEToolsLink {...fiveeLink} edition={character?.meta?.edition} compact />
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -3011,7 +3395,7 @@ function resolveFavorite(favKey, character, extras = {}) {
   return null
 }
 
-function FavoritesSection({ character, computed, applyCharacter }) {
+function FavoritesSection({ character, computed, applyCharacter, swapHeroCol, heroColSwapped }) {
   const favs = getFavorites(character)
 
   // Lazy data fetches — only when there's at least one favorite of
@@ -3045,7 +3429,21 @@ function FavoritesSection({ character, computed, applyCharacter }) {
   }, [edition, needSpells, spellData])
 
   return (
-    <Section title={`Favoriten${favs.length ? ` (${favs.length})` : ''}`}>
+    <Section
+      title={
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {swapHeroCol && (
+            <button
+              type="button"
+              onClick={swapHeroCol}
+              title="Mit Spells-Spalte tauschen"
+              style={swapColBtnStyle}
+            >{heroColSwapped ? '→' : '←'}</button>
+          )}
+          Favoriten{favs.length ? ` (${favs.length})` : ''}
+        </span>
+      }
+    >
       {favs.length === 0 ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '4px 2px' }}>
           Markiere Feats, Items, Spells, Class Features oder Species-Traits mit dem ☆-Knopf, um sie hier zur Hand zu haben.
@@ -3058,6 +3456,7 @@ function FavoritesSection({ character, computed, applyCharacter }) {
               favKey={key}
               resolved={resolveFavorite(key, character, { featData, spellData })}
               character={character}
+              computed={computed}
               applyCharacter={applyCharacter}
             />
           ))}
@@ -3337,7 +3736,9 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
 // vom alten Tile-Layout übernommen). Linksklick aufs Equip-Badge
 // toggelt equipped.
 function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
-  const [open, setOpen] = useState(false)
+  // Expand-Mechanik komplett entfernt — Items zeigen Name oben + Qty/EQ
+  // unten in zwei Zeilen. Volldetails kommen via Hover-Tooltip (auf
+  // dem Namen) und im Inventory-Tab.
   const qty = it.quantity || 0
   const isEquippable = !!(it.isWeapon || it.isArmor || it.isShield)
   const equipped = !!it.equipped
@@ -3432,106 +3833,55 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
         overflow: 'hidden',
       }}
     >
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '4px 8px',
-          minHeight: 22,
-        }}
-      >
-        <div
-          onClick={() => setOpen(o => !o)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            flex: 1, minWidth: 0, cursor: 'pointer',
-          }}
-        >
+      {/* 2-Zeilen-Layout: Name oben, Qty/EQ darunter. Hover über
+          den Namen zeigt die volle Beschreibung via Tooltip — kein
+          Inline-Expand mehr. Spart horizontalen Platz. */}
+      <div style={{ padding: '4px 8px', minWidth: 0 }}>
+        <HoverDetailTooltip content={tooltipContent}>
           <span style={{
-            color: 'var(--text-dim)', fontSize: 10, lineHeight: 1,
-            width: 10, textAlign: 'center', flexShrink: 0,
-            transform: open ? 'rotate(90deg)' : 'none',
-            transition: 'transform 120ms',
-          }}>▶</span>
-          <HoverDetailTooltip content={tooltipContent}>
-            <span style={{
-              fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
-              lineHeight: 1.3,
-              // Lange Namen umbrechen statt abschneiden — auch
-              // mehrwortige Magic-Item-Namen sollen voll lesbar sein.
-              whiteSpace: 'normal', wordBreak: 'break-word',
-            }}>
-              {isPotion && '🧪 '}{it.customName || it.name}
-            </span>
-          </HoverDetailTooltip>
-        </div>
-        {isEquippable ? (
-          <button
-            type="button"
-            onClick={onToggleEquip}
-            title={equipped ? 'Klick: Ablegen' : 'Klick: Anlegen'}
-            style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
-              color: equipped ? 'var(--accent-green)' : 'var(--text-dim)',
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              padding: '0 2px', fontFamily: 'inherit', flexShrink: 0,
-            }}
-          >{equipped ? 'EQ' : '—'}</button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onBumpQty(-1)}
-            onContextMenu={(e) => { e.preventDefault(); onBumpQty(+1) }}
-            disabled={qty <= 0}
-            title={qty > 0 ? 'Linksklick: −1   ·   Rechtsklick: +1' : 'Rechtsklick: +1'}
-            style={{
-              fontSize: 11, fontWeight: 800,
-              color: qty > 0 ? (isPotion ? 'var(--accent-red)' : 'var(--accent)') : 'var(--text-dim)',
-              whiteSpace: 'nowrap', flexShrink: 0,
-              background: 'transparent', border: 'none',
-              padding: '0 2px', fontFamily: 'inherit',
-              cursor: 'pointer',
-            }}
-          >×{qty}</button>
-        )}
-      </div>
-
-      {open && (
+            display: 'block',
+            fontSize: 11, fontWeight: 600, color: 'var(--text-primary)',
+            lineHeight: 1.25,
+            whiteSpace: 'normal', wordBreak: 'break-word',
+          }}>
+            {isPotion && '🧪 '}{it.customName || it.name}
+          </span>
+        </HoverDetailTooltip>
         <div style={{
-          padding: '6px 10px 8px 22px',         // 22px Indent für die Chevron-Spalte
-          borderTop: '1px solid var(--border-subtle)',
-          background: 'color-mix(in srgb, var(--bg-inset) 70%, transparent)',
-          fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5,
-          cursor: 'default',
+          marginTop: 2,
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 10, color: 'var(--text-dim)',
         }}>
-          {statBits.length > 0 && (
-            <div style={{ marginBottom: 4, color: 'var(--text-muted)' }}>
-              {statBits.join(' · ')}
-            </div>
-          )}
-          {masteryBits.length > 0 && (
-            <div style={{ marginBottom: 4 }}>
-              <span style={{ color: 'var(--accent-yellow)', fontWeight: 700 }}>Mastery:</span>{' '}
-              {masteryBits.join(', ')}
-            </div>
-          )}
-          {propBits.length > 0 && (
-            <div style={{ marginBottom: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Properties:</span>{' '}
-              {propBits.join(', ')}
-            </div>
-          )}
-          {hasEntries && (
-            <div style={{ marginTop: 4 }}>
-              <EntryRenderer entries={it.entries} />
-            </div>
-          )}
-          {!hasEntries && hasDescription && (
-            <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
-              {it.description}
-            </div>
+          {isEquippable ? (
+            <button
+              type="button"
+              onClick={onToggleEquip}
+              title={equipped ? 'Klick: Ablegen' : 'Klick: Anlegen'}
+              style={{
+                fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+                color: equipped ? 'var(--accent-green)' : 'var(--text-dim)',
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                padding: 0, fontFamily: 'inherit',
+              }}
+            >{equipped ? 'EQ' : '—'}</button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onBumpQty(-1)}
+              onContextMenu={(e) => { e.preventDefault(); onBumpQty(+1) }}
+              disabled={qty <= 0}
+              title={qty > 0 ? 'Linksklick: −1   ·   Rechtsklick: +1' : 'Rechtsklick: +1'}
+              style={{
+                fontSize: 10, fontWeight: 800,
+                color: qty > 0 ? (isPotion ? 'var(--accent-red)' : 'var(--accent)') : 'var(--text-dim)',
+                background: 'transparent', border: 'none',
+                padding: 0, fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >×{qty}</button>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -3575,7 +3925,7 @@ const qaTile = {
 // Each spell row shows an action-type pill, a slot/uses pill that
 // goes grey when the level's slots are spent.
 // ─────────────────────────────────────────────────────────────────
-function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, updateCharacter }) {
+function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, updateCharacter, swapHeroCol, heroColSwapped }) {
   const { isPwaMobile } = usePwaMobile()
   const [expandedKey, setExpandedKey] = useState(null)
   const [openLevels, setOpenLevels] = useState(() => new Set([0, 1]))
@@ -4016,7 +4366,15 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
       title={
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
           {isSpellOrderCustom && <ResetOrderIcon onReset={resetSpellOrder} />}
-          Spells
+          {swapHeroCol && (
+            <button
+              type="button"
+              onClick={swapHeroCol}
+              title="Mit Favoriten-Spalte tauschen"
+              style={swapColBtnStyle}
+            >{heroColSwapped ? '→' : '←'}</button>
+          )}
+          Spells & More
         </span>
       }
       action={headerCounter}
@@ -4075,6 +4433,8 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
                 showClassBadge={tab === 'all'}
                 classAbbr={classAbbr}
                 headerExtras={Arrows}
+                character={character}
+                computed={computed}
               />
             )
           }
@@ -4106,6 +4466,7 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
                   preparedByClass={preparedByClass}
                   ritualClassExists={ritualClassExists}
                   character={character}
+                  computed={computed}
                   applyCharacter={applyCharacter}
                 />
               ))}
@@ -4143,8 +4504,10 @@ function SpellListRow({
   row, isExpanded, onExpand, onTogglePrep, onPrepWithClass,
   casterClasses = [], classAbbr = {}, preparedByClass = {},
   ritualClassExists,
-  character, applyCharacter,
+  character, computed, applyCharacter,
 }) {
+  // User-Pill-Farben (pro-Damage-Typ Overrides aus Settings).
+  const pillColors = usePillColors()
   // Color-Marker fuer den Spell — gleicher Key wie in der Action-
   // Spalte UND wie favoriteKey('spell', name) damit der gleiche
   // Farb-Tag bei Spells-Spalte, Action-Spalte und Features-Tab
@@ -4193,6 +4556,34 @@ function SpellListRow({
   const comps = sp.components || {}
   const compChars = [comps.v && 'V', comps.s && 'S', comps.m && 'M'].filter(Boolean).join('')
   const showRitualPill = !!sp.ritual && ritualClassExists
+
+  // Smart-Effect-Pills (Attack/Save/DC/Damage/Healing/Upcast) aus dem
+  // 5etools-Entries-Text rausgeparst. Identische Logik zur Action-
+  // Spalte: wir picken die beste Caster-Klasse die diesen Spell auf
+  // ihrer Liste hat (DC + Attack-Bonus → max), schicken deren Werte
+  // mit in den Parser, und rendern was rauskommt.
+  const effectPills = useMemo(() => {
+    if (!sp || !Array.isArray(sp.entries)) return []
+    // Klasse picken: bevorzugt eine die diesen Spell führt; sonst
+    // irgendeine Caster-Klasse damit DC/Atk-Werte sinnvoll bleiben.
+    const sc = computed?.spellcasting || {}
+    let bestCid = null
+    let bestScore = -Infinity
+    const known = row.knownByClass || new Set()
+    for (const cid of Object.keys(sc)) {
+      const isKnown = known.has(cid) || known.has(String(cid).toLowerCase())
+      const score = (sc[cid]?.spellSaveDC || 0) + (sc[cid]?.spellAttackBonus || 0) + (isKnown ? 50 : 0)
+      if (score > bestScore) { bestScore = score; bestCid = cid }
+    }
+    const stats = bestCid ? sc[bestCid] : null
+    const totalCharLevel = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
+    const fx = parseSpellEffect(sp, {
+      spellAttackBonus: stats?.spellAttackBonus ?? null,
+      saveDC:           stats?.spellSaveDC ?? null,
+      totalCharLevel,
+    })
+    return fx?.pills || []
+  }, [sp, computed, row.knownByClass, character?.classes])
 
   return (
     <div
@@ -4289,6 +4680,28 @@ function SpellListRow({
           </span>
         </HoverDetailTooltip>
 
+        {/* Smart-Pills (Attack/Save/DC/Damage/Healing/Upcast) zuerst
+            damit sie unmittelbar neben dem Namen sitzen — gleiche
+            Reihenfolge wie in der Action-Spalte. Components/Conc/
+            Ritual/Action-Type folgen rechts dahinter. */}
+        {effectPills.map((p) => {
+          const color = p.kind === 'attack'
+            ? (pillColors['pill.attack'] || 'var(--accent-blue)')
+            : p.kind === 'save'
+              ? (pillColors['pill.save'] || 'var(--accent-purple)')
+              : (p.damageType && pillColors[`damage.${p.damageType}`])
+                || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
+                || 'var(--accent-red)'
+          return (
+            <span key={`fx-${p.kind}-${p.label}-${p.value || ''}`}
+              title={p.title} style={{
+                ...spellPill(color),
+                background: `color-mix(in srgb, ${color} 12%, transparent)`,
+              }}>
+              {p.value != null ? `${p.label} ${p.value}` : p.label}
+            </span>
+          )
+        })}
         {/* Pill order: components → conc → ritual → action type. The
             action-type pill sits ALL the way to the right so it
             visually lines up with the Action/Bonus/Reaction column
@@ -4404,10 +4817,12 @@ function spellTabStyle(active) {
 // kompakt wie Spell-Rows gerendert: linker Marker + Name + (im
 // 'All'-Tab) ein Klassen-Badge rechts. Klick öffnet ein Sub-Panel
 // mit der vollen Entry-Beschreibung aus optionalfeatures.json.
-function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr, headerExtras }) {
+function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr, headerExtras, character, computed }) {
   const [open, setOpen] = useState(true)
   const [expandedKey, setExpandedKey] = useState(null)
+  const pillColors = usePillColors()
   if (!items || items.length === 0) return null
+  const profBonus = computed?.proficiencyBonus || 0
   return (
     <div style={{ marginBottom: 6 }}>
       <div style={categoryHead}>
@@ -4423,6 +4838,20 @@ function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr
         const lookupKey = `${String(it.name).toLowerCase()}|${String(it.source || '').toUpperCase()}`
         const featData = optFeatMap?.get(lookupKey) || optFeatMap?.get(String(it.name).toLowerCase()) || null
         const hasEntries = Array.isArray(featData?.entries) && featData.entries.length > 0
+        // Smart-Pills aus dem Eintrag-Text. featData hat name + entries
+        // — genau das was parseFeatureEffect erwartet. classId schicken
+        // wir mit damit Skalierungs-Tabellen pro Klasse greifen.
+        let pickPills = []
+        if (featData) {
+          try {
+            const fx = parseFeatureEffect(
+              { ...featData, classId: it.classId || null },
+              character,
+              profBonus,
+            )
+            pickPills = fx?.pills || []
+          } catch { pickPills = [] }
+        }
         return (
           <div key={key} style={{
             margin: '2px 0',
@@ -4435,14 +4864,33 @@ function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '5px 8px',
                 cursor: hasEntries ? 'pointer' : 'default',
+                flexWrap: 'wrap',
               }}
             >
               <span style={{ color: 'var(--text-dim)', fontSize: 10, width: 10, textAlign: 'center' }}>
                 {hasEntries ? (expanded ? '▼' : '▶') : '·'}
               </span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {it.name}
               </span>
+              {pickPills.map(p => {
+                const color = p.kind === 'attack'
+                  ? (pillColors['pill.attack'] || 'var(--accent-blue)')
+                  : p.kind === 'save'
+                    ? (pillColors['pill.save'] || 'var(--accent-purple)')
+                    : (p.damageType && pillColors[`damage.${p.damageType}`])
+                      || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
+                      || 'var(--accent-red)'
+                return (
+                  <span key={`pick-fx-${p.kind}-${p.label}-${p.value || ''}`}
+                    title={p.title} style={{
+                      ...spellPill(color),
+                      background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                    }}>
+                    {p.value != null ? `${p.label} ${p.value}` : p.label}
+                  </span>
+                )
+              })}
               {it.level > 0 && (
                 <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>Lv {it.level}</span>
               )}
@@ -4600,16 +5048,18 @@ function CombatEconomy({ value, onChange, character }) {
   // when the explorer wants to warn the player, and cleared here.
   const concSpell = String(character?.status?.concentration?.spell || character?.status?.concentration?.name || '').toLowerCase()
   const hasted    = /\bhaste\b/.test(concSpell)
+  // Abkürzungen identisch zum Action-Explorer-Tab-Set (A / BA / R / HA)
+  // damit Spieler die gleichen Labels überall wiedererkennen.
   const slots = [
-    { id: 'action',      label: 'Action',       color: 'var(--accent-red)' },
-    { id: 'bonusAction', label: 'Bonus Action', color: 'var(--accent-yellow)' },
-    { id: 'reaction',    label: 'Reaction',     color: 'var(--accent-purple)' },
+    { id: 'action',      label: 'A',  title: 'Action',       color: 'var(--accent-red)' },
+    { id: 'bonusAction', label: 'BA', title: 'Bonus Action', color: 'var(--accent-yellow)' },
+    { id: 'reaction',    label: 'R',  title: 'Reaction',     color: 'var(--accent-purple)' },
   ]
   if (value?.surgeActive) {
-    slots.push({ id: 'surgeAction', label: 'Action Surge', color: 'var(--accent-orange, #ff9533)' })
+    slots.push({ id: 'surgeAction', label: 'AS', title: 'Action Surge', color: 'var(--accent-orange, #ff9533)' })
   }
   if (hasted) {
-    slots.push({ id: 'hastedAction', label: 'Hasted Action', color: 'var(--accent-blue)' })
+    slots.push({ id: 'hastedAction', label: 'HA', title: 'Hasted Action', color: 'var(--accent-blue)' })
   }
   function toggle(id) {
     onChange({ ...(value || {}), [id]: !value?.[id] })
@@ -4629,7 +5079,7 @@ function CombatEconomy({ value, onChange, character }) {
     || value?.surgeAction || value?.hastedAction || value?.surgeActive || value?.leveledCast)
 
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap', alignItems: 'center', overflow: 'hidden' }}>
       {slots.map(s => {
         const used = !!value?.[s.id]
         return (
@@ -4637,14 +5087,16 @@ function CombatEconomy({ value, onChange, character }) {
             key={s.id}
             type="button"
             onClick={() => toggle(s.id)}
-            title={used ? `${s.label} bereits verwendet — klicken zum Zurücksetzen` : `${s.label} verfügbar — klicken zum Markieren als verwendet`}
+            title={used
+              ? `${s.title || s.label} bereits verwendet — klicken zum Zurücksetzen`
+              : `${s.title || s.label} verfügbar — klicken zum Markieren als verwendet`}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 12px', borderRadius: 999, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
               border: `1.5px solid ${used ? 'var(--text-dim)' : s.color}`,
               background: used ? 'transparent' : `color-mix(in srgb, ${s.color} 18%, transparent)`,
               color: used ? 'var(--text-dim)' : s.color,
-              fontSize: 12, fontWeight: 600,
+              fontSize: 12, fontWeight: 700,
               textDecoration: used ? 'line-through' : 'none',
               opacity: used ? 0.7 : 1,
               fontFamily: 'inherit',
@@ -4654,13 +5106,16 @@ function CombatEconomy({ value, onChange, character }) {
           </button>
         )
       })}
+      {/* Neue-Runde-Button direkt rechts neben die Action-Pills statt
+          ganz rechts ans Bar-Ende — spart Layout-Breite und reduziert
+          Maus-Weg zwischen "letzten Spot markieren" und "neue Runde". */}
       <button
         type="button"
         onClick={reset}
         disabled={!anyUsed}
-        title="Alle drei zurücksetzen — neue Runde."
+        title="Alle Action-Slots zurücksetzen — neue Runde"
         style={{
-          marginLeft: 'auto', padding: '4px 12px', borderRadius: 999,
+          padding: '4px 10px', borderRadius: 999,
           border: '1px solid var(--border)', background: 'transparent',
           color: anyUsed ? 'var(--text-secondary)' : 'var(--text-dim)',
           fontSize: 11, cursor: anyUsed ? 'pointer' : 'default', fontFamily: 'inherit',

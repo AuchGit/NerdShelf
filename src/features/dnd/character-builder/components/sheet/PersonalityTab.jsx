@@ -44,6 +44,31 @@ export default function PersonalityTab({ character, updateCharacter }) {
 
   return (
     <div className="dnd-sheet-tab-body" style={S.tabBody}>
+      {/* ── Basic Info ── Identity-Badges (Species/Background/
+          Alignment/Edition/XP) lebten früher in der Identity-Strip
+          oben auf der Overview. Da brauchten sie viel Platz für
+          Daten die sich nie mid-session ändern; jetzt sind sie
+          hier kompakt zentral. */}
+      <Section title="Basic Info">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <BasicBadge label="Species" value={
+            character.species?.subraceId
+              ? `${character.species.subraceId.split('__')[0]} (${character.species.raceId?.split('__')[0]})`
+              : character.species?.raceId?.split('__')[0] || '—'
+          } />
+          <BasicBadge label="Background" value={
+            character.background?.backgroundId?.split('__')[0] || '—'
+          } />
+          {character.info?.alignment && (
+            <BasicBadge label="Alignment" value={character.info.alignment} />
+          )}
+          <BasicBadge label="Edition" value={character.meta?.edition === '5.5e' ? 'D&D 2024' : 'D&D 2014'} />
+          {!!character.info?.experience && (
+            <BasicBadge label="XP" value={character.info.experience} />
+          )}
+        </div>
+      </Section>
+
       {/* ── Appearance ── */}
       <Section title="Appearance">
         <div style={S.appearanceSection}>
@@ -118,5 +143,21 @@ export default function PersonalityTab({ character, updateCharacter }) {
         <Field label="Session Notes" value={p.notes} multiline placeholder="Anything else worth remembering" onSave={v => setP('notes', v)} />
       </Section>
     </div>
+  )
+}
+
+// Read-only Identity-Badge fuer den Basic-Info-Bereich.
+function BasicBadge({ label, value }) {
+  return (
+    <span style={{
+      display: 'inline-flex', flexDirection: 'column',
+      padding: '4px 10px', borderRadius: 6,
+      background: 'var(--bg-elevated)',
+      border: '1px solid var(--border-subtle)',
+      minWidth: 90,
+    }}>
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{value}</span>
+    </span>
   )
 }

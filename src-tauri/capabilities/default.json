@@ -4,7 +4,8 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "sheet-popout-*"
+    "sheet-popout-*",
+    "pin-overlay-*"
   ],
   "permissions": [
     "core:default",

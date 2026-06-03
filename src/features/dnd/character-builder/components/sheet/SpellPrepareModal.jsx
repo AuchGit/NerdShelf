@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { SheetModal } from './SheetKit'
 import { loadSpellList } from '../../lib/dataLoader'
 import { getScribingDiscounts, getScribingCost } from '../../lib/wizardScribing'
+import EntryRendererLazy from '../ui/EntryRenderer'
 
 export default function SpellPrepareModal({
   open, onClose,
@@ -107,6 +108,10 @@ export default function SpellPrepareModal({
 
   // ── Wizard "+ Lernen"-Sub-Modal ─────────────────────────────
   const [learningOpen, setLearningOpen] = useState(false)
+  // Inline-Spell-Expand: ein Spell pro Modal kann seine Description
+  // aufgeklappt zeigen. Klick irgendwo auf die Spell-Zeile (außer dem
+  // Prep-Toggle / Cross-Class-Pills) toggled.
+  const [expandedSpell, setExpandedSpell] = useState(null)
 
   return (
     <>
@@ -152,35 +157,75 @@ export default function SpellPrepareModal({
               const otherClasses = casterClasses
                 .filter(c => c.classId !== classId)
                 .filter(c => (sp.classes || []).some(cn => String(cn).toLowerCase() === c.classId.toLowerCase()))
+              const isExpanded = expandedSpell === sp.name
               return (
-                <div key={sp.name} style={spellRow}>
-                  <button
-                    type="button"
-                    onClick={() => togglePrep(sp.name, sp.level)}
-                    disabled={overPrepLimit}
-                    style={togglePill(prepped, overPrepLimit)}
-                    title={prepped ? 'Prepared — klick zum Unpreparen'
-                      : overPrepLimit ? 'Prep-Limit erreicht'
-                      : 'Klick zum Preparen'}
-                  >{prepped ? '●' : '○'}</button>
-                  <span style={spellName}>{sp.name}</span>
-                  <span style={spellLevelTag}>L{sp.level}</span>
-                  {otherClasses.length > 0 && (
-                    <span style={{ display: 'inline-flex', gap: 2 }}>
-                      {otherClasses.map(c => {
-                        const cid = c.classId
-                        const preppedThere = (preparedByClass[cid] || []).some(n => n.toLowerCase() === sp.name.toLowerCase())
-                        return (
-                          <span
-                            key={cid}
-                            style={crossClassPill(preppedThere)}
-                            title={preppedThere
-                              ? `${cid} hat ${sp.name} prepared`
-                              : `${cid} hat ${sp.name} auf der Klassenliste`}
-                          >{classAbbr[cid] || cid.slice(0, 1).toUpperCase()}</span>
-                        )
-                      })}
+                <div key={sp.name} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div
+                    style={{ ...spellRow, cursor: 'pointer' }}
+                    onClick={() => setExpandedSpell(prev => prev === sp.name ? null : sp.name)}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); togglePrep(sp.name, sp.level) }}
+                      disabled={overPrepLimit}
+                      style={togglePill(prepped, overPrepLimit)}
+                      title={prepped ? 'Prepared — klick zum Unpreparen'
+                        : overPrepLimit ? 'Prep-Limit erreicht'
+                        : 'Klick zum Preparen'}
+                    >{prepped ? '●' : '○'}</button>
+                    <span style={spellName}>{sp.name}</span>
+                    <span style={spellLevelTag}>L{sp.level}</span>
+                    {otherClasses.length > 0 && (
+                      <span style={{ display: 'inline-flex', gap: 2 }}>
+                        {otherClasses.map(c => {
+                          const cid = c.classId
+                          const preppedThere = (preparedByClass[cid] || []).some(n => n.toLowerCase() === sp.name.toLowerCase())
+                          return (
+                            <span
+                              key={cid}
+                              style={crossClassPill(preppedThere)}
+                              title={preppedThere
+                                ? `${cid} hat ${sp.name} prepared`
+                                : `${cid} hat ${sp.name} auf der Klassenliste`}
+                            >{classAbbr[cid] || cid.slice(0, 1).toUpperCase()}</span>
+                          )
+                        })}
+                      </span>
+                    )}
+                    <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: 11 }}>
+                      {isExpanded ? '▼' : '▶'}
                     </span>
+                  </div>
+                  {isExpanded && (
+                    <div style={{
+                      padding: '6px 10px 10px 36px',
+                      fontSize: 11, lineHeight: 1.5, color: 'var(--text-secondary)',
+                      borderLeft: '2px solid var(--border-subtle)',
+                      marginLeft: 12,
+                    }}>
+                      <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>
+                        {[
+                          sp.castingTime && `Cast ${sp.castingTime}`,
+                          sp.range && `Range ${sp.range}`,
+                          sp.duration && `Duration ${sp.duration}`,
+                          sp.school && `School ${sp.school}`,
+                        ].filter(Boolean).join(' · ')}
+                      </div>
+                      {Array.isArray(sp.entries) && sp.entries.length > 0 && (
+                        <EntryRendererLazy entries={sp.entries} />
+                      )}
+                      {Array.isArray(sp.entriesHigherLevel) && sp.entriesHigherLevel.length > 0 && (
+                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--border-subtle)' }}>
+                          <EntryRendererLazy entries={
+                            sp.entriesHigherLevel.length === 1
+                              && sp.entriesHigherLevel[0]?.entries
+                              && sp.entriesHigherLevel[0]?.type === 'entries'
+                              ? sp.entriesHigherLevel[0].entries
+                              : sp.entriesHigherLevel
+                          } />
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )

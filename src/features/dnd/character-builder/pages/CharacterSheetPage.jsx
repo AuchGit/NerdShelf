@@ -156,7 +156,7 @@ import SpellsTab from '../components/sheet/SpellsTab'
 import InventoryTab from '../components/sheet/InventoryTab'
 import FeaturesTab from '../components/sheet/FeaturesTab'
 import PersonalityTab from '../components/sheet/PersonalityTab'
-import { modStr, formatToolName, formatSkillName } from '../lib/sheetUtils'
+import { modStr, formatToolName, formatSkillName, COIN_TYPES } from '../lib/sheetUtils'
 import './CharacterSheetPage.css'
 
 const TABS = [
@@ -164,7 +164,7 @@ const TABS = [
   { id: 'spells',      label: 'Spells' },
   { id: 'inventory',   label: 'Inventory' },
   { id: 'features',    label: 'Features' },
-  { id: 'personality', label: 'Personality' },
+  { id: 'personality', label: 'Basic Info' },
   { id: 'history',     label: 'Class History' },
 ]
 
@@ -191,7 +191,24 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // panel falls back to the pre-2024 single-use behaviour.
   const classDataMapRef = useRef({})
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('overview')
+  // Active-Tab pro Charakter persistiert (localStorage keyed by id).
+  // Beim Sheet-Neustart soll der User auf dem Tab landen den er
+  // zuletzt benutzt hatte — z.B. wenn er gerade Inventar gepflegt
+  // hat. Default 'overview' für frische Charaktere.
+  const tabStorageKey = id ? `nerdshelf:sheetTab:${id}` : null
+  const [activeTab, setActiveTabRaw] = useState(() => {
+    if (!tabStorageKey) return 'overview'
+    try {
+      const v = window.localStorage.getItem(tabStorageKey)
+      return v || 'overview'
+    } catch { return 'overview' }
+  })
+  const setActiveTab = (next) => {
+    setActiveTabRaw(next)
+    if (tabStorageKey) {
+      try { window.localStorage.setItem(tabStorageKey, next) } catch { /* ignore */ }
+    }
+  }
   // Im Popout-Fenster ist das Sheet auf Overview eingeschraenkt.
   // Falls aus irgend einem Grund ein anderer Tab gesetzt wurde
   // (Persistenz, Hot-Reload), sofort zurueck.
@@ -1382,10 +1399,34 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           }
           inert={readOnly ? '' : undefined}
         >
-          {portrait && (
-            <div style={{ ...S.sidePortrait, position: 'relative', display: 'inline-block', width: '100%' }}>
-              <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait"
-                onClick={() => portraitRef.current?.click()} title="Portrait ändern" />
+          <div style={{ ...S.sidePortrait, position: 'relative', display: 'inline-block', width: '100%' }}>
+              {portrait
+                ? <img src={portrait} style={S.sidePortraitImg} alt="Portrait" className="dnd-sheet-portrait"
+                    onClick={readOnly ? undefined : () => portraitRef.current?.click()} title="Portrait ändern" />
+                : (
+                  // Placeholder wenn kein Portrait gesetzt — klickbar im
+                  // Edit-Modus, damit der Spieler eins hochladen kann.
+                  // Visuell hält's die Sidebar-Slot-Höhe stabil + die
+                  // Corner-Icons (Lv / Inspiration / Rests) bleiben
+                  // sichtbar wie bei einem gesetzten Portrait.
+                  <div
+                    onClick={readOnly ? undefined : () => portraitRef.current?.click()}
+                    title={readOnly ? '' : 'Portrait hochladen'}
+                    className="dnd-sheet-portrait"
+                    style={{
+                      ...S.sidePortraitImg,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column', gap: 4,
+                      background: 'var(--bg-inset)',
+                      border: '2px dashed var(--border-strong, var(--border))',
+                      color: 'var(--text-dim)',
+                      cursor: readOnly ? 'default' : 'pointer',
+                      fontSize: 11, fontFamily: 'inherit',
+                    }}>
+                    <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>
+                    <span>Portrait</span>
+                  </div>
+                )}
               {/* Corner icons replace the old play-toolbar buttons:
                     TL: short rest  ·  TR: long rest
                     BL: inspiration ·  BR: total level
@@ -1424,7 +1465,6 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                 glyph="SR"
               />
             </div>
-          )}
 
           {/* Attunement-Counter. Mittig unter dem Portrait, knappes
               "Attuned X/Y" — über Limit wird's rot, damit ein
@@ -1441,6 +1481,44 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           title={attunedCount > attuneMax ? 'Über dem Attunement-Limit' : 'Attunement-Slots'}>
             Attuned {attunedCount}/{attuneMax}
           </div>
+
+          {/* Currency — kompakt unter dem Portrait. War vorher in der
+              Identity-Strip oben, sitzt jetzt hier damit der obere
+              Bereich für den Combat-Tracker frei ist. */}
+          {!readOnly && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4,
+              marginBottom: 12, justifyContent: 'center',
+            }}>
+              {COIN_TYPES.map(({ key, label, color }) => (
+                <label key={key} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '1px 4px', borderRadius: 4,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: 10,
+                }}>
+                  <span style={{ color, fontWeight: 700, letterSpacing: 0.3 }}>
+                    {label.slice(0, 2).toUpperCase()}
+                  </span>
+                  <input
+                    type="number" min="0" inputMode="numeric"
+                    value={(character.inventory?.currency || {})[key] ?? 0}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
+                      updateCharacter(`inventory.currency.${key}`, v)
+                    }}
+                    style={{
+                      width: 36, padding: '1px 3px', fontSize: 10,
+                      background: 'transparent', color: 'var(--text-primary)',
+                      border: 'none', textAlign: 'right', fontFamily: 'inherit',
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
 
           <SideSection title="Ability Scores" defaultOpen>
             <div style={S.abilityGrid}>

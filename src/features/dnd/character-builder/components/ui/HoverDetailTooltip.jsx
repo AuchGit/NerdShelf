@@ -18,16 +18,41 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { usePinnedTooltips } from './PinnedTooltipsContext'
 
 const SHOW_DELAY_MS = 200
 const HIDE_DELAY_MS = 80   // kurze Verzögerung damit man auf den Tooltip ziehen kann
 
-export default function HoverDetailTooltip({ content, children, maxWidth = 380, triggerStyle }) {
+export default function HoverDetailTooltip({ content, children, maxWidth = 380, triggerStyle, pinTitle, pinKey }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0, placement: 'below' })
   const triggerRef = useRef(null)
   const showTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
+  const pinned = usePinnedTooltips()
+
+  // Rechtsklick (oder Shift+Klick auf Touch) pinnt den Tooltip als
+  // freistehende, ziehbare/scalierbare Card. Verhindert das native
+  // Context-Menü, da der gepinnte Card-Layer dessen Job übernimmt.
+  const handlePin = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (showTimerRef.current) { clearTimeout(showTimerRef.current); showTimerRef.current = null }
+    if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
+    setOpen(false)
+    const rect = triggerRef.current?.getBoundingClientRect()
+    const title = pinTitle
+      || triggerRef.current?.textContent?.trim()?.slice(0, 80)
+      || 'Detail'
+    const key = pinKey || (rect ? `${title}@${Math.round(rect.left)},${Math.round(rect.top)}` : title)
+    pinned.add({
+      title,
+      content,
+      x: rect ? Math.min(rect.left, window.innerWidth - 400) : 80,
+      y: rect ? Math.min(rect.bottom + 6, window.innerHeight - 300) : 80,
+      anchorKey: key,
+    })
+  }, [content, pinTitle, pinKey, pinned])
 
   const computePosition = useCallback(() => {
     const el = triggerRef.current
@@ -90,6 +115,8 @@ export default function HoverDetailTooltip({ content, children, maxWidth = 380, 
         onMouseLeave={scheduleHide}
         onFocus={scheduleShow}
         onBlur={scheduleHide}
+        onContextMenu={handlePin}
+        title="Rechtsklick: anpinnen"
         style={{ display: 'inline-block', cursor: 'help', ...(triggerStyle || {}) }}
       >
         {children}
@@ -100,6 +127,7 @@ export default function HoverDetailTooltip({ content, children, maxWidth = 380, 
             if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
           }}
           onMouseLeave={scheduleHide}
+          onContextMenu={handlePin}
           style={{
             position: 'fixed',
             top: pos.top,
@@ -120,6 +148,22 @@ export default function HoverDetailTooltip({ content, children, maxWidth = 380, 
             pointerEvents: 'auto',
           }}
         >
+          {/* Pin-Mini-Button rechts oben — fungiert als visueller Hinweis
+              dass dieser Tooltip pinnbar ist, und ist die Touch-Variante
+              zum Rechtsklick. */}
+          <button
+            type="button"
+            onClick={handlePin}
+            title="Anpinnen (Rechtsklick funktioniert auch)"
+            style={{
+              position: 'sticky', float: 'right',
+              top: -4, right: -4,
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-dim)', fontSize: 12, padding: '0 2px',
+              fontFamily: 'inherit', lineHeight: 1,
+              marginLeft: 6, marginBottom: 2,
+            }}
+          >📌</button>
           {content}
         </div>,
         document.body,
