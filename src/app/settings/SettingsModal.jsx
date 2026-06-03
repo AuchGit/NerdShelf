@@ -10,6 +10,10 @@ import {
   useMtgPriceSettings,
 } from '../../features/mtg/deck-builder/services/priceThresholds';
 import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
+import {
+  DEFAULT_PILL_COLORS, PILL_COLOR_GROUPS,
+  getAllPillColors, setPillColor, resetPillColors,
+} from '../../features/dnd/character-builder/lib/pillColors';
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -385,8 +389,97 @@ function DndSettings() {
         </div>
         <GmSessionPrefsEditor />
       </Field>
+
+      {/* ── Pill-Farben ─────────────────────────────────────────────── */}
+      <Field label="Pill-Farben">
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          Farben für Damage-Type-, Save-, Action- und Spell-Pills. Lokal pro Browser gespeichert.
+        </div>
+        <PillColorEditor />
+      </Field>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Pill-Color-Editor — Reihen aus Label + nativem Color-Picker, plus
+// einem "Auf Default zurücksetzen"-Knopf. Speichert lokal in
+// localStorage (siehe lib/pillColors.js), feuert ein custom-event
+// damit alle Sheet-Komponenten sofort re-renderen.
+// ─────────────────────────────────────────────────────────────────
+function PillColorEditor() {
+  const [, force] = useState(0)
+  const colors = getAllPillColors()
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {PILL_COLOR_GROUPS.map(group => (
+        <div key={group.label}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)',
+            textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+          }}>{group.label}</div>
+          <div style={{
+            display: 'grid', gap: 6,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          }}>
+            {group.items.map(([key, label]) => {
+              const value = colors[key] || DEFAULT_PILL_COLORS[key] || '#888888'
+              const overridden = colors[key] && colors[key] !== DEFAULT_PILL_COLORS[key]
+              return (
+                <label key={key} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  fontSize: 12, color: 'var(--color-text)',
+                }}>
+                  <input
+                    type="color"
+                    value={value}
+                    onChange={(e) => { setPillColor(key, e.target.value); force(n => n + 1) }}
+                    style={{ width: 28, height: 22, border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', padding: 0, background: 'transparent' }}
+                  />
+                  <span style={{
+                    padding: '1px 6px', borderRadius: 4,
+                    fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+                    textTransform: 'uppercase',
+                    border: `1px solid ${value}`, color: value,
+                    background: `color-mix(in srgb, ${value} 14%, transparent)`,
+                  }}>{label}</span>
+                  {overridden && (
+                    <button
+                      type="button"
+                      onClick={() => { setPillColor(key, null); force(n => n + 1) }}
+                      title="Auf Default zurücksetzen"
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: 10, padding: '1px 5px',
+                        background: 'transparent', color: 'var(--color-text-muted)',
+                        border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >↻</button>
+                  )}
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => {
+          if (window.confirm('Alle Pill-Farben auf Default zurücksetzen?')) {
+            resetPillColors(); force(n => n + 1)
+          }
+        }}
+        style={{
+          alignSelf: 'flex-start',
+          padding: '4px 12px', fontSize: 12,
+          background: 'transparent', color: 'var(--color-text-muted)',
+          border: '1px solid var(--color-border)', borderRadius: 4,
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >↻ Alle zurücksetzen</button>
+    </div>
+  )
 }
 
 function MtgSettings() {

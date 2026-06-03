@@ -181,7 +181,14 @@ export function formatPrerequisites(prerequisite) {
     }
     if (prereq.spell) {
       for (const sp of prereq.spell) {
-        const name = sp.replace(/#c$/, '').split('|')[0].replace(/\b\w/g, c => c.toUpperCase())
+        // 5e: Strings ("minor illusion#c", "fly|XPHB"). 5.5e: teilweise
+        // Objekte ({ name, source } oder { choose: [...] }). Beide
+        // Formen akzeptieren, Sonderform skip statt crashen.
+        const raw = typeof sp === 'string'
+          ? sp
+          : (sp?.name || sp?.uid || '')
+        if (!raw || typeof raw !== 'string') continue
+        const name = raw.replace(/#c$/, '').split('|')[0].replace(/\b\w/g, c => c.toUpperCase())
         parts.push(`Cantrip: ${name}`)
       }
     }
@@ -196,6 +203,28 @@ export function formatPrerequisites(prerequisite) {
     if (prereq.feature) {
       for (const feat of prereq.feature) {
         parts.push(`Feature: ${typeof feat === 'string' ? feat : feat.name || ''}`)
+      }
+    }
+    // 5.5e Invocations linken Pact-Boons via prereq.optionalfeature
+    // (z.B. "Devouring Blade requires Thirsting Blade", "Eldritch
+    // Smite requires Pact of the Blade"). Strings im Format
+    // "thirsting blade|xphb" → wir nehmen den Namen pre-pipe und
+    // formatieren ihn Title-Case.
+    if (prereq.optionalfeature) {
+      for (const of_ of prereq.optionalfeature) {
+        const raw = typeof of_ === 'string'
+          ? of_
+          : (of_?.name || of_?.uid || '')
+        if (!raw || typeof raw !== 'string') continue
+        const name = raw.split('|')[0]
+          .replace(/\b\w/g, c => c.toUpperCase())
+        parts.push(name)
+      }
+    }
+    if (prereq.race) {
+      for (const race of prereq.race) {
+        const raw = typeof race === 'string' ? race : (race?.name || '')
+        if (raw) parts.push(`Race: ${raw}`)
       }
     }
   }
@@ -239,6 +268,25 @@ export function meetsPrerequisites(prereqs, character, classId, classLevel) {
       const hasPact = existing.some(f => f.name === `Pact of the ${prereq.pact}`)
       // Also check current picks (in case choosing pact boon at same level)
       if (!hasPact) return false
+    }
+    // 5.5e nutzt prereq.optionalfeature für Pact-Boon-Refs (Eldritch
+    // Smite verlangt "pact of the blade|xphb"). Wenn der Spieler die
+    // gewählt hat, durchlassen.
+    if (Array.isArray(prereq.optionalfeature)) {
+      const ce = character.classes.find(c => c.classId === classId)
+      const existing = getExistingOptionalFeatures(ce || {})
+      for (const of_ of prereq.optionalfeature) {
+        const raw = typeof of_ === 'string'
+          ? of_
+          : (of_?.name || of_?.uid || '')
+        if (!raw || typeof raw !== 'string') continue
+        const name = raw.split('|')[0]
+          .replace(/\b\w/g, c => c.toUpperCase())
+        const has = existing.some(f =>
+          String(f.name || '').toLowerCase() === name.toLowerCase(),
+        )
+        if (!has) return false
+      }
     }
   }
   return true

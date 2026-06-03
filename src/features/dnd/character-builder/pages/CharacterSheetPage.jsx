@@ -60,6 +60,24 @@ async function openPopout(characterId) {
 // das Popout sein eigenes Window-Label hat. Browser-Fallback:
 // `window.close()` greift bei Fenstern die durch `window.open` aus
 // einem User-Gesture entstanden sind.
+// Defensive Popout-Detection ohne den React-Hook — wird im useEffect
+// am ganz oberen Scope der Page-Komponente gebraucht bevor isPopout
+// aus usePwaMobile destrukturiert ist.
+function isPopoutWindow() {
+  if (typeof window === 'undefined') return false
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('popout') === '1') return true
+    const hash = window.location.hash || ''
+    const qIdx = hash.indexOf('?')
+    if (qIdx >= 0) {
+      const hashParams = new URLSearchParams(hash.slice(qIdx + 1))
+      if (hashParams.get('popout') === '1') return true
+    }
+  } catch { /* ignore */ }
+  return false
+}
+
 async function closePopoutWindow() {
   const isTauri = typeof window !== 'undefined'
     && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
@@ -174,6 +192,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const classDataMapRef = useRef({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  // Im Popout-Fenster ist das Sheet auf Overview eingeschraenkt.
+  // Falls aus irgend einem Grund ein anderer Tab gesetzt wurde
+  // (Persistenz, Hot-Reload), sofort zurueck.
+  useEffect(() => {
+    if (isPopoutWindow() && activeTab !== 'overview') setActiveTab('overview')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   // Concentration-save prompt: { damage, dc } when the player has just
   // taken damage while concentrating. Player-side only — readOnly GM
   // view skips this entirely.
@@ -1564,7 +1589,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="var(--text-muted)" />
           </div>
 
-          <div data-pwa-target="dnd-sheet-tabs" style={S.tabs}>
+          {/* Im Popout wird die Tab-Leiste weggelassen. Das Popout ist
+              auf die Overview-Spalten beschränkt — der Spieler kann
+              nicht zu Features / Inventory etc. navigieren, das gehört
+              ins Hauptfenster. */}
+          {!isPopout && <div data-pwa-target="dnd-sheet-tabs" style={S.tabs}>
             {TABS.map(tab => (
               <button key={tab.id}
                 style={{ ...S.tab, ...(activeTab === tab.id ? S.tabActive : {}) }}
@@ -1572,7 +1601,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                 {tab.label}
               </button>
             ))}
-          </div>
+          </div>}
 
           <div style={S.tabContent} inert={readOnly ? '' : undefined}>
             {activeTab === 'overview' && (

@@ -6,6 +6,8 @@ import EntryRenderer from '../ui/EntryRenderer'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
 import { Section, TraitPill, CardColorPicker } from './SheetKit'
 import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
+import { getCustomNote, setCustomNote } from '../../lib/customNotes'
+import { DEFAULT_PILL_COLORS } from '../../lib/pillColors'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
 import { parseFeatureChoices } from '../../lib/choiceParser'
@@ -613,6 +615,10 @@ function ExpandableEntryCard({
   // gefavt UND farbgetaggt werden).
   const markerKey = favKey || null
   const markerColor = markerKey ? getColorMarker(character, markerKey) : null
+  // Custom-Note (Pill-Text + Pill-Color + optional Notes-Body).
+  const note = markerKey ? getCustomNote(character, markerKey) : null
+  const [viewMode, setViewMode] = useState('desc')
+  const notePillColor = note?.pillColor || markerColor || 'var(--accent)'
   return (
     <div style={{ ...S.featCard, ...(colorStripeStyle(markerColor) || {}) }}>
       <div
@@ -650,6 +656,20 @@ function ExpandableEntryCard({
               </span>
             )
           })}
+          {/* Custom-Note-Pille — vom Player gesetzter Hinweis in
+              Form einer farbigen Pille im Card-Header. Persistiert
+              via setCustomNote → character.customNotes[markerKey]. */}
+          {note?.pillText && (
+            <span style={{
+              padding: '1px 6px', borderRadius: 4,
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+              border: `1px solid ${notePillColor}`,
+              color: notePillColor,
+              background: `color-mix(in srgb, ${notePillColor} 14%, transparent)`,
+              marginLeft: 6, whiteSpace: 'nowrap',
+            }}
+            title={note.pillText}>{note.pillText}</span>
+          )}
           {hasBody && (
             <span style={{ color: 'var(--text-dim)', fontSize: 11, marginLeft: 6 }}>
               {open ? '▲' : '▼'}
@@ -657,27 +677,85 @@ function ExpandableEntryCard({
           )}
         </div>
       </div>
-      {open && hasBody && (
-        <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-          <EntryRenderer entries={entries} />
-          {(fiveeLink || markerKey) && (
+      {open && (hasBody || markerKey) && (
+        <div
+          style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Desc/Notes-Toggle. Klein und kompakt, kein Emoji — nur
+              Text-Labels. Hidden wenn keine entries vorhanden sind
+              (dann ist immer notes der einzige sinnvolle View). */}
+          {markerKey && hasBody && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <div style={viewToggleWrap}>
+                <button type="button"
+                  onClick={() => setViewMode('desc')}
+                  style={viewToggleBtn(viewMode === 'desc')}>Desc</button>
+                <button type="button"
+                  onClick={() => setViewMode('notes')}
+                  style={viewToggleBtn(viewMode === 'notes')}>Notes</button>
+              </div>
+            </div>
+          )}
+          {viewMode === 'desc' && hasBody && <EntryRenderer entries={entries} />}
+          {(viewMode === 'notes' || !hasBody) && markerKey && (
+            <textarea
+              value={note?.body || ''}
+              placeholder="Deine Notizen zu diesem Eintrag …"
+              onChange={(e) => setCustomNote(applyCharacter, markerKey, { body: e.target.value })}
+              style={{
+                width: '100%', minHeight: 90,
+                padding: '6px 8px', fontSize: 12, lineHeight: 1.45,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 6,
+                fontFamily: 'inherit', resize: 'vertical',
+              }}
+            />
+          )}
+          {/* Pill-Editor: kurzer Hinweis-Text + Farbe. Farbe kann
+              entweder eine der Settings-Farben oder ein custom-hex
+              sein (über CardColorPicker, der die TAG_COLORS-Palette
+              anbietet). Drei kleine Inputs in einer Zeile. */}
+          {markerKey && (
             <div style={{
-              marginTop: 8, display: 'flex',
-              alignItems: 'center', justifyContent: 'space-between', gap: 8,
-            }}
-              onClick={(e) => e.stopPropagation()}>
-              {markerKey ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Farb-Tag:</span>
-                  <CardColorPicker
-                    color={markerColor}
-                    onChange={(c) => setColorMarker(applyCharacter, markerKey, c)}
-                    compact
-                  />
-                </span>
-              ) : <span />}
+              marginTop: 10, display: 'flex',
+              alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              paddingTop: 8, borderTop: '1px dashed var(--border-subtle)',
+            }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Pill:</span>
+              <input
+                type="text"
+                value={note?.pillText || ''}
+                placeholder="kurzer Hinweis"
+                onChange={(e) => setCustomNote(applyCharacter, markerKey, { pillText: e.target.value })}
+                style={{
+                  flex: 1, minWidth: 100, padding: '3px 8px', fontSize: 11,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 4,
+                  fontFamily: 'inherit',
+                }}
+              />
+              <input
+                type="color"
+                value={note?.pillColor || markerColor || '#888888'}
+                onChange={(e) => setCustomNote(applyCharacter, markerKey, { pillColor: e.target.value })}
+                title="Pill-Farbe"
+                style={{
+                  width: 24, height: 22, padding: 0,
+                  background: 'transparent',
+                  border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Stripe:</span>
+              <CardColorPicker
+                color={markerColor}
+                onChange={(c) => setColorMarker(applyCharacter, markerKey, c)}
+                compact
+              />
               {fiveeLink && (
-                <FiveEToolsLink {...fiveeLink} edition={edition} compact />
+                <span style={{ marginLeft: 'auto' }}>
+                  <FiveEToolsLink {...fiveeLink} edition={edition} compact />
+                </span>
               )}
             </div>
           )}
@@ -685,4 +763,23 @@ function ExpandableEntryCard({
       )}
     </div>
   )
+}
+
+// View-Toggle-Styles fuer den Desc/Notes-Switch im Expanded-Body.
+// Kompakt, symbol-frei (nur Text-Labels), Settings-konsistent.
+const viewToggleWrap = {
+  display: 'inline-flex',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  overflow: 'hidden',
+}
+function viewToggleBtn(active) {
+  return {
+    padding: '2px 8px', fontSize: 10, fontWeight: 700,
+    letterSpacing: 0.3, textTransform: 'uppercase',
+    background: active ? 'var(--color-surface, var(--bg-card))' : 'transparent',
+    color: active ? 'var(--accent)' : 'var(--text-muted)',
+    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+  }
 }

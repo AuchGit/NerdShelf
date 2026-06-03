@@ -249,7 +249,7 @@ export function parseSpellEffect(spell, opts = {}) {
 export const DAMAGE_TYPE_COLOR = {
   acid:        '#7bc950',
   bludgeoning: '#8a8a8a',
-  cold:        '#4ecdc4',
+  cold:        '#7dd3fc',
   fire:        '#ff6b35',
   force:       '#c084fc',
   lightning:   '#fbbf24',

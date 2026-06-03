@@ -329,7 +329,17 @@ export default function Step9Equipment({ character, updateCharacter }) {
     rebuildInventory(equipChoices, newPicks)
   }
 
-  function makeInventoryItem(item, grantedBy) {
+  // Inline style fuer <option> Elemente in den Equipment-Dropdowns.
+// Erzwingt dunklen Background + helle Schrift damit das native OS-
+// Popup nicht auf weiss-auf-weiss fällt wenn der Browser im
+// system-light-Modus läuft (Tauri unter Win10/11). colorScheme: dark
+// auf dem <select> hilft schon, das hier ist die zweite Sicherung.
+const optionStyle = {
+  background: '#1f2937',
+  color: '#e5e7eb',
+}
+
+function makeInventoryItem(item, grantedBy) {
     return {
       id: nextId(),
       itemId: item.name,
@@ -494,10 +504,22 @@ export default function Step9Equipment({ character, updateCharacter }) {
                                       <select
                                         value={pickedName || ''}
                                         onChange={e => handlePlaceholderPick(pickKey, e.target.value)}
-                                        style={{ fontSize: 11, background: 'var(--bg-card)', color: pickedName ? 'var(--text-secondary)' : 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 6px' }}>
-                                        <option value=''>— auswählen —</option>
+                                        style={{
+                                          fontSize: 11,
+                                          background: 'var(--bg-card)',
+                                          color: pickedName ? 'var(--text-secondary)' : 'var(--text-dim)',
+                                          border: '1px solid var(--border)', borderRadius: 4, padding: '3px 6px',
+                                          // colorScheme zwingt den Browser dazu, das native
+                                          // Dropdown-Popup im selben Farbschema (dark) zu
+                                          // rendern wie die App. Ohne das fallen Optionen
+                                          // im OS-light-Modus auf weiß zurück und werden
+                                          // mit dunkler Schrift → bei unserem dark theme
+                                          // weiß-auf-weiß (unlesbar).
+                                          colorScheme: 'dark',
+                                        }}>
+                                        <option value='' style={optionStyle}>— auswählen —</option>
                                         {choices.map(w => (
-                                          <option key={w.name} value={w.name}>
+                                          <option key={w.name} value={w.name} style={optionStyle}>
                                             {itemDropdownLabel(w)}
                                           </option>
                                         ))}

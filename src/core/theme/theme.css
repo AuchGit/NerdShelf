@@ -82,6 +82,13 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+/* Dark color-scheme app-weit damit native Form-Controls (Dropdown-
+   Popups von <select>, Color-Picker, Datums-Picker) sich an unser
+   Dark-Theme halten statt im OS-Light-Modus weiß-auf-weiß zu
+   rendern. Greift auch wenn das Betriebssystem auf Light gesetzt
+   ist — die App ist eine Dark-App. */
+:root { color-scheme: dark; }
+select, option, input, textarea { color-scheme: dark; }
 body {
   background: var(--color-bg);
   color: var(--color-text);

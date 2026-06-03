@@ -22,7 +22,7 @@ import { createPortal } from 'react-dom'
 const SHOW_DELAY_MS = 200
 const HIDE_DELAY_MS = 80   // kurze Verzögerung damit man auf den Tooltip ziehen kann
 
-export default function HoverDetailTooltip({ content, children, maxWidth = 380 }) {
+export default function HoverDetailTooltip({ content, children, maxWidth = 380, triggerStyle }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0, placement: 'below' })
   const triggerRef = useRef(null)
@@ -90,7 +90,7 @@ export default function HoverDetailTooltip({ content, children, maxWidth = 380 }
         onMouseLeave={scheduleHide}
         onFocus={scheduleShow}
         onBlur={scheduleHide}
-        style={{ display: 'inline-block', cursor: 'help' }}
+        style={{ display: 'inline-block', cursor: 'help', ...(triggerStyle || {}) }}
       >
         {children}
       </span>

@@ -26,12 +26,130 @@ import ConditionChips from '../ui/ConditionChips'
 import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
+import { usePillColors } from '../../lib/pillColors'
 import { parseFeatureEffect } from '../../lib/featureEffectParser'
 import { applySavedOrder, getSavedOrder, moveCategory, resetCategoryOrder } from '../../lib/categoryOrder'
 import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
+import { getCustomNote, setCustomNote } from '../../lib/customNotes'
 import { isPinnedAction, togglePinnedAction, getPinnedActions } from '../../lib/pinnedActions'
 import HoverDetailTooltip from '../ui/HoverDetailTooltip'
+
+// Sync-Check ob das aktuelle Fenster ein Sheet-Popout ist (`?popout=1`).
+// Wird im Render gelesen damit der Closing-Strip ad-hoc als Tauri-
+// Drag-Region markiert werden kann.
+function isPopoutEnv() {
+  if (typeof window === 'undefined') return false
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('popout') === '1') return true
+    const hash = window.location.hash || ''
+    const qIdx = hash.indexOf('?')
+    if (qIdx >= 0) {
+      const hashParams = new URLSearchParams(hash.slice(qIdx + 1))
+      if (hashParams.get('popout') === '1') return true
+    }
+  } catch { /* ignore */ }
+  return false
+}
 import { CardColorPicker } from './SheetKit'
+
+// Tooltip-Content fuer einen Action-Row-Hover. Greift auf die
+// strukturierten Felder zurueck die der Bucket-Builder befuellt
+// (spellMeta.entries fuer Spells, entries fuer Features/Species/
+// Items, weapon-Stats fuer Attacks). Liefert null wenn nichts
+// Sinnvolles zu zeigen ist — dann unterdrueckt der Renderer den
+// Tooltip-Wrap.
+function actionRowTooltipContent(r) {
+  if (!r) return null
+  const titleEl = (
+    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+      {r.name}
+      {r.sub && (
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6, fontWeight: 400 }}>
+          {r.sub}
+        </span>
+      )}
+    </div>
+  )
+  if (r.kind === 'spell' || r.kind === 'always-spell') {
+    const sp = r.spellMeta || {}
+    const chips = [
+      sp.castingTime && `Cast ${sp.castingTime}`,
+      sp.range       && `Range ${sp.range}`,
+      sp.duration    && `Duration ${sp.duration}`,
+      sp.components  && `Comp ${formatSpellComponents(sp.components)}`,
+    ].filter(Boolean)
+    return (
+      <div>
+        {titleEl}
+        {chips.length > 0 && (
+          <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+            {chips.join(' · ')}
+          </div>
+        )}
+        {Array.isArray(sp.entries) && sp.entries.length > 0 && (
+          <EntryRenderer entries={sp.entries} />
+        )}
+        {Array.isArray(sp.entriesHigherLevel) && sp.entriesHigherLevel.length > 0 && (
+          <div style={{
+            marginTop: 6, paddingTop: 6,
+            borderTop: '1px dashed var(--border-subtle)',
+            color: 'var(--text-secondary)',
+          }}>
+            <EntryRenderer entries={
+              (sp.entriesHigherLevel.length === 1
+                && sp.entriesHigherLevel[0]?.entries
+                && sp.entriesHigherLevel[0]?.type === 'entries')
+                ? sp.entriesHigherLevel[0].entries
+                : sp.entriesHigherLevel
+            } />
+          </div>
+        )}
+      </div>
+    )
+  }
+  if (r.kind === 'attack') {
+    return (
+      <div>
+        {titleEl}
+        <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>
+          {[
+            r.attack && `To Hit ${r.attack}`,
+            r.damage && r.damage !== '—' && `${r.damage} ${r.damageType || ''}`.trim(),
+            r.range && r.range !== '—' && `Range ${r.range}`,
+          ].filter(Boolean).join(' · ')}
+        </div>
+        {Array.isArray(r.properties) && r.properties.length > 0 && (
+          <div style={{ marginBottom: 4 }}>Properties: {r.properties.join(', ')}</div>
+        )}
+        {r.markedAs && (
+          <div style={{ color: 'var(--accent-purple)' }}>{r.markedAs.label}: {r.markedAs.note}</div>
+        )}
+      </div>
+    )
+  }
+  if (r.kind === 'feature' || r.kind === 'species' || r.kind === 'item') {
+    if (!Array.isArray(r.entries) || r.entries.length === 0) {
+      if (r.notes) return <div>{titleEl}<div>{r.notes}</div></div>
+      return null
+    }
+    return (
+      <div>
+        {titleEl}
+        <EntryRenderer entries={r.entries} />
+      </div>
+    )
+  }
+  if (r.kind === 'standard' && r.notes) {
+    return (
+      <div>
+        {titleEl}
+        <div>{r.notes}</div>
+      </div>
+    )
+  }
+  return null
+}
 
 // Composite-Key für einen Action-Row / Spells-Spalten-Eintrag im
 // Color-Marker-System. MUSS IDENTISCH sein zum favoriteKey()-Format
@@ -144,44 +262,85 @@ function ResourceCard({ res, used, onSetUsed }) {
 // Temp + Max-Adjust steppers, sized to sit alongside the HP card at the
 // same height. Current HP is intentionally absent — the big "56/56" on
 // the HP card already conveys it and the Damage/Heal buttons are the
-// Temp / Max steht jetzt als zwei zentrierte schlanke Zeilen unter
-// der HP-Karte: jeweils ein simples Number-Input mit Label davor.
-// Statt Stepper, damit der Platz minimal bleibt und die Karten unten
-// sauber ausgerichtet sind. Werte spiegeln sich direkt mit
-// status.temporaryHp / status.maxHpBonus.
+// Temp / Max: lokaler Draft + debounced commit (250ms idle). Sonst
+// schreibt jeder Tastendruck den gesamten Character neu (Recompute +
+// Re-render der ganzen Sheet) und das input lagged spürbar.
 function TempMaxControls({ hp, maxHpBonus, updateCharacter }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 4,
       alignItems: 'center', marginTop: 6,
     }}>
-      <label style={hpMiniInputRow}>
-        <span style={hpMiniInputLabel}>temp:</span>
-        <input
-          type="number" min="0" max="999"
-          value={hp.temporary || 0}
-          onFocus={(e) => e.target.select()}
-          onChange={(e) => {
-            const v = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0)
-            updateCharacter('status.temporaryHp', v)
-          }}
-          style={hpMiniInputField}
-        />
-      </label>
-      <label style={hpMiniInputRow}>
-        <span style={hpMiniInputLabel}>max:</span>
-        <input
-          type="number" min="-999" max="999"
-          value={maxHpBonus || 0}
-          onFocus={(e) => e.target.select()}
-          onChange={(e) => {
-            const v = e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0)
-            updateCharacter('status.maxHpBonus', v)
-          }}
-          style={hpMiniInputField}
-        />
-      </label>
+      <DebouncedNumberField
+        label="temp:"
+        value={hp.temporary || 0}
+        min={0} max={999}
+        onCommit={(v) => updateCharacter('status.temporaryHp', Math.max(0, v))}
+      />
+      <DebouncedNumberField
+        label="max:"
+        value={maxHpBonus || 0}
+        min={-999} max={999}
+        onCommit={(v) => updateCharacter('status.maxHpBonus', v)}
+      />
     </div>
+  )
+}
+
+// Kleines Number-Input mit Label, das lokal-state hält und nur
+// debounced + auf Blur ans Parent-State committed. Verhindert das
+// Re-render-Lag der Sheet bei jedem Tastendruck.
+function DebouncedTextArea({ value, onCommit, delayMs = 300, ...rest }) {
+  const [draft, setDraft] = useState(value || '')
+  useEffect(() => { setDraft(value || '') }, [value])
+  useEffect(() => {
+    if (draft === (value || '')) return
+    const t = setTimeout(() => { if (draft !== (value || '')) onCommit(draft) }, delayMs)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft])
+  return (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => {
+        const v = e.target.value
+        if (v !== (value || '')) onCommit(v)
+      }}
+      {...rest}
+    />
+  )
+}
+
+function DebouncedNumberField({ label, value, min, max, onCommit, delayMs = 250 }) {
+  const [draft, setDraft] = useState(String(value ?? 0))
+  // Externer Wert hat sich geändert (z.B. anderer Tab schreibt) →
+  // Draft re-sync wenn der User gerade NICHT fokussiert ist.
+  useEffect(() => { setDraft(String(value ?? 0)) }, [value])
+  useEffect(() => {
+    if (draft === '' || draft === String(value ?? 0)) return
+    const t = setTimeout(() => {
+      const n = parseInt(draft, 10)
+      if (Number.isFinite(n) && n !== value) onCommit(n)
+    }, delayMs)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft])
+  return (
+    <label style={hpMiniInputRow}>
+      <span style={hpMiniInputLabel}>{label}</span>
+      <input
+        type="number" min={min} max={max}
+        value={draft}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => {
+          const v = e.target.value === '' ? 0 : (parseInt(e.target.value, 10) || 0)
+          if (v !== value) onCommit(v)
+        }}
+        style={hpMiniInputField}
+      />
+    </label>
   )
 }
 
@@ -487,16 +646,14 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             <DamageResistancePills character={character} compact />
           </div>
           <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
-          {/* Spieler-Notizen: füllt den restlichen vertikalen Platz der
-              HP-Section bis zum Section-Ende. Kein eigener Page-
-              Scroll-Push — wenn der Text die Textarea überfüllt,
-              scrollt sie intern. resize ist deaktiviert da die Höhe
-              automatisch durch flex:1 verwaltet wird. */}
+          {/* Spieler-Notizen: füllt den restlichen vertikalen Platz.
+              Debounced (300ms idle + auf Blur) damit jeder Tastendruck
+              nicht die ganze Character-State recomputed → kein Lag. */}
           {!readOnly && (
-            <textarea
+            <DebouncedTextArea
               value={character.status?.hpNotes || ''}
+              onCommit={(v) => updateCharacter('status.hpNotes', v)}
               placeholder="Notizen …"
-              onChange={(e) => updateCharacter('status.hpNotes', e.target.value)}
               style={{
                 width: '100%', marginTop: 6,
                 flex: 1, minHeight: 32,
@@ -591,8 +748,15 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             HP Method · Hit Dice · Successes · Failures · Action pills
           The "Combat-Tracker" title was deliberately removed — the
           strip is its own visual divider between the play columns
-          and whatever sits below them. */}
-      <div style={{
+          and whatever sits below them.
+          Im Popout-Fenster ist der Strip zusätzlich Drag-Handle
+          (data-tauri-drag-region), damit das Popout per Combat-
+          Tracker verschoben werden kann ohne extra UI. Buttons /
+          Inputs darin behalten ihre Klick-Targets. */}
+      <div
+        {...(isPwaMobile ? {} : {})}
+        data-tauri-drag-region={isPopoutEnv() ? '' : undefined}
+        style={{
         display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
         padding: '8px 12px',
         background: 'var(--bg-elevated)',
@@ -1050,6 +1214,9 @@ const STANDARD_ACTIONS = {
 }
 
 function CombatActionsExplorer({ character, computed, applyCharacter, embedded = false }) {
+  // Pill-Farbpalette mit den User-Settings-Overrides. Wird bei jeder
+  // Änderung in den Settings via custom-event refreshed.
+  const pillColors = usePillColors()
   // `embedded` = render always-open (no collapsible header), no own
   // padding, so the column container controls dimensions and the
   // explorer is just the inner content.
@@ -1696,6 +1863,10 @@ function CombatActionsCategorisedList({
   castSpellFromExplorer, markActionUsed, consumeResource, applyRowSideEffects,
   character, applyCharacter,
 }) {
+  // Pill-Farben sind lokal-state, also Hook hier separat aufrufen
+  // statt durch Props zu reichen — vermeidet eine Prop-Drilling-
+  // Kette wenn der Parent ihn schon hat.
+  const pillColors = usePillColors()
   // Open/closed state per category id. Open by default — feels less
   // like a series of clicks to get going.
   const [closedCats, setClosedCats] = useState(() => new Set())
@@ -1863,6 +2034,11 @@ function CombatActionsCategorisedList({
                 </div>
               )
               : cat.items.map(r => {
+                // Marker-Key zuerst computen, BEVOR irgend ein Pill-
+                // Builder ihn referenziert (TDZ-Bugfix). Die spätere
+                // Block-Variable `mKey` ist dieselbe Identität.
+                const mKey = rowMarkerKey(r)
+                const mColor = mKey ? getColorMarker(character, mKey) : null
                 // Pill-Aufteilung neu strukturiert:
                 //   TOP  (rechts neben dem Namen): Slot-Pill ODER
                 //        Always-Badge ODER Charges-Pill (für resource-
@@ -1877,13 +2053,60 @@ function CombatActionsCategorisedList({
 
                 // Slot- oder Always- oder Uses-Pill oben — eine
                 // Auswahl, keine Doppel-Anzeige.
+                // Slot-Pill ist klickbar: castet den Spell auf seinem
+                // Basislevel (Cantrip → kein Slot, leveled → niedrigster
+                // verfügbarer Slot ≥ Spell-Level). "Up"-Button neben-
+                // dran ist nur noch für Upcast-Auswahl.
                 if (r.slotLabel) {
+                  const slotColor = r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)'
+                  const isSpellRow = r.kind === 'spell' || r.kind === 'always-spell'
+                  const canCast = isSpellRow && r.slotAvailable !== false
+                  const baseLevel = r.spell?.level || 0
+                  const handleSlotCast = (e) => {
+                    e.stopPropagation()
+                    if (!isSpellRow || !canCast || !r.spell) return
+                    if (baseLevel === 0) {
+                      castSpellFromExplorer(r.spell, 0, { economySlot: r.economySlot })
+                      return
+                    }
+                    // Niedrigsten verfügbaren Slot ≥ baseLevel finden.
+                    const slotsArr = slots?.slots || []
+                    for (let lv = baseLevel; lv <= 9; lv++) {
+                      const max = slotsArr[lv - 1] || 0
+                      if (!max) continue
+                      const used = usedSlots[lv] || 0
+                      if (used < max) {
+                        castSpellFromExplorer(r.spell, lv, { economySlot: r.economySlot })
+                        return
+                      }
+                    }
+                    // Kein Slot? Pact-Slot probieren.
+                    const pact = slots?.warlockSlots
+                    if (pact && pact.level >= baseLevel && (pact.slots - usedPact) > 0) {
+                      castSpellFromExplorer(r.spell, pact.level, {
+                        economySlot: r.economySlot, usePact: true,
+                      })
+                    }
+                  }
                   topPills.push(
-                    <span key="slot" style={{
-                      ...caePill,
-                      border: `1px solid ${r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)'}`,
-                      color: r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)',
-                    }} title={`Spell Slots: ${r.slotLabel}`}>{r.slotLabel}</span>
+                    canCast ? (
+                      <button key="slot" type="button"
+                        onClick={handleSlotCast}
+                        title={baseLevel === 0
+                          ? 'Cantrip wirken'
+                          : `Cast L${baseLevel} (niedrigster freier Slot)`}
+                        style={{
+                          ...caePill,
+                          border: `1px solid ${slotColor}`, color: slotColor,
+                          background: 'transparent', cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}>{r.slotLabel}</button>
+                    ) : (
+                      <span key="slot" style={{
+                        ...caePill,
+                        border: `1px solid ${slotColor}`, color: slotColor,
+                      }} title={`Spell Slots: ${r.slotLabel}`}>{r.slotLabel}</span>
+                    )
                   )
                 }
                 if (r.badge === 'Always') {
@@ -1906,15 +2129,30 @@ function CombatActionsCategorisedList({
                     </span>
                   )
                 }
+                // Custom-Note-Pill (vom Player gesetzt): erscheint in
+                // Top-Pills mit pillText + pillColor aus character.customNotes.
+                const noteRow = mKey ? getCustomNote(character, mKey) : null
+                if (noteRow?.pillText) {
+                  const nc = noteRow.pillColor || mColor || 'var(--accent)'
+                  topPills.push(
+                    <span key="cnote" style={{
+                      ...caePill,
+                      border: `1px solid ${nc}`, color: nc,
+                      background: `color-mix(in srgb, ${nc} 14%, transparent)`,
+                    }} title={noteRow.pillText}>{noteRow.pillText}</span>
+                  )
+                }
 
                 // Smart-Effect-Pills (Attack/Save/Damage) ins LEFT.
                 if (Array.isArray(r.effectPills) && r.effectPills.length > 0) {
                   for (const p of r.effectPills) {
                     const color = p.kind === 'attack'
-                      ? 'var(--accent-blue)'
+                      ? (pillColors['pill.attack'] || 'var(--accent-blue)')
                       : p.kind === 'save'
-                        ? 'var(--accent-purple)'
-                        : (p.damageType && DAMAGE_TYPE_COLOR[p.damageType]) || 'var(--accent-red)'
+                        ? (pillColors['pill.save'] || 'var(--accent-purple)')
+                        : (p.damageType && pillColors[`damage.${p.damageType}`])
+                          || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
+                          || (pillColors['damage.healing'] && p.damageType === 'healing' ? pillColors['damage.healing'] : 'var(--accent-red)')
                     leftPills.push(
                       <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
                         ...caePill,
@@ -1970,11 +2208,8 @@ function CombatActionsCategorisedList({
                 )
 
                 const hasBottomRow = leftPills.length > 0 || rightPills.length > 0
-                // Color-Marker: persistiert per rowMarkerKey →
-                // `character.colorMarkers`. Stripe links wenn gesetzt,
-                // Picker im Expanded-Body.
-                const mKey = rowMarkerKey(r)
-                const mColor = mKey ? getColorMarker(character, mKey) : null
+                // (mKey + mColor sind oben am Anfang des map-Body
+                // schon deklariert — gleicher Wert, eine Quelle.)
                 return (
                   <div key={r.id} style={{
                     ...caeRow,
@@ -1990,9 +2225,19 @@ function CombatActionsCategorisedList({
                         <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>
                           {expanded === r.id ? '▼' : '▶'}
                         </span>
-                        <span style={{ ...caeRowName, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {r.name}
-                        </span>
+                        {(() => {
+                          const tip = actionRowTooltipContent(r)
+                          const nameEl = (
+                            <span style={{ ...caeRowName, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {r.name}
+                            </span>
+                          )
+                          return (
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              {tip ? <HoverDetailTooltip content={tip}>{nameEl}</HoverDetailTooltip> : nameEl}
+                            </span>
+                          )
+                        })()}
                         {topPills.length > 0 && (
                           <span style={{ display: 'inline-flex', gap: 4, flexShrink: 0 }}>
                             {topPills}
@@ -2032,19 +2277,43 @@ function CombatActionsCategorisedList({
                         <ActionRowExpandedBody row={r} />
                         {mKey && applyCharacter && (
                           <div style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
+                            display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                             padding: '4px 10px 6px',
                             borderTop: '1px solid var(--border-subtle)',
                           }}
                             onClick={(e) => e.stopPropagation()}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Farb-Tag:</span>
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Stripe:</span>
                               <CardColorPicker
                                 color={mColor}
                                 onChange={(c) => setColorMarker(applyCharacter, mKey, c)}
                                 compact
                               />
                             </span>
+                            {/* Custom-Pill-Editor inline: Text + Farbe. */}
+                            <input
+                              type="text"
+                              defaultValue={(getCustomNote(character, mKey) || {}).pillText || ''}
+                              placeholder="Pill-Hinweis"
+                              onBlur={(e) => setCustomNote(applyCharacter, mKey, { pillText: e.target.value })}
+                              style={{
+                                width: 110, padding: '2px 6px', fontSize: 11,
+                                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                                border: '1px solid var(--border-subtle)', borderRadius: 4,
+                                fontFamily: 'inherit',
+                              }}
+                            />
+                            <input
+                              type="color"
+                              value={(getCustomNote(character, mKey) || {}).pillColor || mColor || '#888888'}
+                              onChange={(e) => setCustomNote(applyCharacter, mKey, { pillColor: e.target.value })}
+                              title="Pill-Farbe"
+                              style={{
+                                width: 22, height: 20, padding: 0,
+                                background: 'transparent',
+                                border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+                              }}
+                            />
                             {/* Pin-Toggle: gepinnte Actions erscheinen
                                 ZUSÄTZLICH oben in der "★ Pinned"-
                                 Kategorie. Original-Eintrag bleibt. */}
@@ -2269,7 +2538,7 @@ function CombatActionButton({
     return (
       <button type="button" style={caeUseBtn} onClick={(e) => {
         stop(e); setCastingFor(isOpen ? null : row.id)
-      }} title="Spell wirken">{isOpen ? 'Cast ▴' : 'Cast ▾'}</button>
+      }} title="Upcast — Slot-Pille klicken castet direkt mit dem Base-Slot">{isOpen ? 'Up ▴' : 'Up ▾'}</button>
     )
   }
   // Non-spell row: only show a button when this row actually does
@@ -2322,7 +2591,20 @@ function SpellSlotPicker({ row, slots, usedSlots, usedPact, onCast, onCancel }) 
           border: '1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent)',
           borderRadius: 6, padding: '6px 8px', marginBottom: 6,
         }}>
-          <EntryRenderer entries={higherLevel} />
+          {/* Headline ("Using a Higher-Level Spell Slot" /
+              "At Higher Levels") wegfallen lassen — wir wissen aus
+              dem Kontext (Upcast-Picker), worum es geht. Wenn der
+              entries-Block die typische Form
+              [{ type: 'entries', name: '...', entries: [...] }]
+              hat, ziehen wir das innere entries-Array raus. */}
+          <EntryRenderer entries={
+            (Array.isArray(higherLevel)
+              && higherLevel.length === 1
+              && higherLevel[0]?.entries
+              && higherLevel[0]?.type === 'entries')
+              ? higherLevel[0].entries
+              : higherLevel
+          } />
         </div>
       )}
       {list.length === 0 ? (
@@ -2406,12 +2688,14 @@ const caeRowHead = {
 const caeRowName = { color: 'var(--text-primary)', fontWeight: 600, fontSize: 12 }
 const caeRowMeta = { display: 'flex', gap: 8, color: 'var(--text-secondary)', fontSize: 11 }
 const caeMetaPart = { color: 'var(--text-muted)' }
-// Einheitliche kompakte Pill für Action-Rows (slot/atk/dmg/save/range/
-// mastery/conc/ritual). Border + Farbe werden inline überschrieben.
+// Einheitliche Pill für Action-Rows. Form ist die gleiche wie S.tag
+// im Spells-Tab (kantig statt 999px-pillenförmig) damit alle Pills
+// quer durchs Sheet visuell konsistent sind.
 const caePill = {
   display: 'inline-flex', alignItems: 'center',
-  padding: '0 7px', borderRadius: 999,
-  fontSize: 10, fontWeight: 700, lineHeight: '16px',
+  padding: '1px 6px', borderRadius: 4,
+  fontSize: 10, fontWeight: 700, lineHeight: '14px',
+  letterSpacing: 0.3, textTransform: 'uppercase',
   whiteSpace: 'nowrap', fontFamily: 'inherit',
 }
 // ▲▼ Reorder-Buttons im Kategorie-Header. Disabled wenn schon am
@@ -2493,9 +2777,17 @@ const DMG_TYPE_COLOR = {
   slashing:    '#bfa07a',
   thunder:     '#7fa8ff',
 }
-const colorFor = (t) => DMG_TYPE_COLOR[String(t).toLowerCase()] || 'var(--text-secondary)'
+const colorFor = (t, pillColors) => {
+  const k = String(t).toLowerCase()
+  return (pillColors && pillColors[`damage.${k}`])
+    || DMG_TYPE_COLOR[k]
+    || 'var(--text-secondary)'
+}
 
 export function DamageResistancePills({ character, compact = false }) {
+  // Pill-Farben aus den Settings — Resistances und Vulnerabilities
+  // teilen sich die Damage-Type-Farbpalette mit den Action-Row-Pills.
+  const pillColors = usePillColors()
   const m = getMechanicalEffects(character)
   // Immunity is a stronger resistance — display in the same column,
   // pill carries an "immune" tooltip so the rule difference isn't
@@ -2511,7 +2803,7 @@ export function DamageResistancePills({ character, compact = false }) {
         {[...set].map(t => {
           const tn = String(t).toLowerCase()
           const immune = isImmune && m.damageImmunity.has(tn)
-          const c = colorFor(t)
+          const c = colorFor(t, pillColors)
           return (
             <span key={t}
               title={immune ? `Immun gegen ${t}` : `Resistenz gegen ${t}`}
@@ -2573,9 +2865,13 @@ const drPillRow = { display: 'flex', gap: 4, flexWrap: 'wrap' }
 // pro Zeile. So bleibt der "yellow area"-Bereich neben der HP-Karte
 // schmal und scrollt anstatt zu wrappen.
 const drPillRowCompact = { display: 'flex', flexDirection: 'column', gap: 2 }
+// Resistance-Pill folgt jetzt der gleichen Form wie alle anderen
+// Pills im Sheet (Spell-Tab + Action-Spalte): borderRadius 4 statt
+// 999, uppercase + letterSpacing für visuelle Einheitlichkeit.
 const drPill = {
-  padding: '1px 7px', borderRadius: 999, fontSize: 10,
-  border: '1px solid', textTransform: 'capitalize',
+  padding: '1px 6px', borderRadius: 4, fontSize: 10,
+  border: '1px solid', textTransform: 'uppercase',
+  letterSpacing: 0.3, fontWeight: 700,
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -3870,6 +4166,8 @@ function SpellListRow({
   // synchron läuft. KEIN lowercase — favoriteKey ist case-preserving.
   const mKey = `spell:${row.spell?.name || row.key || ''}`
   const mColor = getColorMarker(character, mKey)
+  const mNote = getCustomNote(character, mKey)
+  const mNoteColor = mNote?.pillColor || mColor || 'var(--accent)'
   const sp = row.spell
   const lv = row.level
   const isCantrip = lv === 0
@@ -3962,12 +4260,49 @@ function SpellListRow({
           </div>
         )}
 
-        <span
-          onClick={onExpand}
-          style={{ fontSize: 12, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+        <HoverDetailTooltip
+          triggerStyle={{ flex: 1, minWidth: 0, display: 'block' }}
+          content={
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                {sp.name}
+              </div>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>
+                {[
+                  lv === 0 ? 'Cantrip' : `Level ${lv}`,
+                  sp.castingTime && `Cast ${sp.castingTime}`,
+                  sp.range && `Range ${sp.range}`,
+                  sp.duration && `Duration ${sp.duration}`,
+                ].filter(Boolean).join(' · ')}
+              </div>
+              {Array.isArray(sp.entries) && sp.entries.length > 0 && (
+                <EntryRenderer entries={sp.entries} />
+              )}
+              {Array.isArray(sp.entriesHigherLevel) && sp.entriesHigherLevel.length > 0 && (
+                <div style={{
+                  marginTop: 6, paddingTop: 6,
+                  borderTop: '1px dashed var(--border-subtle)',
+                  color: 'var(--text-secondary)',
+                }}>
+                  <EntryRenderer entries={
+                    (sp.entriesHigherLevel.length === 1
+                      && sp.entriesHigherLevel[0]?.entries
+                      && sp.entriesHigherLevel[0]?.type === 'entries')
+                      ? sp.entriesHigherLevel[0].entries
+                      : sp.entriesHigherLevel
+                  } />
+                </div>
+              )}
+            </div>
+          }
         >
-          {sp.name}
-        </span>
+          <span
+            onClick={onExpand}
+            style={{ fontSize: 12, fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}
+          >
+            {sp.name}
+          </span>
+        </HoverDetailTooltip>
 
         {/* Pill order: components → conc → ritual → action type. The
             action-type pill sits ALL the way to the right so it
@@ -3984,6 +4319,12 @@ function SpellListRow({
         )}
         {actionLetter && (
           <span style={spellPill(actionColor)} title="Casting time">{actionLetter}</span>
+        )}
+        {mNote?.pillText && (
+          <span style={{
+            ...spellPill(mNoteColor),
+            background: `color-mix(in srgb, ${mNoteColor} 14%, transparent)`,
+          }} title={mNote.pillText}>{mNote.pillText}</span>
         )}
       </div>
 
@@ -4013,16 +4354,39 @@ function SpellListRow({
           {applyCharacter && (
             <div
               style={{
-                marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
+                marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                 paddingTop: 6, borderTop: '1px solid var(--border-subtle)',
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Farb-Tag:</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Stripe:</span>
               <CardColorPicker
                 color={mColor}
                 onChange={(c) => setColorMarker(applyCharacter, mKey, c)}
                 compact
+              />
+              <input
+                type="text"
+                defaultValue={mNote?.pillText || ''}
+                placeholder="Pill-Hinweis"
+                onBlur={(e) => setCustomNote(applyCharacter, mKey, { pillText: e.target.value })}
+                style={{
+                  width: 110, padding: '2px 6px', fontSize: 11,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)', borderRadius: 4,
+                  fontFamily: 'inherit',
+                }}
+              />
+              <input
+                type="color"
+                value={mNote?.pillColor || mColor || '#888888'}
+                onChange={(e) => setCustomNote(applyCharacter, mKey, { pillColor: e.target.value })}
+                title="Pill-Farbe"
+                style={{
+                  width: 22, height: 20, padding: 0,
+                  background: 'transparent',
+                  border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+                }}
               />
             </div>
           )}
@@ -4160,7 +4524,8 @@ function prepDot(kind, enabled) {
 }
 function spellPill(color) {
   return {
-    fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+    fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+    letterSpacing: 0.3, textTransform: 'uppercase',
     border: `1px solid ${color}`, color,
     whiteSpace: 'nowrap',
   }
