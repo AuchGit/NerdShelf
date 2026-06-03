@@ -646,24 +646,9 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             <DamageResistancePills character={character} compact />
           </div>
           <FeatureNoteList notes={getEffectsForSlot(character, 'hp')} />
-          {/* Spieler-Notizen: füllt den restlichen vertikalen Platz.
-              Debounced (300ms idle + auf Blur) damit jeder Tastendruck
-              nicht die ganze Character-State recomputed → kein Lag. */}
-          {!readOnly && (
-            <DebouncedTextArea
-              value={character.status?.hpNotes || ''}
-              onCommit={(v) => updateCharacter('status.hpNotes', v)}
-              placeholder="Notizen …"
-              style={{
-                width: '100%', marginTop: 6,
-                flex: 1, minHeight: 32,
-                padding: '6px 8px', fontSize: 11, lineHeight: 1.4,
-                background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 6,
-                fontFamily: 'inherit', resize: 'none', overflowY: 'auto',
-              }}
-            />
-          )}
+          {/* HP-Notiz-Feld komplett entfernt (User-Request) —
+              wer Free-Form-Notizen will, nutzt die Custom-Notes pro
+              Eintrag oder den Personality/Basic-Info-Tab. */}
         </Section>
         </div>
 

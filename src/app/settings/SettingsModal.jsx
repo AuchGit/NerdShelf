@@ -21,7 +21,6 @@ const TABS = [
   { id: 'theme',   label: 'Theme' },
   { id: 'dnd',     label: 'DnD' },
   { id: 'mtg',     label: 'MTG' },
-  { id: 'tools',   label: 'Tools' },
 ];
 
 const isTauri = () => typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
@@ -100,15 +99,20 @@ export default function SettingsModal({ open, onClose }) {
       {tab === 'theme'   && <ThemeSettings />}
       {tab === 'dnd'     && <DndSettings />}
       {tab === 'mtg'     && <MtgSettings />}
-      {tab === 'tools'   && <ToolsSettings />}
     </Modal>
   );
 }
 
 function GeneralSettings() {
   return (
-    <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 'var(--space-4) 0' }}>
-      Allgemeine Einstellungen kommen hier in Zukunft hin.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      <Field label="App-Updates">
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          Prüft GitHub auf eine neue Version. Default-Check läuft automatisch ~4s nach App-Start und alle 6h.
+        </div>
+        <UpdateCheckButton />
+        <RecentReleases />
+      </Field>
     </div>
   );
 }
@@ -399,6 +403,184 @@ function DndSettings() {
       </Field>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Manueller "Auf Updates prüfen"-Knopf. Triggert denselben check()
+// wie der auto-Updater, aber mit sichtbarem Feedback — User mit
+// Installer-Setups die kein Popup sehen können hier verifizieren ob
+// die Updater-Pipeline überhaupt durchkommt.
+// ─────────────────────────────────────────────────────────────────
+function UpdateCheckButton() {
+  const [busy, setBusy]   = useState(false)
+  const [info, setInfo]   = useState(null)
+  const isTauri = typeof window !== 'undefined'
+    && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+
+  async function run() {
+    setBusy(true); setInfo(null)
+    try {
+      let currentVersion = ''
+      if (isTauri) {
+        try {
+          const { getVersion } = await import('@tauri-apps/api/app')
+          currentVersion = await getVersion()
+        } catch { /* ignore */ }
+      }
+      if (!isTauri) {
+        setInfo({ kind: 'info', text: 'Update-Check funktioniert nur im Desktop-Build (Tauri).' })
+        return
+      }
+      const { check } = await import('@tauri-apps/plugin-updater')
+      const update = await check()
+      if (!update?.available) {
+        setInfo({ kind: 'ok',
+          text: `Du bist auf der aktuellsten Version (v${currentVersion || '?'}).` })
+        return
+      }
+      setInfo({ kind: 'new',
+        text: `Update verfügbar: v${update.version}. Im Haupt-Banner unten rechts erscheint die Installations-Möglichkeit.` })
+    } catch (e) {
+      setInfo({ kind: 'err',
+        text: `Update-Check fehlgeschlagen: ${e?.message || String(e)}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const color = info?.kind === 'err' ? 'var(--color-danger)'
+    : info?.kind === 'new' ? 'var(--color-accent)'
+    : info?.kind === 'ok' ? 'var(--color-success, var(--color-accent))'
+    : 'var(--color-text-muted)'
+
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Button onClick={run} disabled={busy}>
+        {busy ? 'Prüfe …' : 'Auf Updates prüfen'}
+      </Button>
+      {info && (
+        <span style={{ fontSize: 12, color }}>{info.text}</span>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RecentReleases — zeigt die letzten 3 GitHub-Releases mit ein-/
+// ausklappbarem Changelog. Jede Version hat einen "Installieren"-
+// Knopf der die NSIS-Setup-EXE im Browser/OS-Download öffnet
+// (Tauri opener-plugin → Download im Default-Browser, User führt
+// den Installer manuell aus). Erlaubt sowohl Downgrade als auch
+// Reinstall einer älteren Version.
+// ─────────────────────────────────────────────────────────────────
+function RecentReleases() {
+  const [releases, setReleases] = useState(null)
+  const [error, setError]       = useState(null)
+  const [openId, setOpenId]     = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('https://api.github.com/repos/AuchGit/NerdShelf/releases?per_page=3', {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(list => { if (!cancelled) setReleases(Array.isArray(list) ? list : []) })
+      .catch(e => { if (!cancelled) setError(String(e?.message || e)) })
+    return () => { cancelled = true }
+  }, [])
+
+  async function install(release) {
+    // Den .exe-Asset finden (NSIS-Setup). Fallback auf das HTML-
+    // Release wenn kein direkter Asset-Treffer.
+    const asset = (release.assets || []).find(a => /\.exe$/i.test(a.name || ''))
+    const url = asset?.browser_download_url || release.html_url
+    if (!url) return
+    const isTauri = typeof window !== 'undefined'
+      && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+    if (isTauri) {
+      try {
+        const { openUrl } = await import('@tauri-apps/plugin-opener')
+        await openUrl(url)
+        return
+      } catch (e) {
+        console.warn('[opener]', e)
+      }
+    }
+    try { window.open(url, '_blank') } catch { /* ignore */ }
+  }
+
+  if (error) {
+    return (
+      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-danger)' }}>
+        Release-Liste konnte nicht geladen werden: {error}
+      </div>
+    )
+  }
+  if (!releases) {
+    return (
+      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
+        Lade Release-Historie…
+      </div>
+    )
+  }
+  if (releases.length === 0) return null
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)',
+        textTransform: 'uppercase', letterSpacing: 0.5,
+      }}>Letzte Versionen</div>
+      {releases.map(r => {
+        const isOpen = openId === r.id
+        const ver = String(r.tag_name || '').replace(/^v/, '')
+        return (
+          <div key={r.id} style={{
+            border: '1px solid var(--color-border)', borderRadius: 6,
+            background: 'var(--color-bg-elevated)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 10px', cursor: 'pointer',
+            }} onClick={() => setOpenId(o => o === r.id ? null : r.id)}>
+              <span style={{ flex: 1, fontWeight: 600, color: 'var(--color-text)' }}>
+                v{ver} <span style={{
+                  fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)',
+                  marginLeft: 6,
+                }}>{new Date(r.published_at).toLocaleDateString()}</span>
+              </span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); install(r) }}
+                title="Diese Version installieren — Browser-Download startet"
+                style={{
+                  padding: '3px 10px', fontSize: 11, fontWeight: 600,
+                  background: 'transparent', color: 'var(--color-accent)',
+                  border: '1px solid var(--color-accent)', borderRadius: 4,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >Installieren</button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                {isOpen ? '▲' : '▼'}
+              </span>
+            </div>
+            {isOpen && (
+              <div style={{
+                padding: '8px 12px',
+                borderTop: '1px solid var(--color-border)',
+                background: 'var(--color-bg)',
+                fontSize: 12, lineHeight: 1.5, color: 'var(--color-text-muted)',
+                whiteSpace: 'pre-wrap',
+                maxHeight: 240, overflowY: 'auto',
+              }}>
+                {(r.body || '').trim() || 'Keine Changelog-Notizen.'}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────
