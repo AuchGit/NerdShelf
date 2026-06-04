@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react'
 import { useLanguage } from '../../../lib/i18n'
 import { setChoiceValue } from '../../../lib/choiceParser'
+import { loadClassData, loadOptionalFeatureList } from '../../../lib/dataLoader'
+import { parseClassFeatureOptionChoices } from '../../../lib/optionBlockResolver'
 
 // ── Skill-Konstanten ───────────────────────────────────────
 const ALL_SKILLS = [
@@ -55,115 +58,28 @@ function extractSkillChoices(startingProfs) {
   return null
 }
 
-// ── Fighting Styles ────────────────────────────────────────
+// ── Fighting Styles / Maneuvers / Invocations / Metamagic /
+//    Eldritch Shots / Pact Boons / Primal Order / …
+//
+// Quelle ist jetzt komplett data-driven (5etools `optionalfeatures.json`
+// + `classFeature[].entries[].type:'options'`). Der generische
+// Option-Block-Resolver (lib/optionBlockResolver.js) baut die
+// ChoiceDescriptors; rulesEngine wendet die mechanischen Boni über
+// lib/featureBonusExtractor.js an. Hier — keine hardcoded Tabellen
+// mehr.
+// ─────────────────────────────────────────────────────────────
 
-const FIGHTING_STYLES = {
-  Fighter: {
-    '5e': [
-      { id: 'Archery',                desc: '+2 bonus to attack rolls with ranged weapons.' },
-      { id: 'Defense',                desc: '+1 to AC while wearing armor.' },
-      { id: 'Dueling',                desc: '+2 damage when wielding a melee weapon in one hand and no other weapons.' },
-      { id: 'Great Weapon Fighting',  desc: 'Reroll 1s and 2s on damage dice for two-handed weapons (keep new result).' },
-      { id: 'Protection',             desc: 'When an adjacent ally is attacked, impose disadvantage as a reaction (shield required).' },
-      { id: 'Two-Weapon Fighting',    desc: 'Add ability modifier to damage of off-hand attacks.' },
-      { id: 'Blind Fighting',         desc: 'You have Blindsight with a range of 10 feet.' },
-      { id: 'Interception',           desc: 'Reduce damage to another creature by 1d10 + proficiency bonus (reaction).' },
-      { id: 'Superior Technique',     desc: 'Learn one Battle Master maneuver. Gain one superiority die (d6). (→ Maneuver unten wählen)', needsManeuver: true },
-      { id: 'Thrown Weapon Fighting', desc: '+2 damage with thrown weapons; draw a weapon with the same action.' },
-      { id: 'Unarmed Fighting',       desc: 'Unarmed strikes deal 1d6 (or 1d8 with free hand). Grappled targets take 1d4 at start of your turn.' },
-    ],
-    '5.5e': [
-      { id: 'Archery',                desc: '+2 bonus to attack rolls with ranged weapons.' },
-      { id: 'Defense',                desc: '+1 to AC while wearing armor.' },
-      { id: 'Dueling',                desc: '+2 damage when wielding a melee weapon in one hand and no other weapons.' },
-      { id: 'Great Weapon Fighting',  desc: 'Reroll 1s and 2s on damage dice for two-handed weapons.' },
-      { id: 'Protection',             desc: 'When an adjacent ally is attacked, impose disadvantage as a reaction (shield required).' },
-      { id: 'Two-Weapon Fighting',    desc: 'Add ability modifier to damage of off-hand attacks.' },
-      { id: 'Blind Fighting',         desc: 'You have Blindsight with a range of 10 feet.' },
-      { id: 'Interception',           desc: 'Reduce damage to another creature by 1d10 + proficiency bonus (reaction).' },
-      { id: 'Thrown Weapon Fighting', desc: '+2 damage with thrown weapons; draw a weapon with the same action.' },
-      { id: 'Unarmed Fighting',       desc: 'Unarmed strikes deal 1d6 (or 1d8 with free hand). Grappled targets take 1d4 per turn.' },
-    ],
-  },
-  Paladin: {
-    '5e': [
-      { id: 'Defense',               desc: '+1 to AC while wearing armor.' },
-      { id: 'Dueling',               desc: '+2 damage when wielding a melee weapon in one hand and no other weapons.' },
-      { id: 'Great Weapon Fighting', desc: 'Reroll 1s and 2s on damage dice for two-handed weapons.' },
-      { id: 'Protection',            desc: 'When an adjacent ally is attacked, impose disadvantage as a reaction (shield required).' },
-    ],
-    '5.5e': [
-      { id: 'Defense',               desc: '+1 to AC while wearing armor.' },
-      { id: 'Dueling',               desc: '+2 damage when wielding a melee weapon in one hand and no other weapons.' },
-      { id: 'Great Weapon Fighting', desc: 'Reroll 1s and 2s on damage dice for two-handed weapons.' },
-      { id: 'Protection',            desc: 'When an adjacent ally is attacked, impose disadvantage as a reaction (shield required).' },
-      { id: 'Blessed Warrior',       desc: 'Learn two Cleric cantrips. Use CHA as spellcasting ability for them. (→ Cantrips im Spells-Schritt wählen)', needsSpells: 'Cleric', spellCount: 2 },
-      { id: 'Blind Fighting',        desc: 'You have Blindsight with a range of 10 feet.' },
-      { id: 'Interception',          desc: 'Reduce damage to another creature by 1d10 + proficiency bonus (reaction).' },
-    ],
-  },
-  Ranger: {
-    '5e': [
-      { id: 'Archery',            desc: '+2 bonus to attack rolls with ranged weapons.' },
-      { id: 'Defense',            desc: '+1 to AC while wearing armor.' },
-      { id: 'Dueling',            desc: '+2 damage when wielding a melee weapon in one hand and no other weapons.' },
-      { id: 'Two-Weapon Fighting',desc: 'Add ability modifier to damage of off-hand attacks.' },
-    ],
-    '5.5e': [
-      { id: 'Archery',             desc: '+2 bonus to attack rolls with ranged weapons.' },
-      { id: 'Defense',             desc: '+1 to AC while wearing armor.' },
-      { id: 'Druidic Warrior',     desc: 'Learn two Druid cantrips. Use WIS as spellcasting ability for them. (→ Cantrips im Spells-Schritt wählen)', needsSpells: 'Druid', spellCount: 2 },
-      { id: 'Two-Weapon Fighting', desc: 'Add ability modifier to damage of off-hand attacks.' },
-      { id: 'Blind Fighting',      desc: 'You have Blindsight with a range of 10 feet.' },
-    ],
-  },
-}
-
-const CLASSES_WITH_FIGHTING_STYLE = ['Fighter', 'Paladin', 'Ranger']
-
-// ── Battle Master Maneuvers ────────────────────────────────
-const BATTLE_MASTER_MANEUVERS = [
-  { id: 'Ambush',               source: 'TCE', desc: 'When you make a Dexterity (Stealth) check or an initiative roll, you can expend one superiority die and add the die to the roll.' },
-  { id: 'Bait and Switch',      source: 'TCE', desc: 'When you\'re within 5 feet of a creature on your turn, you can expend one superiority die and switch places with that creature.' },
-  { id: 'Brace',                source: 'TCE', desc: 'When a creature you can see moves into the reach you have with the melee weapon you\'re wielding, you can use your reaction to expend one superiority die and make one attack against the creature.' },
-  { id: 'Commander\'s Strike',  source: 'PHB', desc: 'When you take the Attack action on your turn, you can forgo one of your attacks to direct one of your companions to strike.' },
-  { id: 'Commanding Presence',  source: 'TCE', desc: 'When you make a Charisma (Intimidation), Charisma (Performance), or Charisma (Persuasion) check, you can expend one superiority die and add the die to the ability check.' },
-  { id: 'Disarming Attack',     source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to attempt to disarm the target.' },
-  { id: 'Distracting Strike',   source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to distract the creature, giving your allies an opening.' },
-  { id: 'Evasive Footwork',     source: 'PHB', desc: 'When you move, you can expend one superiority die, rolling the die and adding the number rolled to your AC until you stop moving.' },
-  { id: 'Feinting Attack',      source: 'PHB', desc: 'You can expend one superiority die and use a bonus action on your turn to feint, choosing one creature within 5 feet of you as your target.' },
-  { id: 'Goading Attack',       source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to attempt to goad the target into attacking you.' },
-  { id: 'Grappling Strike',     source: 'TCE', desc: 'Immediately after you hit a creature with a melee attack on your turn, you can expend one superiority die and then try to grapple the target as a bonus action.' },
-  { id: 'Lunging Attack',       source: 'PHB', desc: 'When you make a melee weapon attack on your turn, you can expend one superiority die to increase your reach for that attack by 5 feet.' },
-  { id: 'Maneuvering Attack',   source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to maneuver one of your comrades into a more advantageous position.' },
-  { id: 'Menacing Attack',      source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to attempt to frighten the target.' },
-  { id: 'Parry',                source: 'PHB', desc: 'When another creature damages you with a melee attack, you can use your reaction and expend one superiority die to reduce the damage by the number you roll on your superiority die + your Dexterity modifier.' },
-  { id: 'Precision Attack',     source: 'PHB', desc: 'When you make a weapon attack roll against a creature, you can expend one superiority die to add it to the roll.' },
-  { id: 'Pushing Attack',       source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to attempt to drive the target back.' },
-  { id: 'Quick Toss',           source: 'TCE', desc: 'As a bonus action, you can expend one superiority die and make a ranged attack with a weapon that has the thrown property.' },
-  { id: 'Rally',                source: 'PHB', desc: 'On your turn, you can use a bonus action and expend one superiority die to bolster the resolve of one of your companions.' },
-  { id: 'Riposte',              source: 'PHB', desc: 'When a creature misses you with a melee attack, you can use your reaction and expend one superiority die to make a melee weapon attack against the creature.' },
-  { id: 'Sweeping Attack',      source: 'PHB', desc: 'When you hit a creature with a melee weapon attack, you can expend one superiority die to attempt to damage another creature with the same attack.' },
-  { id: 'Tactical Assessment',  source: 'TCE', desc: 'When you make an Intelligence (History), Intelligence (Investigation), or Wisdom (Insight) check, you can expend one superiority die and add the die to the ability check.' },
-  { id: 'Trip Attack',          source: 'PHB', desc: 'When you hit a creature with a weapon attack, you can expend one superiority die to attempt to knock the target down.' },
-]
-
-// Ranger Favored Enemy (5e)
+// Ranger Favored Enemy (5e — kein optionalfeature, kein Eintrag in
+// den Datenquellen, deshalb hardcoded fallback)
 const FAVORED_ENEMIES_5E = [
   'Aberrations','Beasts','Celestials','Constructs','Dragons','Elementals',
   'Fey','Fiends','Giants','Humanoids','Monstrosities','Oozes','Plants','Undead',
 ]
 
-// Ranger Natural Explorer Terrain (5e)
+// Ranger Natural Explorer Terrain (5e — same reason)
 const FAVORED_TERRAINS_5E = [
   'Arctic','Coast','Desert','Forest','Grassland','Mountain','Swamp','Underdark',
 ]
-
-function getFightingStyles(classId, edition) {
-  const styles = FIGHTING_STYLES[classId]
-  if (!styles) return null
-  return styles[edition] || styles['5e'] || null
-}
 
 // ── Hauptkomponente ────────────────────────────────────────
 // NOTE: Skill proficiency choices and Expertise have moved to Step7Proficiencies,
@@ -179,30 +95,13 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
   const cls = character.classes[0]
   const edition = character.meta.edition || '5e'
 
-  const selectedFightingStyle = cls?.levelChoices?.[1]?.fightingStyle           || null
-  const selectedManeuver      = cls?.levelChoices?.[1]?.superiorTechniqueManeuver || null
-  const selectedFavoredEnemy  = cls?.levelChoices?.[1]?.favoredEnemy            || null
-  const selectedFavoredTerrain = cls?.levelChoices?.[1]?.favoredTerrain         || null
-
-  const fightingStyles  = getFightingStyles(cls?.classId, edition)
+  // Fighting Style / Maneuver / Invocation / Metamagic werden jetzt
+  // alle über die generischen Feature-Option-Descriptors gerendert
+  // (siehe unten). Hier nur noch die niche-5e-Ranger-Extras die nicht
+  // als optionalfeature in den Daten leben.
+  const selectedFavoredEnemy  = cls?.levelChoices?.[1]?.favoredEnemy   || null
+  const selectedFavoredTerrain = cls?.levelChoices?.[1]?.favoredTerrain || null
   const hasRangerExtras = cls?.classId === 'Ranger' && edition === '5e'
-
-  const currentStyleObj = fightingStyles?.find(s => s.id === selectedFightingStyle) || null
-  const needsManeuver   = currentStyleObj?.needsManeuver && selectedFightingStyle === 'Superior Technique'
-  const needsSpellNote  = currentStyleObj?.needsSpells ? currentStyleObj : null
-
-  // ── Fighting Style ────────────────────────────────────────
-  function selectFightingStyle(id) {
-    const newStyle = id === selectedFightingStyle ? null : id
-    // Clear maneuver if style changes away from Superior Technique
-    const patch = { fightingStyle: newStyle }
-    if (newStyle !== 'Superior Technique') patch.superiorTechniqueManeuver = null
-    updateLevelChoice(patch)
-  }
-
-  function selectManeuver(id) {
-    updateLevelChoice({ superiorTechniqueManeuver: id === selectedManeuver ? null : id })
-  }
 
   // ── Ranger extras ─────────────────────────────────────────
   function selectFavoredEnemy(val) {
@@ -233,6 +132,61 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     updateCharacter('choices', setChoiceValue(character.choices || {}, id, val))
   }
 
+  // ── Generic Feature-Option-Blocks ─────────────────────────
+  // 5etools encoded inline picks: `type: 'options'` mit refClassFeature
+  // / refSubclassFeature children. Wir laden die Class-Data lazy, ziehen
+  // alle Option-Block-Descriptors raus und rendern sie als generische
+  // Cards. Druid Primal Order (Magician / Warden), Sub-Class-internal
+  // sub-options, future class options — alle landen hier ohne Hardcode.
+  //
+  // refOptionalfeature-Blöcke (5e Fighting Style → Archery / Defense /
+  // …) werden in dieser Phase ausgeklammert — sie nutzen weiter den
+  // bestehenden FIGHTING_STYLES-Pfad oben.
+  const [classData, setClassData] = useState(null)
+  const [optionalFeatureMap, setOptionalFeatureMap] = useState(null)
+  useEffect(() => {
+    if (!cls?.classId) { setClassData(null); return }
+    let cancelled = false
+    loadClassData(edition, cls.classId).then(d => {
+      if (!cancelled) setClassData(d)
+    }).catch(() => { if (!cancelled) setClassData(null) })
+    return () => { cancelled = true }
+  }, [cls?.classId, edition])
+
+  // Optfeature-Map laden — pro Edition einmal. Wird vom Resolver für
+  // refOptionalfeature-Lookups (5e Fighter Fighting Style → Archery /
+  // Defense / Dueling / …, Battle Master Maneuvers, Warlock
+  // Invocations, Sorcerer Metamagic, …) gebraucht.
+  useEffect(() => {
+    let cancelled = false
+    loadOptionalFeatureList(edition).then(list => {
+      if (cancelled) return
+      const m = new Map()
+      for (const f of (list || [])) {
+        if (!f?.name) continue
+        const lower = String(f.name).toLowerCase()
+        const src = String(f.source || '').toUpperCase()
+        m.set(lower, f)
+        if (src) m.set(`${lower}|${src}`, f)
+      }
+      setOptionalFeatureMap(m)
+    }).catch(() => { if (!cancelled) setOptionalFeatureMap(new Map()) })
+    return () => { cancelled = true }
+  }, [edition])
+
+  // Alle Feature-Option-Descriptors — refClassFeature, refSubclass
+  // Feature UND refOptionalfeature werden alle generisch behandelt.
+  // Damit verschwindet die hardcoded FIGHTING_STYLES / BATTLE_MASTER_
+  // MANEUVERS-Tabelle als Source-of-Truth; die Daten kommen direkt
+  // aus optionalfeatures.json.
+  const featureOptionDescs = (() => {
+    if (!classData || !cls) return []
+    return parseClassFeatureOptionChoices(cls, classData, {
+      edition,
+      optionalFeatureMap,
+    }) || []
+  })()
+
   // ── Kein Character / keine Klasse ─────────────────────────
   if (!cls) {
     return (
@@ -243,7 +197,8 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     )
   }
 
-  const hasAnythingToPick = fightingStyles || hasRangerExtras
+  const hasAnythingToPick = hasRangerExtras
+    || (featureOptionDescs && featureOptionDescs.length > 0)
 
   if (!hasAnythingToPick) {
     return (
@@ -263,83 +218,71 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
       <h2 style={styles.title}>{t('classOptions')}</h2>
       <p style={styles.subtitle}>{cls.classId}</p>
 
-      {/* ── Fighting Style ── */}
-      {fightingStyles && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>Fighting Style</div>
-          <p style={styles.sectionDesc}>
-            Wähle einen Fighting Style. Dieser bleibt permanent und kann nicht geändert werden.
-            {!selectedFightingStyle && (
-              <span style={{ color: 'var(--accent)', marginLeft: 8 }}>— noch nicht gewählt</span>
-            )}
-            {selectedFightingStyle && (
-              <span style={{ color: 'var(--accent-green)', marginLeft: 8 }}>✓ {selectedFightingStyle}</span>
-            )}
-          </p>
-          <div style={styles.styleGrid}>
-            {fightingStyles.map(style => {
-              const isSelected = selectedFightingStyle === style.id
-              return (
-                <div
-                  key={style.id}
-                  style={{ ...styles.styleCard, ...(isSelected ? styles.styleCardSelected : {}) }}
-                  onClick={() => selectFightingStyle(style.id)}
-                >
-                  <div style={styles.styleName}>{style.id}</div>
-                  <div style={styles.styleDesc}>{style.desc}</div>
-                  {isSelected && <div style={styles.styleCheck}>✓ Gewählt</div>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Superior Technique: Maneuver Picker ── */}
-      {needsManeuver && (
-        <div style={styles.section}>
-          <div style={styles.sectionTitle}>
-            Battle Master Maneuver
-            {selectedManeuver
-              ? <span style={{ color: 'var(--accent-green)', marginLeft: 8, fontSize: 12, textTransform: 'none' }}>✓ {selectedManeuver}</span>
-              : <span style={{ color: 'var(--accent)', marginLeft: 8, fontSize: 12, textTransform: 'none' }}>— noch nicht gewählt</span>
-            }
-          </div>
-          <p style={styles.sectionDesc}>
-            Superior Technique gibt dir ein Maneuver und einen Superiority Die (d6). Wähle ein Maneuver:
-          </p>
-          <div style={styles.maneuverGrid}>
-            {BATTLE_MASTER_MANEUVERS.map(m => {
-              const isSel = selectedManeuver === m.id
-              return (
-                <div
-                  key={m.id}
-                  style={{ ...styles.maneuverCard, ...(isSel ? styles.maneuverSelected : {}) }}
-                  onClick={() => selectManeuver(m.id)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <div style={styles.maneuverName}>{m.id}</div>
-                    <span style={styles.maneuverSource}>{m.source}</span>
-                    {isSel && <span style={{ color: 'var(--accent)', fontSize: 11, marginLeft: 'auto' }}>✓</span>}
+      {/* ── Generische Feature-Option-Blocks ───────────────────
+          Aus 5etools type:'options'-Inline-Picks (Druid Primal
+          Order: Magician/Warden, ähnliche subclass-interne
+          Sub-Options, alle zukünftigen Class-Options). Storage in
+          character.choices via Descriptor-ID. */}
+      {featureOptionDescs.map(desc => {
+        const stored = character.choices?.[desc.id]
+        const storedArr = Array.isArray(stored) ? stored : (stored ? [stored] : [])
+        const setStored = (next) => {
+          // count=1 → string, count>1 → string[]. Beide Shapes
+          // werden überall via asArray gelesen.
+          const value = desc.count === 1 ? (next[0] || null) : next
+          updateCharacter('choices', setChoiceValue(character.choices || {}, desc.id, value))
+        }
+        const toggle = (valueKey) => {
+          if (desc.count === 1) {
+            setStored(storedArr.includes(valueKey) ? [] : [valueKey])
+            return
+          }
+          const has = storedArr.includes(valueKey)
+          if (has) setStored(storedArr.filter(v => v !== valueKey))
+          else if (storedArr.length < desc.count) setStored([...storedArr, valueKey])
+        }
+        const done = storedArr.length === desc.count
+        return (
+          <div key={desc.id} style={styles.section}>
+            <div style={styles.sectionTitle}>
+              {desc._featureName || desc.label}
+              {done
+                ? <span style={{ color: 'var(--accent-green)', marginLeft: 8, fontSize: 12, textTransform: 'none' }}>
+                    ✓ {storedArr.length}/{desc.count}
+                  </span>
+                : <span style={{ color: 'var(--accent)', marginLeft: 8, fontSize: 12, textTransform: 'none' }}>
+                    {storedArr.length}/{desc.count} — wählen
+                  </span>}
+            </div>
+            <p style={styles.sectionDesc}>
+              Wähle {desc.count === 1 ? 'eine Option' : `${desc.count} Optionen`} für „{desc._featureName || desc.label}".
+            </p>
+            <div style={styles.styleGrid}>
+              {desc.options.map(opt => {
+                const isSel = storedArr.includes(opt.value)
+                // Description-Strings für die Card aus den Entries extrahieren.
+                const firstString = Array.isArray(opt.description)
+                  ? opt.description.find(e => typeof e === 'string')
+                  : null
+                const shortDesc = firstString
+                  ? String(firstString).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1').slice(0, 260)
+                  : ''
+                return (
+                  <div
+                    key={opt.value}
+                    style={{ ...styles.styleCard, ...(isSel ? styles.styleCardSelected : {}) }}
+                    onClick={() => toggle(opt.value)}
+                  >
+                    <div style={styles.styleName}>{opt.label}</div>
+                    {shortDesc && <div style={styles.styleDesc}>{shortDesc}{firstString && firstString.length > 260 ? ' …' : ''}</div>}
+                    {isSel && <div style={styles.styleCheck}>✓ Gewählt</div>}
                   </div>
-                  <div style={styles.maneuverDesc}>{m.desc}</div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Spell-Note für Blessed/Druidic Warrior ── */}
-      {needsSpellNote && (
-        <div style={styles.spellNoteBox}>
-          <span style={{ fontSize: 16, marginRight: 8 }}>✦</span>
-          <span style={{ color: 'var(--accent-purple)', fontSize: 13 }}>
-            <strong>{needsSpellNote.id}</strong> gewährt dir {needsSpellNote.spellCount} {needsSpellNote.needsSpells}-Cantrips.
-            Du wählst diese im <strong>Spells-Schritt</strong> aus (unter „Cantrips aus Fighting Style").
-          </span>
-        </div>
-      )}
+        )
+      })}
 
       {/* ── Ranger: Favored Enemy + Natural Explorer (5e only) ── */}
       {hasRangerExtras && (

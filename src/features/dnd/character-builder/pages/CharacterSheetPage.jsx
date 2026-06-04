@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel, getModifier } from '../lib/characterModel'
-import { loadClassData, loadItemIndex, loadRaceList } from '../lib/dataLoader'
+import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList } from '../lib/dataLoader'
+import { findOptionBlocks, optionValueKey } from '../lib/optionBlockResolver'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
 // Defer the import to click time so the initial sheet bundle stays small.
@@ -216,6 +217,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // straight from those tables, so until this is loaded the resource
   // panel falls back to the pre-2024 single-use behaviour.
   const classDataMapRef = useRef({})
+  // Cached optionalfeature index (lowercased name → entry). Wird in
+  // hydrateClassDataAndRecompute befüllt und von collectActiveClass
+  // Features genutzt um refOptionalfeature-Picks (Fighting Style etc.)
+  // auf konkrete Entries aufzulösen.
+  const optionalFeatureMapRef = useRef(null)
   const [loading, setLoading] = useState(true)
   // Active-Tab pro Charakter persistiert (localStorage keyed by id).
   // Beim Sheet-Neustart soll der User auf dem Tab landen den er
@@ -337,6 +343,25 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     const map = {}
     unique.forEach((cid, i) => { if (loaded[i]) map[cid] = loaded[i] })
     classDataMapRef.current = map
+    // Optfeature-Liste laden für die Auflösung der refOptionalfeature
+    // -Picks (Fighting Style, Maneuver, Invocation, …). Fail-soft —
+    // wenn der Load schief geht, fallen wir auf "kein Match" zurück,
+    // catalog/parser sehen den optfeature dann nicht, aber kein Crash.
+    let optionalFeatureMap = null
+    try {
+      const ofList = await loadOptionalFeatureList(edition)
+      optionalFeatureMap = new Map()
+      for (const f of (ofList || [])) {
+        if (!f?.name) continue
+        const lower = String(f.name).toLowerCase()
+        const src = String(f.source || '').toUpperCase()
+        // Two keys: `name` und `name|source` damit ein Resolver-Lookup
+        // auch ohne Source treffen kann.
+        optionalFeatureMap.set(lower, f)
+        if (src) optionalFeatureMap.set(`${lower}|${src}`, f)
+      }
+    } catch { /* ignore */ }
+    optionalFeatureMapRef.current = optionalFeatureMap
     // Backfill the spellcasting fields onto cls entries that were
     // saved before loadClassList consistently forwarded them. Without
     // this, multiclass Rangers / Paladins / Wizards / etc. created
@@ -377,17 +402,23 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         speciesPatch.__traits = rawTraits
       }
       if (raceFixedSkills.length > 0) speciesPatch.__fixedSkills = raceFixedSkills
+      // classDataMap auf das transient-character stashen, damit
+      // featureEffectParser (für Sneak-Attack-/Bardic-Die-/Martial-
+      // Arts-Skalierung über classTableLookup) den Map ohne extra
+      // Prop-Drilling findet. queueSave strippt das vor dem Persist.
       setCharacter(prev => prev ? ({
         ...prev,
         species: { ...(prev.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
         __grantedSpells: grantedSpells,
+        __classDataMap: map,
       }) : prev)
       charData = {
         ...charData,
         species: { ...(charData.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
         __grantedSpells: grantedSpells,
+        __classDataMap: map,
       }
     }
     setComputed(computeCharacter(charData, map))
@@ -542,6 +573,133 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
     }
     const is55e = (charData?.meta?.edition || '5e') === '5.5e'
+    // ── Option-Block-Vorscan ────────────────────────────────────
+    // Bevor wir Features pushen, ermitteln wir welche Class-Feature-
+    // Namen Sub-Optionen anderer Features sind (z.B. Magician /
+    // Warden sind Sub-Options von Primal Order). Diese Features
+    // dürfen NICHT automatisch in __activeFeatures landen — sie
+    // werden nur durch eine bewusste Wahl in character.choices
+    // aktiv. So vermeiden wir das "beide Optionen gleichzeitig
+    // aktiv"-Bug.
+    //
+    // Pro Entry-Key (classId|name|level) merken wir auch wer der
+    // Parent ist (für UI-Diagnostik) und welcher Choice-Descriptor
+    // die Wahl steuert.
+    const choices = charData?.choices || {}
+    const optionTargetKeys = new Set()
+    const chosenSubFeatures = [] // {classId, source, subclassId?, name, level, entries, fromOptionFeature}
+
+    for (const cls of (charData?.classes || [])) {
+      const cd = classDataMap[cls.classId]
+      if (!cd) continue
+      const allClassFeatures = cd.features || []
+      const subId = cls.subclassId
+      const cleanSubIdPrescan = subId ? String(subId).split(/__|\|/)[0].trim() : null
+      const subPrescan = cleanSubIdPrescan
+        ? (cd.subclasses || []).find(s =>
+            s.id === subId || s.name === subId
+            || s.id === cleanSubIdPrescan || s.name === cleanSubIdPrescan
+            || s.shortName === cleanSubIdPrescan)
+        : null
+      const allSubFeatures = subPrescan
+        ? [
+            ...(Array.isArray(subPrescan.features) ? subPrescan.features : []),
+            ...(subPrescan.featuresPerLevel
+              ? Object.entries(subPrescan.featuresPerLevel).flatMap(([lvl, fs]) =>
+                  (fs || []).map(f => ({ ...f, level: parseInt(lvl, 10) || 1 })))
+              : []),
+          ]
+        : []
+
+      // Resolver braucht die geladenen Class-Data damit
+      // refClassFeature → konkretes Feature aufgelöst werden kann.
+      // optionalFeatureMap zusätzlich, damit refOptionalfeature
+      // (Fighting Style, Maneuver, Invocation, Metamagic, …) ebenfalls
+      // resolved.
+      const resolverOpts = {
+        classDataMap: { [cls.classId]: cd },
+        optionalFeatureMap: optionalFeatureMapRef.current,
+      }
+
+      const collectFromBlocks = (feature, ownerKey, isSubclass) => {
+        if (!feature?.entries) return
+        const blocks = findOptionBlocks(feature.entries, resolverOpts)
+        if (blocks.length === 0) return
+        blocks.forEach((block, blockIdx) => {
+          // Sub-Option-Namen für skip-Set merken.
+          for (const opt of block.options) {
+            if (opt.kind === 'classFeature' && opt.entry) {
+              const target = opt.entry
+              const tLvl = target.level || opt.level || 1
+              const matchesEdition = is55e
+                ? (!target.classSource || target.classSource === cd.source || PREFERRED.includes(target.classSource))
+                : true
+              if (matchesEdition) {
+                optionTargetKeys.add(`${cls.classId}|${target.name}|${tLvl}`)
+              }
+            }
+            if (opt.kind === 'subclassFeature' && opt.entry) {
+              optionTargetKeys.add(`${cls.classId}|sub|${opt.entry.name}|${opt.entry.level || opt.level || 1}`)
+            }
+          }
+          // Stored choice für diesen Block.
+          const idParts = [
+            'optblock',
+            ownerKey.source,
+            String(ownerKey.classId || ''),
+            String(ownerKey.subclassId || ''),
+            String(ownerKey.level || ''),
+            String(feature.name || ''),
+            `b${blockIdx}`,
+          ]
+          const descId = idParts.join('::')
+          const stored = choices[descId]
+          const storedArr = Array.isArray(stored) ? stored : (stored ? [stored] : [])
+          for (const valueKey of storedArr) {
+            const match = block.options.find(o => optionValueKey(o) === valueKey)
+            if (!match?.entry) continue
+            // Bei refOptionalfeature kennt die Entry kein `level` — wir
+            // setzen das Feature-Level des PARENT-Features, sonst
+            // greift die `lvl > cls.level`-Filterung später nicht
+            // korrekt (optfeatures sind level-agnostisch in den Daten,
+            // aber an die Parent-Feature-Stufe gekoppelt).
+            const effectiveLevel = match.entry.level || ownerKey.level || feature.level || 1
+            chosenSubFeatures.push({
+              classId: cls.classId,
+              source: isSubclass ? 'subclass' : 'class',
+              subclassId: isSubclass ? subId : undefined,
+              name: match.entry.name,
+              level: effectiveLevel,
+              entries: match.entry.entries || [],
+              fromOptionFeature: feature.name,
+              // Marker damit der Downstream-Code optfeatures bei Bedarf
+              // anders behandeln kann.
+              isOptionalFeature: match.kind === 'optionalfeature',
+            })
+          }
+        })
+      }
+
+      for (const f of allClassFeatures) {
+        if (!f?.name) continue
+        const lvl = f.level || 1
+        if (lvl > cls.level) continue
+        if (f.isClassFeatureVariant) continue
+        const matchesEditionPre = is55e
+          ? (!f.classSource || f.classSource === cd.source || PREFERRED.includes(f.classSource))
+          : true
+        if (!matchesEditionPre) continue
+        collectFromBlocks(f, { source: 'class', classId: cls.classId, level: lvl }, false)
+      }
+      for (const f of allSubFeatures) {
+        if (!f?.name) continue
+        const lvl = f.level || 1
+        if (lvl > cls.level) continue
+        if (f.isClassFeatureVariant) continue
+        collectFromBlocks(f, { source: 'subclass', classId: cls.classId, subclassId: subId, level: lvl }, true)
+      }
+    }
+
     for (const cls of (charData?.classes || [])) {
       const cd = classDataMap[cls.classId]
       if (!cd) continue
@@ -561,6 +719,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           ? (!f.classSource || f.classSource === cd.source || PREFERRED.includes(f.classSource))
           : true
         if (!matchesEdition) continue
+        // Option-Target-Filter: Features die Sub-Options eines
+        // anderen Features sind (Magician/Warden für Druid Primal
+        // Order, Sub-Optionen für Fighter Fighting Style etc.)
+        // werden NICHT auto-aktiviert — sie kommen über
+        // chosenSubFeatures nur rein wenn der Player tatsächlich
+        // gewählt hat.
+        if (optionTargetKeys.has(`${cls.classId}|${f.name}|${lvl}`)) continue
         push({ classId: cls.classId, source: 'class', name: f.name, level: lvl, entries: f.entries || [] }, f.source)
       }
       // Subclass features. loadClassData returns the subclass as
@@ -588,6 +753,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           const lvl = f.level || 1
           if (lvl > cls.level) continue
           if (f.isClassFeatureVariant) continue
+          if (optionTargetKeys.has(`${cls.classId}|sub|${f.name}|${lvl}`)) continue
           push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
         }
       }
@@ -597,8 +763,82 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           if (!Number.isFinite(lvl) || lvl > cls.level) continue
           for (const f of (feats || [])) {
             if (!f?.name) continue
+            if (optionTargetKeys.has(`${cls.classId}|sub|${f.name}|${lvl}`)) continue
             push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
           }
+        }
+      }
+    }
+    // Chosen sub-features (Magician/Warden für die jeweilige
+    // Primal-Order-Wahl etc.) jetzt nachschieben.
+    for (const cf of chosenSubFeatures) {
+      push({
+        classId: cf.classId,
+        source: cf.source,
+        subclassId: cf.subclassId,
+        name: cf.name,
+        level: cf.level,
+        entries: cf.entries,
+        fromOptionFeature: cf.fromOptionFeature,
+        isOptionalFeature: cf.isOptionalFeature,
+      }, 'XPHB')
+    }
+
+    // Legacy-Optfeature-Picks aus cls.levelChoices[N].optionalFeatures
+    // (Level-Up-Wizard schreibt dort rein) als __activeFeatures
+    // surfacen, damit Bonus-Extractor + Catalog + featureEffectParser
+    // sie sehen. Auflösung über die optionalFeatureMap aus der
+    // Hydration; fehlt sie, schicken wir den blanken Eintrag mit nur
+    // dem Namen rein — catalog matched über name, Bonus-Extractor
+    // ignoriert (keine entries).
+    const ofMap = optionalFeatureMapRef.current
+    for (const cls of (charData?.classes || [])) {
+      const lcs = cls.levelChoices || {}
+      for (const [lvlStr, lc] of Object.entries(lcs)) {
+        const lvl = parseInt(lvlStr, 10) || 1
+        const ofs = Array.isArray(lc?.optionalFeatures) ? lc.optionalFeatures : []
+        for (const f of ofs) {
+          const name = typeof f === 'string' ? f : f?.name
+          if (!name) continue
+          const lookup = ofMap ? (ofMap.get(name.toLowerCase()) || null) : null
+          push({
+            classId: cls.classId,
+            source: 'class',
+            name,
+            level: lvl,
+            entries: (lookup?.entries) || [],
+            isOptionalFeature: true,
+          }, lookup?.source || 'XPHB')
+        }
+        // Legacy Fighting-Style-Field: alte Charaktere haben
+        // `levelChoices[1].fightingStyle = 'Archery'` (Step4b vor dem
+        // Refactor). Wir lookupen den Eintrag aus optfeature-Data und
+        // surfacen ihn als active feature, damit die mechanischen Boni
+        // (Archery → +2 Ranged Attack, etc.) trotzdem greifen.
+        if (typeof lc?.fightingStyle === 'string' && lc.fightingStyle) {
+          const fsName = lc.fightingStyle
+          const lookup = ofMap ? (ofMap.get(fsName.toLowerCase()) || null) : null
+          push({
+            classId: cls.classId,
+            source: 'class',
+            name: fsName,
+            level: lvl,
+            entries: (lookup?.entries) || [],
+            isOptionalFeature: true,
+          }, lookup?.source || 'XPHB')
+        }
+        // Superior-Technique-Maneuver field (auch Legacy).
+        if (typeof lc?.superiorTechniqueManeuver === 'string' && lc.superiorTechniqueManeuver) {
+          const mName = lc.superiorTechniqueManeuver
+          const lookup = ofMap ? (ofMap.get(mName.toLowerCase()) || null) : null
+          push({
+            classId: cls.classId,
+            source: 'class',
+            name: mName,
+            level: lvl,
+            entries: (lookup?.entries) || [],
+            isOptionalFeature: true,
+          }, lookup?.source || 'XPHB')
         }
       }
     }
@@ -857,6 +1097,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         delete stripped.__grantedSpells
         touched = true
       }
+      if (stripped.__classDataMap) {
+        delete stripped.__classDataMap
+        touched = true
+      }
       return touched ? stripped : data
     }
     saveTimer.current = setTimeout(() => {
@@ -1007,6 +1251,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         if (res.recharge === 'short_rest') delete used[res.id]
       }
       d.status.usedResources = used
+      // Active-Effects-Cleanup: alle Effekte mit until=short_rest /
+      // concentration-end / turn-end fallen weg.
+      if (Array.isArray(d.status.activeEffects)) {
+        d.status.activeEffects = d.status.activeEffects.filter(e =>
+          !['short_rest', 'concentration-end', 'turn-end'].includes(e?.until),
+        )
+      }
     })
     setShortRestOpen(false)
   }
@@ -1025,6 +1276,14 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         action: false, bonusAction: false, reaction: false,
         surgeAction: false, hastedAction: false,
         surgeActive: false, leveledCast: false,
+      }
+      // Active-Effects-Cleanup: long rest räumt alles auf außer
+      // dauerhafte Effekte (until=null). Concentration ist sowieso
+      // gebrochen (siehe oben), Minute-/Turn-Effekte sind eh abgelaufen.
+      if (Array.isArray(d.status.activeEffects)) {
+        d.status.activeEffects = d.status.activeEffects.filter(e =>
+          !['long_rest', 'short_rest', 'concentration-end', 'minute', 'turn-end'].includes(e?.until),
+        )
       }
       // Long Rest recovers half (round-up) of each class's max hit dice.
       const used = { ...(d.status.hitDiceUsed || {}) }

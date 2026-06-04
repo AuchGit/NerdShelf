@@ -155,6 +155,11 @@ export function gatherCharacterFeatures(character) {
         const name = typeof f === 'string' ? f : f?.name
         if (name) set.add(name.toLowerCase())
       }
+      // Legacy: Step4b alte Storage-Felder (fightingStyle / Maneuver
+      // als Strings). Hier hineinziehen damit featureGrants /
+      // featureEffects sie matchen.
+      if (typeof lvl?.fightingStyle === 'string') set.add(lvl.fightingStyle.toLowerCase())
+      if (typeof lvl?.superiorTechniqueManeuver === 'string') set.add(lvl.superiorTechniqueManeuver.toLowerCase())
     }
   }
 
@@ -174,6 +179,41 @@ export function gatherCharacterFeatures(character) {
     for (const [needle, implied] of SUBCLASS_IMPLIED_FEATURES) {
       if (contains(sub, needle)) {
         for (const name of implied) set.add(name.toLowerCase())
+      }
+    }
+  }
+
+  // 4. __activeFeatures: Class-/Subclass-Features + die gewählten
+  //    Sub-Features aus dem Option-Block-Resolver (Phase 1, z.B. Druid
+  //    Primal Order → Magician oder Warden). Wird in der Sheet-
+  //    Hydration befüllt. featureGrants matcht über diese Namen, also
+  //    sehen wir "Warden" → Martial-Weapon/Medium-Armor-Prof.
+  for (const f of (character?.__activeFeatures || [])) {
+    if (f?.name) set.add(String(f.name).toLowerCase())
+  }
+
+  // 5. character.choices: Generischer Option-Block-Resolver schreibt
+  //    'of:Name|Source' Werte für refOptionalfeature-Picks. Wir
+  //    extrahieren den Namen damit Fighting Style / Maneuver / etc.
+  //    auch ohne Sheet-Hydration matchen.
+  for (const [descId, raw] of Object.entries(character?.choices || {})) {
+    if (!descId.startsWith('optblock::')) continue
+    const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+    for (const v of values) {
+      if (typeof v !== 'string') continue
+      if (v.startsWith('of:')) {
+        const name = v.slice(3).split('|')[0].trim()
+        if (name) set.add(name.toLowerCase())
+      } else if (v.startsWith('cf:')) {
+        // refClassFeature-Pick: "cf:Magician|Druid|XPHB|1"
+        const name = v.slice(3).split('|')[0].trim()
+        if (name) set.add(name.toLowerCase())
+      } else if (v.startsWith('sf:')) {
+        const name = v.slice(3).split('|')[0].trim()
+        if (name) set.add(name.toLowerCase())
+      } else if (v.startsWith('ft:')) {
+        const name = v.slice(3).split('|')[0].trim()
+        if (name) set.add(name.toLowerCase())
       }
     }
   }

@@ -601,6 +601,7 @@ function ExpandableEntryCard({
     { name: title, entries, classId: classId || null, level: level || null },
     character,
     Math.ceil(((character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)) / 4) + 1,
+    { classDataMap: character?.__classDataMap },
   )
   // Wenn der Parent expandKey + isExpanded + onToggle gibt, läuft der
   // Toggle gegen den Parent-State (überlebt Tab-Wechsel). Sonst

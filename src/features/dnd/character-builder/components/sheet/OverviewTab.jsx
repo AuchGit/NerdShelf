@@ -27,11 +27,13 @@ import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
 import { usePillColors } from '../../lib/pillColors'
-import { parseFeatureEffect } from '../../lib/featureEffectParser'
+import { parseFeatureEffect, pillColorForKind } from '../../lib/featureEffectParser'
 import { applySavedOrder, getSavedOrder, moveCategory, resetCategoryOrder } from '../../lib/categoryOrder'
 import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
 import { getCustomNote, setCustomNote } from '../../lib/customNotes'
 import { isPinnedAction, togglePinnedAction, getPinnedActions } from '../../lib/pinnedActions'
+import { getSpellWeaponBuff, getEligibleWeapons } from '../../lib/spellWeaponBuffs'
+import { addActiveEffect, removeActiveEffect, getActiveEffects } from '../../lib/activeEffects'
 import CrossEditionPill from '../ui/CrossEditionPill'
 import HoverDetailTooltip from '../ui/HoverDetailTooltip'
 
@@ -1388,6 +1390,44 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     // Reaction by parsing castingTime.
     const meta = character?.spellMetadata || {}
     const collected = collectCharacterSpells(character) || []
+    // Prepared-Caster-Filter: für Klassen vom Typ 'prepared' /
+    // 'spellbook' (Wizard, Cleric, Druid, Paladin, Ranger 5.5e) nur
+    // Spells die TATSÄCHLICH heute prepared sind erscheinen als
+    // Actions. Sonst landen 50+ Wizard-Spellbook-Einträge in der
+    // Action-Spalte und überfüllen sie. Known-Caster (Sorcerer/Bard/
+    // Warlock 5e) und Cantrips + Granted-Spells (race/feat/feature)
+    // bleiben unkonditional sichtbar.
+    const preparedCasterIds = new Set()
+    for (const cls of (character.classes || [])) {
+      try {
+        const sub = cls.subclassId?.split('__')[0] || null
+        const mod = computed?.spellcasting?.[cls.classId]?.modifier ?? 0
+        const info = getSpellcastingInfo(cls.classId, cls.level, mod, sub, edition)
+        if (info?.type === 'prepared' || info?.type === 'spellbook') {
+          preparedCasterIds.add(cls.classId)
+        }
+      } catch { /* ignore — class without spellcasting */ }
+    }
+    const preparedByClassLc = {}
+    for (const [cid, names] of Object.entries(character?.status?.preparedSpells || {})) {
+      preparedByClassLc[cid] = new Set((names || []).map(n => String(n).toLowerCase()))
+    }
+    function isCastableNow(c, fullSpell) {
+      // Cantrips immer ok.
+      if ((fullSpell?.level ?? 1) === 0) return true
+      // Race/Feat/Custom-Grants sind permanent castbar (oder über
+      // explicit "granted") — als Action verfügbar.
+      if (c.granted) return true
+      const origins = new Set(c.origins || [])
+      if (origins.has('race') || origins.has('feat') || origins.has('custom')) return true
+      // Class-Source: nur erlauben wenn mindestens EINE Source-Klasse
+      // den Spell aktuell prepared hat ODER known-caster ist.
+      for (const cid of (c.sourceClasses || [])) {
+        if (!preparedCasterIds.has(cid)) return true   // known-caster
+        if (preparedByClassLc[cid]?.has(c.name.toLowerCase())) return true
+      }
+      return false
+    }
     const seenSpells = new Set()
     for (const c of collected) {
       const key = c.name.toLowerCase()
@@ -1395,6 +1435,8 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       seenSpells.add(key)
       const full = spellMap?.get(key) || null
       const m = full || meta[c.name] || null
+      // Apply prepared-filter before deciding to surface the row.
+      if (!isCastableNow(c, full)) continue
       // 5etools `time` array stores `unit: "bonus" | "reaction" | "action"`
       // (no trailing "action" on "bonus"); formatCastingTime stringifies
       // to "1 bonus" / "1 reaction …" / "1 action". Match the unit word
@@ -1557,7 +1599,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         if (re.test(raw)) matched.push(a)
       }
       const subActions = matched.length >= 2 ? matched : null
-      const fxF = parseFeatureEffect(f, character, profBonus)
+      const fxF = parseFeatureEffect(f, character, profBonus, { classDataMap: character?.__classDataMap })
       b[slot].push({
         id: `feat-${f.classId}-${f.name}-${f.level}`,
         // Color-Marker / Favoriten-Key im einheitlichen
@@ -1580,7 +1622,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     for (const t of (character?.species?.__traits || [])) {
       const slot = detectActionSlot(t.entries)
       if (!slot) continue
-      const fxT = parseFeatureEffect({ ...t, classId: null }, character, profBonus)
+      const fxT = parseFeatureEffect({ ...t, classId: null }, character, profBonus, { classDataMap: character?.__classDataMap })
       b[slot].push({
         id: `race-${t.name}`,
         markerKey: `trait:${t.name}`,
@@ -2328,16 +2370,10 @@ function CombatActionsCategorisedList({
                   )
                 }
 
-                // Smart-Effect-Pills (Attack/Save/Damage) ins LEFT.
+                // Smart-Effect-Pills (Attack/Save/Damage + Phase 4 Kinds).
                 if (Array.isArray(r.effectPills) && r.effectPills.length > 0) {
                   for (const p of r.effectPills) {
-                    const color = p.kind === 'attack'
-                      ? (pillColors['pill.attack'] || 'var(--accent-blue)')
-                      : p.kind === 'save'
-                        ? (pillColors['pill.save'] || 'var(--accent-purple)')
-                        : (p.damageType && pillColors[`damage.${p.damageType}`])
-                          || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
-                          || (pillColors['damage.healing'] && p.damageType === 'healing' ? pillColors['damage.healing'] : 'var(--accent-red)')
+                    const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
                     leftPills.push(
                       <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
                         ...caePill,
@@ -3197,6 +3233,7 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
           { name: title, entries, classId },
           character,
           computed?.proficiencyBonus || 0,
+          { classDataMap: character?.__classDataMap },
         )
         return fx?.pills || []
       }
@@ -3217,13 +3254,7 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
           <span style={favCardName}>{title}</span>
           {badge && <span style={favCardBadge}>{badge}</span>}
           {favPills.map(p => {
-            const color = p.kind === 'attack'
-              ? (pillColors['pill.attack'] || 'var(--accent-blue)')
-              : p.kind === 'save'
-                ? (pillColors['pill.save'] || 'var(--accent-purple)')
-                : (p.damageType && pillColors[`damage.${p.damageType}`])
-                  || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
-                  || 'var(--accent-red)'
+            const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
             return (
               <span key={`favfx-${p.kind}-${p.label}-${p.value || ''}`}
                 title={p.title} style={{
@@ -4070,33 +4101,84 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
   }, [edition])
 
   // ── Pro Klasse die Optional-Features einsammeln (Maneuvers etc.).
-  //    Datenpfad: cls.levelChoices[lv].optionalFeatures[]. Gruppiert
-  //    nach dem 5etools featureType-Label (Maneuver, Invocation,
-  //    Metamagic, Fighting Style, Arcane Shot, …) — kein hardcoded
-  //    Mapping pro Klasse, das Label kommt direkt aus FEATURE_TYPE_LABEL.
+  //    Drei Datenpfade werden gemerged:
+  //     • cls.levelChoices[lv].optionalFeatures[]   (Legacy: Level-Up-Wizard
+  //       OptFeatPicker)
+  //     • cls.levelChoices[lv].fightingStyle (string)  (Legacy: alter Step4b)
+  //     • character.choices[descId] = 'of:Name|Source' (NEU: Option-Block-
+  //       Resolver in Step4b + LevelUp-Page generischer Picker — Phase 2)
+  //
+  //    Alle werden nach 5etools featureType-Label gruppiert (Maneuver,
+  //    Invocation, Metamagic, Fighting Style, Arcane Shot, …).
+  //    optFeatMap ist die geladene optionalfeatures.json — über sie
+  //    resolven wir featureType + source für choices-Picks die nur Name
+  //    haben.
   const classPicks = useMemo(() => {
     const out = {}
+    // Helper: ein bereits resolvter Pick → push to out[classId][label]
+    const pushPick = (classId, lv, name, source, featureType) => {
+      if (!classId || !name) return
+      const ft = String(featureType || '').toUpperCase()
+      const labelEntry = FEATURE_TYPE_LABEL[ft]
+      const label = labelEntry?.label || ft || 'Other'
+      if (!out[classId]) out[classId] = {}
+      if (!out[classId][label]) out[classId][label] = []
+      // Dedup auf Name + Level — verhindert Doppel-Anzeige wenn Pick
+      // sowohl im legacy Optfeatures-Array als auch im neuen choices
+      // -Map liegt (z.B. nach Migration).
+      const exists = out[classId][label].some(p =>
+        p.name === name && p.level === lv,
+      )
+      if (exists) return
+      out[classId][label].push({ name, source, level: lv, featureType: ft })
+    }
+
     for (const cls of (character.classes || [])) {
-      const map = {}
       for (const [lvStr, ch] of Object.entries(cls.levelChoices || {})) {
         const lv = parseInt(lvStr, 10) || 0
+        // Legacy 1: optionalFeatures[] (LevelUp-OptFeatPicker)
         for (const f of (ch.optionalFeatures || [])) {
-          const ft = String(f.featureType || '').toUpperCase()
-          const labelEntry = FEATURE_TYPE_LABEL[ft]
-          const label = labelEntry?.label || ft || 'Other'
-          if (!map[label]) map[label] = []
-          map[label].push({
-            name: f.name,
-            source: f.source,
-            level: lv,
-            featureType: ft,
-          })
+          pushPick(cls.classId, lv, f.name, f.source, f.featureType)
+        }
+        // Legacy 2: fightingStyle (string from old Step4b)
+        if (typeof ch.fightingStyle === 'string' && ch.fightingStyle) {
+          const lookup = optFeatMap?.get(ch.fightingStyle.toLowerCase()) || null
+          const ftTag = lookup?.featureType?.[0] || (cls.classId === 'Paladin' ? 'FS:P'
+            : cls.classId === 'Ranger' ? 'FS:R' : 'FS:F')
+          pushPick(cls.classId, lv, ch.fightingStyle, lookup?.source, ftTag)
+        }
+        if (typeof ch.superiorTechniqueManeuver === 'string' && ch.superiorTechniqueManeuver) {
+          const lookup = optFeatMap?.get(ch.superiorTechniqueManeuver.toLowerCase()) || null
+          pushPick(cls.classId, lv, ch.superiorTechniqueManeuver, lookup?.source, lookup?.featureType?.[0] || 'MV:B')
         }
       }
-      if (Object.keys(map).length > 0) out[cls.classId] = map
+    }
+
+    // Neuer Pfad: character.choices mit 'of:Name|Source' Values. Diese
+    // Picks stammen aus dem generischen Option-Block-Picker (Phase 2)
+    // und tragen ihren classId im descId-Pfad
+    // ("optblock::class::Fighter::::1::Fighting Style::b0").
+    for (const [descId, raw] of Object.entries(character.choices || {})) {
+      if (!descId.startsWith('optblock::')) continue
+      const segs = descId.split('::')
+      // Format: optblock::<source>::<classId>::<subclassId>::<level>::<featureName>::bN
+      if (segs.length < 7) continue
+      const classId = segs[2]
+      const level = parseInt(segs[4], 10) || 1
+      const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+      for (const v of values) {
+        if (!v || !v.startsWith('of:')) continue
+        // 'of:Archery|PHB'
+        const [name, src] = v.slice(3).split('|')
+        const trimmedName = (name || '').trim()
+        if (!trimmedName) continue
+        const lookup = optFeatMap?.get(trimmedName.toLowerCase()) || null
+        const ft = lookup?.featureType?.[0] || ''
+        pushPick(classId, level, trimmedName, src || lookup?.source, ft)
+      }
     }
     return out
-  }, [character.classes])
+  }, [character.classes, character.choices, optFeatMap])
 
   // Klassen die ihren eigenen Tab bekommen — alles mit Caster-Status
   // ODER mit picked Optional-Features. Reihenfolge entspricht der
@@ -4742,13 +4824,7 @@ function SpellListRow({
             Reihenfolge wie in der Action-Spalte. Components/Conc/
             Ritual/Action-Type folgen rechts dahinter. */}
         {effectPills.map((p) => {
-          const color = p.kind === 'attack'
-            ? (pillColors['pill.attack'] || 'var(--accent-blue)')
-            : p.kind === 'save'
-              ? (pillColors['pill.save'] || 'var(--accent-purple)')
-              : (p.damageType && pillColors[`damage.${p.damageType}`])
-                || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
-                || 'var(--accent-red)'
+          const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
           return (
             <span key={`fx-${p.kind}-${p.label}-${p.value || ''}`}
               title={p.title} style={{
@@ -4806,6 +4882,18 @@ function SpellListRow({
             <div style={{ marginTop: 6 }}>
               <EntryRenderer entries={sp.entriesHigherLevel} />
             </div>
+          )}
+          {/* Spell-Weapon-Buff (Shillelagh / Magic Weapon / Magic
+              Stone / Elemental Weapon): wenn der Spell-Name im
+              SPELL_WEAPON_BUFFS-Catalog steht, zeigen wir hier den
+              Weapon-Picker. Aktivieren registriert ein activeEffect;
+              rulesEngine.computeAttacks consumed das. */}
+          {applyCharacter && getSpellWeaponBuff(sp?.name) && (
+            <SpellWeaponBuffPicker
+              spell={sp}
+              character={character}
+              applyCharacter={applyCharacter}
+            />
           )}
           {applyCharacter && (
             <div
@@ -4870,6 +4958,132 @@ function spellTabStyle(active) {
   }
 }
 
+// ── Spell-Weapon-Buff-Picker ─────────────────────────────────────
+// Erscheint im Expanded-Body einer Spell-Row für Spells im
+// SPELL_WEAPON_BUFFS-Catalog (Shillelagh, Magic Weapon, Magic Stone,
+// Elemental Weapon). Listet die eligiblen Waffen, "Activate" pinnt
+// den Effekt an die gewählte Waffe via lib/activeEffects.
+//   • Aktiver Effekt zeigt sich als badge mit × Dismiss-Knopf
+//   • rulesEngine.computeAttacks consumed den Effekt → Attack/Damage
+//     reflektieren die Buff-Werte automatisch (Shillelagh: WIS + 1d8)
+function SpellWeaponBuffPicker({ spell, character, applyCharacter }) {
+  const buff = getSpellWeaponBuff(spell?.name)
+  const [showAll, setShowAll] = useState(false)
+  if (!buff) return null
+  const eligible = getEligibleWeapons(character, spell?.name)
+  // Fallback: alle Waffen wenn der strikte Filter leer ist ODER der
+  // Spieler "alle anzeigen" gewählt hat. Schützt vor dem Edge-Case
+  // wo der Char eine Custom-Named Waffe hat die nicht erkannt wird.
+  const allWeapons = [
+    ...((character?.inventory?.items) || []),
+    ...((character?.custom?.items) || []),
+  ].filter(i => i?.isWeapon || String(i?.type || '').split('|')[0] === 'M' || String(i?.type || '').split('|')[0] === 'R')
+  const displayList = (showAll || eligible.length === 0) ? allWeapons : eligible
+  const activeEffects = getActiveEffects(character)
+  // Effekte die VON DIESEM Spell stammen (gleicher source-string).
+  const sourceTag = `spell:${spell.name}`
+  const active = activeEffects.filter(e => e?.source === sourceTag)
+
+  function activate(weapon) {
+    const built = buff.buildEffect(character, weapon)
+    addActiveEffect(applyCharacter, {
+      kind: built.kind,
+      source: sourceTag,
+      target: { kind: 'weapon', id: weapon.id, label: weapon.customName || weapon.name },
+      value: built.value || {},
+      until: buff.duration,
+    })
+  }
+  function dismiss(effectId) {
+    removeActiveEffect(applyCharacter, effectId)
+  }
+
+  return (
+    <div style={{
+      marginTop: 8, padding: '8px 10px', borderRadius: 6,
+      border: '1px dashed var(--accent-orange, #ff9533)',
+      background: 'color-mix(in srgb, var(--accent-orange, #ff9533) 8%, transparent)',
+    }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6,
+        color: 'var(--accent-orange, #ff9533)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        {buff.label} — Auf Waffe wirken
+      </div>
+      {active.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
+          {active.map(e => (
+            <div key={e.id} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '3px 6px', borderRadius: 4,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--accent-orange, #ff9533)',
+              fontSize: 11,
+            }}>
+              <span style={{ color: 'var(--accent-orange, #ff9533)', fontWeight: 700 }}>● Active</span>
+              <span style={{ color: 'var(--text-primary)', flex: 1 }}>
+                {e?.target?.label || e?.target?.id}
+              </span>
+              <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{e.until || ''}</span>
+              <button type="button" onClick={() => dismiss(e.id)}
+                title="Effekt aufheben"
+                style={{
+                  background: 'transparent', border: 'none',
+                  color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13,
+                  padding: '0 4px', fontFamily: 'inherit', lineHeight: 1,
+                }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {displayList.length === 0 ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+          Keine Waffen im Inventar gefunden.
+        </div>
+      ) : (
+        <>
+          {eligible.length === 0 && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 10, marginBottom: 4 }}>
+              Keine Waffe passt strikt zum Spell-Filter — alle Waffen werden gelistet.
+            </div>
+          )}
+          {eligible.length > 0 && (
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 10, color: 'var(--text-muted)', marginBottom: 4,
+              cursor: 'pointer',
+            }}>
+              <input type="checkbox" checked={showAll}
+                onChange={(e) => setShowAll(e.target.checked)} />
+              Alle Waffen anzeigen (überschreibt Spell-Filter)
+            </label>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {displayList.map(w => {
+              const isAlreadyActive = active.some(e => e?.target?.id === w.id)
+              return (
+                <button key={w.id} type="button" onClick={() => activate(w)}
+                  disabled={isAlreadyActive}
+                  title={isAlreadyActive ? 'Schon aktiv' : `Auf ${w.customName || w.name} wirken`}
+                  style={{
+                    padding: '3px 8px', fontSize: 11,
+                    background: isAlreadyActive ? 'transparent' : 'var(--bg-elevated)',
+                    border: '1px solid var(--accent-orange, #ff9533)',
+                    borderRadius: 4,
+                    color: 'var(--accent-orange, #ff9533)',
+                    cursor: isAlreadyActive ? 'default' : 'pointer',
+                    opacity: isAlreadyActive ? 0.5 : 1,
+                    fontFamily: 'inherit',
+                  }}>
+                  {w.customName || w.name}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Class-Pick-Kategorie (Maneuvers / Invocations / Metamagic / …) ─
 // Eine Klapp-Kategorie pro featureType-Label. Items werden so
 // kompakt wie Spell-Rows gerendert: linker Marker + Name + (im
@@ -4906,6 +5120,7 @@ function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr
               { ...featData, classId: it.classId || null },
               character,
               profBonus,
+              { classDataMap: character?.__classDataMap },
             )
             pickPills = fx?.pills || []
           } catch { pickPills = [] }
@@ -4932,13 +5147,7 @@ function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr
                 {it.name}
               </span>
               {pickPills.map(p => {
-                const color = p.kind === 'attack'
-                  ? (pillColors['pill.attack'] || 'var(--accent-blue)')
-                  : p.kind === 'save'
-                    ? (pillColors['pill.save'] || 'var(--accent-purple)')
-                    : (p.damageType && pillColors[`damage.${p.damageType}`])
-                      || (p.damageType && DAMAGE_TYPE_COLOR[p.damageType])
-                      || 'var(--accent-red)'
+                const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
                 return (
                   <span key={`pick-fx-${p.kind}-${p.label}-${p.value || ''}`}
                     title={p.title} style={{

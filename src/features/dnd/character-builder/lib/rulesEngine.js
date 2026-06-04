@@ -5,6 +5,27 @@ import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
 import { activeConcentrationEffects, activeVariableDamageEffect } from './concentrationEffects'
 import { getMechanicalEffects } from './featureEffects'
 import { sumEquippedBonuses, getWeaponBonus } from './itemBonuses'
+import { aggregateFeatureBonuses } from './featureBonusExtractor'
+import { getEffectsForWeapon } from './activeEffects'
+import { getClassTableValue as _gcTableValue, getClassTableDie as _gcTableDie, getClassTableCell as _gcTableCell } from './classTableLookup'
+import { RESOURCE_TEMPLATES } from './resourceTemplates'
+import {
+  getBarbarianRages, getBarbarianRageDamage, getBardicInspirationDie,
+  getMonkMartialArtsDie, getMonkUnarmoredMovement,
+  getWarlockInvocations, getArtificerInfusions, getArtificerInfusedItems,
+} from './rulesEngineFallbacks'
+
+// Boni aus aktiv-gewählten Class-/Subclass-/Optional-Features
+// (Fighting Style Defense → +1 AC, Archery → +2 ranged attack,
+// Dueling → +2 1H melee damage, Thrown Weapon Fighting → +2 thrown
+// damage, etc.). __activeFeatures wird in CharacterSheetPage.
+// hydrateClassDataAndRecompute befüllt — inkl. chosen sub-features
+// aus dem option-block-resolver, sodass eine Magician/Warden-Wahl
+// hier korrekt durchschlägt.
+function _featureBonusesFor(character) {
+  const list = Array.isArray(character?.__activeFeatures) ? character.__activeFeatures : []
+  return aggregateFeatureBonuses(list)
+}
 
 // ============================================================
 // HAUPT-FUNKTION
@@ -458,6 +479,10 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
   // Magic-Item-Boni auf ALLE Saves (Cloak of Protection +1,
   // Ring of Protection +1, Robe of the Archmagi +2, etc.).
   const itemSaves = sumEquippedBonuses(character, 'bonusSavingThrow')
+  // Feature-Boni (data-extracted aus optionalfeature/Feature-Text —
+  // catches future Saving-Throw-Boni ohne Hardcode).
+  const featBonusesSv = _featureBonusesFor(character)
+  const featSaveBonus = featBonusesSv.savingThrowBonus || 0
 
   for (const ability of abilities) {
     const isProficient = proficiencies.savingThrows[ability] || false
@@ -467,7 +492,7 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
     // Feats wie Resilient können Saving Throw Proficiency geben
     const featBonus = getFeatSaveBonus(character, ability)
 
-    const total = mod + bonus + featBonus + auraBonus + itemSaves.total
+    const total = mod + bonus + featBonus + auraBonus + itemSaves.total + featSaveBonus
 
     result[ability] = {
       modifier: mod,
@@ -477,7 +502,8 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
         + (isProficient ? ` + ${profBonus} (prof)` : '')
         + (featBonus ? ` + ${featBonus}` : '')
         + (auraBonus ? ` + ${auraBonus} (aura/${mech.saveBonusAbility?.toUpperCase()})` : '')
-        + (itemSaves.total ? ` + ${itemSaves.total} (item)` : ''),
+        + (itemSaves.total ? ` + ${itemSaves.total} (item)` : '')
+        + (featSaveBonus ? ` + ${featSaveBonus} (feature)` : ''),
     }
   }
 
@@ -738,6 +764,23 @@ export function computeAC(character, modifiers, abilityScores) {
   const itemAc = sumEquippedBonuses(character, 'bonusAc')
   total += itemAc.total
 
+  // Feature-AC-Boni (Fighting Style "Defense" → +1 wenn Rüstung an).
+  // acBonusRequiresArmor gilt für Defense; Features ohne Flag (z.B.
+  // Cloak-of-Protection-ähnliche Items) addieren immer. Wir bestimmen
+  // "trägt Rüstung" über die getroffene AC-Option: armor-basierte
+  // Optionen haben `armor.isArmor`, unarmored-defense nicht.
+  const featBonuses = _featureBonusesFor(character)
+  const wearingArmor = equippedArmor.length > 0
+  let featAcContribution = 0
+  if (typeof featBonuses.acBonus === 'number' && featBonuses.acBonus !== 0) {
+    if (featBonuses.acBonusRequiresArmor && !wearingArmor) {
+      // skip — z.B. Defense ohne Rüstung greift nicht
+    } else {
+      featAcContribution = featBonuses.acBonus
+      total += featAcContribution
+    }
+  }
+
   // acBonus (additive, e.g. Shield of Faith / Haste) stacks on the
   // chosen base AC.
   if (concEff?.acBonus) total += concEff.acBonus
@@ -894,6 +937,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // gehängt. KEIN Stat-Math (die Würfe sind per-Roll) — nur
   // Display-Pille damit der Spieler beim Würfeln nicht vergisst.
   const variableBuff = activeVariableDamageEffect(character)
+  // Feature-Boni: Fighting-Style-Effekte etc. werden hier pro Waffe
+  // konditional addiert (ranged vs. melee, einhändig vs. thrown).
+  const fb = _featureBonusesFor(character)
   for (const weapon of weapons) {
     // Legacy characters created before the wizard normalised weapon
     // properties may still carry raw 5etools codes like "F|XPHB". Map
@@ -914,10 +960,37 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     // Weapon, …). Effects are data-driven via WEAPON_MARKING_RULES —
     // the engine never names a class or feature directly.
     const marks = combinedMarkEffects(character, weapon.id)
+    // Aktive Effects die auf diese Waffe gebunden sind (Shillelagh,
+    // Magic Weapon, Magic Stone, Elemental Weapon — generisch via
+    // character.status.activeEffects). Mehrere Effects stacken
+    // additiv für Boni; abilityOverride/damageDie nimmt der LETZTE
+    // Effect (Spieler-Order).
+    const effects = getEffectsForWeapon(character, weapon.id)
+    const effectAcc = {
+      abilityOverride: null, damageDie: null, damageType: null,
+      attackBonus: 0, damageBonus: 0, magical: false,
+      labels: [],
+    }
+    for (const e of effects) {
+      const v = e?.value || {}
+      if (v.abilityOverride) effectAcc.abilityOverride = v.abilityOverride
+      if (v.damageDie)       effectAcc.damageDie       = v.damageDie
+      if (v.damageType)      effectAcc.damageType      = v.damageType
+      if (typeof v.attackBonus === 'number') effectAcc.attackBonus += v.attackBonus
+      if (typeof v.damageBonus === 'number') effectAcc.damageBonus += v.damageBonus
+      if (v.magical) effectAcc.magical = true
+      if (e?.source) effectAcc.labels.push({ label: e.source.replace(/^spell:/, ''), kind: e.kind })
+    }
 
     let abilityMod
     let abilityUsed
-    if (marks.abilityOverride) {
+    // Effect-Override hat höchste Priorität (Shillelagh überschreibt
+    // selbst Hex Warrior). Wenn beide aktiv sind, nimmt der spätere
+    // Effect den AbilityOverride.
+    if (effectAcc.abilityOverride) {
+      abilityUsed = effectAcc.abilityOverride
+      abilityMod = modifiers[effectAcc.abilityOverride] || 0
+    } else if (marks.abilityOverride) {
       abilityUsed = marks.abilityOverride
       abilityMod = modifiers[marks.abilityOverride] || 0
     } else if (isFinesse) {
@@ -938,9 +1011,39 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     // separat `bonusWeaponAttack` / `bonusWeaponDamage`. Legacy:
     // `weapon.attackBonus` (numerisch, von CustomEditModal gesetzt).
     const wBonus = getWeaponBonus(weapon)
-    const baseAtk = abilityMod + (isProficient ? profBonus : 0) + wBonus.attack
-    const attackBonus = baseAtk + (marks.attackBonus || 0)
-    const damageExtra = wBonus.damage + (marks.damageBonus || 0)
+    // Fighting-Style-Boni (data-extracted aus den Feature-Texten):
+    //   • Archery → +rangedAttackBonus auf Fernkampf-Attack-Rolls
+    //   • Dueling → +oneHandedMeleeDamageBonus wenn Nahkampf+1H+keine andere Waffe
+    //   • Thrown Weapon Fighting → +thrownDamageBonus auf Thrown-Waffen
+    // isRanged ist oben bereits berechnet; "1H+nothing else" leiten wir
+    // aus Properties + Equipped-Set ab.
+    let featAtk = 0
+    let featDmg = 0
+    if (isRanged && fb.rangedAttackBonus) featAtk += fb.rangedAttackBonus
+    if (!isRanged && fb.meleeAttackBonus) featAtk += fb.meleeAttackBonus
+    if (fb.thrownDamageBonus && props.includes('Thrown')) featDmg += fb.thrownDamageBonus
+    if (fb.oneHandedMeleeDamageBonus
+        && !isRanged
+        && !props.includes('Two-Handed')
+        && !props.includes('Heavy')
+    ) {
+      // "no other weapons" — wir gucken ob noch eine ANDERE Waffe
+      // equipped ist (Off-Hand-Two-Weapon-Fighting würde Dueling
+      // ausschließen). Versatile-Waffen einhändig getragen → erlaubt.
+      const otherWeaponEquipped = weapons.some(w =>
+        w.id !== weapon.id && w.equipped && w.isWeapon,
+      )
+      if (!otherWeaponEquipped) featDmg += fb.oneHandedMeleeDamageBonus
+    }
+    const baseAtk = abilityMod + (isProficient ? profBonus : 0) + wBonus.attack + featAtk
+    const attackBonus = baseAtk + (marks.attackBonus || 0) + effectAcc.attackBonus
+    const damageExtra = wBonus.damage + (marks.damageBonus || 0) + featDmg + effectAcc.damageBonus
+    // Damage-Die-Override (Shillelagh: 1d8 statt Quarterstaff-1d6;
+    // Magic Stone: 1d6). Wir bauen den Damage-String aus dem über-
+    // schriebenen Würfel und tag'n den Damage-Type wenn der Effect
+    // einen vorgibt.
+    const effectiveDmg1     = effectAcc.damageDie  || weapon.dmg1
+    const effectiveDmgType  = effectAcc.damageType || weapon.dmgType || 'unknown'
 
     // Reach-Property erweitert die Nahkampf-Reichweite per RAW von
     // 5 auf 10 ft. 5etools füllt `range` nur bei Ranged/Thrown-Waffen
@@ -960,8 +1063,13 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       name: weapon.customName || weapon.name,
       attackBonus,
       attackDisplay: `${attackBonus >= 0 ? '+' : ''}${attackBonus}`,
-      damage: `${weapon.dmg1} + ${abilityMod}${damageExtra ? ` + ${damageExtra}` : ''}`,
-      damageType: weapon.dmgType || 'unknown',
+      damage: `${effectiveDmg1} + ${abilityMod}${damageExtra ? ` + ${damageExtra}` : ''}`,
+      damageType: effectiveDmgType,
+      // Effect-Labels werden als Pill auf der Attack-Row angezeigt
+      // ("Shillelagh", "Magic Weapon", …) damit der Spieler sofort
+      // sieht dass die Waffe gerade gebuffed ist.
+      activeEffects: effectAcc.labels,
+      magical: effectAcc.magical || undefined,
       range: computedRange,
       properties: props,
       // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann
@@ -1139,12 +1247,8 @@ function parseWeaponMasteryCount(feature) {
   return null
 }
 
-function getMonkMartialArtsDie(level) {
-  if (level >= 17) return 'd10'
-  if (level >= 11) return 'd8'
-  if (level >= 5) return 'd6'
-  return 'd4'
-}
+// getMonkMartialArtsDie + andere Fallbacks leben jetzt in
+// rulesEngineFallbacks.js und werden oben importiert.
 
 // ============================================================
 // KLASSEN-RESSOURCEN
@@ -1164,167 +1268,36 @@ function getMonkMartialArtsDie(level) {
  * Matching is case-insensitive and tolerates `{@filter X|…}` markup so
  * spell-slot column lookups also work uniformly.
  */
-function getClassTableValue(classData, level, columnLabel) {
-  const cell = getClassTableCell(classData, level, columnLabel)
-  if (cell == null) return null
-  // Plain number / numeric string → integer.
-  if (typeof cell === 'number') return cell
-  if (typeof cell === 'string') {
-    const n = parseInt(cell, 10)
-    return Number.isNaN(n) ? null : n
-  }
-  // Object cells: { type: "bonus" | "bonusSpeed", value: N } → value.
-  if (cell && typeof cell === 'object' && typeof cell.value === 'number') return cell.value
-  return null
-}
-
-/**
- * Like getClassTableValue but returns a formatted die string ("1d6")
- * for cells of the 5etools dice shape:
- *   { type: "dice", toRoll: [{ number, faces }, ...] }
- * Used for Monk Martial Arts die, Rogue Sneak Attack dice, Bardic
- * Inspiration die — everywhere the table cell IS a die rather than a
- * count.
- */
-function getClassTableDie(classData, level, columnLabel) {
-  const cell = getClassTableCell(classData, level, columnLabel)
-  if (!cell || typeof cell !== 'object') return null
-  if (cell.type === 'dice' && Array.isArray(cell.toRoll) && cell.toRoll[0]) {
-    const r = cell.toRoll[0]
-    return `${r.number || 1}d${r.faces}`
-  }
-  return null
-}
-
-/** Internal: locate the raw cell. Tolerates `{@filter X|…}` markup on
- *  column labels and matches case-insensitively. */
-function getClassTableCell(classData, level, columnLabel) {
-  if (!classData?.classTableGroups || !level) return null
-  const stripTag = (s) => String(s || '')
-    .replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
-    .toLowerCase().trim()
-  const target = stripTag(columnLabel)
-  for (const group of classData.classTableGroups) {
-    const labels = group.colLabels || []
-    const idx = labels.findIndex(l => stripTag(l) === target)
-    if (idx < 0) continue
-    const row = (group.rows || [])[level - 1]
-    if (!row) continue
-    return row[idx]
-  }
-  return null
-}
+// Re-export aliases so der vorhandene Code im File die lokalen Namen
+// weiterbenutzen kann. Die Implementierung lebt jetzt in
+// ./classTableLookup damit auch featureEffectParser drauf zugreifen
+// kann (Sneak-Attack-Pille-Scaling Phase 3).
+const getClassTableValue = _gcTableValue
+const getClassTableDie   = _gcTableDie
+const getClassTableCell  = _gcTableCell
 
 export function computeResources(character, modifiers, profBonus, totalLevel, classDataMap = {}) {
   const resources = []
 
+  // Per-Klasse-Resource-Templates aus lib/resourceTemplates.js. Eine
+  // neue Klasse hinzufügen = ein Eintrag im Catalog; kein switch hier
+  // mehr.
   for (const cls of character.classes) {
     const level = cls.level
-
     const cd = classDataMap[cls.classId]
-    // tv = table-value (numeric), td = table-die ("1d6")
-    const tv = (col) => getClassTableValue(cd, level, col)
-    const td = (col) => getClassTableDie(cd, level, col)
-
-    switch (cls.classId) {
-      case 'Barbarian': {
-        // 5.5e XPHB Barbarian table: Rages, Rage Damage, Weapon Mastery.
-        // 5e PHB uses hardcoded progression — keep the legacy helpers as
-        // the fallback.
-        const rages = tv('Rages') ?? getBarbarianRages(level)
-        const rageDmg = tv('Rage Damage') ?? getBarbarianRageDamage(level)
-        resources.push({ id: 'rage', name: 'Rages', max: rages, current: 0, recharge: 'long_rest' })
-        resources.push({ id: 'rage_damage', name: 'Rage Damage Bonus', value: `+${rageDmg}`, type: 'passive' })
-        break
-      }
-
-      case 'Bard': {
-        // 5.5e XPHB calls the column "Bardic Die" (a die — d6 → d12).
-        // 5e PHB used a static "1d6" and grew. getBardicInspirationDie
-        // remains the 5e fallback.
-        const die = td('Bardic Die') ?? td('Bardic Insp. Die') ?? getBardicInspirationDie(level)
-        resources.push({ id: 'bardic_inspiration', name: 'Bardic Inspiration', max: Math.max(1, modifiers.cha || 1), current: 0, recharge: level >= 5 ? 'short_rest' : 'long_rest', die })
-        break
-      }
-
-      case 'Cleric': {
-        const cdMax = tv('Channel Divinity') ?? (level >= 18 ? 3 : level >= 6 ? 2 : 1)
-        resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: cdMax, current: 0, recharge: 'short_rest' })
-        break
-      }
-
-      case 'Druid': {
-        const wsMax = tv('Wild Shape') ?? (level >= 20 ? 99 : 2)
-        resources.push({ id: 'wild_shape', name: 'Wild Shape', max: wsMax, current: 0, recharge: 'short_rest' })
-        break
-      }
-
-      case 'Fighter': {
-        // 5.5e Fighter table has a "Second Wind" column (2/3/4 by level).
-        // 5e Fighter has no such column → fallback to 1.
-        const swMax = tv('Second Wind') ?? 1
-        resources.push({ id: 'second_wind', name: 'Second Wind', max: swMax, current: 0, recharge: 'short_rest' })
-        if (level >= 2) resources.push({ id: 'action_surge', name: 'Action Surge', max: level >= 17 ? 2 : 1, current: 0, recharge: 'short_rest' })
-        if (level >= 9) resources.push({ id: 'indomitable', name: 'Indomitable', max: level >= 17 ? 3 : level >= 13 ? 2 : 1, current: 0, recharge: 'long_rest' })
-        break
-      }
-
-      case 'Monk': {
-        // 5.5e renamed Ki → Focus Points. The table's column is one or
-        // the other depending on edition; we prefer Focus Points (newer)
-        // then fall back. Martial Arts die also comes from the table.
-        const points = tv('Focus Points') ?? tv('Ki Points') ?? level
-        const maDie = td('Martial Arts') ?? `1${getMonkMartialArtsDie(level)}`
-        resources.push({ id: 'ki', name: tv('Focus Points') != null ? 'Focus Points' : 'Ki Points', max: points, current: 0, recharge: 'short_rest' })
-        resources.push({ id: 'martial_arts_die', name: 'Martial Arts Die', value: maDie, type: 'passive' })
-        break
-      }
-
-      case 'Paladin': {
-        const cdMax = tv('Channel Divinity') ?? (level >= 6 ? 2 : 1)
-        resources.push({ id: 'lay_on_hands', name: 'Lay on Hands', max: level * 5, current: 0, recharge: 'long_rest', type: 'pool' })
-        if (level >= 2) resources.push({ id: 'channel_divinity', name: 'Channel Divinity', max: cdMax, current: 0, recharge: 'short_rest' })
-        break
-      }
-
-      case 'Ranger': {
-        // 5.5e calls it "Favored Enemy" (Hunter's Mark casts), with
-        // explicit counts in the table. 5e uses profBonus.
-        const fe = tv('Favored Enemy') ?? profBonus
-        if (level >= 1) resources.push({ id: 'favored_foe', name: 'Favored Enemy', max: fe, current: 0, recharge: 'long_rest' })
-        break
-      }
-
-      case 'Rogue': {
-        // 5.5e Sneak Attack die is in the table ("1d6" → "10d6"). 5e
-        // uses ⌈level/2⌉d6 — same numbers, computed differently.
-        const saDie = td('Sneak Attack') ?? `${Math.ceil(level / 2)}d6`
-        if (level >= 1) resources.push({ id: 'sneak_attack', name: 'Sneak Attack', value: saDie, type: 'passive' })
-        break
-      }
-
-      case 'Sorcerer': {
-        const sp = tv('Sorcery Points') ?? level
-        resources.push({ id: 'sorcery_points', name: 'Sorcery Points', max: sp, current: 0, recharge: 'long_rest' })
-        break
-      }
-
-      case 'Warlock':
-        // Pact Magic wird separat über Spell Slots gehandelt
-        if (level >= 2) {
-          const invocations = getWarlockInvocations(level)
-          resources.push({ id: 'eldritch_invocations', name: 'Eldritch Invocations', value: invocations, type: 'passive' })
-        }
-        break
-
-      case 'Wizard':
-        resources.push({ id: 'arcane_recovery', name: 'Arcane Recovery', max: 1, value: Math.ceil(level / 2), current: 0, recharge: 'long_rest', note: `Recover up to ${Math.ceil(level / 2)} spell slot levels` })
-        break
-
-      case 'Artificer':
-        resources.push({ id: 'infusions', name: 'Infusions Known', value: getArtificerInfusions(level), type: 'passive' })
-        resources.push({ id: 'infused_items', name: 'Infused Items', max: getArtificerInfusedItems(level), type: 'passive' })
-        break
+    const ctx = {
+      level,
+      modifiers,
+      profBonus,
+      // tv = table-value (numeric), td = table-die ("1d6")
+      tv: (col) => getClassTableValue(cd, level, col),
+      td: (col) => getClassTableDie(cd, level, col),
+    }
+    const template = RESOURCE_TEMPLATES[cls.classId]
+    if (!template) continue
+    const out = template(ctx)
+    if (Array.isArray(out)) {
+      for (const r of out) resources.push(r)
     }
   }
 
@@ -1629,66 +1602,8 @@ function getInitiativeBonus(character) {
 // HILFSTABELLEN
 // ============================================================
 
-function getBarbarianRages(level) {
-  if (level >= 20) return 999 // Unlimited
-  if (level >= 17) return 6
-  if (level >= 15) return 5
-  if (level >= 12) return 4
-  if (level >= 6) return 3
-  if (level >= 3) return 3
-  return 2
-}
-
-function getBarbarianRageDamage(level) {
-  if (level >= 16) return 4
-  if (level >= 9) return 3
-  return 2
-}
-
-function getBardicInspirationDie(level) {
-  if (level >= 15) return 'd12'
-  if (level >= 10) return 'd10'
-  if (level >= 5) return 'd8'
-  return 'd6'
-}
-
-function getMonkUnarmoredMovement(level) {
-  if (level >= 18) return 30
-  if (level >= 14) return 25
-  if (level >= 10) return 20
-  if (level >= 6) return 15
-  if (level >= 2) return 10
-  return 0
-}
-
-function getWarlockInvocations(level) {
-  if (level >= 17) return 8
-  if (level >= 15) return 7
-  if (level >= 12) return 6
-  if (level >= 9) return 5
-  if (level >= 7) return 4
-  if (level >= 5) return 3
-  if (level >= 2) return 2
-  return 0
-}
-
-function getArtificerInfusions(level) {
-  if (level >= 18) return 12
-  if (level >= 14) return 10
-  if (level >= 10) return 8
-  if (level >= 6) return 6
-  if (level >= 2) return 4
-  return 0
-}
-
-function getArtificerInfusedItems(level) {
-  if (level >= 18) return 6
-  if (level >= 14) return 5
-  if (level >= 10) return 4
-  if (level >= 6) return 3
-  if (level >= 2) return 2
-  return 0
-}
+// 5e-Hardcoded-Progression-Fallbacks leben jetzt zentral in
+// rulesEngineFallbacks.js und werden oben importiert.
 
 // ============================================================
 // NORMALISIERUNG

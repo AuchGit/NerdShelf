@@ -6,6 +6,8 @@ import { newShareToken } from '../../../../shared/tokens'
 import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
+import { loadClassData } from '../lib/dataLoader'
+import { parseClassFeatureOptionChoices } from '../lib/optionBlockResolver'
 import HeaderButtons from '../components/ui/HeaderButtons'
 import './CharacterCreatePage.css'
 import StepIndicator        from '../components/wizard/StepIndicator'
@@ -45,13 +47,14 @@ const FALLBACK_STEPS = [
 ]
 
 // ── Classes with non-skill class options at level 1 ───────────────────────────
-function hasClassNonSkillOptions(cls, edition) {
+// Vollständig data-driven über die generischen Feature-Option-
+// Descriptors (Druid Primal Order, 5e Fighter Fighting Style etc.).
+// Plus 5e Ranger Favored Enemy / Favored Terrain (niche legacy, nicht
+// in optionalfeatures.json).
+function hasClassNonSkillOptions(cls, edition, extraOptionDescCount = 0) {
   if (!cls) return false
-  const id = cls.classId
-  // Fighting Style classes
-  if (['Fighter', 'Paladin', 'Ranger'].includes(id)) return true
-  // Ranger 5e also gets Favored Enemy + Natural Explorer
-  // (already covered above)
+  if (extraOptionDescCount > 0) return true
+  if (cls.classId === 'Ranger' && edition === '5e') return true
   return false
 }
 
@@ -69,26 +72,31 @@ function extractSkillChoices(startingProfs) {
 }
 
 // ── CLASS_OPTS completion (only non-skill options) ────────────────────────────
-function isClassOptsComplete(character) {
+// `extraOptionDescs` ist die Liste der generischen Feature-Option-
+// Descriptors. Jeder muss in character.choices eine vollständige
+// Wahl (string oder string[] mit count Items) hinterlegt haben.
+function isClassOptsComplete(character, extraOptionDescs = []) {
   const cls     = character.classes[0]
   const edition = character.meta.edition || '5e'
   if (!cls) return false
   // If there's nothing special to choose, step is trivially complete (auto-skip)
-  if (!hasClassNonSkillOptions(cls, edition)) return true
+  if (!hasClassNonSkillOptions(cls, edition, extraOptionDescs.length)) return true
 
   const lc = cls.levelChoices?.[1] || {}
   const id = cls.classId
 
-  // Fighting Style required
-  if (['Fighter', 'Paladin', 'Ranger'].includes(id)) {
-    if (!lc.fightingStyle) return false
-    // Superior Technique needs a maneuver too
-    if (lc.fightingStyle === 'Superior Technique' && !lc.superiorTechniqueManeuver) return false
-  }
-
-  // Ranger 5e needs Favored Enemy + Terrain
+  // Ranger 5e Favored Enemy + Terrain — die zwei Picks leben außerhalb
+  // der optionalfeatures-Daten und behalten ihren Legacy-Speicherslot.
   if (id === 'Ranger' && edition === '5e') {
     if (!lc.favoredEnemy || !lc.favoredTerrain) return false
+  }
+
+  // Generische Feature-Option-Descriptors: jeder muss seine count
+  // Slots in character.choices belegt haben.
+  for (const d of extraOptionDescs) {
+    const stored = character.choices?.[d.id]
+    const arr = Array.isArray(stored) ? stored : (stored ? [stored] : [])
+    if (arr.length < (d.count || 1)) return false
   }
 
   return true
@@ -162,6 +170,41 @@ export default function CharacterCreatePage({ session }) {
   const [character,   setCharacter]   = useState(createEmptyCharacter())
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState(null)
+  // Cache der Feature-Option-Descriptors für die aktuelle Klasse +
+  // Edition. Wird lazy via loadClassData befüllt und treibt sowohl
+  // den Skip-Logik (hasClassNonSkillOptions) als auch die "Step ist
+  // fertig"-Check (isClassOptsComplete). Datadriven — kein Hardcode
+  // pro Klasse mehr nötig.
+  const [classOptionDescs, setClassOptionDescs] = useState([])
+
+  // Class-Daten laden + Feature-Option-Descriptors berechnen. Triggert
+  // immer wenn classId / edition / level / subclassId / choices wechseln,
+  // damit refClassFeature/refSubclassFeature dynamisch aufgelöst werden.
+  useEffect(() => {
+    const cls = character.classes[0]
+    const edition = character.meta?.edition || '5e'
+    if (!cls?.classId) { setClassOptionDescs([]); return }
+    let cancelled = false
+    loadClassData(edition, cls.classId).then(cd => {
+      if (cancelled) return
+      if (!cd) { setClassOptionDescs([]); return }
+      const all = parseClassFeatureOptionChoices(cls, cd, { edition }) || []
+      // refOptionalfeature-only Blöcke (5e Fighting Style → Archery/…)
+      // werden vom Legacy-Pfad behandelt. Hier filtern wir sie raus,
+      // damit der Skip-/Done-Check sich nicht doppelt zählt.
+      const filtered = all.filter(d => {
+        const kinds = (d._resolvedRefs || []).map(r => r.kind)
+        return !kinds.every(k => k === 'optionalfeature')
+      })
+      setClassOptionDescs(filtered)
+    }).catch(() => { if (!cancelled) setClassOptionDescs([]) })
+    return () => { cancelled = true }
+  }, [
+    character.classes[0]?.classId,
+    character.classes[0]?.level,
+    character.classes[0]?.subclassId,
+    character.meta?.edition,
+  ])
 
   // Prefill info.player from user's profile playerName once (only if still empty).
   // Stays editable — we never overwrite after the first set.
@@ -224,7 +267,7 @@ export default function CharacterCreatePage({ session }) {
       case STEP.RACE:          return !!character.species.raceId
       case STEP.BACKGROUND:    return !!character.background.backgroundId
       case STEP.CLASS:         return isStep4Complete(character)
-      case STEP.CLASS_OPTS:    return isClassOptsComplete(character)
+      case STEP.CLASS_OPTS:    return isClassOptsComplete(character, classOptionDescs)
       case STEP.ABILITIES:     return !!character.abilityScores.method
       case STEP.PROFICIENCIES: return isProficienciesComplete(character)
       case STEP.SPELLS:        return isSpellStepComplete(character)
@@ -237,7 +280,7 @@ export default function CharacterCreatePage({ session }) {
         if (!character.species.raceId)            return false
         if (!character.background.backgroundId)   return false
         if (!isStep4Complete(character))          return false
-        if (!isClassOptsComplete(character))      return false
+        if (!isClassOptsComplete(character, classOptionDescs))      return false
         if (!character.abilityScores.method)      return false
         if (!isProficienciesComplete(character))  return false
         if (!isSpellStepComplete(character))      return false
@@ -283,7 +326,7 @@ export default function CharacterCreatePage({ session }) {
 
   function getNextStep(from) {
     const next = Math.min(stepLabels.length - 1, from + 1)
-    if (next === STEP.CLASS_OPTS && !hasClassNonSkillOptions(cls0, edition)) {
+    if (next === STEP.CLASS_OPTS && !hasClassNonSkillOptions(cls0, edition, classOptionDescs.length)) {
       return Math.min(stepLabels.length - 1, next + 1)
     }
     return next
@@ -291,7 +334,7 @@ export default function CharacterCreatePage({ session }) {
 
   function getPrevStep(from) {
     const prev = Math.max(0, from - 1)
-    if (prev === STEP.CLASS_OPTS && !hasClassNonSkillOptions(cls0, edition)) {
+    if (prev === STEP.CLASS_OPTS && !hasClassNonSkillOptions(cls0, edition, classOptionDescs.length)) {
       return Math.max(0, prev - 1)
     }
     return prev

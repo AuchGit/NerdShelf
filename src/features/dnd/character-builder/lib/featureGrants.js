@@ -44,6 +44,17 @@ export const FEATURE_PROFICIENCY_GRANTS = [
     weapons: [],  // the chosen weapon is captured in the level-up flow
     armor:   ['light'],
   },
+  {
+    // 5.5e Druid Primal Order Sub-Option. Granted only when the
+    // player picks Warden in the Primal-Order-Optionsblock. Da der
+    // collectActiveClassFeatures-Pre-Scan Magician/Warden raus filtert
+    // wenn sie NICHT gewählt sind, taucht "Warden" nur dann in
+    // gatherCharacterFeatures auf wenn der Pick gesetzt ist — exakt
+    // die Voraussetzung dafür dass dieser Grant greift.
+    feature: 'Warden',
+    weapons: ['martial'],
+    armor:   ['medium'],
+  },
   // Common Eldritch Invocations and other commonly-missed grants can go
   // here. Add lines as players run into "wait, I should be proficient with
   // X but the sheet says I'm not".

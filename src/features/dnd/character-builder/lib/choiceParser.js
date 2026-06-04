@@ -1286,7 +1286,23 @@ const DESC_TYPE_TO_PROF_KEY = {
   ability:  'ability',
 }
 
-export function getAllChoiceDescriptors({ race = null, subrace = null, background = null, feats = [], cls = null, choices = {} } = {}) {
+// extraDescriptors: optionale Liste von vorberechneten Descriptors die
+// die Caller hineinmischen — typischer Use-Case sind die Feature-
+// Option-Descriptors aus optionBlockResolver.parseClassFeatureOption
+// Choices (Druid Primal Order, 5e Fighting Style, alle inline
+// type:'options'-Blöcke). Wir nehmen sie als Parameter weil
+// choiceParser intentional keine async/lazy imports macht — der
+// Wizard ruft den Resolver eigenständig und hängt das Resultat hier
+// dran.
+export function getAllChoiceDescriptors({
+  race = null,
+  subrace = null,
+  background = null,
+  feats = [],
+  cls = null,
+  extraDescriptors = [],
+  choices = {},
+} = {}) {
   const raceDescs    = parseRaceChoices(race)
   const subraceDescs = parseSubraceChoices(subrace)
 
@@ -1332,6 +1348,7 @@ export function getAllChoiceDescriptors({ race = null, subrace = null, backgroun
     ...parseBackgroundChoices(background),
     ...feats.flatMap(f => parseFeatChoices(f)),
     ...(cls ? parseClassChoices(cls) : []),
+    ...(Array.isArray(extraDescriptors) ? extraDescriptors : []),
   ]
   return filterActiveDescriptors(all, choices)
 }

@@ -10,6 +10,7 @@ import {
   loadFeatList, loadOptionalFeatureList,
 } from '../lib/dataLoader'
 import { parseFeatChoices } from '../lib/choiceParser'
+import { parseClassFeatureOptionChoices } from '../lib/optionBlockResolver'
 import { getSpellListClass, getSpellcastingInfo } from '../lib/spellcastingRules'
 import {
   computeLevelUpInfo, applyLevelUp, undoLastLevelUp,
@@ -34,6 +35,35 @@ const STEPS = [
   {id:'spells',label:'Zauber'},{id:'summary',label:'Übersicht'},
 ]
 
+// Hilfsfunktion: ALLE Feature-Option-Descriptors für den NEUEN Level
+// einer Klasse berechnen. Wir simulieren den classEntry mit
+// level=info.nextLevel + dem (potenziell neu gewählten) subclassId
+// damit Subclass-interne Option-Blocks ab dem Subclass-Level auch
+// auftauchen. refOptionalfeature-only Blöcke gehen über den Legacy
+// OptFeatPicker-Pfad, nicht über uns.
+function computeNewOptionBlockDescs(draft, info) {
+  if (!info || !draft?.classData) return []
+  const synthEntry = {
+    classId: info.classId,
+    level: info.nextLevel,
+    subclassId: draft.subclassId
+      || (info.classId && info.subclassId)
+      || null,
+  }
+  const all = parseClassFeatureOptionChoices(
+    synthEntry, draft.classData, { edition: draft.edition || info.edition || '5e' },
+  ) || []
+  // Nur Descriptors deren Feature genau auf nextLevel kommt — alle
+  // vorherigen Level wurden bei früheren Level-Ups schon abgehandelt.
+  const newAtThisLevel = all.filter(d => Number(d._featureLevel) === Number(info.nextLevel))
+  // refOptionalfeature-only Blöcke vom Legacy-Pfad (OptFeatPicker)
+  // ausschließen.
+  return newAtThisLevel.filter(d => {
+    const kinds = (d._resolvedRefs || []).map(r => r.kind)
+    return !kinds.every(k => k === 'optionalfeature')
+  })
+}
+
 function getActiveSteps(info, draft) {
   if (!info) return [STEPS[0]]
   const a = [STEPS[0], STEPS[1]]
@@ -46,7 +76,11 @@ function getActiveSteps(info, draft) {
   // Also check for class features that need choices (Ranger Favored Enemy/Terrain, etc.)
   const featureNames = info.features.map(f => f.toLowerCase())
   const hasClassFeatureChoices = featureNames.some(f => f.includes('favored enemy') || f.includes('natural explorer'))
-  if (ofGains.length > 0 || hasClassFeatureChoices) a.push(STEPS[4])
+  // Generic feature-option blocks new at this level (Druid Primal
+  // Order, future class-feature option picks). Computed against the
+  // upcoming level so descriptors fresh for this level-up appear.
+  const newOptionBlockDescs = computeNewOptionBlockDescs(draft, info)
+  if (ofGains.length > 0 || hasClassFeatureChoices || newOptionBlockDescs.length > 0) a.push(STEPS[4])
   // Spells: check effective casting (class or subclass)
   const castAb = draft.existingSpellAbility || draft.subclassSpellAbility || info.spellcastingAbility
   const effProg = draft.existingCasterProg || draft.subclassCasterProg || info.casterProgression
@@ -78,7 +112,7 @@ export default function LevelUpPage({ session }) {
     subclassId:null, subclassSpellAbility:null, subclassCasterProg:null,
     existingSpellAbility:null, existingCasterProg:null,
     asiMode:'asi', asiPicks:{}, featEntry:null, featAB:{}, featCh:{},
-    optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{},
+    optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{},
     cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
     preparedSpellPool:null, preparedCantripPool:null,
     // 5.5e prepared-caster pick at level-up: the new prepared spells
@@ -118,7 +152,7 @@ export default function LevelUpPage({ session }) {
       subclassId: existSubId, subclassSpellAbility:null, subclassCasterProg:null,
       existingSpellAbility: existSpellAb, existingCasterProg: existCasterProg,
       asiMode:'asi', asiPicks:{}, featEntry:null, featAB:{}, featCh:{},
-      optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{},
+      optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{},
       cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
       preparedSpellPool:null, preparedCantripPool:null,
     })
@@ -210,7 +244,13 @@ export default function LevelUpPage({ session }) {
       newCantrips:draft.cantrips, newSpells:draft.spells, swappedSpell:sw,
       optionalFeatures:ofE, optFeatureSpells:draft.optFeatureSpells,
       classFeatureChoices:draft.classFeatureChoices,
-      preparedSpellPool:draft.preparedSpellPool, newChoices:{},
+      preparedSpellPool:draft.preparedSpellPool,
+      // Generische Feature-Option-Picks (Druid Primal Order etc.) →
+      // direkt in character.choices mergen. ApplyLevelUp übernimmt
+      // das in next.choices, sheet-side collectActiveClassFeatures
+      // wertet es aus.
+      newChoices: draft.featureOptionPicks && Object.keys(draft.featureOptionPicks).length > 0
+        ? { ...draft.featureOptionPicks } : {},
     })
     // 5.5e prepared casters: append the level-up's new prepared spell
     // picks to character.status.preparedSpells[classId]. The Prepare
@@ -599,9 +639,71 @@ function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
   const showFavoredTerrain = featureNames.some(f => f.includes('natural explorer'))
   const cfc = draft.classFeatureChoices || {}
 
+  // Generische Feature-Option-Picks (Druid Primal Order, …) — neu
+  // auf diesem Level, datadriven aus den Class-/Subclass-Features.
+  const newOptionBlockDescs = useMemo(() => computeNewOptionBlockDescs(draft, info), [draft, info])
+  const optionPicks = draft.featureOptionPicks || {}
+  const toggleOptionPick = (desc, valueKey) => {
+    const stored = optionPicks[desc.id]
+    const arr = Array.isArray(stored) ? stored : (stored ? [stored] : [])
+    let nextArr
+    if (desc.count === 1) {
+      nextArr = arr.includes(valueKey) ? [] : [valueKey]
+    } else {
+      nextArr = arr.includes(valueKey)
+        ? arr.filter(v => v !== valueKey)
+        : (arr.length < desc.count ? [...arr, valueKey] : arr)
+    }
+    const value = desc.count === 1 ? (nextArr[0] || null) : nextArr
+    setDraft(d => ({ ...d, featureOptionPicks: { ...(d.featureOptionPicks || {}), [desc.id]: value } }))
+  }
+
   return (
     <div style={{maxWidth:860,margin:'0 auto'}}>
       <h2 style={S.secTitle}>Class Features wählen</h2>
+
+      {/* ── Generische Feature-Option-Blocks (Druid Primal Order etc.) ── */}
+      {newOptionBlockDescs.map(desc => {
+        const stored = optionPicks[desc.id]
+        const storedArr = Array.isArray(stored) ? stored : (stored ? [stored] : [])
+        const done = storedArr.length === desc.count
+        return (
+          <div key={desc.id} style={S.card}>
+            <div style={S.cardTitle}>
+              {desc._featureName || desc.label}
+              {done
+                ? <span style={{ color: 'var(--accent-green)', marginLeft: 8, fontSize: 12 }}>✓ {storedArr.length}/{desc.count}</span>
+                : <span style={{ color: 'var(--accent)', marginLeft: 8, fontSize: 12 }}>{storedArr.length}/{desc.count} — wählen</span>}
+            </div>
+            <div style={{ color:'var(--text-muted)', fontSize:12, marginBottom:10 }}>
+              Wähle {desc.count === 1 ? 'eine Option' : `${desc.count} Optionen`} für „{desc._featureName || desc.label}".
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:8 }}>
+              {desc.options.map(opt => {
+                const isSel = storedArr.includes(opt.value)
+                const firstString = Array.isArray(opt.description)
+                  ? opt.description.find(e => typeof e === 'string') : null
+                const shortDesc = firstString
+                  ? String(firstString).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1').slice(0, 260) : ''
+                return (
+                  <div
+                    key={opt.value}
+                    onClick={() => toggleOptionPick(desc, opt.value)}
+                    style={{
+                      padding:'10px 12px', borderRadius:8, cursor:'pointer',
+                      border: isSel ? '2px solid var(--accent)' : '2px solid var(--border)',
+                      background: isSel ? 'var(--bg-highlight)' : 'var(--bg-elevated)',
+                    }}>
+                    <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:4 }}>{opt.label}</div>
+                    {shortDesc && <div style={{ fontSize:12, color:'var(--text-muted)' }}>{shortDesc}{firstString && firstString.length > 260 ? ' …' : ''}</div>}
+                    {isSel && <div style={{ color:'var(--accent)', fontSize:11, marginTop:6 }}>✓ Gewählt</div>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
 
       {/* Ranger Favored Enemy (5e — data-driven by feature name) */}
       {showFavoredEnemy && <div style={S.card}>
