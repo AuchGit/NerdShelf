@@ -401,7 +401,40 @@ function DndSettings() {
         </div>
         <PillColorEditor />
       </Field>
+
+      {/* ── Cross-Edition-Marker für 5e.tools-Imports ─────────────── */}
+      <Field label="Cross-Edition-Marker">
+        <CrossEditionToggle />
+      </Field>
     </div>
+  );
+}
+
+function CrossEditionToggle() {
+  const [hide, setHide] = useState(() => {
+    try { return localStorage.getItem('nerdshelf:hideCrossEditionMarker') === '1' }
+    catch { return false }
+  });
+  const onChange = (e) => {
+    const next = e.target.checked;
+    setHide(next);
+    try {
+      if (next) localStorage.setItem('nerdshelf:hideCrossEditionMarker', '1');
+      else localStorage.removeItem('nerdshelf:hideCrossEditionMarker');
+      window.dispatchEvent(new CustomEvent('nerdshelf:crossedition-changed'));
+    } catch { /* ignore */ }
+  };
+  return (
+    <label style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)',
+      cursor: 'pointer',
+    }}>
+      <input type="checkbox" checked={hide} onChange={onChange} />
+      <span>
+        Cross-Edition-Marker bei importierten 5e.tools-Einträgen ausblenden
+      </span>
+    </label>
   );
 }
 
@@ -477,6 +510,15 @@ function RecentReleases() {
   const [releases, setReleases] = useState(null)
   const [error, setError]       = useState(null)
   const [openId, setOpenId]     = useState(null)
+  const [busyId, setBusyId]     = useState(null)
+  // Was bietet der Tauri-Updater aktuell an? Diese Version geht über
+  // den background-downloadAndInstall()-Pfad — alle anderen Versionen
+  // sind Downgrades und müssen weiter den Browser-Download nehmen
+  // (Tauri-Updater ist „latest-or-not", kein arbitrary-Version-Install).
+  const [updaterVersion, setUpdaterVersion] = useState(null)
+  const [currentVersion, setCurrentVersion] = useState(null)
+  const isTauri = typeof window !== 'undefined'
+    && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 
   useEffect(() => {
     let cancelled = false
@@ -489,24 +531,70 @@ function RecentReleases() {
     return () => { cancelled = true }
   }, [])
 
-  async function install(release) {
-    // Den .exe-Asset finden (NSIS-Setup). Fallback auf das HTML-
-    // Release wenn kein direkter Asset-Treffer.
-    const asset = (release.assets || []).find(a => /\.exe$/i.test(a.name || ''))
-    const url = asset?.browser_download_url || release.html_url
-    if (!url) return
-    const isTauri = typeof window !== 'undefined'
-      && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
-    if (isTauri) {
+  // Tauri-Updater + Current-Version parallel laden. updaterVersion =
+  // null wenn kein Update verfügbar (heißt: User ist schon auf
+  // latest, oder wir sind im Browser).
+  useEffect(() => {
+    if (!isTauri) return
+    let cancelled = false
+    ;(async () => {
       try {
-        const { openUrl } = await import('@tauri-apps/plugin-opener')
-        await openUrl(url)
-        return
+        const { getVersion } = await import('@tauri-apps/api/app')
+        const v = await getVersion()
+        if (!cancelled) setCurrentVersion(String(v || '').replace(/^v/, ''))
+      } catch { /* ignore */ }
+      try {
+        const { check } = await import('@tauri-apps/plugin-updater')
+        const update = await check()
+        if (!cancelled) setUpdaterVersion(update?.available ? String(update.version || '').replace(/^v/, '') : null)
       } catch (e) {
-        console.warn('[opener]', e)
+        console.warn('[updater-check]', e)
       }
+    })()
+    return () => { cancelled = true }
+  }, [isTauri])
+
+  async function install(release, ver) {
+    setBusyId(release.id)
+    try {
+      // Bevorzugter Pfad: Tauri-Updater wenn diese Version genau die
+      // ist die der Updater gerade anbietet → background download +
+      // auto-install + relaunch. Kein User-Browser-Download nötig.
+      if (isTauri && updaterVersion && ver === updaterVersion) {
+        try {
+          const { check } = await import('@tauri-apps/plugin-updater')
+          const update = await check()
+          if (update?.available) {
+            await update.downloadAndInstall()
+            // Nach erfolgreichem Install muss der Process neu gestartet
+            // werden damit die neue Binary läuft.
+            const { relaunch } = await import('@tauri-apps/plugin-process')
+            await relaunch()
+            return
+          }
+        } catch (e) {
+          console.warn('[updater-install] fallback to browser', e)
+          // Fall through zum Opener-Pfad.
+        }
+      }
+      // Downgrade / Reinstall: opener-Plugin lädt im OS-Browser. Tauri-
+      // Updater unterstützt keinen arbitrary-version-install.
+      const asset = (release.assets || []).find(a => /\.exe$/i.test(a.name || ''))
+      const url = asset?.browser_download_url || release.html_url
+      if (!url) return
+      if (isTauri) {
+        try {
+          const { openUrl } = await import('@tauri-apps/plugin-opener')
+          await openUrl(url)
+          return
+        } catch (e) {
+          console.warn('[opener]', e)
+        }
+      }
+      try { window.open(url, '_blank') } catch { /* ignore */ }
+    } finally {
+      setBusyId(null)
     }
-    try { window.open(url, '_blank') } catch { /* ignore */ }
   }
 
   if (error) {
@@ -533,6 +621,21 @@ function RecentReleases() {
       {releases.map(r => {
         const isOpen = openId === r.id
         const ver = String(r.tag_name || '').replace(/^v/, '')
+        // Drei Zustände pro Zeile:
+        //   • Aktuelle Version → kein Install-Button (User ist schon drauf)
+        //   • Latest verfügbar via Tauri-Updater → "Update installieren"
+        //     (background download + auto-install + relaunch)
+        //   • Ältere/andere Version → "Browser-Download" (Opener)
+        const isCurrent = currentVersion && ver === currentVersion
+        const isUpdaterTarget = updaterVersion && ver === updaterVersion
+        const busy = busyId === r.id
+        const btnLabel = busy
+          ? 'Installiere…'
+          : isUpdaterTarget ? 'Auto-Update'
+          : 'Browser-Download'
+        const btnTitle = isUpdaterTarget
+          ? 'Im Hintergrund herunterladen + installieren + neustarten'
+          : 'Download startet im Browser — Installer manuell ausführen'
         return (
           <div key={r.id} style={{
             border: '1px solid var(--color-border)', borderRadius: 6,
@@ -548,18 +651,33 @@ function RecentReleases() {
                   fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)',
                   marginLeft: 6,
                 }}>{new Date(r.published_at).toLocaleDateString()}</span>
+                {isCurrent && (
+                  <span style={{
+                    marginLeft: 8, fontSize: 10, fontWeight: 700,
+                    padding: '1px 6px', borderRadius: 4,
+                    border: '1px solid var(--color-text-muted)',
+                    color: 'var(--color-text-muted)', textTransform: 'uppercase',
+                  }}>Installiert</span>
+                )}
               </span>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); install(r) }}
-                title="Diese Version installieren — Browser-Download startet"
-                style={{
-                  padding: '3px 10px', fontSize: 11, fontWeight: 600,
-                  background: 'transparent', color: 'var(--color-accent)',
-                  border: '1px solid var(--color-accent)', borderRadius: 4,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >Installieren</button>
+              {!isCurrent && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={(e) => { e.stopPropagation(); install(r, ver) }}
+                  title={btnTitle}
+                  style={{
+                    padding: '3px 10px', fontSize: 11, fontWeight: 600,
+                    background: isUpdaterTarget
+                      ? 'color-mix(in srgb, var(--color-accent) 16%, transparent)'
+                      : 'transparent',
+                    color: 'var(--color-accent)',
+                    border: '1px solid var(--color-accent)', borderRadius: 4,
+                    cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit',
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                >{btnLabel}</button>
+              )}
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 {isOpen ? '▲' : '▼'}
               </span>

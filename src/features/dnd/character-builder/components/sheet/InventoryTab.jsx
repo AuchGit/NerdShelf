@@ -18,6 +18,7 @@ import {
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
+import CrossEditionPill from '../ui/CrossEditionPill'
 import { computeAbilityScores } from '../../lib/rulesEngine'
 import {
   getAvailableMarkingRules, weaponEligibleForMark, setWeaponMark,
@@ -113,6 +114,7 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
   const carried = items.filter(i =>
     !isContainerItem(i) && (!i.containerId || !containerKeys.has(i.containerId))
   )
+
 
   // One-shot migration: any pre-existing singleton with quantity > 1 from
   // before the split-on-add rule is silently fanned out into N separate
@@ -262,6 +264,20 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       // Item description / entries so the expanded inventory row can
       // render the rules text without round-tripping to the data files.
       entries: entry.entries || [],
+      // Wondrous-Flag → Wondrous-Kategorie in der InventoryTab.
+      wondrous: !!entry.wondrous,
+      // 5etools-Magic-Boni 1:1 weiterreichen — rulesEngine liest sie
+      // sobald `equipped: true` gesetzt wird (AC, Saves, Weapon-Attack/
+      // Damage, Spell-Attack/DC). Ohne diese Felder verpufft jede
+      // "Cloak of Protection / +1 Weapon / Robe of the Archmagi" still.
+      bonusAc:            entry.bonusAc            || null,
+      bonusWeapon:        entry.bonusWeapon        || null,
+      bonusWeaponAttack:  entry.bonusWeaponAttack  || null,
+      bonusWeaponDamage:  entry.bonusWeaponDamage  || null,
+      bonusSpellAttack:   entry.bonusSpellAttack   || null,
+      bonusSpellSaveDc:   entry.bonusSpellSaveDc   || null,
+      bonusSavingThrow:   entry.bonusSavingThrow   || null,
+      bonusAbilityCheck:  entry.bonusAbilityCheck  || null,
     }
     // The browser modal adds one row per click; if it ever gains a
     // quantity input, the same singleton-split logic from saveItem would
@@ -594,7 +610,19 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
                    character, markingRules = [], markedWeapons = {}, onToggleMark, applyCharacter }) {
   const [open, setOpen] = useState(false)
   const meta = itemTypeMeta(item.type)
+  // "Equippable" datadriven statt nur über Type-Code: jeder Magic-
+  // Bonus-Träger (Cloak of Protection, +N Ring, Coat of the Crest,
+  // Amulet of Health, …) IST tragbar. 5etools tagged solche Items
+  // als `wondrous: true` und/oder `reqAttune`; zusätzlich erkennen
+  // wir jedes Item mit einem aktiven bonus*-Feld als equippable, so
+  // dass auch Brew-Items ohne wondrous-Flag durch ihren Bonus
+  // automatisch den Equip-Toggle bekommen.
+  const hasMagicBonus = !!(item.bonusAc || item.bonusWeapon
+    || item.bonusWeaponAttack || item.bonusWeaponDamage
+    || item.bonusSpellAttack  || item.bonusSpellSaveDc
+    || item.bonusSavingThrow  || item.bonusAbilityCheck)
   const canEquip = meta.isWeapon || meta.isArmor || item.type === 'S'
+    || item.wondrous || item.reqAttune || hasMagicBonus
   const singleton = isSingletonItem(item)
 
   // Only weapons can be marked, and only when a rule actually allows it.
@@ -624,6 +652,9 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
             />
             {item.customName || item.name}
             {item._isCustom && <span style={{ color: 'var(--accent-purple)', fontSize: 10, marginLeft: 6 }}>CUSTOM</span>}
+            <span style={{ marginLeft: 6 }}>
+              <CrossEditionPill character={character} kind="item" name={item.name} />
+            </span>
             {activeMarks.length > 0 && (
               <span style={{
                 marginLeft: 8, padding: '1px 7px', fontSize: 10, fontWeight: 600,

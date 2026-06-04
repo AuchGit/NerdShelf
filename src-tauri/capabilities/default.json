@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "sheet-popout-*",
-    "pin-overlay-*"
+    "pin-overlay-*",
+    "fivee-browse"
   ],
   "permissions": [
     "core:default",

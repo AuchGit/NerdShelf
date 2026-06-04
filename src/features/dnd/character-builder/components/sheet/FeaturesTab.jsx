@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import EntryRenderer from '../ui/EntryRenderer'
 import FiveEToolsLink from '../ui/FiveEToolsLink'
+import CrossEditionPill from '../ui/CrossEditionPill'
 import { Section, TraitPill, CardColorPicker } from './SheetKit'
 import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
 import { getCustomNote, setCustomNote } from '../../lib/customNotes'
@@ -520,6 +521,7 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                     />
                     {feat.isOrigin && <span style={S.originTag}>ORIGIN</span>}
                     {feat.name}
+                    <CrossEditionPill character={character} kind="feat" name={feat.name} />
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -557,6 +559,7 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                   <div style={S.featCardName}>
                     <span style={S.originTag}>CUSTOM</span>
                     {feat.name}
+                    <CrossEditionPill character={character} kind="feat" name={feat.name} />
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{isExpanded ? '▲' : '▼'}</span>
                   </div>
                   <div style={S.featCardSource}>{feat.source || 'Custom'}</div>

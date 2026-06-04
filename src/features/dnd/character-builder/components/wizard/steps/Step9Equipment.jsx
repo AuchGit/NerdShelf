@@ -373,6 +373,17 @@ function makeInventoryItem(item, grantedBy) {
       // Item description / entries from the catalog so the inventory
       // detail panel can render the rules text without re-loading data.
       entries: item.entries || [],
+      // Wondrous-Flag → Wondrous-Kategorie in der InventoryTab.
+      wondrous: !!item.wondrous,
+      // Magic-Boni (5etools-Felder) für rulesEngine — siehe lib/itemBonuses.js.
+      bonusAc:            item.bonusAc            || null,
+      bonusWeapon:        item.bonusWeapon        || null,
+      bonusWeaponAttack:  item.bonusWeaponAttack  || null,
+      bonusWeaponDamage:  item.bonusWeaponDamage  || null,
+      bonusSpellAttack:   item.bonusSpellAttack   || null,
+      bonusSpellSaveDc:   item.bonusSpellSaveDc   || null,
+      bonusSavingThrow:   item.bonusSavingThrow   || null,
+      bonusAbilityCheck:  item.bonusAbilityCheck  || null,
     }
   }
 
@@ -402,6 +413,15 @@ function makeInventoryItem(item, grantedBy) {
         ? item.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
         : [],
       entries: item.entries || [],
+      // Magic-Boni (5etools-Felder) — gleiche Logik wie makeInventoryItem.
+      bonusAc:            item.bonusAc            || null,
+      bonusWeapon:        item.bonusWeapon        || null,
+      bonusWeaponAttack:  item.bonusWeaponAttack  || null,
+      bonusWeaponDamage:  item.bonusWeaponDamage  || null,
+      bonusSpellAttack:   item.bonusSpellAttack   || null,
+      bonusSpellSaveDc:   item.bonusSpellSaveDc   || null,
+      bonusSavingThrow:   item.bonusSavingThrow   || null,
+      bonusAbilityCheck:  item.bonusAbilityCheck  || null,
     }
     updateCharacter('inventory.items', [...(character.inventory.items || []), newItem])
   }

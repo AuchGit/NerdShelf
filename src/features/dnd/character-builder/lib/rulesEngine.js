@@ -2,8 +2,9 @@ import { getModifier, getProficiencyBonus, getTotalLevel } from './characterMode
 import { asArray } from './choiceParser'
 import { combinedMarkEffects, gatherCharacterFeatures } from './weaponMarkingRules'
 import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
-import { activeConcentrationEffects } from './concentrationEffects'
+import { activeConcentrationEffects, activeVariableDamageEffect } from './concentrationEffects'
 import { getMechanicalEffects } from './featureEffects'
+import { sumEquippedBonuses, getWeaponBonus } from './itemBonuses'
 
 // ============================================================
 // HAUPT-FUNKTION
@@ -454,6 +455,10 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
   const mech = getMechanicalEffects(character)
   const auraBonus = mech.saveBonusAbility ? (modifiers[mech.saveBonusAbility] || 0) : 0
 
+  // Magic-Item-Boni auf ALLE Saves (Cloak of Protection +1,
+  // Ring of Protection +1, Robe of the Archmagi +2, etc.).
+  const itemSaves = sumEquippedBonuses(character, 'bonusSavingThrow')
+
   for (const ability of abilities) {
     const isProficient = proficiencies.savingThrows[ability] || false
     const mod = modifiers[ability] || 0
@@ -462,7 +467,7 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
     // Feats wie Resilient können Saving Throw Proficiency geben
     const featBonus = getFeatSaveBonus(character, ability)
 
-    const total = mod + bonus + featBonus + auraBonus
+    const total = mod + bonus + featBonus + auraBonus + itemSaves.total
 
     result[ability] = {
       modifier: mod,
@@ -471,7 +476,8 @@ export function computeSavingThrows(character, modifiers, profBonus, proficienci
       breakdown: `${mod >= 0 ? '+' : ''}${mod}`
         + (isProficient ? ` + ${profBonus} (prof)` : '')
         + (featBonus ? ` + ${featBonus}` : '')
-        + (auraBonus ? ` + ${auraBonus} (aura/${mech.saveBonusAbility?.toUpperCase()})` : ''),
+        + (auraBonus ? ` + ${auraBonus} (aura/${mech.saveBonusAbility?.toUpperCase()})` : '')
+        + (itemSaves.total ? ` + ${itemSaves.total} (item)` : ''),
     }
   }
 
@@ -724,6 +730,14 @@ export function computeAC(character, modifiers, abilityScores) {
   const best = options.reduce((a, b) => a.value > b.value ? a : b, options[0])
   let total = best.value + shieldBonus
 
+  // Magic-Item-Boni: +N Armor/Shield, Cloak of Protection, Ring of
+  // Protection, Robe of the Archmagi etc. tragen `bonusAc` als String
+  // wie "+1". Wir summieren über ALLE equipped Items — auch das
+  // Shield-Item selbst (eine "Shield, +1" hat sowohl Type=S als auch
+  // bonusAc: "+1"; dadurch ergibt sich +2 base + 1 magic = +3 korrekt).
+  const itemAc = sumEquippedBonuses(character, 'bonusAc')
+  total += itemAc.total
+
   // acBonus (additive, e.g. Shield of Faith / Haste) stacks on the
   // chosen base AC.
   if (concEff?.acBonus) total += concEff.acBonus
@@ -737,6 +751,8 @@ export function computeAC(character, modifiers, abilityScores) {
     source: best.label,
     note: best.note,
     allOptions: options,
+    itemBonusAc: itemAc.total,
+    itemBonusAcSources: itemAc.sources,
     concentrationEffect: concEff
       ? { spell: concEff.spell, label: concEff.label, acBonus: concEff.acBonus, acFloor: concEff.acFloor }
       : null,
@@ -750,13 +766,20 @@ export function computeAC(character, modifiers, abilityScores) {
 export function computeSpellcasting(character, modifiers, profBonus) {
   const result = {}
 
+  // Magic-Item-Boni werden auf jede Caster-Klasse identisch addiert
+  // (Robe of the Archmagi, +N Spellcasting Focus, Staff of Power, …).
+  // 5etools unterscheidet bonusSpellAttack (Attack-Roll) und
+  // bonusSpellSaveDc (DC) — beide werden aus equipped Items summiert.
+  const itemAtk = sumEquippedBonuses(character, 'bonusSpellAttack').total
+  const itemDC  = sumEquippedBonuses(character, 'bonusSpellSaveDc').total
+
   for (const cls of character.classes) {
     if (!cls.spellcastingAbility) continue
 
     const ability = cls.spellcastingAbility.toLowerCase()
     const mod = modifiers[ability] || 0
-    const spellAttack = mod + profBonus
-    const saveDC = 8 + mod + profBonus
+    const spellAttack = mod + profBonus + itemAtk
+    const saveDC = 8 + mod + profBonus + itemDC
 
     result[cls.classId] = {
       ability,
@@ -764,6 +787,8 @@ export function computeSpellcasting(character, modifiers, profBonus) {
       spellAttackBonus: spellAttack,
       spellSaveDC: saveDC,
       spellAttackDisplay: `${spellAttack >= 0 ? '+' : ''}${spellAttack}`,
+      itemBonusAttack: itemAtk,
+      itemBonusDC: itemDC,
     }
   }
 
@@ -864,6 +889,11 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // Bewaffnete Angriffe aus Inventar (wird später mit echten Item-Daten gefüllt)
   const allCombatItems = [...(character.inventory?.items || []), ...(character.custom?.items || [])]
   const weapons = allCombatItems.filter(i => i.equipped && i.isWeapon)
+  // Aktive Variable-Damage-Konzentration (Hex, Hunter's Mark, Divine
+  // Favor, Bless …) — wird als Advisory-Effekt an jede Waffen-Row
+  // gehängt. KEIN Stat-Math (die Würfe sind per-Roll) — nur
+  // Display-Pille damit der Spieler beim Würfeln nicht vergisst.
+  const variableBuff = activeVariableDamageEffect(character)
   for (const weapon of weapons) {
     // Legacy characters created before the wizard normalised weapon
     // properties may still carry raw 5etools codes like "F|XPHB". Map
@@ -903,9 +933,14 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     }
 
     const isProficient = checkWeaponProficiency(character, weapon, proficiencies)
-    const baseAtk = abilityMod + (isProficient ? profBonus : 0) + (weapon.attackBonus || 0)
+    // Magic-Weapon-Bonus: 5etools-Items tragen entweder `bonusWeapon`
+    // (zählt für attack UND damage — klassisch "+1 Weapon") oder
+    // separat `bonusWeaponAttack` / `bonusWeaponDamage`. Legacy:
+    // `weapon.attackBonus` (numerisch, von CustomEditModal gesetzt).
+    const wBonus = getWeaponBonus(weapon)
+    const baseAtk = abilityMod + (isProficient ? profBonus : 0) + wBonus.attack
     const attackBonus = baseAtk + (marks.attackBonus || 0)
-    const damageExtra = (weapon.attackBonus || 0) + (marks.damageBonus || 0)
+    const damageExtra = wBonus.damage + (marks.damageBonus || 0)
 
     // Reach-Property erweitert die Nahkampf-Reichweite per RAW von
     // 5 auf 10 ft. 5etools füllt `range` nur bei Ranged/Thrown-Waffen
@@ -929,6 +964,16 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       damageType: weapon.dmgType || 'unknown',
       range: computedRange,
       properties: props,
+      // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann
+      // daraus eine "Hex +1d6 necrotic"-Pille auf der Attack-Row
+      // bauen. Kein Effekt auf attackBonus / damage — der Player
+      // entscheidet pro Hit ob die Bedingung greift.
+      variableBuff: variableBuff ? {
+        label:      variableBuff.label,
+        formula:    variableBuff.formula,
+        damageType: variableBuff.damageType,
+        note:       variableBuff.note || null,
+      } : null,
       // 5.5e Weapon Mastery — empty on 5e weapons. Surfaced as a small
       // pill on the attack row of the player sheet. Hidden unless the
       // weapon's name is in the character's picked-mastery list so we

@@ -32,6 +32,7 @@ import { applySavedOrder, getSavedOrder, moveCategory, resetCategoryOrder } from
 import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/cardColors'
 import { getCustomNote, setCustomNote } from '../../lib/customNotes'
 import { isPinnedAction, togglePinnedAction, getPinnedActions } from '../../lib/pinnedActions'
+import CrossEditionPill from '../ui/CrossEditionPill'
 import HoverDetailTooltip from '../ui/HoverDetailTooltip'
 
 // Sync-Check ob das aktuelle Fenster ein Sheet-Popout ist (`?popout=1`).
@@ -1369,6 +1370,10 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         damageType: atk.damageType,
         properties: atk.properties || [],
         markedAs: atk.markedAs || null,
+        // Per-Roll-Advisory aus aktiver Konzentration (Hex / Hunter's
+        // Mark / Bless / Divine Favor) — wird als Pille auf der Row
+        // gerendert. rulesEngine setzt das Feld; kein Stat-Math.
+        variableBuff: atk.variableBuff || null,
         notes: [
           atk.markedAs && `${atk.markedAs.label}: ${atk.markedAs.note}`,
         ].filter(Boolean).join(' • '),
@@ -2375,6 +2380,24 @@ function CombatActionsCategorisedList({
                   }
                 }
 
+                // Variable-Damage-Concentration-Advisory (Hex /
+                // Hunter's Mark / Bless / Divine Favor) — Per-Roll-
+                // Bonus den der Player nicht vergessen darf. Orange,
+                // damit es sofort als "denk dran"-Marker auffällt.
+                if (r.variableBuff) {
+                  const vb = r.variableBuff
+                  leftPills.push(
+                    <span key="varbuff" style={{
+                      ...caePill,
+                      border: '1px solid var(--accent-orange, #ff9533)',
+                      color: 'var(--accent-orange, #ff9533)',
+                      background: 'color-mix(in srgb, var(--accent-orange, #ff9533) 14%, transparent)',
+                    }} title={vb.note || `${vb.label}: ${vb.formula} ${vb.damageType}`}>
+                      ⚡ {vb.label} {vb.formula}
+                    </span>,
+                  )
+                }
+
                 // RIGHT: Concentration und Ritual.
                 if (r.spell?.concentration) rightPills.push(
                   <span key="conc" style={{
@@ -3138,28 +3161,22 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState('desc')
   const pillColors = usePillColors()
-  if (!resolved) return null
-  const { title, badge, entries, html, fiveeLink } = resolved
-  const hasBody = (Array.isArray(entries) && entries.length > 0) || (typeof html === 'string' && html.trim())
-  // Favorites teilen sich denselben markerKey (= favoriteKey) wie alle
-  // anderen ausklappbaren Cards → Custom-Pill + Notes landen im
-  // gleichen character.customNotes-Bucket.
-  const note  = favKey ? getCustomNote(character, favKey) : null
-  const mColor = favKey ? getColorMarker(character, favKey) : null
-  const notePillColor = note?.pillColor || mColor || 'var(--accent)'
-
-  // Smart-Pills aus dem Eintrag-Text. Per favKey-Präfix entscheiden
-  // wir welcher Parser passt — Spells gehen durch parseSpellEffect
-  // (braucht DC/Atk vom Caster), Features/Traits/Feats durch
-  // parseFeatureEffect. Items haben kein konsistentes Schema, deshalb
-  // keine Pill-Extraktion dort.
+  // Wichtig: ALLE Hooks MÜSSEN vor jedem early-return stehen. Sonst
+  // ändert sich die Hook-Anzahl zwischen Renders (resolved geht von
+  // null → Objekt sobald featData/spellData async geladen sind) und
+  // React wirft "Rendered more hooks than during the previous render".
+  // Die useMemo-Guards lesen resolved/favKey defensiv — bei null wird
+  // einfach [] zurückgegeben.
+  const entries     = resolved?.entries
+  const title       = resolved?.title
+  const note        = favKey ? getCustomNote(character, favKey) : null
+  const mColor      = favKey ? getColorMarker(character, favKey) : null
   const favPills = useMemo(() => {
-    if (!favKey || !Array.isArray(entries) || entries.length === 0) return []
+    if (!resolved || !favKey || !Array.isArray(entries) || entries.length === 0) return []
     const kind = favKey.split(':')[0]
     try {
       if (kind === 'spell') {
         const sc = computed?.spellcasting || {}
-        // Beste Caster-Klasse (höchste DC+Atk-Summe) als Stat-Quelle.
         let best = null
         let bestScore = -Infinity
         for (const cid of Object.keys(sc)) {
@@ -3175,7 +3192,6 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
         return fx?.pills || []
       }
       if (kind === 'feature' || kind === 'trait' || kind === 'feat') {
-        // Klassen-ID aus favKey ziehen wenn vorhanden (`feature:Class:Name:Lv`).
         const classId = kind === 'feature' ? favKey.split(':')[1] || null : null
         const fx = parseFeatureEffect(
           { name: title, entries, classId },
@@ -3187,6 +3203,11 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
     } catch { /* ignore – parser shouldn't crash a render */ }
     return []
   }, [favKey, entries, resolved, title, character, computed])
+
+  if (!resolved) return null
+  const { badge, html, fiveeLink } = resolved
+  const hasBody = (Array.isArray(entries) && entries.length > 0) || (typeof html === 'string' && html.trim())
+  const notePillColor = note?.pillColor || mColor || 'var(--accent)'
 
   return (
     <div style={{ ...favCard, ...(colorStripeStyle(mColor) || {}) }}>
@@ -3223,6 +3244,20 @@ function FavoriteCard({ favKey, resolved, character, computed, applyCharacter })
               whiteSpace: 'nowrap', textTransform: 'uppercase',
             }} title={note.pillText}>{note.pillText}</span>
           )}
+          {/* Cross-Edition-Marker: greift sobald der gleiche Name in
+              character.custom.{spells|items|feats} mit _crossEdition:true
+              liegt. Welcher Bucket geprüft wird, leiten wir aus dem
+              favKey-Präfix ab. */}
+          <CrossEditionPill
+            character={character}
+            kind={
+              favKey?.startsWith('spell:') ? 'spell'
+              : favKey?.startsWith('item:') ? 'item'
+              : favKey?.startsWith('feat:') ? 'feat'
+              : null
+            }
+            name={title}
+          />
         </div>
         <button
           type="button"
@@ -3606,19 +3641,32 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
     })
   }
 
-  // Categorise: Equipment (weapons/armor/shields) vs Loot (everything
-  // else, plus auto-detected healing potions). Both lists are
-  // collapsible — opens by default.
+  // Categorise: Equipment (weapons/armor/shields) → Wondrous
+  // (getragene Magic-Items ohne Type-Code: wondrous-Flag ODER
+  // bonus-tragende Accessoires wie Cloak of Protection / Coat of
+  // the Crest, Ring of Protection, Amulet of Health …) → Loot
+  // (alles andere, inkl. der auto-detected Healing Potions).
+  // Datadriven aus 5etools-Feldern — keine Item-Whitelist.
+  const isEquipment = (it) => !!(it.isWeapon || it.isArmor || it.isShield)
+  const hasMagicBonus = (it) => !!(it.bonusAc || it.bonusWeapon
+    || it.bonusWeaponAttack || it.bonusWeaponDamage
+    || it.bonusSpellAttack  || it.bonusSpellSaveDc
+    || it.bonusSavingThrow  || it.bonusAbilityCheck)
+  const isWondrous = (it) =>
+    !isEquipment(it) && (it.wondrous || hasMagicBonus(it) || !!it.reqAttune)
   const equipmentTiles = quickAccess
-    .filter(it => it.isWeapon || it.isArmor || it.isShield)
+    .filter(isEquipment)
+    .map(it => ({ it, isPotion: false }))
+  const wondrousTiles = quickAccess
+    .filter(isWondrous)
     .map(it => ({ it, isPotion: false }))
   const lootTiles = [
-    ...potions.map(p => ({ it: p, isPotion: true })),
+    ...potions.filter(p => !isWondrous(p)).map(p => ({ it: p, isPotion: true })),
     ...quickAccess
-      .filter(it => !(it.isWeapon || it.isArmor || it.isShield))
+      .filter(it => !isEquipment(it) && !isWondrous(it))
       .map(it => ({ it, isPotion: false })),
   ]
-  const tiles = [...equipmentTiles, ...lootTiles] // for the "empty" check
+  const tiles = [...equipmentTiles, ...wondrousTiles, ...lootTiles] // for the "empty" check
 
   // Compact icon-only inventory launcher — fits the narrow column.
   const action = (
@@ -3651,6 +3699,7 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
   // gleicher Pattern wie Actions/Spells.
   const itemCats = [
     { id: 'items:equipment', label: 'Equipment', tiles: equipmentTiles },
+    { id: 'items:wondrous',  label: 'Wondrous',  tiles: wondrousTiles },
     { id: 'items:loot',      label: 'Loot',      tiles: lootTiles },
   ]
   const savedItemOrder = getSavedOrder(character, 'items')
@@ -3740,7 +3789,15 @@ function QaItemRow({ it, isPotion, onToggleEquip, onBumpQty }) {
   // unten in zwei Zeilen. Volldetails kommen via Hover-Tooltip (auf
   // dem Namen) und im Inventory-Tab.
   const qty = it.quantity || 0
-  const isEquippable = !!(it.isWeapon || it.isArmor || it.isShield)
+  // Equippable jetzt datadriven: Waffen/Rüstungen/Schilde wie gehabt,
+  // plus jedes Wondrous-Item (Cloak/Ring/Amulet/Coat of …) damit der
+  // Equipped-Toggle direkt in der Items-Spalte funktioniert.
+  const _hasMagicBonus = !!(it.bonusAc || it.bonusWeapon
+    || it.bonusWeaponAttack || it.bonusWeaponDamage
+    || it.bonusSpellAttack  || it.bonusSpellSaveDc
+    || it.bonusSavingThrow  || it.bonusAbilityCheck)
+  const isEquippable = !!(it.isWeapon || it.isArmor || it.isShield
+    || it.wondrous || it.reqAttune || _hasMagicBonus)
   const equipped = !!it.equipped
   const tagStripe = it.tagColor
     ? { boxShadow: `inset 4px 0 0 ${it.tagColor}`, paddingLeft: 10 }
@@ -4724,6 +4781,7 @@ function SpellListRow({
             background: `color-mix(in srgb, ${mNoteColor} 14%, transparent)`,
           }} title={mNote.pillText}>{mNote.pillText}</span>
         )}
+        <CrossEditionPill character={character} kind="spell" name={sp?.name} />
       </div>
 
       {isExpanded && (

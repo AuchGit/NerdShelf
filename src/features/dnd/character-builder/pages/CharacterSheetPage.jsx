@@ -100,10 +100,11 @@ async function closePopoutWindow() {
 //     `app-region: no-drag` — wäre nur in CSS-Win-Style relevant,
 //     Tauri respektiert Click-Targets automatisch.
 const popoutDragBar = {
-  height: 22,
+  height: 28,
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
+  gap: 4,
   background: 'var(--bg-elevated)',
   borderBottom: '1px solid var(--border)',
   padding: '0 4px 0 10px',
@@ -113,13 +114,37 @@ const popoutDragBar = {
 }
 const popoutDragTitle = {
   flex: 1,
-  fontSize: 11,
-  color: 'var(--text-muted)',
+  minWidth: 0,
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   letterSpacing: 0.3,
   pointerEvents: 'none',  // Click geht durch zum Drag-Bereich
+}
+const popoutDragSubtitle = {
+  fontSize: 10,
+  fontWeight: 400,
+  color: 'var(--text-dim)',
+  marginLeft: 6,
+  pointerEvents: 'none',
+}
+const popoutActionBtn = {
+  padding: '0 8px',
+  height: 20,
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+  background: 'transparent',
+  color: 'var(--accent)',
+  border: '1px solid var(--accent)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  lineHeight: 1,
 }
 const popoutCloseBtn = {
   width: 22, height: 22,
@@ -146,6 +171,7 @@ import { lazy, Suspense } from 'react'
 // CustomEditModal is opened ~rarely (Custom button); split it off so the
 // rules-engine that drives it doesn't sit in the initial sheet bundle.
 const CustomEditModal = lazy(() => import('../components/ui/CustomEditModal'))
+const FiveEImportModal = lazy(() => import('../components/FiveEImportModal'))
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
 import useWindowWidth from '../../../../shared/hooks/useWindowWidth'
 import { ActionSheet } from '../../../../shared/ui'
@@ -222,6 +248,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   const [concSavePrompt, setConcSavePrompt] = useState(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [showCustomEdit, setShowCustomEdit] = useState(false)
+  const [showFiveEImport, setShowFiveEImport] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
@@ -1143,7 +1170,20 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             data-tauri-drag-region
             style={popoutDragBar}
           >
-            <span style={popoutDragTitle}>{character.info.name || 'Character'}</span>
+            <span style={popoutDragTitle}>
+              {character.info.name || 'Character'}
+              <span style={popoutDragSubtitle}>
+                {className} · L{totalLevel}
+              </span>
+            </span>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => navigate(`/character/${id}/levelup`)}
+                title="Level Up — auch im Popout möglich"
+                style={popoutActionBtn}
+              >Level Up</button>
+            )}
             <button
               type="button"
               onClick={closePopoutWindow}
@@ -1260,6 +1300,15 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                   onClick={() => openPopout(id)}
                   title="Sheet als Popout-Fenster für VTT-Spiel öffnen"
                 >Popout</button>
+                {/* 5e.tools-Import: öffnet das Importer-Modal mit
+                    URL-Paste + Browse-Window. Spell / Item / Feat
+                    landen in character.custom.* mit korrektem Edition-
+                    Marker. */}
+                <button
+                  style={{ ...S.headerBtn, borderColor: 'var(--accent-orange, #ff9533)', color: 'var(--accent-orange, #ff9533)' }}
+                  onClick={() => setShowFiveEImport(true)}
+                  title="Spell, Item oder Feat per 5e.tools-URL importieren"
+                >📥 5e.tools</button>
               </>
             )}
             <HeaderButtons session={session} />
@@ -1308,6 +1357,17 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             onClose={() => setShowCustomEdit(false)}
             character={character}
             updateCharacter={updateCharacter}
+          />
+        </Suspense>
+      )}
+
+      {showFiveEImport && (
+        <Suspense fallback={null}>
+          <FiveEImportModal
+            open={showFiveEImport}
+            onClose={() => setShowFiveEImport(false)}
+            character={character}
+            applyCharacter={applyCharacter}
           />
         </Suspense>
       )}

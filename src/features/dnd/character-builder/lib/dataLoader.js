@@ -788,6 +788,11 @@ export async function loadItemIndex(edition) {
     //     items-base have these, the index doesn't. Without this merge
     //     the Weapon Mastery picker on the sheet had nothing to show.
     const baseData = await fetchData(edition, 'items-base.json')
+    // Auch magic items (items.json) ziehen wir parallel, um die
+    // bonus*-Felder zurück zu mergen — der bundled item-index.json
+    // strippt diese Felder, aber rulesEngine braucht sie für AC/Save/
+    // Weapon/Spell-Boni von Cloak of Protection, +N Weapon, etc.
+    const magicData = await fetchData(edition, 'items.json')
     if (baseData) {
       const scfMap = {}
       const masteryMap = {}
@@ -808,12 +813,35 @@ export async function loadItemIndex(edition) {
           entriesMap[key] = b.entries
         }
       }
+      // Magic-Boni und Magic-Item-Entries aus items.json indexen.
+      const bonusMap = {}
+      const magicEntriesMap = {}
+      const attuneMap = {}
+      const wondrousMap = {}
+      const BONUS_FIELDS = [
+        'bonusAc', 'bonusWeapon', 'bonusWeaponAttack', 'bonusWeaponDamage',
+        'bonusSpellAttack', 'bonusSpellSaveDc',
+        'bonusSavingThrow', 'bonusAbilityCheck',
+      ]
+      for (const m of (magicData?.item || [])) {
+        const key = `${m.name?.toLowerCase()}::${m.source}`
+        const b = {}
+        for (const f of BONUS_FIELDS) if (m[f] != null) b[f] = m[f]
+        if (Object.keys(b).length > 0) bonusMap[key] = b
+        if (Array.isArray(m.entries) && m.entries.length > 0) magicEntriesMap[key] = m.entries
+        if (m.reqAttune != null) attuneMap[key] = m.reqAttune
+        if (m.wondrous === true)  wondrousMap[key] = true
+      }
       items = items.map(i => {
         const key = `${i.name?.toLowerCase()}::${i.source}`
         const patch = {}
         if (i.type === 'SCF' && !i.scfType && scfMap[key]) patch.scfType = scfMap[key]
         if (masteryMap[key]) patch.mastery = masteryMap[key]
         if ((!i.entries || i.entries.length === 0) && entriesMap[key]) patch.entries = entriesMap[key]
+        if ((!i.entries || i.entries.length === 0) && magicEntriesMap[key]) patch.entries = magicEntriesMap[key]
+        if (bonusMap[key]) Object.assign(patch, bonusMap[key])
+        if (attuneMap[key] != null && i.reqAttune == null) patch.reqAttune = attuneMap[key]
+        if (wondrousMap[key] && !i.wondrous) patch.wondrous = true
         // item-index.json stripped its isArmor/isWeapon flags by source-
         // exact `type === 'LA'` checks, so XPHB armors (`type: 'LA|XPHB'`)
         // ended up with isArmor=false. Re-derive from the type code so

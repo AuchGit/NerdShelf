@@ -61,7 +61,54 @@ export const CONCENTRATION_EFFECTS = {
     label: 'Atmen unter Wasser',
   },
   // Add more as needed. Bless / Bane / Guidance etc. apply variable
-  // dice rolls — not modelled here (couldn't be flat-applied anyway).
+  // dice rolls — die werden NICHT als acBonus/speedBonus modelliert
+  // (würden eh nicht stacken), aber als advisory-Pill auf Attack-Rows
+  // via VARIABLE_CONCENTRATION_DAMAGE (siehe unten).
+}
+
+// Variable-Dice-Buffs für Per-Attack-Pills. Kein flat-Stat-Bonus —
+// das Datum ist eine reine Anzeige-Hilfe damit der Spieler vergisst
+// nicht "+1d6 necrotic von Hex" beim Würfeln. Erkennung läuft wieder
+// rein über den Concentration-Spell-Namen, kein Hardcode pro Klasse.
+//
+// Form: 'spell name (lowercase)' → {
+//   label:       string             // angezeigter Source-Name
+//   formula:     string             // die Dice-Notation ('+1d6 necrotic')
+//   damageType:  string             // für Pillen-Farbgebung
+//   targets:     'weapon-attack'    // wo greift's
+//   note:        string?            // optionaler Hover-Hinweis
+// }
+export const VARIABLE_CONCENTRATION_DAMAGE = {
+  'hex': {
+    label: 'Hex', formula: '+1d6', damageType: 'necrotic',
+    targets: 'weapon-attack',
+    note: 'Auf jeden Treffer gegen das verhexte Ziel +1d6 necrotic.',
+  },
+  "hunter's mark": {
+    label: "Hunter's Mark", formula: '+1d6', damageType: 'piercing',
+    targets: 'weapon-attack',
+    note: 'Auf jeden Treffer gegen das markierte Ziel +1d6 (1d8 ab L17).',
+  },
+  'divine favor': {
+    label: 'Divine Favor', formula: '+1d4', damageType: 'radiant',
+    targets: 'weapon-attack',
+    note: 'Solange aktiv, +1d4 radiant auf jeden Waffen-Treffer.',
+  },
+  'bless': {
+    label: 'Bless', formula: '+1d4', damageType: 'attack-roll',
+    targets: 'weapon-attack',
+    note: 'Während Bless: +1d4 auf Attack-Rolls und Saving Throws.',
+  },
+}
+
+export function activeVariableDamageEffect(character) {
+  const c = character?.status?.concentration
+  if (!c) return null
+  const name = String(c.spell || c.name || '').trim().toLowerCase()
+  if (!name) return null
+  const e = VARIABLE_CONCENTRATION_DAMAGE[name]
+  if (!e) return null
+  return { spell: c.spell || c.name, ...e }
 }
 
 /**
