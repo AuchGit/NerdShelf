@@ -94,7 +94,7 @@ export async function loadRaceList(edition) {
   const allRaces = []
 
   for (const race of (data.race || [])) {
-    if (!isOfficialSource(race.source)) continue
+    if (!isEditionMatch(race.source, edition)) continue
     allRaces.push({
       id: `${race.name}__${race.source}`,
       name: race.name,
@@ -118,7 +118,7 @@ export async function loadRaceList(edition) {
   }
 
   for (const sub of (data.subrace || [])) {
-    if (!isOfficialSource(sub.source)) continue
+    if (!isEditionMatch(sub.source, edition)) continue
     // Unterrassen ohne Namen überspringen
     if (!sub.name || !sub.name.trim()) continue
     const parent = allRaces.find(r => r.name === sub.raceName)
@@ -166,8 +166,9 @@ export async function loadClassList(edition) {
     if (!data?.class) continue
 
     // ── Pick the right class entry ──────────────────────────────────────
-    // 5.5e files contain both PHB and XPHB versions. Pick XPHB if available.
-    const officialClasses = data.class.filter(c => isOfficialSource(c.source))
+    // 5.5e files contain both PHB and XPHB versions. Strict edition filter:
+    // 5.5e → nur XPHB-Klassen, 5e → nur non-X-Klassen.
+    const officialClasses = data.class.filter(c => isEditionMatch(c.source, edition))
     let cls = null
     if (is55e) {
       cls = officialClasses.find(c => PREFERRED_55E_SOURCES.includes(c.source))
@@ -182,14 +183,14 @@ export async function loadClassList(edition) {
     const classSource = cls.source  // e.g. 'XPHB' or 'PHB'
     const subclassFeatureArray = data.subclassFeature || []
 
-    // ── Filter subclasses by classSource ─────────────────────────────────
-    // In 5.5e, each subclass entry has a classSource field indicating which
-    // version of the parent class it belongs to. Filter to match.
+    // ── Filter subclasses by edition + classSource ───────────────────────
+    // Strict: nur Subclasses aus der passenden Edition-Family. Zusätzlich
+    // bei 5.5e nur die Subclasses deren classSource zur gewählten Class-
+    // Source passt (interne Kohärenz innerhalb der 2024-Edition).
     const rawSubclasses = (data.subclass || [])
       .filter(s => {
         if (s.className !== cls.name) return false
-        if (!isOfficialSource(s.source)) return false
-        // In 5.5e, only keep subclasses matching the chosen class's source
+        if (!isEditionMatch(s.source, edition)) return false
         if (is55e && s.classSource && s.classSource !== classSource) return false
         return true
       })
@@ -322,7 +323,7 @@ export async function loadClassData(edition, classId) {
   // updated starting proficiencies, so we must prefer it. Without this
   // preference loadClassData returned the PHB entry — silently breaking
   // every table-driven 5.5e resource.
-  const officialClasses = (data.class || []).filter(c => isOfficialSource(c.source))
+  const officialClasses = (data.class || []).filter(c => isEditionMatch(c.source, edition))
   const matching = officialClasses.filter(c => c.name === classId)
   const is55e = edition === '5.5e'
   let cls = null
@@ -333,14 +334,87 @@ export async function loadClassData(edition, classId) {
   } else {
     cls = matching[0] || data.class?.find(c => c.name === classId)
   }
-  // Pull subclass features from the matching source family first, falling
-  // back to anything in the file so legacy subclasses still appear when
-  // their XPHB rewrite is missing.
+  // Strict-Edition Subclass-Filter — bei 5.5e nur XPHB-Subclasses,
+  // bei 5e nur non-X-Subclasses (kein Auto-Bridge der 2024-Subclasses
+  // in 5e-Charaktere).
   const subclasses = (data.subclass || []).filter(
-    s => s.className === classId && isOfficialSource(s.source)
+    s => s.className === classId && isEditionMatch(s.source, edition)
   )
-  const classFeatures = (data.classFeature || []).filter(f => f.className === classId)
-  const subclassFeatures = data.subclassFeature || []
+  // Cross-edition guard: 5.5e class JSONs ship BOTH legacy (PHB) und
+  // 2024 (XPHB) Versionen jeder Feature für Backward-Compat. Wir
+  // dedupen in zwei Phasen:
+  //   1. Same-name-same-level: bevorzuge die Edition-passende Variante
+  //   2. Same-level-different-name (5.5e only): wenn auf einer Stufe
+  //      eine XPHB-Variante existiert, droppen wir ALLE PHB-Varianten
+  //      auf derselben Stufe (5e PHB hat z.B. "Extra Attack (2)" L11,
+  //      5.5e XPHB hat dafür "Two Extra Attacks" L11 — unterschiedliche
+  //      Namen aber gleiche Mechanik; doppelt = Spieler sieht beide).
+  // Ausnahme: PHB-Feature wird BEHALTEN wenn auf seiner Stufe kein
+  // einziges XPHB-Feature existiert (Subclass-Stub-Features wie
+  // "Martial Archetype feature L7 (PHB)" haben kein XPHB-Pendant).
+  // Strict edition gate ZUERST — danach erst die same-name-same-level
+  // Dedup. Verhindert dass 5e-Charaktere XPHB-Features sehen oder
+  // 5.5e-Charaktere PHB-Reste die kein XPHB-Pendant haben.
+  const rawClassFeatures = (data.classFeature || []).filter(
+    f => f.className === classId && isEditionMatch(f.source, edition),
+  )
+  const featureKey = (f) => `${f.name}::${f.level ?? 0}::${f.className}`
+  const isXphb = (f) => PREFERRED_55E_SOURCES.includes(f?.source)
+
+  // Phase 1: same-name same-level dedup
+  const byKey = new Map()
+  for (const f of rawClassFeatures) {
+    const k = featureKey(f)
+    const existing = byKey.get(k)
+    if (!existing) { byKey.set(k, f); continue }
+    if (is55e) {
+      if (isXphb(f) && !isXphb(existing)) byKey.set(k, f)
+    } else {
+      if (isXphb(existing) && !isXphb(f)) byKey.set(k, f)
+    }
+  }
+  let classFeatures = [...byKey.values()]
+
+  // Phase 2 (5.5e only): drop PHB features auf Stufen die schon eine
+  // XPHB-Variante haben — die XPHB-Feature ersetzt mechanisch die PHB
+  // (z.B. "Two Extra Attacks" L11 ersetzt "Extra Attack (2)" L11).
+  if (is55e) {
+    const xphbLevels = new Set(
+      classFeatures.filter(isXphb).map(f => f.level ?? 0),
+    )
+    classFeatures = classFeatures.filter(f => isXphb(f) || !xphbLevels.has(f.level ?? 0))
+  }
+
+  // Subclass-Features: gleiche Logik aber gekeyt zusätzlich auf
+  // subclassShortName damit Champion-PHB nicht mit Battle-Master-XPHB
+  // kollidiert.
+  const rawSubFeatures = (data.subclassFeature || []).filter(
+    f => isEditionMatch(f.source, edition),
+  )
+  const subKey = (f) => `${f.name}::${f.level ?? 0}::${f.className}::${f.subclassShortName}`
+  const subByKey = new Map()
+  for (const f of rawSubFeatures) {
+    const k = subKey(f)
+    const existing = subByKey.get(k)
+    if (!existing) { subByKey.set(k, f); continue }
+    if (is55e) {
+      if (isXphb(f) && !isXphb(existing)) subByKey.set(k, f)
+    } else {
+      if (isXphb(existing) && !isXphb(f)) subByKey.set(k, f)
+    }
+  }
+  let subclassFeatures = [...subByKey.values()]
+  // Phase 2 für Subclass: per (subclassShortName, level) wenn XPHB
+  // vorhanden → drop PHB.
+  if (is55e) {
+    const xphbSubLevels = new Set(
+      subclassFeatures.filter(isXphb)
+        .map(f => `${f.subclassShortName}::${f.level ?? 0}`),
+    )
+    subclassFeatures = subclassFeatures.filter(f =>
+      isXphb(f) || !xphbSubLevels.has(`${f.subclassShortName}::${f.level ?? 0}`),
+    )
+  }
 
   return {
     ...cls,
@@ -394,7 +468,7 @@ export async function loadBackgroundList(edition) {
   if (!data) return []
 
   const all = (data.background || [])
-    .filter(bg => isOfficialSource(bg.source))
+    .filter(bg => isEditionMatch(bg.source, edition))
     .map(bg => ({
       id: `${bg.name}__${bg.source}`,
       name: bg.name,
@@ -431,14 +505,12 @@ export async function loadBackgroundList(edition) {
  */
 export async function loadOptionalFeatureList(edition) {
   const data = await fetchData(edition || '5e', 'optionalfeatures.json')
-  const all = data?.optionalfeature || []
-  if (edition === '5.5e') {
-    // deduplicateByName matches on lowercase name and is featureType-agnostic.
-    // Two optional features can share a name across feature-type buckets in
-    // theory (none in current data), but the consumer is filtering by
-    // featureType anyway, so the dedup is safe.
-    return deduplicateByName(all)
-  }
+  const raw = data?.optionalfeature || []
+  // Strict edition gate: 5.5e bekommt nur XPHB-Optionalfeatures
+  // (Fighting Styles, Maneuvers, Invocations, Metamagic der 2024-
+  // Edition); 5e behält PHB / TCE / XGE.
+  const all = raw.filter(f => isEditionMatch(f.source, edition))
+  if (edition === '5.5e') return deduplicateByName(all)
   return all
 }
 
@@ -449,7 +521,7 @@ export async function loadFeatList(edition) {
   if (!data) return []
 
   const all = (data.feat || [])
-    .filter(f => isOfficialSource(f.source))
+    .filter(f => isEditionMatch(f.source, edition))
     .map(f => ({
       id: `${f.name}__${f.source}`,
       name: f.name,
@@ -853,7 +925,7 @@ export async function loadItemIndex(edition) {
         return Object.keys(patch).length > 0 ? { ...i, ...patch } : i
       })
     }
-    const filtered = items.filter(i => isOfficialSource(i.source))
+    const filtered = items.filter(i => isEditionMatch(i.source, edition))
     if (edition === '5.5e') return deduplicateByName(filtered)
     return filtered
   }
@@ -862,7 +934,7 @@ export async function loadItemIndex(edition) {
   const data = await fetchData(edition, 'items-base.json')
   if (!data) return []
   const baseItems = (data.baseitem || data.item || [])
-    .filter(item => isOfficialSource(item.source))
+    .filter(item => isEditionMatch(item.source, edition))
     .map(item => ({
       name: item.name,
       source: item.source,
@@ -1080,6 +1152,25 @@ export function isOfficialSource(source) {
     'SRD','SRD5.1',
   ]
   return official.includes(source)
+}
+
+// Strict edition gate. Pro Edition werden NUR Quellen aus dieser
+// Edition-Family zugelassen:
+//   • 5.5e mode → XPHB / XDMG / XMM (2024 core books)
+//   • 5e   mode → alles AUSSER X*-Quellen, plus offizielle Supplements
+// Falls der Spieler andere Quellen will, kann er sie nachträglich über
+// den 5e.tools-Import in seinem Sheet einspielen (manuelle Items /
+// Feats / Spells). Der Auto-Catalog bleibt edition-strict.
+//
+// `entryHasNoSource` (truthy) erlaubt unkommentierte Einträge — manche
+// optionalfeatures haben keine source und sollen dann zur jeweiligen
+// Edition gehören (Fallback).
+export function isEditionMatch(source, edition, entryHasNoSource = false) {
+  if (!source) return entryHasNoSource ? true : false
+  const isXfamily = source === 'XPHB' || source === 'XDMG' || source === 'XMM'
+  if (edition === '5.5e') return isXfamily
+  // 5e: alles official AUSSER X-family
+  return isOfficialSource(source) && !isXfamily
 }
 
 function formatCastingTime(time) {

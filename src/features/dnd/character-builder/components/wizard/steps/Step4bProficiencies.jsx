@@ -69,17 +69,62 @@ function extractSkillChoices(startingProfs) {
 // mehr.
 // ─────────────────────────────────────────────────────────────
 
-// Ranger Favored Enemy (5e — kein optionalfeature, kein Eintrag in
-// den Datenquellen, deshalb hardcoded fallback)
-const FAVORED_ENEMIES_5E = [
-  'Aberrations','Beasts','Celestials','Constructs','Dragons','Elementals',
-  'Fey','Fiends','Giants','Humanoids','Monstrosities','Oozes','Plants','Undead',
-]
+// Ranger Favored Enemy + Natural Explorer (5e PHB).
+// Beide Listen werden direkt aus den 5etools-Feature-Entries
+// extrahiert — kein hardcoded Fallback.
+//
+// Favored Enemy Text-Schnipsel (PHB Ranger L1):
+//   "Choose a type of favored enemy: {@filter aberrations|bestiary|...},
+//    {@filter beasts|...}, …, or {@filter undead|...}.
+//    Alternatively, you can select two races of {@filter humanoid|...}."
+//
+// Natural Explorer Text-Schnipsel:
+//   "Choose one type of favored terrain: arctic, coast, desert, …, or
+//    the Underdark."
+function extractFavoredEnemyOptions(classData) {
+  const feat = (classData?.features || []).find(
+    f => f.name === 'Favored Enemy' && (f.level == null || f.level === 1),
+  )
+  if (!Array.isArray(feat?.entries)) return []
+  const text = feat.entries.filter(e => typeof e === 'string').join(' ')
+  const tokens = []
+  const re = /\{@filter\s+([^|}]+)\|bestiary\|type=[^}]+\}/g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    const raw = m[1].trim().toLowerCase()
+    // Casing direkt aus dem Datenfeld übernehmen — 5etools spielt die
+    // Pluralität (Fey + Undead bleiben singular; Aberrations bleibt
+    // plural). Nur First-Letter-Capitalization.
+    const cap = raw.charAt(0).toUpperCase() + raw.slice(1)
+    if (!tokens.includes(cap)) tokens.push(cap)
+  }
+  // Der "Alternatively, you can select two races of humanoid"-Satz
+  // führt nur den singular "humanoid" als Tag — kein @filter-Match
+  // ergibt "Humanoids". Wir ergänzen manuell, falls humanoid im Text
+  // aber noch nicht in der Liste ist.
+  if (/\bhumanoid/i.test(text) && !tokens.includes('Humanoid') && !tokens.includes('Humanoids')) {
+    tokens.push('Humanoids')
+  }
+  return tokens
+}
 
-// Ranger Natural Explorer Terrain (5e — same reason)
-const FAVORED_TERRAINS_5E = [
-  'Arctic','Coast','Desert','Forest','Grassland','Mountain','Swamp','Underdark',
-]
+function extractFavoredTerrainOptions(classData) {
+  const feat = (classData?.features || []).find(
+    f => f.name === 'Natural Explorer' && (f.level == null || f.level === 1),
+  )
+  if (!Array.isArray(feat?.entries)) return []
+  const text = feat.entries.filter(e => typeof e === 'string').join(' ')
+  const m = text.match(/choose\s+one\s+type\s+of\s+favored\s+terrain:\s+([^.]+?)\./i)
+  if (!m) return []
+  const list = m[1]
+    .replace(/\bor\s+the\s+/gi, '')
+    .replace(/\bor\s+/gi, '')
+    .split(/,\s*/)
+    .map(s => s.replace(/^the\s+/i, '').trim())
+    .filter(Boolean)
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+  return [...new Set(list)]
+}
 
 // ── Hauptkomponente ────────────────────────────────────────
 // NOTE: Skill proficiency choices and Expertise have moved to Step7Proficiencies,
@@ -102,6 +147,8 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
   const selectedFavoredEnemy  = cls?.levelChoices?.[1]?.favoredEnemy   || null
   const selectedFavoredTerrain = cls?.levelChoices?.[1]?.favoredTerrain || null
   const hasRangerExtras = cls?.classId === 'Ranger' && edition === '5e'
+  // Optionen werden weiter unten aus classData via useMemo extrahiert
+  // (siehe favoredEnemyOpts / favoredTerrainOpts). Kein hardcoded Array.
 
   // ── Ranger extras ─────────────────────────────────────────
   function selectFavoredEnemy(val) {
@@ -186,6 +233,18 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
       optionalFeatureMap,
     }) || []
   })()
+
+  // Ranger 5e PHB-Optionen direkt aus den Feature-Entries extrahieren.
+  // useMemo damit die Listen nur neu berechnet werden wenn classData
+  // wechselt (Klassenwechsel etc.).
+  const favoredEnemyOpts = useMemo(
+    () => hasRangerExtras ? extractFavoredEnemyOptions(classData) : [],
+    [hasRangerExtras, classData],
+  )
+  const favoredTerrainOpts = useMemo(
+    () => hasRangerExtras ? extractFavoredTerrainOptions(classData) : [],
+    [hasRangerExtras, classData],
+  )
 
   // ── Kein Character / keine Klasse ─────────────────────────
   if (!cls) {
@@ -294,7 +353,10 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
               und auf Intelligence-Checks um sie zu erinnern.
             </p>
             <div style={styles.chipGrid}>
-              {FAVORED_ENEMIES_5E.map(enemy => {
+              {favoredEnemyOpts.length === 0 && (
+                <span style={styles.muted}>Lade Optionen…</span>
+              )}
+              {favoredEnemyOpts.map(enemy => {
                 const isSel = selectedFavoredEnemy === enemy
                 return (
                   <button key={enemy}
@@ -313,7 +375,10 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
               Wähle ein Favored Terrain. In diesem Terrain erhältst du verschiedene Boni.
             </p>
             <div style={styles.chipGrid}>
-              {FAVORED_TERRAINS_5E.map(terrain => {
+              {favoredTerrainOpts.length === 0 && (
+                <span style={styles.muted}>Lade Optionen…</span>
+              )}
+              {favoredTerrainOpts.map(terrain => {
                 const isSel = selectedFavoredTerrain === terrain
                 return (
                   <button key={terrain}
