@@ -1388,6 +1388,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         activeEffects: atk.activeEffects || [],
         magical: atk.magical,
         weaponId: atk.id,
+        attacksPerAction: atk.attacksPerAction || 1,
         properties: atk.properties || [],
         markedAs: atk.markedAs || null,
         // Per-Roll-Advisory aus aktiver Konzentration (Hex / Hunter's
@@ -2525,8 +2526,25 @@ function CombatActionsCategorisedList({
                 }
 
                 // Smart-Effect-Pills (Attack/Save/Damage + Phase 4 Kinds).
+                // Dedup-Filter:
+                //   • Trigger-Pills die NUR den economy-Slot wiederholen
+                //     (Row ist eh schon im BA/R/A-Tab) werden gedroppt
+                //   • Identische (kind+label)-Paare nur einmal — verhindert
+                //     dass zwei Regex-Treffer das selbe Pill emittieren
                 if (Array.isArray(r.effectPills) && r.effectPills.length > 0) {
+                  const REDUNDANT_TRIGGERS_BY_SLOT = {
+                    bonusAction: new Set(['Bonus Action', 'BA · Your Turn']),
+                    reaction:    new Set(['Reaction']),
+                    action:      new Set(['On Attack Action', 'On Your Turn']),
+                  }
+                  const redundant = REDUNDANT_TRIGGERS_BY_SLOT[r.economySlot] || new Set()
+                  const seenPillKey = new Set()
                   for (const p of r.effectPills) {
+                    // Skip trigger-pill wenn es nur den economySlot wiederholt
+                    if (p.kind === 'trigger' && redundant.has(p.label)) continue
+                    const dedupKey = `${p.kind}::${p.label}::${p.value || ''}`
+                    if (seenPillKey.has(dedupKey)) continue
+                    seenPillKey.add(dedupKey)
                     const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
                     leftPills.push(
                       <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
@@ -2581,6 +2599,22 @@ function CombatActionsCategorisedList({
                     ...caePill, border: '1px solid var(--text-dim)', color: 'var(--text-secondary)',
                   }} title={`Reichweite: ${r.range}`}>{r.range}</span>
                 )
+                // Extra Attack — zeigt "×N" wenn der Character mehr als
+                // einen Treffer pro Attack-Action machen kann (Extra
+                // Attack feature, Two Extra Attacks, Three Extra Attacks).
+                if (r.attacksPerAction && r.attacksPerAction > 1) {
+                  leftPills.push(
+                    <span key="atks" style={{
+                      ...caePill,
+                      border: '1px solid var(--accent-yellow)',
+                      color: 'var(--accent-yellow)',
+                      background: 'color-mix(in srgb, var(--accent-yellow) 14%, transparent)',
+                      fontWeight: 700,
+                    }} title={`${r.attacksPerAction} Treffer pro Attack-Action (Extra Attack feature)`}>
+                      ×{r.attacksPerAction}
+                    </span>,
+                  )
+                }
                 if (r.mastery && r.mastery.length > 0) {
                   for (const m of r.mastery) {
                     const desc = masteryShortDesc(m)

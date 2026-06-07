@@ -136,6 +136,179 @@ function scaleCantripDice(diceToken, charLevel) {
 //   • Object:  { label, scaling: { '1': '1d8', '5': '1d10', ... } }
 //   • Array:   [ { label: 'damage', scaling: {...} }, { label: '...' } ]
 // Wir picken den Eintrag mit label='damage' (oder fallback erste).
+// Anzahl-Treffer-/Ray-/Beam-/Dart-Erkennung. Liefert
+// { count, upcast, targetKind, targetNote } wenn der Spell-Text auf
+// einen Multi-Treffer- oder Multi-Target-Effekt hinweist (Scorching
+// Ray, Eldritch Blast, Magic Missile, Bless, Bane, Aid, Slow, Hold
+// Person mit single-target+humanoid …) — sonst null.
+//
+//   count       = Anzahl initialer Treffer (Char-Level-skaliert bei
+//                 Cantrips wie Eldritch Blast)
+//   upcast      = "+1/lvl" wenn höhere Slots zusätzliche Treffer geben
+//   targetKind  = 'enemy' | 'friend' | 'neutral' — für Pill-Farbgebung
+//   targetNote  = optionale Restriction-Beschreibung ("Humanoid only",
+//                 "Willing creature") für Hover-Tooltip
+//
+// Patterns sind data-driven über den Entry-Text + 5etools-Strukturfelder
+// (savingThrow / damageInflict / affectsCreatureType).
+// `attacks?` bewusst NICHT in der Liste: "one attack" steht in vielen
+// Non-Projektil-Spells (Slow: "can make only one attack") und würde
+// fälschlich als 1-Treffer-Projektil gewertet — was Section 1b (Creature
+// Targeting) für Slow / Hold Person / etc. unterdrückt.
+const PROJECTILE_RE = '(?:rays?|beams?|darts?|bolts?|missiles?|orbs?|spheres?|projectiles?)'
+const CREATURE_RE   = '(?:creatures?|targets?|allies|enemies)'
+const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, ten: 10 }
+
+// Heuristik für friend/enemy/neutral. 5etools-Strukturfelder zuerst,
+// dann Textsignale.
+function detectTargetKind(spell, text) {
+  // Save = Gegner muss würfeln → typisch ENEMY (debuff / damage save)
+  if (Array.isArray(spell?.savingThrow) && spell.savingThrow.length > 0) return 'enemy'
+  if (Array.isArray(spell?.damageInflict) && spell.damageInflict.length > 0) return 'enemy'
+  // Textsignale für FRIEND (Buffs / Heals / Beneficial Effects)
+  if (/\bwilling\s+creatures?\b/i.test(text)) return 'friend'
+  if (/\b(?:bless|imbue[sd]?\s+with|inspire|invigorate)\b/i.test(text)) return 'friend'
+  if (/\bregain[s]?\s+(?:hit\s+points|hp)\b/i.test(text)) return 'friend'
+  if (/\b(?:gains?|granting)\s+(?:temporary\s+hit\s+points|temp\s+hp)\b/i.test(text)) return 'friend'
+  if (/\bhit\s+point[s]?\s+(?:maximum\s+)?(?:increase|gain)/i.test(text)) return 'friend'
+  if (/\b(?:advantage|\+\d+\s+(?:to|bonus\s+to)\s+(?:ac|saving\s+throws?|attack\s+rolls?))\b/i.test(text)) return 'friend'
+  if (/\bimmune\s+to\b/i.test(text)) return 'friend'
+  // Textsignale für ENEMY (Damage / Restraint)
+  if (/\b(?:deals?\s+\d*d?\d+\s+\w+\s+damage|takes?\s+\d*d?\d+\s+\w+\s+damage)\b/i.test(text)) return 'enemy'
+  if (/\b(?:against\s+(?:the\s+)?target|against\s+a\s+creature)\b/i.test(text)) return 'enemy'
+  return 'neutral'
+}
+
+// Restriction-Note für Hover (Humanoid only, Willing creature only, …).
+function detectTargetRestriction(spell, text) {
+  const parts = []
+  // affectsCreatureType: Hold Person ['humanoid'], Charm Monster ['humanoid','fiend',...]
+  if (Array.isArray(spell?.affectsCreatureType) && spell.affectsCreatureType.length > 0) {
+    const cap = spell.affectsCreatureType.map(t => t[0].toUpperCase() + t.slice(1)).join(' / ')
+    parts.push(`${cap} only`)
+  }
+  // Textsignale
+  if (/\bwilling\s+creature\b/i.test(text) && !parts.some(p => /willing/i.test(p))) {
+    parts.push('Willing creature only')
+  }
+  if (/\bnon-(?:humanoid|beast|elf|construct|undead)\b/i.test(text)) {
+    const m = text.match(/\bnon-(\w+)\b/i)
+    if (m) parts.push(`Non-${m[1][0].toUpperCase() + m[1].slice(1)} only`)
+  }
+  if (/\b(?:tiny|small\s+or\s+medium|small\s+or\s+smaller|medium\s+or\s+smaller)\s+(?:creatures?|targets?)\b/i.test(text)) {
+    const m = text.match(/\b(tiny|small\s+or\s+medium|small\s+or\s+smaller|medium\s+or\s+smaller)\s+(?:creatures?|targets?)\b/i)
+    if (m) parts.push(`Size: ${m[1]}`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+function findHitCount(spell, totalCharLevel) {
+  if (!spell) return null
+  const text = stripTags(flattenEntries(spell.entries))
+    .replace(/\s+/g, ' ')
+
+  // 1) Initialer Count aus "you hurl/create/conjure THREE rays" /
+  //    "three glowing darts" / "you fire two bolts" etc. (Projektile)
+  let baseCount = null
+  const verbMatch = text.match(new RegExp(
+    `\\byou\\s+(?:hurl|create|conjure|fire|launch|summon|throw)\\s+(\\w+)\\s+(?:glowing\\s+|fiery\\s+|crackling\\s+|magical\\s+|spectral\\s+)?${PROJECTILE_RE}`,
+    'i',
+  ))
+  if (verbMatch) {
+    const w = verbMatch[1].toLowerCase()
+    baseCount = WORD_NUM[w] != null ? WORD_NUM[w] : (parseInt(w, 10) || null)
+  }
+  if (baseCount == null) {
+    // Fallback ohne Verb-Anker (Magic Missile: "three glowing darts of …").
+    const m = text.match(new RegExp(`\\b(${Object.keys(WORD_NUM).join('|')}|\\d+)\\s+(?:glowing\\s+|fiery\\s+|crackling\\s+|magical\\s+|spectral\\s+)?${PROJECTILE_RE}\\b`, 'i'))
+    if (m) {
+      const w = m[1].toLowerCase()
+      baseCount = WORD_NUM[w] != null ? WORD_NUM[w] : (parseInt(w, 10) || null)
+    }
+  }
+
+  // 1b) Creature/Target Targeting: "Choose up to three creatures",
+  //     "Up to three creatures of your choice", "You bless up to N
+  //     creatures", "alter time around up to six creatures".
+  //     Wird nur ausgewertet wenn kein Projektil-Count gefunden wurde
+  //     (manche Spells wie Magic Missile haben beides).
+  if (baseCount == null) {
+    const m = text.match(new RegExp(
+      `\\b(?:choose|bless|target|alter\\s+time\\s+around|grant)\\s+(?:up\\s+to\\s+)?(\\w+)\\s+(?:other\\s+|willing\\s+|friendly\\s+)?${CREATURE_RE}\\b`,
+      'i',
+    )) || text.match(new RegExp(
+      `\\bup\\s+to\\s+(\\w+)\\s+${CREATURE_RE}\\b`,
+      'i',
+    ))
+    if (m) {
+      const w = m[1].toLowerCase()
+      const cnt = WORD_NUM[w] != null ? WORD_NUM[w] : parseInt(w, 10)
+      if (Number.isFinite(cnt) && cnt > 1) baseCount = cnt
+    }
+  }
+
+  // 2) Cantrip-Scaling für Projektile: "two beams at level 5, three
+  //    beams at level 11, four beams at level 17" (Eldritch Blast).
+  //    Sucht im Haupt-Text + entriesHigherLevel.
+  if ((spell.level ?? 0) === 0) {
+    const scanText = text + ' ' + stripTags(flattenEntries(spell.entriesHigherLevel))
+    const re = new RegExp(`(${Object.keys(WORD_NUM).join('|')}|\\d+)\\s+${PROJECTILE_RE}\\s+at\\s+(?:level|(?:character\\s+)?level)\\s+(\\d+)`, 'gi')
+    let m
+    let bestLvl = 0
+    let bestCount = baseCount || 1
+    while ((m = re.exec(scanText)) !== null) {
+      const w = m[1].toLowerCase()
+      const cnt = WORD_NUM[w] != null ? WORD_NUM[w] : parseInt(w, 10)
+      const lvl = parseInt(m[2], 10)
+      if (!Number.isFinite(cnt) || !Number.isFinite(lvl)) continue
+      if (lvl <= totalCharLevel && lvl > bestLvl) {
+        bestLvl = lvl
+        bestCount = cnt
+      }
+    }
+    if (bestLvl > 0) baseCount = bestCount
+    if (baseCount == null && /\b(?:a|one)\s+(?:beam|ray|dart|bolt|orb|sphere|missile)\b/i.test(text)) {
+      baseCount = 1
+    }
+  }
+
+  // Wenn nichts gefunden wurde, kein Multi-Hit-Pill.
+  if (!baseCount || baseCount <= 1) return null
+
+  // 3) Upcast-Skalierung extrahiert die TATSÄCHLICHE Steigerung:
+  //    "one additional ray for each spell slot level above 2"     → +1
+  //    "two more darts for each spell slot level above 1"         → +2
+  //    "one additional creature for every two slot levels above"  → +1/2
+  //    Matched sowohl Projektile als auch Creatures.
+  const higherText = stripTags(flattenEntries(spell.entriesHigherLevel))
+  const upcastMatch = higherText.match(new RegExp(
+    `\\b(one|two|three|four|five|\\d+)\\s+(?:additional|more)\\s+(?:\\w+\\s+)?(?:${PROJECTILE_RE}|${CREATURE_RE})\\s+for\\s+(?:each|every)\\s+(?:(\\w+)\\s+)?(?:spell\\s+)?slot\\s+levels?\\s+above`,
+    'i',
+  ))
+  let upcastSuffix = null
+  if (upcastMatch) {
+    const w = upcastMatch[1].toLowerCase()
+    const inc = WORD_NUM[w] != null ? WORD_NUM[w] : parseInt(w, 10)
+    // Optional: "every TWO slot levels above" → +N/2
+    const perWord = (upcastMatch[2] || '').toLowerCase()
+    const per = WORD_NUM[perWord] != null ? WORD_NUM[perWord] : (parseInt(perWord, 10) || 1)
+    if (Number.isFinite(inc) && inc > 0) {
+      upcastSuffix = per > 1 ? `+${inc}/${per}` : `+${inc}`
+    }
+  }
+
+  // Targeting-Kind + Restriction für Pill-Farbe und Hover.
+  const targetKind = detectTargetKind(spell, text)
+  const targetNote = detectTargetRestriction(spell, text)
+
+  return {
+    count: baseCount,
+    upcast: upcastSuffix,
+    targetKind,
+    targetNote,
+  }
+}
+
 function dieFromScalingLevelDice(scalingLevelDice, charLevel) {
   if (!scalingLevelDice) return null
   const arr = Array.isArray(scalingLevelDice) ? scalingLevelDice : [scalingLevelDice]
@@ -202,6 +375,12 @@ export function parseSpellEffect(spell, opts = {}) {
     }
   }
 
+  // Multi-Hit ZUERST berechnen, weil damage-Skalierung das Wissen
+  // braucht: wenn ein Cantrip multi-hit ist (Eldritch Blast: 1d10
+  // PRO BEAM, mehr Beams mit Level), darf die generische
+  // "1 → 2 → 3 → 4 Würfel" Skalierung NICHT angewendet werden.
+  const hits = findHitCount(spell, totalCharLevel)
+
   // ── Damage + Upcast ──────────────────────────────────────────
   let damage = null
   const firstDmg = findFirstDamage(rawText)
@@ -216,10 +395,10 @@ export function parseSpellEffect(spell, opts = {}) {
     let diceDisplay
     if (scalingDie) {
       diceDisplay = scalingDie
-    } else if ((spell.level ?? 0) === 0) {
-      // Cantrip-Skalierung: nur bei Level-0-Spells und nur wenn das
-      // Token "1d…" oder "d…" ist (Cantrips ohne ability-mod). Spells
-      // ab Level 1 skalieren via Slot, nicht via Charlevel.
+    } else if ((spell.level ?? 0) === 0 && !hits) {
+      // Cantrip-Skalierung: nur bei Level-0-Spells OHNE Multi-Hit-
+      // Skalierung. Eldritch Blast multipliziert die Anzahl der
+      // Beams (über hits), nicht die Würfel-Anzahl pro Beam.
       diceDisplay = scaleCantripDice(firstDmg.dice, totalCharLevel)
     } else {
       diceDisplay = firstDmg.dice
@@ -260,6 +439,33 @@ export function parseSpellEffect(spell, opts = {}) {
       title: `${save.ability.toUpperCase()} Save DC`,
     })
   }
+  // Multi-Hit / Multi-Target — Scorching Ray, Eldritch Blast,
+  // Magic Missile, … Pille kommt direkt VOR der Damage-Pille damit
+  // klar ist: "3x · 2d6 fire" = 3 Treffer à 2d6 Schaden pro Treffer
+  // (nicht 6d6 zusammen).
+  // `hits` wurde oben schon berechnet damit die Damage-Skalierung
+  // weiß ob sie den generischen Cantrip-Multiplier überspringen soll.
+  if (hits) {
+    // Tooltip enthält Restriction + Targeting-Kind. Renderer benutzt
+    // p.targetKind ('enemy'|'friend'|'neutral') zum Einfärben der Pille.
+    const kindLabel = hits.targetKind === 'enemy' ? 'Enemy targets'
+      : hits.targetKind === 'friend' ? 'Friendly targets'
+      : 'Any creature'
+    const tipParts = [
+      `${hits.count}× targets`,
+      kindLabel,
+      hits.upcast ? `Upcast: ${hits.upcast}` : null,
+      hits.targetNote || null,
+    ].filter(Boolean)
+    pills.push({
+      kind: 'hits',
+      label: `${hits.count}x${hits.upcast ? ` (${hits.upcast})` : ''}`,
+      title: tipParts.join(' · '),
+      targetKind: hits.targetKind,
+      targetNote: hits.targetNote,
+    })
+  }
+
   if (damage) {
     const parts = [damage.dice]
     if (damage.upcast) parts.push(`(${damage.upcast})`)
@@ -269,7 +475,7 @@ export function parseSpellEffect(spell, opts = {}) {
       value: null,
       damageType: damage.type,
       title: damage.type
-        ? `${damage.dice} ${damage.type}${damage.upcast ? ` · upcast ${damage.upcast}` : ''}`
+        ? `${damage.dice} ${damage.type}${damage.upcast ? ` · upcast ${damage.upcast}` : ''}${hits ? ` · pro Treffer (${hits.count}× insgesamt)` : ''}`
         : damage.dice,
     })
   }

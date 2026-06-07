@@ -27,6 +27,51 @@ function _featureBonusesFor(character) {
   return aggregateFeatureBonuses(list)
 }
 
+// ── Attacks per Attack-Action ─────────────────────────────────
+// 5e/5.5e: jeder Char hat 1 Attack pro Attack-Action. "Extra Attack"
+// feature increases to 2. Fighter bekommt höhere Tiers via:
+//   PHB:  "Extra Attack (2)" L11 = 3 attacks,  "Extra Attack (3)" L20 = 4
+//   XPHB: "Two Extra Attacks" L11 = 3 attacks, "Three Extra Attacks" L20 = 4
+//
+// Datadriven: erkennt aus dem Feature-NAMEN (PHB/XPHB-Tags) UND dem
+// Entry-Text ("number of attacks increases to three"). Maximum aller
+// matches wird zurückgegeben — multiclass-sicher (RAW: nur höchste
+// Stufe zählt, nicht Summe).
+export function computeAttacksPerAction(character) {
+  const features = character?.__activeFeatures || []
+  let max = 1
+  // Mapping name → attack count (PHB + XPHB Variants).
+  const NAME_COUNT = {
+    'extra attack': 2,
+    'extra attack (2)': 3,
+    'two extra attacks': 3,
+    'extra attack (3)': 4,
+    'three extra attacks': 4,
+  }
+  for (const f of features) {
+    const nm = String(f?.name || '').toLowerCase().trim()
+    if (NAME_COUNT[nm] != null) {
+      if (NAME_COUNT[nm] > max) max = NAME_COUNT[nm]
+      continue
+    }
+    // Fallback: Entry-Text. Catches homebrew / future features die
+    // "you can attack X times when you take the Attack action"
+    // sagen.
+    const txt = Array.isArray(f?.entries)
+      ? f.entries.filter(e => typeof e === 'string').join(' ').toLowerCase()
+      : ''
+    if (!txt) continue
+    if (/\battack\s+four\s+times\b|increases?\s+to\s+four\b/.test(txt)) {
+      if (4 > max) max = 4
+    } else if (/\battack\s+three\s+times\b|increases?\s+to\s+three\b/.test(txt)) {
+      if (3 > max) max = 3
+    } else if (/\battack\s+twice\b|\battack\s+two\s+times\b|increases?\s+to\s+two\b/.test(txt)) {
+      if (2 > max) max = 2
+    }
+  }
+  return max
+}
+
 // ============================================================
 // HAUPT-FUNKTION
 // Gibt ein komplettes "computed" Objekt zurück mit allem
@@ -343,6 +388,46 @@ export function computeProficiencies(character, classDataMap = {}) {
    // User-chosen weapon proficiencies
     for (const weapon of (feat.choices?.proficiencies?.weapons || [])) {
       if (!result.weapons.includes(weapon)) result.weapons.push(weapon)
+    }
+    // Sprachen aus feat.languageProficiencies (5etools: array of
+    // {<langName>: true} or {anyStandard: N}). Wir extrahieren fixed
+    // language-names; "anyStandard/anyExotic" sind Choice-Picks die
+    // im character.choices liegen und über den unten getriggerten
+    // generischen choices-loop laufen.
+    for (const block of (feat.languageProficiencies || [])) {
+      if (!block || typeof block !== 'object') continue
+      for (const [key, val] of Object.entries(block)) {
+        if (val === true && !/^any/i.test(key)
+          && !result.languages.includes(key)) {
+          result.languages.push(key)
+        }
+      }
+    }
+    // User-chosen languages (vom Choice-Picker via feat.choices).
+    for (const lang of (feat.choices?.proficiencies?.languages || [])) {
+      if (typeof lang === 'string' && !result.languages.includes(lang)) {
+        result.languages.push(lang)
+      }
+    }
+    // Saving-Throw-Proficiency-Grants (Resilient: structured Form
+    // mit {<ability>: true} array). Resilient gibt prof in EINER
+    // gewählten Ability — `feat.choices.ability` enthält den Pick.
+    for (const block of (feat.savingThrowProficiencies || [])) {
+      if (!block || typeof block !== 'object') continue
+      for (const [ability, val] of Object.entries(block)) {
+        const abLow = ability.toLowerCase()
+        if (val === true && ['str','dex','con','int','wis','cha'].includes(abLow)) {
+          result.savingThrows[abLow] = true
+        }
+      }
+    }
+    // Resilient + andere "choose one ability"-Feats speichern den
+    // Pick in feat.choices.ability (string). Wende ihn auf saves an.
+    if (feat.choices?.ability) {
+      const a = String(feat.choices.ability).toLowerCase()
+      if (['str','dex','con','int','wis','cha'].includes(a)) {
+        result.savingThrows[a] = true
+      }
     }
   }
 
@@ -857,6 +942,11 @@ export function computeSpellcasting(character, modifiers, profBonus) {
 
 export function computeAttacks(character, modifiers, profBonus, proficiencies, weaponMastery = null) {
   const attacks = []
+  // Extra Attack pre-compute — applies to alle Action-Attack-Rows
+  // (Unarmed, Monk Martial Arts, Psychic Blades, Weapons). Bonus-
+  // Action-Attacks (Psychic Blades Bonus, Off-Hand TWF) bekommen das
+  // Feld NICHT (sie sind eine separate Action-Economy-Phase).
+  const _attacksPerActionTop = computeAttacksPerAction(character)
 
   // Unarmed Strike (immer verfügbar)
   const strMod = modifiers.str || 0
@@ -869,6 +959,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     damageType: 'bludgeoning',
     range: '5 ft.',
     properties: [],
+    attacksPerAction: _attacksPerActionTop,
   })
 
   // Monk Martial Arts
@@ -885,6 +976,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       damageType: 'bludgeoning',
       range: '5 ft.',
       properties: ['Finesse'],
+      attacksPerAction: _attacksPerActionTop,
     })
   }
 
@@ -923,6 +1015,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       // Psychic Blades have the Vex mastery built in and the Soulknife
       // knows it automatically — no slot from cls.weaponMasteries used.
       mastery: ['Vex'],
+      attacksPerAction: _attacksPerActionTop,
     })
     // Bonus-action blade: 1d4 + DEX. Unlike regular TWF, the Soulknife
     // feature explicitly adds your ability modifier to this damage —
@@ -953,6 +1046,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // Feature-Boni: Fighting-Style-Effekte etc. werden hier pro Waffe
   // konditional addiert (ranged vs. melee, einhändig vs. thrown).
   const fb = _featureBonusesFor(character)
+  // Aliased für die weapon-loop unten (war oben schon einmal als
+  // _attacksPerActionTop berechnet).
+  const attacksPerAction = _attacksPerActionTop
   for (const weapon of weapons) {
     // Legacy characters created before the wizard normalised weapon
     // properties may still carry raw 5etools codes like "F|XPHB". Map
@@ -1089,6 +1185,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       // sieht dass die Waffe gerade gebuffed ist.
       activeEffects: effectAcc.labels,
       magical: effectAcc.magical || undefined,
+      // Wie viele Treffer pro Attack-Action (Extra Attack feature
+      // pushed das auf 2/3/4 hoch). Renderer zeigt "×N" pill wenn > 1.
+      attacksPerAction,
       range: computedRange,
       properties: props,
       // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann

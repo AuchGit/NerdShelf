@@ -36,6 +36,9 @@ const DEFAULT_KIND_COLORS = {
   uses:           'var(--accent-orange, #ff9533)',
   cost:           'var(--accent-yellow)',
   utility:        'var(--accent-cyan, #4dd0e1)',
+  hits:           'var(--accent-yellow)',
+  crit:           'var(--accent-red)',
+  heal:           'var(--accent-green)',
 }
 
 /**
@@ -60,6 +63,13 @@ export function pillColorForKind(pill, pillColors = {}, damageTypeColorMap = {})
   if (pill.damageType) {
     if (pillColors[`damage.${pill.damageType}`]) return pillColors[`damage.${pill.damageType}`]
     if (damageTypeColorMap[pill.damageType]) return damageTypeColorMap[pill.damageType]
+  }
+  // 2b) Multi-Hit-Pill: Farbe nach targetKind (enemy=red, friend=green,
+  //     neutral=yellow). Default fällt auf neutral.
+  if (k === 'hits') {
+    if (pill.targetKind === 'enemy')  return 'var(--accent-red)'
+    if (pill.targetKind === 'friend') return 'var(--accent-green)'
+    return 'var(--accent-yellow)'
   }
   // 3) Default pro Kind
   if (DEFAULT_KIND_COLORS[k]) return DEFAULT_KIND_COLORS[k]
@@ -94,28 +104,77 @@ function flattenEntries(entries) {
 // Pure first-hit — bei Multi-Damage-Features pickt's das prominenteste
 // (= erstgenanntes) Pattern.
 function findFeatureDamage(rawText) {
-  // Bevorzugt {@damage X|Y} Tag
-  const tagMatch = rawText.match(/\{@(?:damage|dice)\s+([^|}]+)(?:\|[^}]*)?\}\s*([A-Za-z]+)?/i)
+  // d20 ist NIE Damage — es ist der Würfel für Attack/Save/Check-
+  // Würfe. Manche Features (Hexblade's Curse: "critical hit on a roll
+  // of 19 or 20 on the d20") werden sonst fälschlich als d20-Damage
+  // angezeigt. Wir filtern jede `{@dice d20}`-Sequenz raus bevor wir
+  // den Damage-Match versuchen.
+  const dmgRelevantText = rawText.replace(/\{@(?:dice|damage)\s+d20[^}]*\}/gi, '')
+  // Bevorzugt {@damage X|Y} oder {@dice NdM} Tag
+  const tagMatch = dmgRelevantText.match(/\{@(?:damage|dice)\s+(\d*d\d+(?:\s*[+-]\s*\d+)?)(?:\|[^}]*)?\}\s*([A-Za-z]+)?/i)
   if (tagMatch) {
     const dice = tagMatch[1].trim()
-    const possibleType = (tagMatch[2] || '').toLowerCase()
-    const type = DAMAGE_TYPES.includes(possibleType) ? possibleType : null
-    if (!type) {
-      // Probier weiter im Kontext: nach dem Tag könnte der Typ
-      // einige Wörter später stehen.
-      const after = rawText.slice(tagMatch.index + tagMatch[0].length, tagMatch.index + tagMatch[0].length + 60)
-      const t = after.match(new RegExp(`\\b(${DAMAGE_TYPES.join('|')})\\b`, 'i'))
-      return { dice, type: t ? t[1].toLowerCase() : null }
+    // Sicherheitscheck: kein d20 als Damage akzeptieren (zur Sicher-
+    // heit doppelt — falls der Stripper-Filter mal nicht greift).
+    if (/d20\b/i.test(dice)) {
+      // Fallback in den verbleibenden Text springen
+    } else {
+      const possibleType = (tagMatch[2] || '').toLowerCase()
+      const type = DAMAGE_TYPES.includes(possibleType) ? possibleType : null
+      if (!type) {
+        const after = dmgRelevantText.slice(tagMatch.index + tagMatch[0].length, tagMatch.index + tagMatch[0].length + 60)
+        const t = after.match(new RegExp(`\\b(${DAMAGE_TYPES.join('|')})\\b`, 'i'))
+        return { dice, type: t ? t[1].toLowerCase() : null }
+      }
+      return { dice, type }
     }
-    return { dice, type }
   }
-  const stripped = stripTags(rawText)
+  const stripped = stripTags(dmgRelevantText)
   const plain = stripped.match(new RegExp(
     `\\b(\\d*d\\d+(?:\\s*\\+\\s*\\d+)?)\\b[\\s,.;:-]*\\b(${DAMAGE_TYPES.join('|')})?`,
     'i',
   ))
-  if (plain) {
+  if (plain && !/d20\b/i.test(plain[1])) {
     return { dice: plain[1].replace(/\s+/g, ''), type: plain[2] ? plain[2].toLowerCase() : null }
+  }
+  return null
+}
+
+// Crit-Range-Erweiterung: "critical hit on a roll of 19 or 20 on the
+// d20" (Hexblade's Curse), "score a critical hit on a roll of 19 or 20"
+// (Champion Improved Critical), "18-20" (Superior Critical).
+function findCritRangePill(stripped) {
+  const m = stripped.match(/\bcritical\s+hit\s+on\s+a\s+roll\s+of\s+(\d+)(?:\s+(?:or|-)\s+(\d+))?/i)
+  if (m) {
+    const low = parseInt(m[1], 10)
+    const high = m[2] ? parseInt(m[2], 10) : 20
+    if (low > 0 && low < high) {
+      return { label: `Crit ${low}-${high}`, title: `Critical hit on ${low}-${high}` }
+    }
+  }
+  return null
+}
+
+// Vs-Target-Damage-Bonus: "bonus to damage rolls against the cursed
+// target" / "additional damage against the target". Pattern matcht
+// "bonus equals your proficiency bonus" oder "+N damage".
+function findVsTargetDamagePill(stripped) {
+  if (/\bbonus\s+to\s+damage\s+rolls?\s+against\s+the\s+(?:cursed|marked|chosen)\s+target\b/i.test(stripped)
+      && /\bequals\s+your\s+proficiency\s+bonus\b/i.test(stripped)) {
+    return { label: '+ProfBonus dmg', title: 'Bonus damage to attacks against the cursed target equal to your proficiency bonus' }
+  }
+  const m = stripped.match(/\+(\d+)\s+damage\s+(?:to|against)\s+(?:the\s+)?(?:cursed|marked|chosen)\s+target/i)
+  if (m) {
+    return { label: `+${m[1]} dmg vs target`, title: `+${m[1]} damage against the cursed/marked target` }
+  }
+  return null
+}
+
+// HP-Regen-On-Kill: "If the [cursed] target dies, you regain hit points"
+// (Hexblade's Curse pattern).
+function findRegenOnKillPill(stripped) {
+  if (/\b(?:if|when)\s+the\s+(?:cursed|marked)?\s*target\s+dies[^.]*?(?:regain|gain)\s+(?:hit\s+points|hp)\b/i.test(stripped)) {
+    return { label: 'HP on kill', title: 'Regain HP when the cursed/marked target dies' }
   }
   return null
 }
@@ -485,6 +544,14 @@ export function parseFeatureEffect(feature, character, profBonus = 0, opts = {})
   if (resistP) pills.push({ kind: 'resist', ...resistP })
   const rerollP = findRerollPill(stripped)
   if (rerollP) pills.push({ kind: 'reroll', ...rerollP })
+  // Crit-Range / Vs-Target-Bonus / HP-on-Kill — Hexblade's Curse,
+  // Champion's Improved/Superior Critical, Hunter's Mark, etc.
+  const critP = findCritRangePill(stripped)
+  if (critP) pills.push({ kind: 'crit', ...critP })
+  const vsTargetP = findVsTargetDamagePill(stripped)
+  if (vsTargetP) pills.push({ kind: 'damage-bonus', ...vsTargetP })
+  const regenP = findRegenOnKillPill(stripped)
+  if (regenP) pills.push({ kind: 'heal', ...regenP })
 
   // Charges — nur wenn das Feature keinen eigenen Resource-Pfad hat
   // (computeResources würde das sonst doppelt zeigen). Wir geben's
