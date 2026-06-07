@@ -23,6 +23,7 @@ import { getSpellcastingInfo } from '../../lib/spellcastingRules'
 import { Section, Badge, DetailChip, Btn, Stepper, FeatureNoteList, SheetModal } from './SheetKit'
 import { S } from './sheetStyles'
 import ConditionChips from '../ui/ConditionChips'
+import { CONDITIONS } from '../../lib/conditions'
 import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
@@ -470,6 +471,7 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
 
 export default function OverviewTab({ character, computed, abilityScores, hp, updateCharacter, applyCharacter, charId, session, onReload, onNavigateTab, readOnly = false }) {
   const { isPwaMobile } = usePwaMobile()
+  const [conditionsOpen, setConditionsOpen] = useState(false)
   const deathSaves = character.status?.deathSaves || { successes: 0, failures: 0 }
   const usedResources = character.status?.usedResources || {}
   const baseMaxHp = computed?.hp?.max || 1
@@ -607,6 +609,15 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         <div style={isPwaMobile ? heroColPwa : { flex: '0 0 240px', minWidth: 0 }}>
         <Section
           title="Hit Points"
+          // Conditions-Button im Section-Header (rechts, neben dem
+          // Titel), parallel zum "Inventory" / "Prepare"-Button-Muster
+          // in den anderen Spalten. Aktiv-Counter steht direkt drauf.
+          action={!readOnly ? (
+            <ConditionsButton
+              active={character.status?.conditions || []}
+              onOpen={() => setConditionsOpen(true)}
+            />
+          ) : null}
           // height:100% damit die Section die volle Höhe der Hero-Row-
           // Slot einnimmt; display:flex+column damit die Notes-Textarea
           // unten via flex:1 runter bis zur Conditions-Bar wächst.
@@ -754,27 +765,16 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         })()}
       </div>
 
-      {/* Conditions-Footer: spannt horizontal die ganze hero-row und
-          schließt sie nach unten ab — passend zum Reference-Bild.
-          Section-Header wird weggelassen; die Chips sind selbst-
-          erklärend genug. */}
-      <div style={{
-        marginTop: 8, padding: '6px 10px',
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 8,
-      }}>
-        <ConditionChips
-          active={character.status?.conditions || []}
-          onToggle={(id, on) => {
-            const cur = character.status?.conditions || []
-            const next = on ? [...cur.filter(x => x !== id), id] : cur.filter(x => x !== id)
-            updateCharacter('status.conditions', next)
-          }}
-          compact
+      {/* Conditions-Footer entfernt — der Toggle-Button sitzt jetzt
+          unter den HP-Controls, und aktive Conditions sind oben in
+          der Resistance/Vulnerability-Spalte einzeln aufgelistet. */}
+      {conditionsOpen && (
+        <ConditionsPickerModal
+          character={character}
+          updateCharacter={updateCharacter}
+          onClose={() => setConditionsOpen(false)}
         />
-        <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
-      </div>
+      )}
 
       {/* Closing strip entfernt — die Inhalte (Hit Dice, Death Saves,
           Action Economy, Spell-Stats) sitzen jetzt oben in der
@@ -1995,6 +1995,67 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
           }}
         />
       )}
+    </div>
+  )
+}
+
+// Compact-Button im Section-Header der HP-Spalte. Öffnet das
+// ConditionsPickerModal. Aktiv-Counter (Zahl in der Mitte) bleibt
+// dezent — wenn 0 Conditions aktiv sind, zeigen wir nur das "+"-Glyph.
+function ConditionsButton({ active = [], onOpen }) {
+  const count = active.length
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={count > 0
+        ? `${count} aktive Condition${count === 1 ? '' : 's'} — klick zum Bearbeiten`
+        : 'Conditions verwalten'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '3px 8px', borderRadius: 6,
+        border: `1px solid ${count > 0 ? 'var(--accent-red)' : 'var(--border-subtle)'}`,
+        background: count > 0
+          ? 'color-mix(in srgb, var(--accent-red) 16%, transparent)'
+          : 'transparent',
+        color: count > 0 ? 'var(--accent-red)' : 'var(--text-secondary)',
+        cursor: 'pointer', fontSize: 11, fontWeight: 700,
+        fontFamily: 'inherit',
+      }}
+    >
+      <span style={{ fontSize: 12, lineHeight: 1 }}>⚠</span>
+      <span>{count > 0 ? `Conditions (${count})` : 'Conditions'}</span>
+    </button>
+  )
+}
+
+// Overlay-Modal mit allen 5e-Conditions als Toggle-Chips. Schreibt
+// in character.status.conditions; die aktive Liste wird auch oben in
+// der Resistance-Spalte gerendert.
+function ConditionsPickerModal({ character, updateCharacter, onClose }) {
+  const active = character.status?.conditions || []
+  function toggle(id, on) {
+    const cur = character.status?.conditions || []
+    const next = on
+      ? [...cur.filter(x => x !== id), id]
+      : cur.filter(x => x !== id)
+    updateCharacter('status.conditions', next)
+  }
+  return (
+    <div style={wmModalOverlay} onClick={onClose}>
+      <div style={wmModalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 12,
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Conditions
+          </div>
+          <button type="button" onClick={onClose} style={wmModalClose}>×</button>
+        </div>
+        <ConditionChips active={active} onToggle={toggle} />
+        <FeatureNoteList notes={getEffectsForSlot(character, 'conditions')} />
+      </div>
     </div>
   )
 }
@@ -3326,7 +3387,44 @@ export function DamageResistancePills({ character, compact = false }) {
   // lost. Vulnerability stays its own column.
   const resSet = new Set([...m.damageResistance, ...m.damageImmunity])
   const vulSet = m.damageVulnerability
-  if (resSet.size === 0 && vulSet.size === 0) return null
+  // Aktive Conditions stehen ganz oben in der Spalte — vor Resistance
+  // und Vulnerability. Bleibt mounted auch wenn keine Conditions
+  // gesetzt sind, damit der Spalten-Header sichtbar bleibt sobald
+  // mind. eine condition aktiv ist.
+  const conditions = character?.status?.conditions || []
+  if (resSet.size === 0 && vulSet.size === 0 && conditions.length === 0) return null
+
+  const conditionLabelOf = (id) => {
+    const c = CONDITIONS.find(x => x.id === id)
+    return c ? c.label : id
+  }
+  const conditionSymbolOf = (id) => {
+    const c = CONDITIONS.find(x => x.id === id)
+    return c ? c.symbol : '●'
+  }
+  const conditionHintOf = (id) => {
+    const c = CONDITIONS.find(x => x.id === id)
+    return c ? `${c.label} — ${c.hint}` : id
+  }
+
+  const renderConditions = () => (
+    <div style={compact ? drColCompact : drCol}>
+      <div style={drColLabel}>Conditions</div>
+      <div style={compact ? drPillRowCompact : drPillRow}>
+        {conditions.map(id => (
+          <span key={id} title={conditionHintOf(id)}
+            style={{
+              ...drPill,
+              borderColor: 'var(--accent-red)',
+              color: 'var(--accent-red)',
+              background: 'color-mix(in srgb, var(--accent-red) 18%, transparent)',
+            }}>
+            {conditionSymbolOf(id)} {conditionLabelOf(id)}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
 
   const renderPills = (set, label, isImmune) => (
     <div style={compact ? drColCompact : drCol}>
@@ -3344,8 +3442,6 @@ export function DamageResistancePills({ character, compact = false }) {
                 borderColor: c, color: c,
                 background: `color-mix(in srgb, ${c} 15%, transparent)`,
                 fontWeight: immune ? 700 : 600,
-                // Immunity gets a small ⛒ glyph prefix so the player
-                // can tell which entries are immunity vs resistance.
               }}>
               {immune ? '★ ' : ''}{t}
             </span>
@@ -3357,6 +3453,7 @@ export function DamageResistancePills({ character, compact = false }) {
 
   return (
     <div style={compact ? drWrapCompact : drWrap}>
+      {conditions.length > 0 && renderConditions()}
       {resSet.size > 0 && renderPills(resSet, 'Resistance', true)}
       {vulSet.size > 0 && renderPills(vulSet, 'Vulnerability', false)}
     </div>
@@ -4297,28 +4394,55 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
     }).filter(Boolean)
   }, [character.classes, computed, edition])
 
-  // Class-Abkürzungen für die Multiclass-Pills. Datengetrieben: nimm
-  // den ersten Buchstaben jeder Klasse, bei Kollision (Wizard +
-  // Warlock = beide W) auf 2 Buchstaben hoch — kein hardcoded
-  // Klassen→Buchstabe-Mapping.
+  // Class-Abkürzungen für die Multiclass-Pills.
+  // Eindeutige 2-Buchstaben-Abkürzungen pro Klasse damit z.B. Warlock
+  // immer "WL" und Wizard immer "WI" bleibt — auch wenn nur eine der
+  // beiden Klassen im Character ist. Konsistenz > minimal-length.
+  // Die preferences-Map deckt alle 5e/5.5e-Klassen ab; unbekannte
+  // homebrew classes fallen zurück auf die ersten zwei Buchstaben mit
+  // Kollisions-Auflösung über mehr Buchstaben.
   const classAbbr = useMemo(() => {
+    const ABBR_PREFS = {
+      Artificer:  'AR',
+      Barbarian:  'BA',
+      Bard:       'BD',
+      Cleric:     'CL',
+      Druid:      'DR',
+      Fighter:    'FI',
+      Monk:       'MO',
+      Paladin:    'PA',
+      Ranger:     'RA',
+      Rogue:      'RO',
+      Sorcerer:   'SO',
+      Warlock:    'WL',
+      Wizard:     'WI',
+      'Blood Hunter': 'BH',
+    }
     const ids = casterClasses.map(c => c.classId)
-    for (let n = 1; n <= 4; n++) {
-      const candidate = {}
-      let collision = false
-      for (const cid of ids) {
-        const abbr = cid.slice(0, n).toUpperCase()
-        if (candidate[abbr] && candidate[abbr] !== cid) { collision = true; break }
-        candidate[abbr] = cid
-      }
-      if (!collision) {
-        const out = {}
-        for (const cid of ids) out[cid] = cid.slice(0, n).toUpperCase()
-        return out
+    const out = {}
+    const used = new Set()
+    // Erster Pass: zugewiesene Preferences setzen
+    for (const cid of ids) {
+      const pref = ABBR_PREFS[cid]
+      if (pref && !used.has(pref)) {
+        out[cid] = pref
+        used.add(pref)
       }
     }
-    const out = {}
-    for (const cid of ids) out[cid] = cid.toUpperCase().slice(0, 4)
+    // Zweiter Pass: unbekannte Klassen oder Pref-Kollision per
+    // Buchstaben-Expand auflösen.
+    for (const cid of ids) {
+      if (out[cid]) continue
+      for (let n = 2; n <= 4; n++) {
+        const cand = cid.slice(0, n).toUpperCase()
+        if (!used.has(cand)) {
+          out[cid] = cand
+          used.add(cand)
+          break
+        }
+      }
+      if (!out[cid]) out[cid] = cid.toUpperCase().slice(0, 4)
+    }
     return out
   }, [casterClasses])
 
@@ -4918,15 +5042,15 @@ function SpellListRow({
     ? (row.prepared ? 'always-prep' : 'always')
     : (row.prepared ? 'on' : 'off')
 
-  // Multiclass-Modus: wenn mehr als eine Caster-Klasse diesen Spell
-  // preparen darf, zeige Per-Klasse-Pills statt des einzelnen Dots.
-  // Mutually exclusive — eine Klasse hat den Slot, Klick auf andere
-  // Pille verschiebt ihn dorthin. Cantrips & Always-Prepared rendern
-  // weiterhin den Single-Dot (kein Prep-Toggle nötig / sinnvoll).
+  // Multiclass-Modus: wenn EINE oder mehr Caster-Klassen diesen Spell
+  // preparen dürfen, zeige Per-Klasse-Pills statt des einzelnen Dots.
+  // User-Wunsch: immer Klassen-Buchstaben anzeigen damit klar bleibt
+  // welche Klasse den Spell gerade trägt. Cantrips & Always-Prepared
+  // rendern weiterhin den Single-Dot (kein Prep-Toggle nötig / sinnvoll).
   const eligiblePrepClasses = canToggle
     ? casterClasses.filter(c => c.info?.type === 'prepared' && row.knownByClass?.has(c.classId))
     : []
-  const showMulticlassPills = eligiblePrepClasses.length > 1
+  const showMulticlassPills = eligiblePrepClasses.length >= 1
 
   // Pills
   const ct = String(sp.castingTime || '').toLowerCase()
