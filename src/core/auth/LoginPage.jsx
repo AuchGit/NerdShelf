@@ -41,7 +41,16 @@ export default function LoginPage() {
     if (!email.trim()) { setError('Bitte Email eingeben.'); return; }
     if (password.length < 6) { setError('Passwort muss mindestens 6 Zeichen haben.'); return; }
     setLoading(true); setError(null); setSuccess(null);
-    const { data: signupData, error: signupErr } = await supabase.auth.signUp({ email, password });
+    // player_name MUSS in den Auth-Metadaten mitgehen, damit der
+    // `handle_new_user` Trigger ihn beim INSERT in public.profiles
+    // verwendet — sonst schlägt der Trigger gegen die CHECK
+    // constraint `profiles_player_name_length` an und die ganze
+    // Signup-Transaktion bricht mit 500 ab.
+    const { data: signupData, error: signupErr } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { player_name: trimmedPlayer } },
+    });
     if (signupErr) {
       setLoading(false);
       setError(signupErr.message?.includes('already registered')

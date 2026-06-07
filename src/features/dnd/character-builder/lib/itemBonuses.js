@@ -32,18 +32,34 @@ export function parseBonusInt(raw) {
   return sign * parseInt(m[2], 10)
 }
 
-// Liste aller derzeit equipped Items (Inventory + Custom). Reine
-// Helper-Funktion; keine Side-Effects.
+// Ist das Item attunement-bedürftig?
+//   reqAttune = true → braucht generelle Attunement
+//   reqAttune = "by a wizard" → braucht Class-Restricted Attunement
+//   reqAttune = null/false → kein Attunement nötig (z.B. mundane Waffen)
+export function requiresAttunement(item) {
+  return !!item?.reqAttune
+}
+
+// Aktiv-Gate: Item gilt nur dann als "aktiv" (zählt für Boni / Actions),
+// wenn es EQUIPPED ist UND — falls reqAttune gesetzt — auch ATTUNED.
+// Mundane Items (kein reqAttune) reichen mit equipped.
+export function isItemActive(item) {
+  if (!item?.equipped) return false
+  if (requiresAttunement(item) && !item.attuned) return false
+  return true
+}
+
+// Liste aller derzeit aktiven Items (Inventory + Custom). Items die
+// reqAttune tragen aber NICHT attuned sind, werden ausgeschlossen — die
+// Boni dürfen erst greifen wenn der Spieler beide Voraussetzungen
+// erfüllt (RAW: "while attuned"-Klausel auf jedem magischen Item).
 export function listEquippedItems(character) {
   const inv = Array.isArray(character?.inventory?.items) ? character.inventory.items : []
   const cus = Array.isArray(character?.custom?.items)   ? character.custom.items   : []
-  return [...inv, ...cus].filter(i => i?.equipped)
+  return [...inv, ...cus].filter(isItemActive)
 }
 
-// Summiert einen Bonus-Field-Namen über alle equipped Items. Bei
-// Bedarf können Bonus-Items, die ATTUNEMENT erfordern, durch ein
-// strict-Attune-Flag noch gefiltert werden — derzeit lassen wir
-// equipped allein entscheiden (der Spieler markiert was er trägt).
+// Summiert einen Bonus-Field-Namen über alle aktiven Items.
 export function sumEquippedBonuses(character, field) {
   let total = 0
   const sources = []
@@ -60,8 +76,13 @@ export function sumEquippedBonuses(character, field) {
 // Boni einer einzelnen Waffe (legacy `attackBonus` als Fallback wenn
 // jemand den Wert manuell in CustomEdit setzt; sonst die 5etools-
 // Felder). bonusWeapon zählt für BEIDE — attack und damage.
+// Attunement-gated: wenn die Waffe reqAttune trägt aber nicht attuned
+// ist, geben wir 0/0 zurück — kein magischer Bonus ohne Attunement.
 export function getWeaponBonus(weapon) {
   if (!weapon) return { attack: 0, damage: 0 }
+  if (requiresAttunement(weapon) && !weapon.attuned) {
+    return { attack: 0, damage: 0 }
+  }
   const both    = parseBonusInt(weapon.bonusWeapon)
   const atkOnly = parseBonusInt(weapon.bonusWeaponAttack)
   const dmgOnly = parseBonusInt(weapon.bonusWeaponDamage)

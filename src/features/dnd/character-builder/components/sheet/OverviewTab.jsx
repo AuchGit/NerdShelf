@@ -26,6 +26,7 @@ import ConditionChips from '../ui/ConditionChips'
 import { CONDITIONS } from '../../lib/conditions'
 import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
+import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/usePersistedState'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
 import { usePillColors } from '../../lib/pillColors'
 import { parseFeatureEffect, pillColorForKind } from '../../lib/featureEffectParser'
@@ -1193,7 +1194,10 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   // padding, so the column container controls dimensions and the
   // explorer is just the inner content.
   const [open, setOpen] = useState(embedded)
-  const [tab, setTab]   = useState('action')
+  // tab + expanded: per-character UI prefs — Reload soll die letzte
+  // Auswahl beibehalten (User-Wunsch).
+  const charPrefId = character?.id || 'default'
+  const [tab, setTab]   = usePersistedState(`cae_tab_${charPrefId}`, 'action')
   const [expanded, setExpanded] = useState(null)
   // Per-row slot picker: which row's "Cast" prompt is currently
   // open. Single string keyed by row.id so only one expand pops at
@@ -1637,11 +1641,21 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       })
     }
 
-    // Species traits with action economy (Aasimar Healing Hands, …).
+    // Species traits with action economy (Aasimar Healing Hands, …)
+    // — sowie passive Trigger-Features (Bugbear Surprise Attack, …)
+    // die kein "as an action" tragen aber während des normalen
+    // Attack-Wurfs feuern. Data-driven über parseFeatureEffect:
+    // wenn die Pills einen Trigger ODER Damage liefern, gehört das
+    // Trait ins Action-Bucket damit der Spieler die Pille sieht.
     for (const t of (character?.species?.__traits || [])) {
-      const slot = detectActionSlot(t.entries)
-      if (!slot) continue
       const fxT = parseFeatureEffect({ ...t, classId: null }, character, profBonus, { classDataMap: character?.__classDataMap })
+      const explicitSlot = detectActionSlot(t.entries)
+      const hasTriggerPill = (fxT?.pills || []).some(p => p.kind === 'trigger')
+      const hasDamagePill  = (fxT?.pills || []).some(p => p.kind === 'damage' || p.kind === 'damage-bonus')
+      // Passive Trigger ohne explizite Action-Economy → ins Action-
+      // Bucket weil er bei einem normalen Attack-Wurf feuert.
+      const slot = explicitSlot || ((hasTriggerPill || hasDamagePill) ? 'action' : null)
+      if (!slot) continue
       b[slot].push({
         id: `race-${t.name}`,
         markerKey: `trait:${t.name}`,
@@ -1650,7 +1664,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         kind: 'species',
         economySlot: slot,
         entries: t.entries || null,
-        sub: 'Species',
+        sub: explicitSlot ? 'Species' : 'Species · Trigger',
         effectPills: fxT?.pills || [],
         notes: '',
       })
@@ -1978,7 +1992,10 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
           onPick={(weapon, pickOpts = {}) => {
             const buff = getSpellWeaponBuff(buffPrompt.spell.name)
             if (buff) {
-              const built = buff.buildEffect(character, weapon, pickOpts)
+              // Spell-Objekt mitgeben damit Shillelagh die
+              // scalingLevelDice-Daten konsultieren kann (kein
+              // Hardcode mehr).
+              const built = buff.buildEffect(character, weapon, { ...pickOpts, spell: buffPrompt.spell })
               addActiveEffect(applyCharacter, {
                 kind: built.kind,
                 source: `spell:${buffPrompt.spell.name}`,
@@ -2305,9 +2322,12 @@ function CombatActionsCategorisedList({
   // Kette wenn der Parent ihn schon hat.
   const pillColors = usePillColors()
   // Open/closed state per category id. Open by default — feels less
-  // like a series of clicks to get going.
-  const [closedCats, setClosedCats] = useState(() => new Set())
-  const [basicOpen, setBasicOpen]   = useState(false)
+  // like a series of clicks to get going. Beide Werte persistieren in
+  // localStorage, gekeyt per Character damit Reload den Layout-State
+  // 1:1 wiederherstellt.
+  const cidForPrefs = character?.id || 'default'
+  const [closedCats, setClosedCats] = usePersistedSet(`cae_closedCats_${cidForPrefs}`, [])
+  const [basicOpen, setBasicOpen]   = usePersistedState(`cae_basicOpen_${cidForPrefs}`, false)
 
   // Categorisation: per user spec, the action overview is now
   //   1. Basic Actions  (consolidated)
@@ -2626,6 +2646,23 @@ function CombatActionsCategorisedList({
                     ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
                   }} title="Attack-Bonus">{r.attack}</span>
                 )
+                // ×N Multi-Hit-Pille SITZT DIREKT VOR der Damage-Pille
+                // (gleiches Layout wie Spell-Rows mit Scorching Ray /
+                // Magic Missile etc.). Klar: "×2 · 1d8 slashing" =
+                // 2 Treffer à 1d8, nicht 2d8 zusammen.
+                if (r.attacksPerAction && r.attacksPerAction > 1) {
+                  leftPills.push(
+                    <span key="atks" style={{
+                      ...caePill,
+                      border: '1px solid var(--accent-yellow)',
+                      color: 'var(--accent-yellow)',
+                      background: 'color-mix(in srgb, var(--accent-yellow) 14%, transparent)',
+                      fontWeight: 700,
+                    }} title={`${r.attacksPerAction} Treffer pro Attack-Action — Schaden gilt pro Treffer`}>
+                      ×{r.attacksPerAction}
+                    </span>,
+                  )
+                }
                 if (r.damage && r.damage !== '—') {
                   // Damage-Type-Farbe aus dem User-Theme oder dem
                   // DAMAGE_TYPE_COLOR-Default. Tooltip zeigt Type +
@@ -2660,22 +2697,6 @@ function CombatActionsCategorisedList({
                     ...caePill, border: '1px solid var(--text-dim)', color: 'var(--text-secondary)',
                   }} title={`Reichweite: ${r.range}`}>{r.range}</span>
                 )
-                // Extra Attack — zeigt "×N" wenn der Character mehr als
-                // einen Treffer pro Attack-Action machen kann (Extra
-                // Attack feature, Two Extra Attacks, Three Extra Attacks).
-                if (r.attacksPerAction && r.attacksPerAction > 1) {
-                  leftPills.push(
-                    <span key="atks" style={{
-                      ...caePill,
-                      border: '1px solid var(--accent-yellow)',
-                      color: 'var(--accent-yellow)',
-                      background: 'color-mix(in srgb, var(--accent-yellow) 14%, transparent)',
-                      fontWeight: 700,
-                    }} title={`${r.attacksPerAction} Treffer pro Attack-Action (Extra Attack feature)`}>
-                      ×{r.attacksPerAction}
-                    </span>,
-                  )
-                }
                 if (r.mastery && r.mastery.length > 0) {
                   for (const m of r.mastery) {
                     const desc = masteryShortDesc(m)
@@ -4363,7 +4384,10 @@ const qaTile = {
 function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, updateCharacter, swapHeroCol, heroColSwapped }) {
   const { isPwaMobile } = usePwaMobile()
   const [expandedKey, setExpandedKey] = useState(null)
-  const [openLevels, setOpenLevels] = useState(() => new Set([0, 1]))
+  // openLevels persistiert per Character — welche Spell-Level-Buckets
+  // gerade aufgeklappt sind soll Reload überleben.
+  const _spellCharId = character?.id || 'default'
+  const [openLevels, setOpenLevels] = usePersistedSet(`spellCol_openLevels_${_spellCharId}`, [0, 1])
   const [spellMap, setSpellMap] = useState(null)
   const [allSpells, setAllSpells] = useState([])
   const edition = character?.meta?.edition || '5e'
@@ -5394,7 +5418,11 @@ function SpellWeaponBuffPicker({ spell, character, applyCharacter }) {
   const active = activeEffects.filter(e => e?.source === sourceTag)
 
   function activate(weapon) {
-    const built = buff.buildEffect(character, weapon, dmgType ? { damageType: dmgType } : {})
+    // Spell-Daten an buildEffect durchreichen — sonst kann
+    // Shillelagh seinen Cantrip-Scaling-Würfel nicht aus
+    // scalingLevelDice ziehen und fällt auf 1d8 zurück.
+    const opts = { spell, ...(dmgType ? { damageType: dmgType } : {}) }
+    const built = buff.buildEffect(character, weapon, opts)
     addActiveEffect(applyCharacter, {
       kind: built.kind,
       source: sourceTag,

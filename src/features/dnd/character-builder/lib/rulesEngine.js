@@ -29,44 +29,67 @@ function _featureBonusesFor(character) {
 
 // ── Attacks per Attack-Action ─────────────────────────────────
 // 5e/5.5e: jeder Char hat 1 Attack pro Attack-Action. "Extra Attack"
-// feature increases to 2. Fighter bekommt höhere Tiers via:
-//   PHB:  "Extra Attack (2)" L11 = 3 attacks,  "Extra Attack (3)" L20 = 4
-//   XPHB: "Two Extra Attacks" L11 = 3 attacks, "Three Extra Attacks" L20 = 4
+// und seine Folge-Tier-Features pushen das hoch.
 //
-// Datadriven: erkennt aus dem Feature-NAMEN (PHB/XPHB-Tags) UND dem
-// Entry-Text ("number of attacks increases to three"). Maximum aller
-// matches wird zurückgegeben — multiclass-sicher (RAW: nur höchste
-// Stufe zählt, nicht Summe).
+// 100% data-driven aus dem __activeFeatures-Entry-Text:
+//   PHB Fighter L5  → "you can attack twice, instead of once …"
+//   PHB Fighter L5  → "The number of attacks increases to three when you
+//                      reach 11th level in this class and to four when
+//                      you reach 20th level"   ← inline tier-table
+//   XPHB Fighter L5 → "You can attack twice instead of once …"
+//   XPHB Fighter L11 → "You can attack three times instead of once …"
+//   XPHB Fighter L20 → "You can attack four times instead of once …"
+//
+// Patterns matchen sowohl "attack N times" als auch
+// "increases to N when you reach Lth level" — letztere wird
+// charLevel-gegen-Threshold gegated. Max aller Treffer wird
+// zurückgegeben (Multiclass: höchste Stufe gewinnt, nicht Summe).
+// Kein Feature-Name-Whitelist — Homebrew "Path of the Triple Strike"
+// L11 mit "you can attack three times" funktioniert automatisch.
 export function computeAttacksPerAction(character) {
   const features = character?.__activeFeatures || []
+  const WORD = { two: 2, twice: 2, three: 3, four: 4, five: 5, six: 6 }
+  const totalLevel = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
   let max = 1
-  // Mapping name → attack count (PHB + XPHB Variants).
-  const NAME_COUNT = {
-    'extra attack': 2,
-    'extra attack (2)': 3,
-    'two extra attacks': 3,
-    'extra attack (3)': 4,
-    'three extra attacks': 4,
-  }
+
   for (const f of features) {
-    const nm = String(f?.name || '').toLowerCase().trim()
-    if (NAME_COUNT[nm] != null) {
-      if (NAME_COUNT[nm] > max) max = NAME_COUNT[nm]
-      continue
-    }
-    // Fallback: Entry-Text. Catches homebrew / future features die
-    // "you can attack X times when you take the Attack action"
-    // sagen.
     const txt = Array.isArray(f?.entries)
       ? f.entries.filter(e => typeof e === 'string').join(' ').toLowerCase()
       : ''
     if (!txt) continue
-    if (/\battack\s+four\s+times\b|increases?\s+to\s+four\b/.test(txt)) {
-      if (4 > max) max = 4
-    } else if (/\battack\s+three\s+times\b|increases?\s+to\s+three\b/.test(txt)) {
-      if (3 > max) max = 3
-    } else if (/\battack\s+twice\b|\battack\s+two\s+times\b|increases?\s+to\s+two\b/.test(txt)) {
-      if (2 > max) max = 2
+
+    // Pattern A: "attack twice|three times|N times instead of once"
+    const baseRe = /\battack\s+(twice|two\s+times|three\s+times|four\s+times|five\s+times|six\s+times|\d+\s+times)\b/g
+    let m
+    while ((m = baseRe.exec(txt)) !== null) {
+      const tok = m[1].toLowerCase()
+      const firstWord = tok.split(/\s+/)[0]
+      const n = WORD[firstWord] != null ? WORD[firstWord] : parseInt(firstWord, 10)
+      if (Number.isFinite(n) && n > max) max = n
+    }
+
+    // Pattern B: Inline Tier-Progression — "increases to N when you
+    // reach Lth level" UND chained "and to N when you reach Lth level"
+    // (PHB Fighter packt L11+L20 in EINEN Satz: "increases to three
+    // when you reach 11th level … and to four when you reach 20th
+    // level"). Wir matchen jede Vorkommnis von "to N when you reach
+    // Lth level" — Pattern A oben fängt die Base-Count ab, also kein
+    // Risk auf "attack twice instead of once"-Doppelmatching.
+    const tierRe = /\bto\s+(two|three|four|five|six|\d+)\s+when\s+you\s+reach\s+(\d+)(?:st|nd|rd|th)?\s+level/g
+    while ((m = tierRe.exec(txt)) !== null) {
+      const w = m[1].toLowerCase()
+      const n = WORD[w] != null ? WORD[w] : parseInt(w, 10)
+      const lvl = parseInt(m[2], 10)
+      // "in this class" — feature ist class-gebunden, lookup
+      // class-level. Sonst totalLevel.
+      let referenceLevel = totalLevel
+      if (f.classId) {
+        const cls = (character?.classes || []).find(c => c.classId === f.classId)
+        if (cls?.level) referenceLevel = cls.level
+      }
+      if (Number.isFinite(n) && Number.isFinite(lvl) && referenceLevel >= lvl && n > max) {
+        max = n
+      }
     }
   }
   return max

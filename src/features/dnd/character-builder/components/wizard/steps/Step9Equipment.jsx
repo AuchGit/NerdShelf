@@ -214,22 +214,41 @@ export default function Step9Equipment({ character, updateCharacter }) {
     }).sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  // Expand a pack into its individual contents, or return [item] if not a pack
+  // Expand a pack into its individual contents. Das Pack selbst bleibt
+  // als Container-Item drin; sein Inhalt bekommt containerId = id des
+  // Pack-Items damit InventoryTab den Inhalt als "im Pack" rendert
+  // statt lose in "carried". Non-Pack-Items werden 1:1 zurückgegeben.
   function expandItemForInventory(item, source) {
     if (!item.packContents || item.packContents.length === 0) {
       return [makeInventoryItem(item, source)]
     }
-    const result = []
+    // Pack-Item selbst — wird Container. isContainer-Flag macht's
+    // InventoryTab unzweifelhaft (CONTAINER_NAME_RE würde "Pack"
+    // auch matchen, aber wir setzen den Flag explizit).
+    const packEntry = makeInventoryItem({ ...item, isContainer: true }, source)
+    // packContents-Field am Eintrag selbst rauslassen — wir haben den
+    // Inhalt jetzt als eigene Items mit containerId. Sonst würde der
+    // foundry-Export beide Repräsentationen exportieren.
+    delete packEntry.packContents
+    const result = [packEntry]
     for (const c of item.packContents) {
+      let contentItem = null
       if (typeof c === 'string') {
         const resolved = resolveItemRef(c, itemIndex)
-        if (resolved) result.push(makeInventoryItem({ ...resolved, quantity: 1, displayName: resolved.name }, source))
+        if (resolved) contentItem = makeInventoryItem({ ...resolved, quantity: 1, displayName: resolved.name }, source)
       } else if (c.item) {
         const resolved = resolveItemRef(c.item, itemIndex)
-        if (resolved) result.push(makeInventoryItem({ ...resolved, quantity: c.quantity || 1, displayName: resolved.name }, source))
-        else result.push(makeInventoryItem({ name: c.item.split('|')[0].trim(), quantity: c.quantity || 1, rarity: 'none', isWeapon: false, isArmor: false, isGear: true }, source))
+        if (resolved) contentItem = makeInventoryItem({ ...resolved, quantity: c.quantity || 1, displayName: resolved.name }, source)
+        else contentItem = makeInventoryItem({ name: c.item.split('|')[0].trim(), quantity: c.quantity || 1, rarity: 'none', isWeapon: false, isArmor: false, isGear: true }, source)
       } else if (c.special) {
-        result.push(makeInventoryItem({ name: c.special, quantity: 1, rarity: 'none', isWeapon: false, isArmor: false, isGear: true }, source))
+        contentItem = makeInventoryItem({ name: c.special, quantity: 1, rarity: 'none', isWeapon: false, isArmor: false, isGear: true }, source)
+      }
+      if (contentItem) {
+        contentItem.containerId = packEntry.id
+        // Items im Pack starten unequipped — der Spieler legt sie
+        // erst an wenn er sie aus dem Pack zieht.
+        contentItem.equipped = false
+        result.push(contentItem)
       }
     }
     return result
@@ -306,7 +325,26 @@ export default function Step9Equipment({ character, updateCharacter }) {
       bgItems.push(...expandItemForInventory(item, 'background'))
     }
 
-    updateCharacter('inventory.items', [...classItems, ...bgItems, ...manualItems])
+    // Non-equippable loose items werden in den ersten verfügbaren
+    // Container (Backpack, Burglar's Pack, …) verschoben damit der
+    // "Carried"-Bereich auf der Sheet nur anlegbare Items zeigt.
+    // Equippable = isWeapon || isArmor || (wondrous && reqAttune).
+    // Items die schon ein containerId haben (z.B. Pack-Inhalte) bleiben
+    // wo sie sind. Items in 'manual'-Quelle (vom Spieler manuell
+    // hinzugefügt) lassen wir unangetastet.
+    const merged = [...classItems, ...bgItems, ...manualItems]
+    const isEquippable = (it) => !!(it.isWeapon || it.isArmor || (it.wondrous && it.reqAttune))
+    const containerItem = merged.find(it => it.isContainer || /\b(backpack|pouch|sack|bag|haversack|pack)\b/i.test(it.name || ''))
+    if (containerItem) {
+      for (const it of merged) {
+        if (it === containerItem) continue
+        if (it.containerId) continue
+        if (it.grantedBy === 'manual') continue
+        if (isEquippable(it)) continue
+        it.containerId = containerItem.id
+      }
+    }
+    updateCharacter('inventory.items', merged)
     updateCharacter('inventory.currency', { ...character.inventory.currency, gp: cpToGP(totalGold) })
   }
 
@@ -346,7 +384,11 @@ function makeInventoryItem(item, grantedBy) {
       source: item.source || '',
       name: item.displayName || item.name,
       quantity: item.quantity || 1,
-      equipped: item.isArmor || item.isWeapon || false,
+      // Beim Start equipped: Waffen + Rüstung. Attunement-pflichtige
+      // Wondrous Items (Ring of Protection etc.) bleiben unequipped —
+      // der Spieler muss zuerst attune'en + equippen damit Boni greifen.
+      isContainer: !!item.isContainer,
+      equipped: !!(item.isArmor || item.isWeapon) && !item.isContainer,
       attuned: false,
       // reqAttune comes straight from 5etools data — `true` or a
       // string ("by a wizard", …). UI uses truthiness to decide

@@ -266,6 +266,8 @@ function detectTrigger(stripped) {
   if (/\bwhen\s+you\s+take\s+damage\b/i.test(stripped)) return 'When Damaged'
   if (/\bwhen\s+a\s+creature\s+misses\s+you\b/i.test(stripped)) return 'When Missed'
   if (/\bwhen\s+you\s+hit\s+(?:a\s+)?(?:creature|target)/i.test(stripped)) return 'On Hit'
+  if (/\bif\s+you\s+hit\s+(?:a\s+)?(?:creature|target)/i.test(stripped)) return 'On Hit'
+  if (/\bif\s+you\s+surprise\s+a\s+creature\s+and\s+hit\b/i.test(stripped)) return 'On Hit (Surprise)'
   if (/\bon\s+a\s+hit\b/i.test(stripped)) return 'On Hit'
   if (/\bimmediately\s+after\s+you\s+hit\b/i.test(stripped)) return 'On Hit'
   if (/\bwhen\s+you\s+(?:make|hit\s+with)\s+a\s+(?:weapon|melee\s+weapon|ranged\s+weapon)\s+attack/i.test(stripped)) return 'On Hit'
@@ -451,9 +453,17 @@ function findCharges(stripped, profBonus) {
   if (/\bequal\s+to\s+your\s+proficiency\s+bonus\b/i.test(stripped) && profBonus) {
     return profBonus
   }
-  // Numerische "X times" / "X uses"
-  const m = stripped.match(/\b(\d+)\s+(?:times|uses|charges)\b/i)
-  if (m) return parseInt(m[1], 10)
+  // "once per combat / day / encounter / short rest / long rest"
+  if (/\bonce\s+per\s+(?:combat|day|encounter|short\s+rest|long\s+rest|turn|round)\b/i.test(stripped)) {
+    return 1
+  }
+  // Numerische "X times" / "X uses" / "X times per …"
+  const m = stripped.match(/\b(\d+|one|two|three|four|five|six|seven|eight)\s+(?:times|uses|charges)\b/i)
+  if (m) {
+    const w = m[1].toLowerCase()
+    const WORD = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8 }
+    return WORD[w] != null ? WORD[w] : parseInt(w, 10)
+  }
   return null
 }
 

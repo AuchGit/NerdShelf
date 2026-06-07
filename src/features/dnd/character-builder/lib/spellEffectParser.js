@@ -309,7 +309,7 @@ function findHitCount(spell, totalCharLevel) {
   }
 }
 
-function dieFromScalingLevelDice(scalingLevelDice, charLevel) {
+export function dieFromScalingLevelDice(scalingLevelDice, charLevel) {
   if (!scalingLevelDice) return null
   const arr = Array.isArray(scalingLevelDice) ? scalingLevelDice : [scalingLevelDice]
   const block = arr.find(b => /damage/i.test(b?.label || '')) || arr[0]

@@ -155,6 +155,11 @@ export default function LevelUpPage({ session }) {
       optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{},
       cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
       preparedSpellPool:null, preparedCantripPool:null,
+      // 5.5e prepared-caster pick — MUSS initialisiert sein, sonst
+      // crashed `draft.preparedPicks.includes(...)` in StepSpells mit
+      // TypeError. Vorher übersehen weil selectClass den initialen
+      // useState-default überschreibt.
+      preparedPicks: [],
     })
     // Load spells when this class has any spellcasting (including half-casters, subclass casters)
     const spellAb = existSpellAb || classData.spellcastingAbility
@@ -890,39 +895,74 @@ function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) 
       {/* 5.5e Prepared casters — active picker for new prepared
           spells. The XPHB Ranger / Paladin / Druid / Cleric rules
           require the player to "choose N additional spells when
-          your prepared count grows" right at level-up; if we leave
-          it passive the player ends the level-up with the spells
-          missing from their list. Render BEFORE the legacy block so
-          it's the first thing the player sees. */}
-      {info.newPreparedSpells > 0 && isPrepared && (
-        <div style={S.card}>
-          <div style={S.cardTitle}>
-            Prepared Spells — wähle {info.newPreparedSpells} neue{' '}
-            <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: 12 }}>
-              (gesamt {info.totalPreparedSpells || 0})
-            </span>
+          your prepared count grows" right at level-up.
+          Anzeige IMMER für prepared caster — auch wenn an diesem
+          Level keine neuen Slots dazukommen, sieht der Spieler die
+          aktuell vorbereiteten Spells als Vorschau und kann den Pool
+          inspizieren / bei Bedarf neu wählen. */}
+      {isPrepared && (() => {
+        // Aktuell vorbereitete Spells dieser Klasse (read-only Pills
+        // oben). Die schon-prepared Spells werden ZUSÄTZLICH zur
+        // Pool-Liste als grantedSpells markiert damit der Picker sie
+        // nicht doppelt zur Auswahl anbietet.
+        const currentPrep = (char?.status?.preparedSpells?.[info.classId] || [])
+        const newCount = Math.max(0, info.newPreparedSpells || 0)
+        const totalCount = info.totalPreparedSpells || (currentPrep.length + newCount)
+        const grantedWithPrep = { ...granted }
+        for (const name of currentPrep) {
+          if (!grantedWithPrep[name]) grantedWithPrep[name] = 'bereits vorbereitet'
+        }
+        return (
+          <div style={S.card}>
+            <div style={S.cardTitle}>
+              Prepared Spells{newCount > 0 ? ` — wähle ${newCount} neue` : ' — Vorschau & Anpassung'}
+              {' '}<span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: 12 }}>
+                (gesamt {totalCount} · aktuell {currentPrep.length})
+              </span>
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
+              {newCount > 0
+                ? `Wähle Zauber bis zu Level ${info.maxSpellLevel}, die du auf deiner Prepared-Liste haben willst. Bei einer Long Rest darfst du später einen tauschen.`
+                : `Du bekommst auf dieser Stufe keinen zusätzlichen Prepared-Slot, kannst aber auf der Sheet-Seite jederzeit nach einer Long Rest deine Auswahl anpassen.`}
+            </div>
+            {currentPrep.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>
+                  Aktuell vorbereitet
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {currentPrep.map(name => (
+                    <span key={name} style={{
+                      padding: '3px 8px', borderRadius: 6, fontSize: 11,
+                      border: '1px solid var(--accent-green)',
+                      color: 'var(--accent-green)',
+                      background: 'color-mix(in srgb, var(--accent-green) 14%, transparent)',
+                    }}>{name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {newCount > 0 && (
+              <UniversalSpellList
+                label={`${newCount} wählen`}
+                spells={filteredLev}
+                selected={draft.preparedPicks || []}
+                max={newCount}
+                onToggle={sp => {
+                  const cur = draft.preparedPicks || []
+                  const has = cur.includes(sp.name)
+                  const next = has
+                    ? cur.filter(n => n !== sp.name)
+                    : cur.length < newCount
+                      ? [...cur, sp.name] : cur
+                  setDraft(d => ({ ...d, preparedPicks: next }))
+                }}
+                grantedSpells={grantedWithPrep}
+              />
+            )}
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
-            Wähle Zauber bis zu Level {info.maxSpellLevel}, die du auf deiner Prepared-Liste haben willst.
-            Bei einer Long Rest darfst du später einen tauschen.
-          </div>
-          <UniversalSpellList
-            label={`${info.newPreparedSpells} wählen`}
-            spells={filteredLev}
-            selected={draft.preparedPicks}
-            max={info.newPreparedSpells}
-            onToggle={sp => {
-              const has = draft.preparedPicks.includes(sp.name)
-              const next = has
-                ? draft.preparedPicks.filter(n => n !== sp.name)
-                : draft.preparedPicks.length < info.newPreparedSpells
-                  ? [...draft.preparedPicks, sp.name] : draft.preparedPicks
-              setDraft(d => ({ ...d, preparedPicks: next }))
-            }}
-            grantedSpells={granted}
-          />
-        </div>
-      )}
+        )
+      })()}
 
       {/* Leveled spells (known casters / spellbook / 5e prepared reference) */}
       {(spellCount>0||isPrepared)&&<div style={S.card}>
