@@ -131,6 +131,44 @@ export function extractFeatureBonuses(feature) {
     if (m) out.abilityCheckBonus = toInt(m[1])
   }
 
+  // ── Proficiency-Grants ─────────────────────────────────────
+  // "you gain proficiency with martial weapons"
+  // "training with medium armor"
+  // "proficiency in heavy armor"
+  // Erkennt sowohl 5e- als auch 5.5e-Phrasing. Multiple Categories
+  // pro Feature möglich ("you gain proficiency with martial weapons
+  // AND training with medium armor"). out.weaponProficiencies /
+  // out.armorProficiencies sind Arrays mit Tokens 'simple' /
+  // 'martial' / 'light' / 'medium' / 'heavy' / 'shield' / 'all-armor'.
+  // rulesEngine.computeProficiencies merged sie ins
+  // proficiencies.weapons / proficiencies.armor wenn das Feature
+  // im character active ist.
+  {
+    const weaponMatches = [
+      ...text.matchAll(/\b(?:gain\s+(?:training\s+with\s+|proficiency\s+(?:with|in)\s+)|training\s+with\s+|proficiency\s+(?:with|in)\s+)((?:simple|martial)(?:\s+weapons?)?)/gi),
+    ]
+    const armorMatches = [
+      ...text.matchAll(/\b(?:gain\s+(?:training\s+with\s+|proficiency\s+(?:with|in)\s+)|training\s+with\s+|proficiency\s+(?:with|in)\s+)(light\s+armor|medium\s+armor|heavy\s+armor|all\s+armor|shields?)/gi),
+    ]
+    const wp = new Set()
+    for (const m of weaponMatches) {
+      const cat = m[1].toLowerCase()
+      if (cat.startsWith('simple')) wp.add('simple')
+      else if (cat.startsWith('martial')) wp.add('martial')
+    }
+    const ap = new Set()
+    for (const m of armorMatches) {
+      const cat = m[1].toLowerCase()
+      if (cat.startsWith('light'))  ap.add('light')
+      else if (cat.startsWith('medium')) ap.add('medium')
+      else if (cat.startsWith('heavy'))  ap.add('heavy')
+      else if (cat.startsWith('all'))    ap.add('light').add('medium').add('heavy')
+      else if (cat.startsWith('shield')) ap.add('shield')
+    }
+    if (wp.size > 0) out.weaponProficiencies = [...wp]
+    if (ap.size > 0) out.armorProficiencies = [...ap]
+  }
+
   return out
 }
 
@@ -162,6 +200,25 @@ export function aggregateFeatureBonuses(features) {
     for (const k of FLAG_KEYS) {
       if (b[k]) total[k] = true
     }
+    // String-Array-Felder (weapon-/armor-proficiency-tokens) als Set
+    // sammeln und am Ende serialisieren — kein Duplikat von 'martial'
+    // wenn zwei verschiedene Features dasselbe gewähren.
+    if (Array.isArray(b.weaponProficiencies)) {
+      total._weaponProfs = total._weaponProfs || new Set()
+      for (const w of b.weaponProficiencies) total._weaponProfs.add(w)
+    }
+    if (Array.isArray(b.armorProficiencies)) {
+      total._armorProfs = total._armorProfs || new Set()
+      for (const a of b.armorProficiencies) total._armorProfs.add(a)
+    }
+  }
+  if (total._weaponProfs) {
+    total.weaponProficiencies = [...total._weaponProfs]
+    delete total._weaponProfs
+  }
+  if (total._armorProfs) {
+    total.armorProficiencies = [...total._armorProfs]
+    delete total._armorProfs
   }
   return total
 }

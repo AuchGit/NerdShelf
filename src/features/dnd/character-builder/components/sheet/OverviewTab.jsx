@@ -1234,8 +1234,20 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       })
     }
   }
+  // Pending Weapon-Buff-Prompt für Spells im SPELL_WEAPON_BUFFS-
+  // Catalog (Shillelagh, Magic Weapon, Magic Stone, Elemental Weapon).
+  // Wenn ein solcher Spell gecastet wird, halten wir die Cast-Pipeline
+  // an, zeigen einen Target-Picker, und führen den Cast erst beim
+  // Confirm aus (Slot + Concentration + Effect-Apply atomar).
+  const [buffPrompt, setBuffPrompt] = useState(null)
+
   function castSpellFromExplorer(spell, slotLevel, opts = {}) {
     if (!applyCharacter) return
+    // Spell-Weapon-Buff: erst Target prompten, DANN casten + Effekt apply.
+    if (!opts.__skipBuffPrompt && getSpellWeaponBuff(spell?.name)) {
+      setBuffPrompt({ spell, slotLevel, opts })
+      return
+    }
     const slotName = opts.economySlot
     const concName = character?.status?.concentration?.spell
       || character?.status?.concentration?.name
@@ -1370,6 +1382,12 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         // looks up the short description per name.
         mastery: Array.isArray(atk.mastery) ? atk.mastery : [],
         damageType: atk.damageType,
+        // Aktive Effekte auf dieser Waffe (Shillelagh, Magic Weapon, …)
+        // mit Effect-ID damit ein Dismiss-Klick im UI den richtigen
+        // Eintrag aus character.status.activeEffects entfernt.
+        activeEffects: atk.activeEffects || [],
+        magical: atk.magical,
+        weaponId: atk.id,
         properties: atk.properties || [],
         markedAs: atk.markedAs || null,
         // Per-Roll-Advisory aus aktiver Konzentration (Hex / Hunter's
@@ -1947,6 +1965,142 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
           )}
         </div>
       )}
+      {/* Weapon-Buff-Target-Modal — überlagert die Action-Spalte
+          wenn ein SPELL_WEAPON_BUFFS-Spell gecastet wird (Shillelagh,
+          Magic Weapon, …). Spieler wählt Waffe, dann läuft der Cast
+          (Slot + Concentration + Effect-Apply atomar) durch. */}
+      {buffPrompt && (
+        <WeaponBuffTargetModal
+          spell={buffPrompt.spell}
+          character={character}
+          onCancel={() => setBuffPrompt(null)}
+          onPick={(weapon, pickOpts = {}) => {
+            const buff = getSpellWeaponBuff(buffPrompt.spell.name)
+            if (buff) {
+              const built = buff.buildEffect(character, weapon, pickOpts)
+              addActiveEffect(applyCharacter, {
+                kind: built.kind,
+                source: `spell:${buffPrompt.spell.name}`,
+                target: { kind: 'weapon', id: weapon.id, label: weapon.customName || weapon.name },
+                value: built.value || {},
+                until: buff.duration,
+              })
+            }
+            // Slot/Concentration/Economy via originalen Cast-Pfad —
+            // __skipBuffPrompt verhindert Rekursion in den Picker.
+            const { spell, slotLevel, opts } = buffPrompt
+            setBuffPrompt(null)
+            castSpellFromExplorer(spell, slotLevel, { ...opts, __skipBuffPrompt: true })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Modal-Popup das beim Cast eines Weapon-Buff-Spells erscheint.
+// Stoppt die Cast-Pipeline und lässt den Spieler eine Ziel-Waffe wählen.
+function WeaponBuffTargetModal({ spell, character, onCancel, onPick }) {
+  const buff = getSpellWeaponBuff(spell?.name)
+  const [showAll, setShowAll] = useState(false)
+  // Damage-Type-Picker für Spells mit damageTypeOptions (Elemental
+  // Weapon: acid/cold/fire/lightning/thunder). Default = erste Option.
+  const dmgTypeOpts = buff?.damageTypeOptions || null
+  const [dmgType, setDmgType] = useState(dmgTypeOpts ? dmgTypeOpts[0] : null)
+  const eligible = getEligibleWeapons(character, spell?.name)
+  const allWeapons = [
+    ...((character?.inventory?.items) || []),
+    ...((character?.custom?.items) || []),
+  ].filter(i => i?.isWeapon || ['M', 'R'].includes(String(i?.type || '').split('|')[0]))
+  const list = (showAll || eligible.length === 0) ? allWeapons : eligible
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 2000,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: 'var(--bg-card, #1a1a1a)',
+        border: '1px solid var(--accent-orange, #ff9533)',
+        borderRadius: 10, padding: 16,
+        width: 'min(420px, 90vw)', maxHeight: '80vh', overflowY: 'auto',
+      }}>
+        <div style={{
+          fontSize: 14, fontWeight: 700, color: 'var(--accent-orange, #ff9533)',
+          marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5,
+        }}>{buff?.label || spell?.name} — Ziel wählen</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+          Auf welche Waffe soll {spell?.name} wirken?
+        </div>
+        {dmgTypeOpts && (
+          <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Damage-Type:</span>
+            {dmgTypeOpts.map(t => (
+              <button key={t} type="button"
+                onClick={() => setDmgType(t)}
+                style={{
+                  padding: '3px 8px', fontSize: 11, borderRadius: 4,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  border: `1px solid ${dmgType === t ? 'var(--accent-orange, #ff9533)' : 'var(--border)'}`,
+                  color: dmgType === t ? 'var(--accent-orange, #ff9533)' : 'var(--text-secondary)',
+                  background: dmgType === t
+                    ? 'color-mix(in srgb, var(--accent-orange, #ff9533) 14%, transparent)'
+                    : 'transparent',
+                  fontWeight: dmgType === t ? 700 : 400,
+                }}>
+                {t[0].toUpperCase()}{t.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
+        {eligible.length > 0 && (
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, cursor: 'pointer',
+          }}>
+            <input type="checkbox" checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)} />
+            Alle Waffen anzeigen (überschreibt Spell-Filter)
+          </label>
+        )}
+        {eligible.length === 0 && allWeapons.length > 0 && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 8 }}>
+            Keine Waffe passt strikt zum Spell-Filter — alle Waffen werden gelistet.
+          </div>
+        )}
+        {list.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+            Keine Waffen im Inventar. Lege erst Waffen an, dann nochmal versuchen.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {list.map(w => (
+              <button key={w.id} type="button" onClick={() => onPick(w, { damageType: dmgType })}
+                style={{
+                  padding: '8px 10px', fontSize: 12,
+                  textAlign: 'left',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--accent-orange, #ff9533)',
+                  borderRadius: 6,
+                  color: 'var(--accent-orange, #ff9533)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                {w.customName || w.name}
+                {w.dmg1 && <span style={{ color: 'var(--text-dim)', marginLeft: 6, fontSize: 11 }}>
+                  {w.dmg1} {w.dmgType || ''}
+                </span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+          <button type="button" onClick={onCancel} style={{
+            padding: '5px 12px', fontSize: 11,
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--text-muted)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+          }}>Abbrechen</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -2393,11 +2547,35 @@ function CombatActionsCategorisedList({
                     ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
                   }} title="Attack-Bonus">{r.attack}</span>
                 )
-                if (r.damage && r.damage !== '—') leftPills.push(
-                  <span key="dmg-legacy" style={{
-                    ...caePill, border: '1px solid var(--accent-red)', color: 'var(--accent-red)',
-                  }}>{r.damage}</span>
-                )
+                if (r.damage && r.damage !== '—') {
+                  // Damage-Type-Farbe aus dem User-Theme oder dem
+                  // DAMAGE_TYPE_COLOR-Default. Tooltip zeigt Type +
+                  // Magisch-Flag + ggf. "vom Effekt geändert"-Hinweis.
+                  const dmgTypeColor = r.damageType
+                    ? (pillColors[`damage.${r.damageType}`] || DAMAGE_TYPE_COLOR[r.damageType])
+                    : null
+                  const color = dmgTypeColor || 'var(--accent-red)'
+                  const typeLabel = r.damageType
+                    ? `${r.damageType[0].toUpperCase()}${r.damageType.slice(1)}`
+                    : null
+                  const overrideEffect = (r.activeEffects || []).find(e => e.damageType)
+                  const tip = [
+                    typeLabel ? `Damage-Type: ${typeLabel}` : null,
+                    r.magical ? 'Zählt als magisch' : null,
+                    overrideEffect
+                      ? `Type von ${overrideEffect.label} überschrieben`
+                      : null,
+                  ].filter(Boolean).join(' · ')
+                  leftPills.push(
+                    <span key="dmg-legacy" title={tip || undefined}
+                      style={{
+                        ...caePill, border: `1px solid ${color}`, color,
+                        background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                      }}>
+                      {r.damage}{typeLabel ? ` ${typeLabel}` : ''}
+                    </span>,
+                  )
+                }
                 if (r.range && r.range !== '—') leftPills.push(
                   <span key="rng" style={{
                     ...caePill, border: '1px solid var(--text-dim)', color: 'var(--text-secondary)',
@@ -2412,6 +2590,44 @@ function CombatActionsCategorisedList({
                       }} title={desc ? `Weapon Mastery: ${m} — ${desc}` : `Weapon Mastery: ${m}`}>
                         ★ {m}
                       </span>
+                    )
+                  }
+                }
+
+                // Active-Effects auf der Waffe (Shillelagh, Magic
+                // Weapon, …) als klickbare Pille mit ×-Dismiss-Button.
+                // Klick auf den ×-Teil entfernt den Effect aus
+                // character.status.activeEffects via removeActiveEffect.
+                if (Array.isArray(r.activeEffects) && r.activeEffects.length > 0) {
+                  for (const ae of r.activeEffects) {
+                    if (!ae?.id) continue
+                    const label = ae.label || ae.kind || 'effect'
+                    const tip = [
+                      `Aktiver Effekt: ${label}`,
+                      ae.damageType ? `Damage-Type: ${ae.damageType[0].toUpperCase()}${ae.damageType.slice(1)} (überschreibt)` : null,
+                      ae.until ? `Dauer: ${ae.until}` : null,
+                      'Klick auf × um den Effekt zu beenden',
+                    ].filter(Boolean).join(' · ')
+                    leftPills.push(
+                      <span key={`ae-${ae.id}`} title={tip} style={{
+                        ...caePill,
+                        border: '1px solid var(--accent-orange, #ff9533)',
+                        color: 'var(--accent-orange, #ff9533)',
+                        background: 'color-mix(in srgb, var(--accent-orange, #ff9533) 14%, transparent)',
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                        padding: '1px 2px 1px 6px',
+                      }}>
+                        ⚔ {label}
+                        <button type="button"
+                          onClick={(e) => { e.stopPropagation(); removeActiveEffect(applyCharacter, ae.id) }}
+                          title={`${label} beenden`}
+                          style={{
+                            background: 'transparent', border: 'none',
+                            color: 'var(--accent-orange, #ff9533)',
+                            cursor: 'pointer', padding: '0 4px',
+                            fontFamily: 'inherit', fontSize: 11, lineHeight: 1,
+                          }}>×</button>
+                      </span>,
                     )
                   }
                 }
@@ -4851,6 +5067,39 @@ function SpellListRow({
         {actionLetter && (
           <span style={spellPill(actionColor)} title="Casting time">{actionLetter}</span>
         )}
+        {/* Weapon-Buff-Spell-Indikator (Shillelagh, Magic Weapon,
+            Magic Stone, Elemental Weapon, ...): klick öffnet die Row
+            + den Weapon-Picker im Expanded-Body. Wenn schon aktiv:
+            zeigt die gebuffte Waffe als Pill an. */}
+        {applyCharacter && getSpellWeaponBuff(sp?.name) && (() => {
+          const activeOnes = getActiveEffects(character)
+            .filter(e => e?.source === `spell:${sp.name}`)
+          if (activeOnes.length > 0) {
+            const target = activeOnes[0]?.target?.label || activeOnes[0]?.target?.id || '?'
+            return (
+              <span style={{
+                ...spellPill('var(--accent-orange, #ff9533)'),
+                background: 'color-mix(in srgb, var(--accent-orange, #ff9533) 14%, transparent)',
+                cursor: 'pointer',
+              }} title={`Aktiv auf ${target}. Klick zum Anzeigen / Dismiss.`}
+                onClick={(e) => { e.stopPropagation(); onExpand?.() }}>
+                ⚔ {target}
+              </span>
+            )
+          }
+          return (
+            <button type="button"
+              onClick={(e) => { e.stopPropagation(); onExpand?.() }}
+              title="Auf Waffe wirken — Picker im Expanded-Body öffnen"
+              style={{
+                ...spellPill('var(--accent-orange, #ff9533)'),
+                background: 'color-mix(in srgb, var(--accent-orange, #ff9533) 10%, transparent)',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              ⚔ Cast on…
+            </button>
+          )
+        })()}
         {mNote?.pillText && (
           <span style={{
             ...spellPill(mNoteColor),
@@ -4969,6 +5218,8 @@ function spellTabStyle(active) {
 function SpellWeaponBuffPicker({ spell, character, applyCharacter }) {
   const buff = getSpellWeaponBuff(spell?.name)
   const [showAll, setShowAll] = useState(false)
+  const dmgTypeOpts = buff?.damageTypeOptions || null
+  const [dmgType, setDmgType] = useState(dmgTypeOpts ? dmgTypeOpts[0] : null)
   if (!buff) return null
   const eligible = getEligibleWeapons(character, spell?.name)
   // Fallback: alle Waffen wenn der strikte Filter leer ist ODER der
@@ -4985,7 +5236,7 @@ function SpellWeaponBuffPicker({ spell, character, applyCharacter }) {
   const active = activeEffects.filter(e => e?.source === sourceTag)
 
   function activate(weapon) {
-    const built = buff.buildEffect(character, weapon)
+    const built = buff.buildEffect(character, weapon, dmgType ? { damageType: dmgType } : {})
     addActiveEffect(applyCharacter, {
       kind: built.kind,
       source: sourceTag,
@@ -5031,6 +5282,27 @@ function SpellWeaponBuffPicker({ spell, character, applyCharacter }) {
                   padding: '0 4px', fontFamily: 'inherit', lineHeight: 1,
                 }}>×</button>
             </div>
+          ))}
+        </div>
+      )}
+      {dmgTypeOpts && (
+        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Damage-Type:</span>
+          {dmgTypeOpts.map(t => (
+            <button key={t} type="button"
+              onClick={() => setDmgType(t)}
+              style={{
+                padding: '2px 6px', fontSize: 10, borderRadius: 4,
+                cursor: 'pointer', fontFamily: 'inherit',
+                border: `1px solid ${dmgType === t ? 'var(--accent-orange, #ff9533)' : 'var(--border)'}`,
+                color: dmgType === t ? 'var(--accent-orange, #ff9533)' : 'var(--text-secondary)',
+                background: dmgType === t
+                  ? 'color-mix(in srgb, var(--accent-orange, #ff9533) 14%, transparent)'
+                  : 'transparent',
+                fontWeight: dmgType === t ? 700 : 400,
+              }}>
+              {t[0].toUpperCase()}{t.slice(1)}
+            </button>
           ))}
         </div>
       )}

@@ -411,6 +411,19 @@ export function computeProficiencies(character, classDataMap = {}) {
     }
   }
 
+  // ── Datadriven Feature-Text-Proficiency-Grants ─────────────
+  // Jedes aktive Feature dessen Entry-Text "you gain proficiency
+  // with X (weapons|armor)" trägt, fügt seine Tokens hier hinzu.
+  // Catches Druid Warden, Kensei-Subclass Variants, homebrew
+  // features etc. — ohne hand-edited Catalog-Eintrag.
+  const featBonuses = aggregateFeatureBonuses(character?.__activeFeatures || [])
+  for (const w of (featBonuses.weaponProficiencies || [])) {
+    if (!result.weapons.includes(w)) result.weapons.push(w)
+  }
+  for (const a of (featBonuses.armorProficiencies || [])) {
+    if (!result.armor.includes(a)) result.armor.push(a)
+  }
+
   // ── Subclass-feature choices (player-picked skill / save) ──
   // For features like Fey Wanderer's Otherworldly Glamour, Gloom
   // Stalker's Iron Mind, Bard/Rogue Expertise, Cleric/Fighter/
@@ -979,7 +992,13 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       if (typeof v.attackBonus === 'number') effectAcc.attackBonus += v.attackBonus
       if (typeof v.damageBonus === 'number') effectAcc.damageBonus += v.damageBonus
       if (v.magical) effectAcc.magical = true
-      if (e?.source) effectAcc.labels.push({ label: e.source.replace(/^spell:/, ''), kind: e.kind })
+      if (e?.source) effectAcc.labels.push({
+        id: e.id,                                  // für Dismiss-Knopf am Attack-Row
+        label: e.source.replace(/^spell:/, ''),
+        kind: e.kind,
+        damageType: v.damageType || null,
+        until: e.until || null,
+      })
     }
 
     let abilityMod

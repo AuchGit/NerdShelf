@@ -60,11 +60,16 @@ export const WEAPON_MARKING_RULES = [
     feature: 'Pact of the Blade',
     className: 'Warlock',
     count: 1,
-    // No own ability-override here on purpose — base rules don't grant it.
-    // If the character ALSO has Hex Warrior, that rule's mark will be set
-    // on the same weapon and provide the CHA-override on its own.
-    effects: {},
+    effects: { magical: true },
     requires: {},
+    // Hexblade-RAW: dein Pact Weapon zählt automatisch ALS Hex
+    // Warrior Weapon — bekommt also CHA für Attack & Damage ohne
+    // dass der Player es separat als Hex-Warrior-Mark setzen muss.
+    // Synergie greift nur wenn der Charakter Hex Warrior überhaupt
+    // hat (=> Hexblade-Subclass mit Level 1 Hex Warrior Feature).
+    synergies: [
+      { ifFeature: 'Hex Warrior', effects: { abilityOverride: 'cha' } },
+    ],
   },
   {
     id: 'improved_pact_weapon',
@@ -315,15 +320,36 @@ export function weaponEligibleForMark(weapon, rule, character) {
 /**
  * Combine the effects of every rule currently active on this weapon
  * into one object — the form computeAttacks consumes.
+ *
+ * Datadriven Synergies: jede Rule kann `synergies: [{ ifFeature, effects }]`
+ * deklarieren. Wenn der Charakter das benannte Feature hat, werden die
+ * Synergy-Effekte zusätzlich zum Basis-Effekt der Rule angewendet.
+ * RAW-Beispiel: Pact Weapon hat eine Synergie auf Hex Warrior → wenn
+ * der Spieler Hexblade-Warlock ist und Hex Warrior gewählt hat, kriegt
+ * jede Pact-Weapon-markierte Waffe automatisch den CHA-Override.
  */
 export function combinedMarkEffects(character, weaponId) {
   const active = getActiveMarksForWeapon(character, weaponId)
-  const out = { attackBonus: 0, damageBonus: 0, abilityOverride: null, labels: [] }
+  const out = { attackBonus: 0, damageBonus: 0, abilityOverride: null, magical: false, labels: [] }
+  const charFeatures = gatherCharacterFeatures(character)
   for (const r of active) {
     const e = r.effects || {}
     if (e.attackBonus) out.attackBonus += e.attackBonus
     if (e.damageBonus) out.damageBonus += e.damageBonus
     if (e.abilityOverride) out.abilityOverride = e.abilityOverride
+    if (e.magical) out.magical = true
+    // Synergies: zusätzliche Effekte wenn das benannte Feature
+    // active ist.
+    for (const syn of (r.synergies || [])) {
+      if (!syn?.ifFeature) continue
+      if (!charFeatures.has(String(syn.ifFeature).toLowerCase())) continue
+      const se = syn.effects || {}
+      if (se.attackBonus) out.attackBonus += se.attackBonus
+      if (se.damageBonus) out.damageBonus += se.damageBonus
+      if (se.abilityOverride) out.abilityOverride = se.abilityOverride
+      if (se.magical) out.magical = true
+      out.labels.push({ id: `${r.id}-syn-${syn.ifFeature}`, label: `${r.label} → ${syn.ifFeature}`, note: 'synergy' })
+    }
     out.labels.push({ id: r.id, label: r.label, note: r.note })
   }
   return out

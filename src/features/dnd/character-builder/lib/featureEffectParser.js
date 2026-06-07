@@ -34,6 +34,8 @@ const DEFAULT_KIND_COLORS = {
   reroll:         'var(--text-secondary)',
   trigger:        'var(--text-secondary)',
   uses:           'var(--accent-orange, #ff9533)',
+  cost:           'var(--accent-yellow)',
+  utility:        'var(--accent-cyan, #4dd0e1)',
 }
 
 /**
@@ -196,15 +198,78 @@ function findScaledDice(rawText, classId, classLevel) {
 }
 
 // Trigger-Klassifizierung — was triggert das Feature?
-// Liefert ein kurzes Label fürs Pill oder null.
+// Liefert ein kurzes Label fürs Pill oder null. Patterns sortiert
+// von spezifisch zu generisch — die Funktion returnt beim ersten
+// Treffer. Damit gewinnt "When Damaged" gegen "On Hit" wenn beide
+// Phrasen im selben Text vorkommen.
 function detectTrigger(stripped) {
+  if (/\bwhen\s+(?:another\s+)?creature\s+damages\s+you\b/i.test(stripped)) return 'When Damaged'
+  if (/\bwhen\s+you\s+take\s+damage\b/i.test(stripped)) return 'When Damaged'
+  if (/\bwhen\s+a\s+creature\s+misses\s+you\b/i.test(stripped)) return 'When Missed'
   if (/\bwhen\s+you\s+hit\s+(?:a\s+)?(?:creature|target)/i.test(stripped)) return 'On Hit'
   if (/\bon\s+a\s+hit\b/i.test(stripped)) return 'On Hit'
-  if (/\bwhen\s+you\s+(?:are\s+)?targeted\b/i.test(stripped)) return 'When Targeted'
-  if (/\bwhen\s+a\s+creature\s+(?:hits\s+you|attacks\s+you)/i.test(stripped)) return 'When Hit'
-  if (/\bwhen\s+you\s+take\s+damage\b/i.test(stripped)) return 'When Damaged'
+  if (/\bimmediately\s+after\s+you\s+hit\b/i.test(stripped)) return 'On Hit'
   if (/\bwhen\s+you\s+(?:make|hit\s+with)\s+a\s+(?:weapon|melee\s+weapon|ranged\s+weapon)\s+attack/i.test(stripped)) return 'On Hit'
+  if (/\bwhen\s+you\s+make\s+a\s+weapon\s+attack\s+roll\b/i.test(stripped)) return 'On Attack'
+  if (/\bwhen\s+a\s+creature\s+(?:hits\s+you|attacks\s+you)/i.test(stripped)) return 'When Hit'
+  if (/\bwhen\s+you\s+(?:are\s+)?targeted\b/i.test(stripped)) return 'When Targeted'
+  if (/\bwhen\s+you\s+(?:take\s+the\s+)?attack\s+action\b/i.test(stripped)) return 'On Attack Action'
+  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+(?:moves|attacks)/i.test(stripped)) return 'When Seen'
+  if (/\bas\s+a\s+bonus\s+action\s+on\s+your\s+turn\b/i.test(stripped)) return 'BA · Your Turn'
+  if (/\bas\s+a\s+bonus\s+action\b/i.test(stripped)) return 'Bonus Action'
+  if (/\bas\s+a\s+reaction\b/i.test(stripped)) return 'Reaction'
+  if (/\bon\s+your\s+turn\b/i.test(stripped)) return 'On Your Turn'
   return null
+}
+
+// Maneuver/Feature-Cost-Pill: "expend one superiority die" / "spend
+// X ki points" / "spend X sorcery points" etc. Wird als knappes Cost-
+// Pill ("1 SD" / "1 Ki" / "2 SP") angezeigt damit der Spieler sofort
+// sieht was er ausgibt.
+function detectCost(stripped) {
+  if (/\bexpend\s+(?:one|two|three|four|\d+)\s+superiority\s+(?:die|dice)\b/i.test(stripped)) {
+    const m = stripped.match(/\bexpend\s+(one|two|three|four|\d+)\s+superiority\s+(?:die|dice)\b/i)
+    const n = m ? toIntWord(m[1]) : 1
+    return { label: `${n} SD`, title: `Cost: ${n} superiority die${n > 1 ? '+' : ''}` }
+  }
+  if (/\bspend\s+(?:one|two|three|four|five|six|\d+)\s+(?:ki|focus)\s+points?\b/i.test(stripped)) {
+    const m = stripped.match(/\bspend\s+(one|two|three|four|five|six|\d+)\s+(?:ki|focus)\s+points?\b/i)
+    const n = m ? toIntWord(m[1]) : 1
+    return { label: `${n} Ki`, title: `Cost: ${n} Ki / Focus Point${n > 1 ? 's' : ''}` }
+  }
+  if (/\bspend\s+(?:one|two|three|\d+)\s+sorcery\s+points?\b/i.test(stripped)) {
+    const m = stripped.match(/\bspend\s+(one|two|three|\d+)\s+sorcery\s+points?\b/i)
+    const n = m ? toIntWord(m[1]) : 1
+    return { label: `${n} SP`, title: `Cost: ${n} Sorcery Point${n > 1 ? 's' : ''}` }
+  }
+  return null
+}
+
+// Tiny side-effect-pill for movement/utility maneuvers like Bait and
+// Switch ("switch places with that creature"), Evasive Footwork
+// ("rolling the die and adding to AC"), Lunging Attack ("increase
+// your reach for that attack by 5 feet").
+function detectUtility(stripped) {
+  if (/\bswitch\s+places\s+with\b/i.test(stripped)) {
+    return { label: 'Swap', title: 'Switch places with target' }
+  }
+  if (/\badding\s+the\s+(?:number\s+)?rolled\s+to\s+your\s+ac\b/i.test(stripped)) {
+    return { label: '+AC roll', title: 'Add superiority die to AC' }
+  }
+  if (/\bincrease\s+your\s+reach\s+(?:for\s+that\s+attack\s+)?by\s+(\d+)\s+(?:feet|ft\.?)/i.test(stripped)) {
+    const m = stripped.match(/\bincrease\s+your\s+reach\s+(?:for\s+that\s+attack\s+)?by\s+(\d+)\s+(?:feet|ft\.?)/i)
+    return { label: `+${m[1]}ft Reach`, title: `Reach +${m[1]} ft this attack` }
+  }
+  return null
+}
+
+function toIntWord(w) {
+  const map = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+  if (typeof w !== 'string') return 0
+  const lw = w.toLowerCase()
+  if (map[lw] != null) return map[lw]
+  const n = parseInt(w, 10)
+  return Number.isNaN(n) ? 0 : n
 }
 
 // ── Micro-Pattern-Pills (Phase 4) ─────────────────────────
@@ -364,6 +429,14 @@ export function parseFeatureEffect(feature, character, profBonus = 0, opts = {})
   // Trigger
   const trigger = detectTrigger(stripped)
   if (trigger) pills.push({ kind: 'trigger', label: trigger, title: trigger })
+
+  // Cost (Superiority Die / Ki / Sorcery Point)
+  const cost = detectCost(stripped)
+  if (cost) pills.push({ kind: 'cost', ...cost })
+
+  // Utility (Swap / +AC roll / +reach)
+  const util = detectUtility(stripped)
+  if (util) pills.push({ kind: 'utility', ...util })
 
   // Damage (mit Skalierung)
   const dmg = findFeatureDamage(rawText)

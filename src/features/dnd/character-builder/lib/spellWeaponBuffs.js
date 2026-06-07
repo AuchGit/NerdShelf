@@ -108,16 +108,17 @@ export const SPELL_WEAPON_BUFFS = {
     label: 'Elemental Weapon',
     duration: 'concentration-end',
     weaponFilter: (item) => !!item?.isWeapon,
-    buildEffect: () => ({
+    // Spell let den Spieler den Damage-Type beim Cast wählen — Modal
+    // zeigt einen Picker mit diesen Optionen.
+    damageTypeOptions: ['acid', 'cold', 'fire', 'lightning', 'thunder'],
+    buildEffect: (character, weapon, opts = {}) => ({
       kind: 'elemental-weapon',
       value: {
         attackBonus: 1,
         damageBonus: 1,
-        // Damage-Type pickt der Spieler beim Casten — Default Fire
-        // wenn nichts gewählt. Caller kann via updateActiveEffect
-        // anpassen.
         extraDamageDie: '1d4',
-        damageType: 'fire',
+        // Beim Cast vom Modal gepickt, sonst Fire als Default.
+        damageType: opts.damageType || 'fire',
         magical: true,
       },
     }),

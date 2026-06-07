@@ -125,6 +125,32 @@ function scaleCantripDice(diceToken, charLevel) {
   return `${count}d${die}`
 }
 
+// 5.5e Cantrips (und viele 5e-Cantrips über UA-Backports) tragen ein
+// strukturiertes `scalingLevelDice`-Feld, das die EXAKTEN Würfel pro
+// Level-Threshold liefert. Das überschreibt die generische
+// Doppel-Multiplikator-Heuristik. Shillelagh ist das prominenteste
+// Beispiel: 1d8 (L1) → 1d10 (L5) → 1d12 (L11) → 2d6 (L17). Die
+// Standard-Cantrip-Logik würde fälschlich "2d8" am L5 ausgeben.
+//
+// Schema kann sein:
+//   • Object:  { label, scaling: { '1': '1d8', '5': '1d10', ... } }
+//   • Array:   [ { label: 'damage', scaling: {...} }, { label: '...' } ]
+// Wir picken den Eintrag mit label='damage' (oder fallback erste).
+function dieFromScalingLevelDice(scalingLevelDice, charLevel) {
+  if (!scalingLevelDice) return null
+  const arr = Array.isArray(scalingLevelDice) ? scalingLevelDice : [scalingLevelDice]
+  const block = arr.find(b => /damage/i.test(b?.label || '')) || arr[0]
+  if (!block?.scaling || typeof block.scaling !== 'object') return null
+  // Höchster Threshold ≤ charLevel.
+  let best = null
+  for (const [lvlStr, dice] of Object.entries(block.scaling)) {
+    const lvl = parseInt(lvlStr, 10)
+    if (!Number.isFinite(lvl) || lvl > charLevel) continue
+    if (best == null || lvl > best.lvl) best = { lvl, dice: String(dice) }
+  }
+  return best?.dice || null
+}
+
 /**
  * Hauptfunktion: aus einem Spell + Caster-Context die Pill-Daten holen.
  *
@@ -179,17 +205,28 @@ export function parseSpellEffect(spell, opts = {}) {
   // ── Damage + Upcast ──────────────────────────────────────────
   let damage = null
   const firstDmg = findFirstDamage(rawText)
-  if (firstDmg) {
-    let diceDisplay = firstDmg.dice
-    // Cantrip-Skalierung: nur bei Level-0-Spells und nur wenn das
-    // Token "1d…" oder "d…" ist (Cantrips ohne ability-mod). Spells
-    // ab Level 1 skalieren via Slot, nicht via Charlevel.
-    if ((spell.level ?? 0) === 0) {
+  // Strukturierte scalingLevelDice hat Vorrang vor Text-Damage —
+  // selbst wenn `{@dice d8}` im Text steht, gewinnt die Tabellen-
+  // Variante für Shillelagh / Booming Blade / Sword Burst / Magic
+  // Stone (alle Cantrips mit nicht-Standard-Progression).
+  const scalingDie = (spell.level ?? 0) === 0
+    ? dieFromScalingLevelDice(spell.scalingLevelDice, totalCharLevel)
+    : null
+  if (firstDmg || scalingDie) {
+    let diceDisplay
+    if (scalingDie) {
+      diceDisplay = scalingDie
+    } else if ((spell.level ?? 0) === 0) {
+      // Cantrip-Skalierung: nur bei Level-0-Spells und nur wenn das
+      // Token "1d…" oder "d…" ist (Cantrips ohne ability-mod). Spells
+      // ab Level 1 skalieren via Slot, nicht via Charlevel.
       diceDisplay = scaleCantripDice(firstDmg.dice, totalCharLevel)
+    } else {
+      diceDisplay = firstDmg.dice
     }
     damage = {
       dice: diceDisplay,
-      type: firstDmg.type,
+      type: firstDmg?.type || null,
       upcast: parseUpcast(spell),
     }
   }
