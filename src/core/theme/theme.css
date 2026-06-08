@@ -120,6 +120,22 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
+/* Dropdown-Optionen rendern manche OS (insbesondere Windows mit System-
+   Dark-Mode) weiß-auf-weiß wenn der Browser den color-scheme-Hint nicht
+   konsequent durchreicht. Force explizit dunkel über die !important-Regel
+   damit JEDES <option> sichtbar bleibt — Inline-Styles auf einzelnen
+   <select>s können das hier nicht versehentlich überschreiben. */
+select option,
+select optgroup {
+  background-color: var(--color-bg-elevated) !important;
+  color: var(--color-text) !important;
+}
+select option:checked,
+select option:hover {
+  background-color: var(--color-surface-hover) !important;
+  color: var(--color-text) !important;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────
    Mobile / touch responsive layer (PWA on phones).
 

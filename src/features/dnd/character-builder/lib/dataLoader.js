@@ -680,6 +680,17 @@ export async function loadSpellList(edition) {
         savingThrow: spell.savingThrow || [],
         conditionInflict: spell.conditionInflict || [],
         spellAttack: spell.spellAttack || [],
+        // Cantrip-/Spell-Würfel-Skalierung (5.5e XPHB strukturiert):
+        // wird von spellEffectParser.dieFromScalingLevelDice und vom
+        // Weapon-Buff-Catalog (Shillelagh dynamic die) konsumiert.
+        // Ohne dieses Feld fällt buildEffect auf '1d8' Default zurück.
+        scalingLevelDice: spell.scalingLevelDice || null,
+        // Higher-Slot-Damage-Multiplikator (Magic Weapon +1/+2/+3 etc.).
+        damageInflict: spell.damageInflict || [],
+        // Roh-Felder die parseSpellEffect / additionalSpells-Wiring
+        // brauchen können (additionalSpells, hasFluffImages, srd52, etc.).
+        // Wir replicieren NICHT alles — nur was tatsächlich konsumiert wird.
+        meta: spell.meta || {},
       })
     }
   }

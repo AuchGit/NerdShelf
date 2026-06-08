@@ -96,6 +96,27 @@ export default function SpellPrepareModal({
     })
   }, [visibleSpells, preparedByClass, classId])
 
+  // ── Filter / Suche ─────────────────────────────────────────
+  const [searchText, setSearchText] = useState('')
+  const [levelFilter, setLevelFilter] = useState(null)
+  const [concFilter,  setConcFilter]  = useState(false)
+  const [ritFilter,   setRitFilter]   = useState(false)
+  // Levels die in der visibleSpells-Liste tatsächlich vorkommen.
+  const availableLevels = useMemo(() => {
+    const set = new Set(visibleSpells.map(s => s.level))
+    return [...set].sort((a, b) => a - b)
+  }, [visibleSpells])
+  const filtered = useMemo(() => {
+    const q = searchText.trim().toLowerCase()
+    return sorted.filter(s => {
+      if (q && !s.name.toLowerCase().includes(q)) return false
+      if (levelFilter !== null && s.level !== levelFilter) return false
+      if (concFilter && !s.concentration) return false
+      if (ritFilter && !s.ritual) return false
+      return true
+    })
+  }, [sorted, searchText, levelFilter, concFilter, ritFilter])
+
   function isPreppedByMe(spellName) {
     return (preparedByClass[classId] || []).some(n => n.toLowerCase() === spellName.toLowerCase())
   }
@@ -144,8 +165,51 @@ export default function SpellPrepareModal({
               : 'Keine Spells auf der Klassenliste verfügbar.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {sorted.map(sp => {
+          <>
+            {/* Suche + Level/Konz/Ritual-Filter */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              <input
+                type="text" value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                placeholder="Spell suchen…"
+                style={{
+                  width: '100%', padding: '6px 10px', fontSize: 12,
+                  background: 'var(--bg-inset)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border)', borderRadius: 6,
+                  fontFamily: 'inherit',
+                }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                <button type="button" onClick={() => setLevelFilter(null)} style={filterChip(levelFilter === null)}>Alle</button>
+                {availableLevels.map(lv => (
+                  <button key={lv} type="button"
+                    onClick={() => setLevelFilter(levelFilter === lv ? null : lv)}
+                    style={filterChip(levelFilter === lv)}
+                  >L{lv}</button>
+                ))}
+                <span style={{ width: 8 }} />
+                <button type="button"
+                  onClick={() => setConcFilter(v => !v)}
+                  style={filterChip(concFilter)}
+                  title="Nur Konzentrations-Spells"
+                >K Konz.</button>
+                <button type="button"
+                  onClick={() => setRitFilter(v => !v)}
+                  style={filterChip(ritFilter)}
+                  title="Nur Ritual-Spells"
+                >R Ritual</button>
+                <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: 11, alignSelf: 'center' }}>
+                  {filtered.length} / {sorted.length}
+                </span>
+              </div>
+            </div>
+            {filtered.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '8px 2px' }}>
+                Keine Spells passen zu den Filtern.
+              </div>
+            ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {filtered.map(sp => {
               const prepped = isPreppedByMe(sp.name)
               const overPrepLimit = !prepped && max > 0 && current >= max
               // Cross-Class-Marker: andere Caster-Klassen, die diesen
@@ -230,7 +294,9 @@ export default function SpellPrepareModal({
                 </div>
               )
             })}
-          </div>
+            </div>
+            )}
+          </>
         )}
       </SheetModal>
 
@@ -431,4 +497,13 @@ const searchInput = {
   padding: '4px 8px', fontSize: 12,
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
   border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'inherit',
+}
+function filterChip(active) {
+  return {
+    padding: '3px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    background: active ? 'color-mix(in srgb, var(--accent) 22%, transparent)' : 'transparent',
+    color: active ? 'var(--accent)' : 'var(--text-muted)',
+    cursor: 'pointer', fontFamily: 'inherit',
+  }
 }

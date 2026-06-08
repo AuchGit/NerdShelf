@@ -85,14 +85,33 @@ function getActiveSteps(info, draft) {
   const castAb = draft.existingSpellAbility || draft.subclassSpellAbility || info.spellcastingAbility
   const effProg = draft.existingCasterProg || draft.subclassCasterProg || info.casterProgression
   const maxSL = effProg ? getMaxSpellLevel(effProg, info.nextLevel) : 0
-  // Show spell step if: gaining spells, can swap, or is a caster with actual spell levels.
-  // newPreparedSpells covers 5.5e prepared casters whose preparedTable grows each level —
-  // without this the step would be skipped for Ranger / Paladin levels even when they
-  // need to pick a new prepared spell.
-  const hasSpellContent = info.newCantrips > 0 || info.newSpellsKnown > 0 || info.newSpellbookSpells > 0 || (info.newPreparedSpells || 0) > 0 || info.canSwapSpell || maxSL > 0
-  // Also check for optional feature spell choices (Blessed Warrior, Pact of the Tome)
+  // Spell-Step gate: NUR zeigen wenn auf diesem Level wirklich etwas
+  // Spell-bezogenes neu wird:
+  //   • Known caster (Sorcerer/Bard/Warlock) lernt neue Spells
+  //     (`newSpellsKnown > 0`)
+  //   • Wizard erweitert Spellbook (`newSpellbookSpells > 0`)
+  //   • Cantrips dazu (`newCantrips > 0`)
+  //   • Spell-Swap erlaubt (`canSwapSpell`)
+  //   • Prepared caster (Druid/Cleric/Paladin/Ranger/Artificer) bekommt
+  //     ein NEUES Spell-Level freigeschaltet → neue Spells werden
+  //     vorbereitbar (`unlocksNewSpellLevel`). Reines Wachsen der
+  //     Prepared-Count ohne neue Spell-Stufe braucht KEINEN Step mehr
+  //     (Prep wird auf dem Sheet gemacht).
+  //   • Optional-Feature gibt Spells (Blessed Warrior, Pact of the Tome)
+  //
+  // Bei einem Caster der auf diesem Level NICHTS Neues bekommt (z.B.
+  // 5.5e Druid L6 wo nur Prep-Count steigt) wird der Step geskippt.
+  const isCaster = !!(castAb || effProg)
+  const isPrepared = isCaster && !info.newSpellsKnown && !info.newSpellbookSpells
+  const preparedUnlocksNewLevel = isPrepared && !!info.unlocksNewSpellLevel
+  const hasSpellContent =
+       (info.newCantrips || 0) > 0
+    || (info.newSpellsKnown || 0) > 0
+    || (info.newSpellbookSpells || 0) > 0
+    || !!info.canSwapSpell
+    || preparedUnlocksNewLevel
   const hasOptFeatSpells = Object.values(draft.optPicks).flat().length > 0
-  if (hasSpellContent || (castAb && maxSL > 0) || hasOptFeatSpells) a.push(STEPS[5])
+  if (hasSpellContent || hasOptFeatSpells) a.push(STEPS[5])
   a.push(STEPS[6])
   return a
 }
@@ -892,85 +911,56 @@ function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) 
           onToggle={sp=>{const h=draft.cantrips.includes(sp.name);setDraft(d=>({...d,cantrips:h?d.cantrips.filter(n=>n!==sp.name):d.cantrips.length<info.newCantrips?[...d.cantrips,sp.name]:d.cantrips}))}}
           grantedSpells={granted} /></div>}
 
-      {/* 5.5e Prepared casters — active picker for new prepared
-          spells. The XPHB Ranger / Paladin / Druid / Cleric rules
-          require the player to "choose N additional spells when
-          your prepared count grows" right at level-up.
-          Anzeige IMMER für prepared caster — auch wenn an diesem
-          Level keine neuen Slots dazukommen, sieht der Spieler die
-          aktuell vorbereiteten Spells als Vorschau und kann den Pool
-          inspizieren / bei Bedarf neu wählen. */}
-      {isPrepared && (() => {
-        // Aktuell vorbereitete Spells dieser Klasse (read-only Pills
-        // oben). Die schon-prepared Spells werden ZUSÄTZLICH zur
-        // Pool-Liste als grantedSpells markiert damit der Picker sie
-        // nicht doppelt zur Auswahl anbietet.
-        const currentPrep = (char?.status?.preparedSpells?.[info.classId] || [])
-        const newCount = Math.max(0, info.newPreparedSpells || 0)
-        const totalCount = info.totalPreparedSpells || (currentPrep.length + newCount)
-        const grantedWithPrep = { ...granted }
-        for (const name of currentPrep) {
-          if (!grantedWithPrep[name]) grantedWithPrep[name] = 'bereits vorbereitet'
-        }
-        return (
-          <div style={S.card}>
-            <div style={S.cardTitle}>
-              Prepared Spells{newCount > 0 ? ` — wähle ${newCount} neue` : ' — Vorschau & Anpassung'}
-              {' '}<span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: 12 }}>
-                (gesamt {totalCount} · aktuell {currentPrep.length})
-              </span>
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 10 }}>
-              {newCount > 0
-                ? `Wähle Zauber bis zu Level ${info.maxSpellLevel}, die du auf deiner Prepared-Liste haben willst. Bei einer Long Rest darfst du später einen tauschen.`
-                : `Du bekommst auf dieser Stufe keinen zusätzlichen Prepared-Slot, kannst aber auf der Sheet-Seite jederzeit nach einer Long Rest deine Auswahl anpassen.`}
-            </div>
-            {currentPrep.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>
-                  Aktuell vorbereitet
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {currentPrep.map(name => (
-                    <span key={name} style={{
-                      padding: '3px 8px', borderRadius: 6, fontSize: 11,
-                      border: '1px solid var(--accent-green)',
-                      color: 'var(--accent-green)',
-                      background: 'color-mix(in srgb, var(--accent-green) 14%, transparent)',
-                    }}>{name}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {newCount > 0 && (
-              <UniversalSpellList
-                label={`${newCount} wählen`}
-                spells={filteredLev}
-                selected={draft.preparedPicks || []}
-                max={newCount}
-                onToggle={sp => {
-                  const cur = draft.preparedPicks || []
-                  const has = cur.includes(sp.name)
-                  const next = has
-                    ? cur.filter(n => n !== sp.name)
-                    : cur.length < newCount
-                      ? [...cur, sp.name] : cur
-                  setDraft(d => ({ ...d, preparedPicks: next }))
-                }}
-                grantedSpells={grantedWithPrep}
-              />
-            )}
-          </div>
-        )
-      })()}
+      {/* 5.5e Prepared casters — KEIN Picker mehr. Beim Level-Up
+          zeigen wir nur eine Vorschau der vorbereitbaren Zauber, mit
+          den NEU freigeschalteten oben hervorgehoben. Das eigentliche
+          Preparen passiert nach einer Long Rest auf dem Sheet. */}
 
-      {/* Leveled spells (known casters / spellbook / 5e prepared reference) */}
+      {/* Leveled spells block — bei prepared caster reine Preview-
+          Liste (neue Slot-Stufen oben), bei known caster die übliche
+          Pick-UI für die N neuen Zauber. */}
       {(spellCount>0||isPrepared)&&<div style={S.card}>
-        <div style={S.cardTitle}>{isPrepared?`${info.className} — Vorbereitbare Zauber (Referenz)`:`${info.className} — Neue Zauber`}</div>
-        {isPrepared&&<div style={{color:'var(--text-muted)',fontSize:12,marginBottom:10,padding:'8px 12px',background:'var(--bg-inset)',borderRadius:8}}>
-          Prepared Caster: Diese Liste zeigt alle vorbereitbaren Zauber zur Orientierung. Verbindliche Auswahl oben (falls die Anzahl gestiegen ist) — die Tagesauswahl passt du nach Long Rests auf der Sheet-Seite an.</div>}
+        <div style={S.cardTitle}>
+          {isPrepared
+            ? `${info.className} — Vorbereitbare Zauber`
+            : `${info.className} — Neue Zauber`}
+        </div>
+        {isPrepared && (() => {
+          // Der Spell-Step ist für prepared caster NUR sichtbar wenn
+          // ein neues Spell-Level dazukommt (gate in getActiveSteps).
+          // Zeige hier ausschließlich die neu vorbereitbaren Spells —
+          // nicht den ganzen Pool nochmal. Full prepare-management
+          // läuft auf dem Sheet.
+          const prevMax = info.prevMaxSpellLevel ?? Math.max(0, (info.maxSpellLevel || 0) - 1)
+          const newlyUnlockedLevels = []
+          for (let lv = prevMax + 1; lv <= (info.maxSpellLevel || 0); lv++) newlyUnlockedLevels.push(lv)
+          const sortFn = (a, b) => (a.level - b.level) || a.name.localeCompare(b.name)
+          const newSpells = newlyUnlockedLevels.length > 0
+            ? classLev.filter(s => newlyUnlockedLevels.includes(s.level)).sort(sortFn)
+            : []
+          return (
+            <>
+              <div style={{ color:'var(--text-muted)', fontSize:12, marginBottom:10, padding:'8px 12px', background:'var(--bg-inset)', borderRadius:8 }}>
+                🆕 Neu freigeschaltet bei Level {newlyUnlockedLevels.join(' / ')} — <b>{newSpells.length}</b> neue Zauber die du nach einer Long Rest preparen kannst.
+                Die eigentliche Auswahl machst du auf dem Sheet.
+              </div>
+              {newSpells.length > 0 && (
+                <UniversalSpellList
+                  spells={newSpells}
+                  selected={[]}
+                  max={0}
+                  onToggle={() => {}}
+                  grantedSpells={granted}
+                />
+              )}
+            </>
+          )
+        })()}
 
-        {info.canSwapSpell&&knownList.length>0&&!isPrepared&&(
+        {/* Known-Caster UI (Sorcerer/Bard/Warlock/Wizard-Spellbook) —
+            für Prepared-Caster (Druid/Cleric/Ranger/Paladin) wird
+            stattdessen die obige Vorschau benutzt. */}
+        {!isPrepared && info.canSwapSpell && knownList.length > 0 && (
           <div style={{marginBottom:12,padding:'10px 14px',background:'var(--bg-inset)',borderRadius:8,border:'1px solid var(--border)'}}>
             <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',color:'var(--text-secondary)',fontSize:13}}>
               <input type="checkbox" checked={draft.wantSwap} onChange={e=>setDraft(d=>({...d,wantSwap:e.target.checked,...(!e.target.checked?{swapOld:null,swapNew:null}:{})}))} />
@@ -987,23 +977,38 @@ function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) 
             </div>}
           </div>)}
 
-        {sr&&<div style={{background:'var(--bg-hover)',border:'1px solid var(--accent-purple)',borderRadius:8,padding:'8px 14px',marginBottom:10,fontSize:12}}>
-          <span style={{color:'var(--accent-purple)',fontWeight:'bold'}}>Schulbeschränkung: </span>
-          <span style={{color:'var(--text-secondary)'}}>{sr.schools.map(s=>SCH[s]||s).join(' / ')}{isFree&&<span style={{color:'var(--accent-green)'}}> — Freie Wahl!</span>}</span></div>}
+        {!isPrepared && sr && (
+          <div style={{background:'var(--bg-hover)',border:'1px solid var(--accent-purple)',borderRadius:8,padding:'8px 14px',marginBottom:10,fontSize:12}}>
+            <span style={{color:'var(--accent-purple)',fontWeight:'bold'}}>Schulbeschränkung: </span>
+            <span style={{color:'var(--text-secondary)'}}>{sr.schools.map(s=>SCH[s]||s).join(' / ')}{isFree&&<span style={{color:'var(--accent-green)'}}> — Freie Wahl!</span>}</span>
+          </div>
+        )}
 
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-          <button style={{...S.filterBtn,...(sLv===null?S.filterAct:{})}} onClick={()=>setSLv(null)}>Alle</button>
-          {availLvls.map(lv=><button key={lv} style={{...S.filterBtn,...(sLv===lv?S.filterAct:{})}} onClick={()=>setSLv(sLv===lv?null:lv)}>Lv.{lv}</button>)}
-          <button style={{...S.filterBtn,...(sCon?S.filterAct:{}),marginLeft:8}} onClick={()=>setSCon(!sCon)}>K Konz.</button>
-          <button style={{...S.filterBtn,...(sRit?S.filterAct:{})}} onClick={()=>setSRit(!sRit)}>R Ritual</button></div>
+        {!isPrepared && (
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+            <button style={{...S.filterBtn,...(sLv===null?S.filterAct:{})}} onClick={()=>setSLv(null)}>Alle</button>
+            {availLvls.map(lv=><button key={lv} style={{...S.filterBtn,...(sLv===lv?S.filterAct:{})}} onClick={()=>setSLv(sLv===lv?null:lv)}>Lv.{lv}</button>)}
+            <button style={{...S.filterBtn,...(sCon?S.filterAct:{}),marginLeft:8}} onClick={()=>setSCon(!sCon)}>K Konz.</button>
+            <button style={{...S.filterBtn,...(sRit?S.filterAct:{})}} onClick={()=>setSRit(!sRit)}>R Ritual</button>
+          </div>
+        )}
 
-        <UniversalSpellList label={isPrepared?undefined:`Zauber wählen — ${maxSpells}`}
-          spells={filteredLev} selected={isPrepared?[]:draft.spells} max={isPrepared?0:maxSpells}
-          onToggle={isPrepared?()=>{}:sp=>{const h=draft.spells.includes(sp.name)
-            if(h){setDraft(d=>({...d,spells:d.spells.filter(n=>n!==sp.name),...(d.swapNew===sp.name?{swapNew:null}:{})}))}
-            else if(draft.spells.length<maxSpells){setDraft(d=>{const next=[...d.spells,sp.name]
-              const sw=d.wantSwap&&d.swapOld&&next.length>spellCount?sp.name:d.swapNew;return{...d,spells:next,swapNew:sw}})}}}
-          grantedSpells={granted} />
+        {!isPrepared && (
+          <UniversalSpellList label={`Zauber wählen — ${maxSpells}`}
+            spells={filteredLev} selected={draft.spells} max={maxSpells}
+            onToggle={sp => {
+              const h = draft.spells.includes(sp.name)
+              if (h) { setDraft(d => ({...d, spells: d.spells.filter(n => n !== sp.name), ...(d.swapNew === sp.name ? {swapNew: null} : {})})) }
+              else if (draft.spells.length < maxSpells) {
+                setDraft(d => {
+                  const next = [...d.spells, sp.name]
+                  const sw = d.wantSwap && d.swapOld && next.length > spellCount ? sp.name : d.swapNew
+                  return {...d, spells: next, swapNew: sw}
+                })
+              }
+            }}
+            grantedSpells={granted} />
+        )}
       </div>}
     </div>
   )

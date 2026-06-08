@@ -368,13 +368,14 @@ export default function Step9Equipment({ character, updateCharacter }) {
   }
 
   // Inline style fuer <option> Elemente in den Equipment-Dropdowns.
-// Erzwingt dunklen Background + helle Schrift damit das native OS-
-// Popup nicht auf weiss-auf-weiss fällt wenn der Browser im
-// system-light-Modus läuft (Tauri unter Win10/11). colorScheme: dark
-// auf dem <select> hilft schon, das hier ist die zweite Sicherung.
+// Theme-aware via CSS-Variablen; die globale "select option { …
+// !important }"-Regel in theme.css ist die primäre Sicherung gegen
+// das weiß-auf-weiß Windows-Light-Verhalten — dieses Inline-Style
+// bleibt als doppelte Absicherung damit auch ohne globale Regel
+// jede Option lesbar bleibt.
 const optionStyle = {
-  background: '#1f2937',
-  color: '#e5e7eb',
+  background: 'var(--color-bg-elevated)',
+  color: 'var(--color-text)',
 }
 
 function makeInventoryItem(item, grantedBy) {
