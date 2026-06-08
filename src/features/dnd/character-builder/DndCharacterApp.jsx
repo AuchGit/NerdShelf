@@ -13,6 +13,7 @@ import CharacterViewPage from './pages/CharacterViewPage'
 import CampaignsPage from './pages/CampaignsPage'
 import CampaignDetailPage from './pages/CampaignDetailPage'
 import SessionPage from './pages/SessionPage'
+import HomebrewPage from '../homebrew/pages/HomebrewPage'
 
 setupErrorCollector()
 
@@ -83,6 +84,8 @@ function matchRoute(route) {
   // /character/:id/edit
   m = route.match(/^\/character\/([^/]+)\/edit\/?$/)
   if (m) return { page: 'edit', id: m[1] }
+  // ── Homebrew ──
+  if (route === '/homebrew' || route === '/homebrew/') return { page: 'homebrew' }
   // ── Campaigns ──
   if (route === '/campaigns' || route === '/campaigns/') return { page: 'campaigns' }
   // /campaign/:id/session/character/:charId  (GM sheet opened from session — back goes to session)
@@ -116,6 +119,7 @@ function DndRoutes({ session }) {
     case 'edit':      return <CharacterEditPage session={session} />
     case 'view':      return <CharacterViewPage />
     case 'campaigns': return <CampaignsPage session={session} />
+    case 'homebrew':  return <HomebrewPage session={session} />
     case 'campaign':  return <CampaignDetailPage session={session} campaignId={match.campaignId} />
     case 'session':   return <SessionPage session={session} campaignId={match.campaignId} />
     case 'gmsheet':   return <CharacterSheetPage session={session} readOnly

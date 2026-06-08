@@ -344,6 +344,16 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     const map = {}
     unique.forEach((cid, i) => { if (loaded[i]) map[cid] = loaded[i] })
     classDataMapRef.current = map
+    // Homebrew-Features lazy laden und auf den transient-character
+    // stashen. collectActiveClassFeatures liest sie unten aus und
+    // hängt sie an __activeFeatures wenn classId + level matched.
+    try {
+      const { listHomebrew } = await import('../../homebrew/lib/homebrewStore')
+      const homebrewFeatures = await listHomebrew('features')
+      charData = { ...charData, __homebrewFeatures: homebrewFeatures }
+    } catch (e) {
+      console.warn('[homebrew] feature load failed', e)
+    }
     // Optfeature-Liste laden für die Auflösung der refOptionalfeature
     // -Picks (Fighting Style, Maneuver, Invocation, …). Fail-soft —
     // wenn der Load schief geht, fallen wir auf "kein Match" zurück,
@@ -817,6 +827,44 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }, 'XPHB')
     }
 
+    // Homebrew-Features: laufen async aus dem Tauri-Filesystem, also
+    // ergänzen wir den Charakter mit pending-Promise-Liste. Sie werden
+    // dem __activeFeatures-Bucket hinzugefügt wenn sie zur Klasse des
+    // Charakters gehören (oder klassenfrei sind = global aktiv).
+    // Hinweis: hier synchron-Pfad — die Promise wird unten resolved.
+    if (Array.isArray(charData?.__homebrewFeatures)) {
+      for (const hf of charData.__homebrewFeatures) {
+        if (!hf?.name || !Array.isArray(hf.entries)) continue
+        // Wenn classId gesetzt, nur aktivieren wenn der Char diese
+        // Klasse hat UND die Stufe ≥ feature.level erreicht ist.
+        if (hf.className) {
+          const cls = (charData.classes || []).find(c => c.classId === hf.className)
+          if (!cls) continue
+          if ((hf.level || 1) > cls.level) continue
+          push({
+            classId: hf.className,
+            source: 'class-homebrew',
+            name: hf.name,
+            level: hf.level || 1,
+            entries: hf.entries,
+          }, hf.source)
+        } else {
+          // Klassenfreies Homebrew-Feature → an erste Klasse hängen
+          // damit der Bucket-Builder es als generisches Class-Feature
+          // behandelt.
+          const cls0 = (charData.classes || [])[0]
+          if (!cls0) continue
+          push({
+            classId: cls0.classId,
+            source: 'class-homebrew',
+            name: hf.name,
+            level: hf.level || 1,
+            entries: hf.entries,
+          }, hf.source)
+        }
+      }
+    }
+
     // Legacy-Optfeature-Picks aus cls.levelChoices[N].optionalFeatures
     // (Level-Up-Wizard schreibt dort rein) als __activeFeatures
     // surfacen, damit Bonus-Extractor + Catalog + featureEffectParser
@@ -1132,6 +1180,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
       if (stripped.__classDataMap) {
         delete stripped.__classDataMap
+        touched = true
+      }
+      if (stripped.__homebrewFeatures) {
+        delete stripped.__homebrewFeatures
         touched = true
       }
       return touched ? stripped : data

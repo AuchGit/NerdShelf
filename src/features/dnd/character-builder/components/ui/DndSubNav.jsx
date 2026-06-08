@@ -11,6 +11,7 @@ import { useNavigate } from '../../lib/hashNav'
 const TABS = [
   { id: 'characters', label: 'Characters', to: '/' },
   { id: 'campaigns',  label: 'Campaigns',  to: '/campaigns' },
+  { id: 'homebrew',   label: 'Homebrew',   to: '/homebrew' },
 ]
 
 export default function DndSubNav({ active }) {

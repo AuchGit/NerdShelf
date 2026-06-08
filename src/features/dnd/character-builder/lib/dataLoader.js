@@ -1,4 +1,5 @@
 import { parseTags } from './tagParser'
+import { applyHomebrewToData, listHomebrew } from '../../homebrew/lib/homebrewStore'
 
 const SOURCES = {
   '5e':   '/data/5e',
@@ -465,10 +466,13 @@ function parseFeatRefs(featsArray) {
 
 export async function loadBackgroundList(edition) {
   const data = await fetchData(edition, 'backgrounds.json')
-  if (!data) return []
+  // Homebrew Backgrounds (5etools-Shape) durchgängig einmischen
+  // unabhängig vom edition-Filter. Sind über die Homebrew-Tab pflegbar.
+  const homebrewBg = await listHomebrew('backgrounds')
+  if (!data && homebrewBg.length === 0) return []
 
-  const all = (data.background || [])
-    .filter(bg => isEditionMatch(bg.source, edition))
+  const all = ([...(data?.background || []), ...homebrewBg])
+    .filter(bg => isEditionMatch(bg.source, edition) || bg._localMeta)
     .map(bg => ({
       id: `${bg.name}__${bg.source}`,
       name: bg.name,
@@ -609,6 +613,11 @@ async function resolveSpellFiles(edition) {
 }
 
 export async function loadSpellList(edition) {
+  // 0. Homebrew Spells (5etools-Shape `{spell: [...]}`) durchgängig
+  //    einmischen. Die Einträge gehen unten durch dieselbe
+  //    Mapping-Pipeline wie official spells, müssen also korrekt
+  //    geshaped sein (HomebrewPage validiert das beim Speichern).
+  const homebrewSpells = await listHomebrew('spells')
   // 1. Build spell→class map from sources.json (authoritative for PHB, XGE, TCE …)
   const spellClassMap = await buildSpellClassMap(edition)
 
@@ -693,6 +702,46 @@ export async function loadSpellList(edition) {
         meta: spell.meta || {},
       })
     }
+  }
+
+  // ── HOMEBREW SPELLS ─────────────────────────────────────────
+  // Lokal gespeicherte Homebrew-Spells durchlaufen die gleiche Mapping-
+  // Pipeline wie offizielle Quellen. Klassen-Assignments kommen
+  // entweder aus spell.classes (Array von Namen) ODER aus der
+  // Standard-spellListsMap. So kann ein Homebrew-Spell direkt einer
+  // Klassen-Liste zugewiesen werden im Editor.
+  for (const spell of homebrewSpells) {
+    const uid = `${spell.name}__${spell.source || 'HB'}`
+    if (seen.has(uid)) continue
+    seen.add(uid)
+    const classesFromSpell = Array.isArray(spell.classes) ? spell.classes : []
+    const classesFromLists = spellListsMap.get(spell.name.toLowerCase())
+    const mergedClasses = new Set([...classesFromSpell])
+    if (classesFromLists?.size) for (const c of classesFromLists) mergedClasses.add(c)
+    all.push({
+      id: uid,
+      name: spell.name,
+      source: spell.source || 'HB',
+      level: spell.level ?? 0,
+      school: spell.school || 'U',
+      castingTime: formatCastingTime(spell.time),
+      range: formatRange(spell.range),
+      components: spell.components || {},
+      duration: formatDuration(spell.duration),
+      concentration: !!(spell.duration?.some(d => d.concentration)),
+      ritual: !!(spell.meta?.ritual),
+      classes: [...mergedClasses],
+      entries: spell.entries || [],
+      entriesHigherLevel: spell.entriesHigherLevel || [],
+      damageType: spell.damageInflict || [],
+      savingThrow: spell.savingThrow || [],
+      conditionInflict: spell.conditionInflict || [],
+      spellAttack: spell.spellAttack || [],
+      scalingLevelDice: spell.scalingLevelDice || null,
+      damageInflict: spell.damageInflict || [],
+      meta: spell.meta || {},
+      _isHomebrew: true,
+    })
   }
 
   // ── SUPPLEMENT via spell-lists-full.json ──────────────────────────────────
@@ -863,6 +912,13 @@ export function filterSpellsByClass(spells, classId) {
 export async function loadItemIndex(edition) {
   // Try combined index first
   let items = await fetchData(edition, 'item-index.json')
+  // Homebrew-Items hier dazumixen: die liegen im 5etools-Shape
+  // { item: [...] } im AppData-Verzeichnis und werden vom User über
+  // die Homebrew-Tab gepflegt. Wir fügen sie als zusätzliche Items
+  // ein — die unten greifende isEditionMatch-Filterung lässt sie
+  // durch (homebrew-source 'HB-*' ist nicht offiziell, würde
+  // gedroppt) — Workaround: wir hängen sie NACH der Filterung an.
+  const homebrewItems = (await applyHomebrewToData('items', { item: [] })).item || []
   if (items && Array.isArray(items)) {
     // Merge a couple of fields the index strips out but downstream code
     // needs:
@@ -937,13 +993,17 @@ export async function loadItemIndex(edition) {
       })
     }
     const filtered = items.filter(i => isEditionMatch(i.source, edition))
-    if (edition === '5.5e') return deduplicateByName(filtered)
-    return filtered
+    // Homebrew durchgehend einmischen — unabhängig von source-Filter
+    // damit user-erstellte Items immer sichtbar sind (Source 'HB-*'
+    // matched isEditionMatch nicht).
+    const merged = [...filtered, ...homebrewItems]
+    if (edition === '5.5e') return deduplicateByName(merged)
+    return merged
   }
 
   // Fallback to items-base.json only
   const data = await fetchData(edition, 'items-base.json')
-  if (!data) return []
+  if (!data) return [...homebrewItems]
   const baseItems = (data.baseitem || data.item || [])
     .filter(item => isEditionMatch(item.source, edition))
     .map(item => ({
@@ -976,8 +1036,9 @@ export async function loadItemIndex(edition) {
         ? item.mastery.map(m => String(typeof m === 'string' ? m : m?.name || '').split('|')[0]).filter(Boolean)
         : [],
     }))
-  if (edition === '5.5e') return deduplicateByName(baseItems)
-  return baseItems
+  const mergedBase = [...baseItems, ...homebrewItems]
+  if (edition === '5.5e') return deduplicateByName(mergedBase)
+  return mergedBase
 }
 
 // Keep old name as alias for backwards compatibility

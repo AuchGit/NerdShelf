@@ -1689,6 +1689,47 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     ]
     for (const item of inventoryItems) {
       if (!item || !item.reqAttune || !item.attuned) continue
+      if (!item.equipped) continue
+      // Pfad A: Homebrew-Item mit strukturiertem _hbActions-Array.
+      // Engine liest direkt — keine entries-Text-Regex nötig. Eine Row
+      // pro Action, Pills (cost/damage/save/attack/charges) werden 1:1
+      // aus den gespeicherten Feldern gebaut.
+      if (Array.isArray(item._hbActions) && item._hbActions.length > 0) {
+        for (const a of item._hbActions) {
+          const slot = a.cost === 'bonus' ? 'bonusAction'
+            : a.cost === 'reaction' ? 'reaction'
+            : a.cost === 'passive' ? 'action'  // Passive Trigger landen in Action damit der Spieler sie sieht; Trigger-Pille klärt das
+            : 'action'
+          // Direkt strukturierte Pills emittieren (kein parseFeatureEffect-Roundtrip).
+          const pills = []
+          if (a.cost === 'passive') pills.push({ kind: 'trigger', label: 'On Trigger', title: a.description?.slice(0, 80) })
+          if (a.attackBonus) pills.push({ kind: 'attack', label: 'Atk', value: a.attackBonus })
+          if (a.saveAbility && a.saveDc) pills.push({ kind: 'save', label: a.saveAbility.toUpperCase(), value: a.saveDc, title: `${a.saveAbility.toUpperCase()} Save DC` })
+          if (a.damageDice) {
+            const typeMap = { B: 'bludgeoning', P: 'piercing', S: 'slashing', A: 'acid', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', I: 'poison', Y: 'psychic', R: 'radiant', T: 'thunder' }
+            const dmgType = typeMap[a.damageType] || null
+            pills.push({ kind: 'damage', label: a.damageDice, damageType: dmgType, title: dmgType ? `${a.damageDice} ${dmgType}` : a.damageDice })
+          }
+          if (a.chargesMax > 0) {
+            pills.push({ kind: 'uses', label: `${a.chargesMax}×`, title: `Max ${a.chargesMax} Charges` })
+          }
+          b[slot].push({
+            id: `item-${item.id || item._id || item.name}-a-${a.id}`,
+            markerKey: `item:${item.id || item._id || item.name}`,
+            name: `${item.customName || item.name} — ${a.name}`,
+            damage: '—', attack: '', range: '—', target: '—',
+            kind: 'item',
+            economySlot: slot,
+            entries: [a.description || ''],
+            effectPills: pills,
+            sub: 'Item · Attuned · Homebrew',
+            notes: '',
+          })
+        }
+        continue
+      }
+      // Pfad B: Standard-Item ohne _hbActions — entries-Text-Scan
+      // (Magic Items aus dem 5etools-Datensatz).
       if (!Array.isArray(item.entries) || item.entries.length === 0) continue
       const slot = detectActionSlot(item.entries)
       if (!slot) continue
