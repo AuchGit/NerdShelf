@@ -278,6 +278,13 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       bonusSpellSaveDc:   entry.bonusSpellSaveDc   || null,
       bonusSavingThrow:   entry.bonusSavingThrow   || null,
       bonusAbilityCheck:  entry.bonusAbilityCheck  || null,
+      // Homebrew strukturierte Felder: müssen explicit durchgereicht
+      // werden — sonst stripped der Field-Whitelist sie raus und die
+      // Engine sieht weder Actions noch Grants auf dem inventory-Item.
+      ...(Array.isArray(entry._hbActions) && entry._hbActions.length > 0
+        ? { _hbActions: entry._hbActions } : {}),
+      ...(Array.isArray(entry._hbGrants) && entry._hbGrants.length > 0
+        ? { _hbGrants: entry._hbGrants } : {}),
     }
     // The browser modal adds one row per click; if it ever gains a
     // quantity input, the same singleton-split logic from saveItem would

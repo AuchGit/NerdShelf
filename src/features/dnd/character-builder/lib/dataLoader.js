@@ -90,12 +90,20 @@ async function buildSpellClassMap(edition) {
 
 export async function loadRaceList(edition) {
   const data = await fetchData(edition, 'races.json')
-  if (!data) return []
+  // Homebrew-Rassen einmischen (lokal aus AppData via homebrewStore).
+  // Erscheinen direkt im Race-Picker; das 5etools-Shape ist identisch
+  // (name, source, size, speed, ability, languageProficiencies,
+  // skillProficiencies, additionalSpells, entries) sodass loadRaceList
+  // sie ohne Sonderbehandlung durchschleifen kann.
+  const homebrewRaces = await listHomebrew('races')
+  if (!data && homebrewRaces.length === 0) return []
 
   const allRaces = []
 
-  for (const race of (data.race || [])) {
-    if (!isEditionMatch(race.source, edition)) continue
+  for (const race of ([...(data?.race || []), ...homebrewRaces])) {
+    // Homebrew-Race ist immer durchgelassen (kein edition-filter),
+    // standard 5etools-Race wird auf isEditionMatch gefiltert.
+    if (!race._localMeta && !isEditionMatch(race.source, edition)) continue
     allRaces.push({
       id: `${race.name}__${race.source}`,
       name: race.name,
@@ -379,11 +387,20 @@ export async function loadClassData(edition, classId) {
   // Phase 2 (5.5e only): drop PHB features auf Stufen die schon eine
   // XPHB-Variante haben — die XPHB-Feature ersetzt mechanisch die PHB
   // (z.B. "Two Extra Attacks" L11 ersetzt "Extra Attack (2)" L11).
+  // AUSNAHME: isClassFeatureVariant=true Features (TCE Optional Class
+  // Features wie Magical Inspiration, Wild Companion, Steady Aim, …)
+  // bleiben IMMER drin — das sind alternative Regeln, keine
+  // mechanischen Duplikate. Sie werden via optionalClassFeatures
+  // opt-in vom Spieler aktiviert.
   if (is55e) {
     const xphbLevels = new Set(
       classFeatures.filter(isXphb).map(f => f.level ?? 0),
     )
-    classFeatures = classFeatures.filter(f => isXphb(f) || !xphbLevels.has(f.level ?? 0))
+    classFeatures = classFeatures.filter(f =>
+      isXphb(f)
+      || f.isClassFeatureVariant
+      || !xphbLevels.has(f.level ?? 0),
+    )
   }
 
   // Subclass-Features: gleiche Logik aber gekeyt zusätzlich auf
@@ -406,14 +423,16 @@ export async function loadClassData(edition, classId) {
   }
   let subclassFeatures = [...subByKey.values()]
   // Phase 2 für Subclass: per (subclassShortName, level) wenn XPHB
-  // vorhanden → drop PHB.
+  // vorhanden → drop PHB. Variants ausgenommen (Opt-In-Rules).
   if (is55e) {
     const xphbSubLevels = new Set(
       subclassFeatures.filter(isXphb)
         .map(f => `${f.subclassShortName}::${f.level ?? 0}`),
     )
     subclassFeatures = subclassFeatures.filter(f =>
-      isXphb(f) || !xphbSubLevels.has(`${f.subclassShortName}::${f.level ?? 0}`),
+      isXphb(f)
+      || f.isClassFeatureVariant
+      || !xphbSubLevels.has(`${f.subclassShortName}::${f.level ?? 0}`),
     )
   }
 

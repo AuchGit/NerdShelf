@@ -1042,10 +1042,18 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       s.id === charData.species.subraceId || s.name === charData.species.subraceId
     )
     const allEntries = [...(race.entries || []), ...(sub?.entries || [])]
+    // Level-Gate: Trait-Blöcke mit `_hbLevel` (Homebrew) oder offizielle
+    // 5etools-Konvention (manche MPMM-Rassen haben Sub-Features wie
+    // "At 3rd level…") werden nur aktiviert wenn Char-Level >= Schwelle.
+    const totalLevel = (charData?.classes || []).reduce(
+      (s, c) => s + (c.level || 0), 0,
+    )
     const names = []
     const traits = []
     for (const e of allEntries) {
       if (!e || typeof e !== 'object' || !e.name) continue
+      const minLevel = parseInt(e._hbLevel, 10) || 1
+      if (totalLevel < minLevel) continue
       names.push(String(e.name))
       traits.push({ name: String(e.name), entries: Array.isArray(e.entries) ? e.entries : [] })
     }

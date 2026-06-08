@@ -17,15 +17,16 @@
 // funktioniert für Dev-Tests; in der gebauten Tauri-App geht der
 // Filesystem-Pfad.
 
-const KINDS = ['items', 'spells', 'backgrounds', 'creatures', 'features']
+const KINDS = ['items', 'spells', 'backgrounds', 'races', 'creatures', 'features']
 
 // 5etools Top-Level-Key pro Kind. Vorsicht: items uses 'item' (singular)
-// als Top-Level-Array; das Gleiche bei spells, background, monster,
-// classFeature. monster ist 5etools-Naming für Creature.
+// als Top-Level-Array; das Gleiche bei spells, background, race,
+// monster, classFeature. monster ist 5etools-Naming für Creature.
 const ROOT_KEY = {
   items:       'item',
   spells:      'spell',
   backgrounds: 'background',
+  races:       'race',
   creatures:   'monster',
   features:    'classFeature',
 }

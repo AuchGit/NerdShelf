@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
+import GrantSpellPicker from './GrantSpellPicker'
 
 const TYPE_OPTIONS = [
   { v: 'M',  l: 'M — Melee Weapon' },
@@ -84,41 +85,112 @@ function newAction() {
 }
 
 // Parsen einer existing item entries für Action-Extraktion (Template-Load).
+// Geht durch BEIDE Layer: top-level strings UND nested object-entries
+// (list-items, sub-entries-blocks). Splittet jeden String in Sätze
+// und schaut PER SATZ ob ein Action-Slot triggert. Charges + Reset
+// werden ITEM-WEIT zusammengezogen (sind oft in einem separaten Satz
+// statt zusammen mit der Action-Klausel).
 function parseTemplateActions(entries) {
   if (!Array.isArray(entries)) return []
-  const out = []
-  const strings = entries.filter(e => typeof e === 'string')
-  for (const text of strings) {
-    let cost = null
-    if (/\bas an action\b/i.test(text)) cost = 'action'
-    else if (/\bas a bonus action\b/i.test(text)) cost = 'bonus'
-    else if (/\bas a reaction\b/i.test(text)) cost = 'reaction'
-    else if (/\bwhen you hit\b|\bon a hit\b|\bif you hit\b/i.test(text)) cost = 'passive'
-    if (!cost) continue
-    const act = newAction()
-    act.cost = cost
-    act.description = text.replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
-    // Damage extrahieren
-    const dmgM = text.match(/\{@damage\s+([^|}]+)\}\s*(\w+)?/i) || text.match(/(\d+d\d+(?:\s*\+\s*\d+)?)\s+(\w+)\s+damage/i)
-    if (dmgM) {
-      act.damageDice = dmgM[1].trim().replace(/\s+/g, '')
-      if (dmgM[2]) act.damageType = dmgM[2][0].toUpperCase()
+  // 1. Alle string-Sätze aus den entries extrahieren (auch nested).
+  const allStrings = []
+  const walk = (n) => {
+    if (typeof n === 'string') { allStrings.push(n); return }
+    if (Array.isArray(n)) { for (const x of n) walk(x); return }
+    if (n && typeof n === 'object') {
+      if (Array.isArray(n.entries)) walk(n.entries)
+      if (Array.isArray(n.items)) walk(n.items)
+      if (n.name && Array.isArray(n.entries)) {
+        // named sub-section — wir behalten den Namen als "Section-Hint"
+        walk(n.entries)
+      }
     }
-    // Save
-    const sM = text.match(/(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving\s+throw/i)
-    if (sM) act.saveAbility = sM[1].slice(0,3).toLowerCase()
-    const dcM = text.match(/\bDC\s*(\d+)/i)
-    if (dcM) act.saveDc = dcM[1]
-    // Charges
-    const chM = text.match(/(\d+)\s+charges?/i)
-    if (chM) act.chargesMax = parseInt(chM[1], 10)
-    if (/short or long rest/i.test(text)) act.chargesRest = 'short'
-    else if (/long rest/i.test(text)) act.chargesRest = 'long'
-    else if (/at dawn/i.test(text)) act.chargesRest = 'dawn'
-    // Name aus der ersten Substanz raten
-    const firstSentence = text.split(/[.!?]/)[0].slice(0, 40)
-    act.name = firstSentence.replace(/^as (an? )?(bonus action|action|reaction),\s*/i, '').slice(0, 30) || 'Aktion'
-    out.push(act)
+  }
+  walk(entries)
+  if (allStrings.length === 0) return []
+
+  // 2. Item-weite Charges-Info (oft in eigenem Satz wie "This wand has
+  //    7 charges and regains 1d6 expended charges at dawn.")
+  const flat = allStrings.join(' ').replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+  let itemChargesMax = 0
+  let itemChargesRest = 'long'
+  const chM = flat.match(/\b(?:has|with|hold(?:s|ing))\s+(\d+)\s+charges?/i)
+                 || flat.match(/(\d+)\s+charges?\b/i)
+  if (chM) itemChargesMax = parseInt(chM[1], 10) || 0
+  if (/short or long rest/i.test(flat)) itemChargesRest = 'short'
+  else if (/long rest/i.test(flat)) itemChargesRest = 'long'
+  else if (/(?:at dawn|each (?:morning|day at dawn))/i.test(flat)) itemChargesRest = 'dawn'
+  else if (/\b(?:per day|each day|daily)\b/i.test(flat)) itemChargesRest = 'day'
+
+  // 3. Pro String/Satz: prüfen ob ein Action-Slot drinsteht.
+  const out = []
+  const DAMAGE_TYPE_MAP = { acid: 'A', bludgeoning: 'B', cold: 'C', fire: 'F', force: 'O', lightning: 'L', necrotic: 'N', piercing: 'P', poison: 'I', psychic: 'Y', radiant: 'R', slashing: 'S', thunder: 'T' }
+
+  for (const rawStr of allStrings) {
+    // Sätze splitten — Action-Klausel kann in der Mitte stehen
+    const sentences = rawStr.split(/(?<=[.!?])\s+/).filter(Boolean)
+    for (const sentence of sentences) {
+      let cost = null
+      if (/\b(?:use|take|spend|expend)\s+(?:an?\s+)?action\b/i.test(sentence) || /\bas an action\b/i.test(sentence)) cost = 'action'
+      else if (/\b(?:use|take|spend|expend)\s+(?:a\s+)?bonus action\b/i.test(sentence) || /\bas a bonus action\b/i.test(sentence)) cost = 'bonus'
+      else if (/\b(?:use|take|spend)\s+(?:a\s+|your\s+)?reaction\b/i.test(sentence) || /\bas a reaction\b/i.test(sentence)) cost = 'reaction'
+      else if (/\bwhen you hit\b|\bon a hit\b|\bif you hit\b|\bwhen you damage\b/i.test(sentence)) cost = 'passive'
+      if (!cost) continue
+
+      const act = newAction()
+      act.cost = cost
+      // Plain-text Description (Tags resolven)
+      act.description = sentence.replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1').trim()
+
+      // Damage: erstmal {@damage} Tag, dann freitext "NdM <type> damage"
+      const dmgTag = sentence.match(/\{@damage\s+([^|}]+)\}\s*([A-Za-z]+)?/i)
+      const dmgPlain = sentence.match(/(\d+d\d+(?:\s*\+\s*\d+)?)\s*([A-Za-z]+)?\s+damage/i)
+      const dmgM = dmgTag || dmgPlain
+      if (dmgM) {
+        act.damageDice = dmgM[1].trim().replace(/\s+/g, '')
+        if (dmgM[2]) {
+          const tLow = dmgM[2].toLowerCase()
+          act.damageType = DAMAGE_TYPE_MAP[tLow] || dmgM[2][0].toUpperCase()
+        }
+      }
+
+      // Save
+      const saveM = sentence.match(/(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving\s+throw/i)
+      if (saveM) act.saveAbility = saveM[1].slice(0, 3).toLowerCase()
+      const dcM = sentence.match(/\bDC\s*(\d+)/i)
+      if (dcM) act.saveDc = dcM[1]
+
+      // Attack-Bonus (selten in items, aber manche magic weapons)
+      const atkM = sentence.match(/([+-]\d+)\s+(?:bonus\s+)?(?:to\s+)?attack\s+roll/i)
+      if (atkM) act.attackBonus = atkM[1]
+
+      // Charges für diese Action: explicit oder vom item-weiten Pool
+      const expM = sentence.match(/expend\s+(\d+)\s+(?:or more\s+)?(?:of\s+(?:its|the)\s+)?charges?/i)
+      if (expM) act.chargesCost = parseInt(expM[1], 10) || 1
+      if (itemChargesMax > 0) {
+        act.chargesMax = itemChargesMax
+        act.chargesRest = itemChargesRest
+      }
+
+      // Name extrahieren: erste paar Wörter ohne Prefix, oder Spell-Name
+      const spellTagM = sentence.match(/\{@spell\s+([^|}]+)/i)
+      if (spellTagM) {
+        act.name = spellTagM[1].trim().replace(/\b\w/g, c => c.toUpperCase())
+      } else {
+        // Erstes "to X" / "to do Y" Pattern als Action-Name
+        const verbM = sentence.match(/\bto\s+(cast|fire|cause|attack|invoke|summon|teleport|deal|create|conjure|use|command)\s+[^.,;]{0,40}/i)
+        if (verbM) {
+          act.name = verbM[0].replace(/^to\s+/i, '').slice(0, 40).replace(/^./, c => c.toUpperCase())
+        } else {
+          // Fallback: erstes Sub des Satzes nach Prefix
+          let cleanName = sentence.replace(/^[^.,;]*?(?:as |you can use |use )?\b(?:an action|a bonus action|a reaction),?\s*/i, '')
+          cleanName = cleanName.split(/[.!?,;]/)[0].slice(0, 50).trim()
+          act.name = cleanName.charAt(0).toUpperCase() + cleanName.slice(1) || 'Aktion'
+        }
+      }
+      if (act.name.length > 50) act.name = act.name.slice(0, 47) + '…'
+      out.push(act)
+    }
   }
   return out
 }
@@ -165,6 +237,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
     if (!out.mastery?.length) delete out.mastery
     if (!out.reqAttune) delete out.reqAttune
     if (!out._hbActions?.length) delete out._hbActions
+    if (!out._hbGrants?.length) delete out._hbGrants
     // Sync entries-Feld aus den strukturierten Actions damit FeaturesTab
     // und alte Parser eine human-readable Beschreibung haben. _hbActions
     // bleibt aber Single Source of Truth für die Engine.
@@ -272,6 +345,27 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
           rows={3} placeholder="Allgemeine Beschreibung des Items (kein Action-Effekt)."
           style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Field>
+
+      {/* ── Gewährte Spells ─────────────────────────────────── */}
+      <div style={{
+        marginTop: 16, padding: 14, borderRadius: 10,
+        background: '#0f1115',
+        border: '1px solid #7aa2f7',
+      }}>
+        <div style={{ ...ed.label, color: '#7aa2f7' }}>
+          📖 Gewährte Spells (verfügbar wenn attuned + equipped)
+        </div>
+        <div style={{ color: '#9aa3b4', fontSize: 11, marginBottom: 10 }}>
+          Spells aus 5etools-Daten oder eigenem Homebrew die das Item dem
+          Spieler gewährt. Modus: <b>known</b> = jederzeit ohne Slot castbar;
+          <b> innate</b> = 1× pro Day; <b>prepared</b> = wird zur prepared-
+          Liste hinzugefügt und verbraucht Slots beim Casten.
+        </div>
+        <GrantSpellPicker
+          grants={draft._hbGrants || []}
+          onChange={(next) => set('_hbGrants', next)}
+        />
+      </div>
 
       {/* ── Aktionen-Liste ──────────────────────────────────── */}
       <div style={{

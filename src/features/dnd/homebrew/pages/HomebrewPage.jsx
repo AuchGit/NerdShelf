@@ -22,6 +22,7 @@ import {
 import ItemEditor from '../components/editors/ItemEditor'
 import SpellEditor from '../components/editors/SpellEditor'
 import FeatureEditor from '../components/editors/FeatureEditor'
+import RaceEditor from '../components/editors/RaceEditor'
 import GenericJsonEditor from '../components/editors/GenericJsonEditor'
 import EntryRenderer from '../../character-builder/components/ui/EntryRenderer'
 import { pushOne, pullAll } from '../lib/homebrewSync'
@@ -30,6 +31,7 @@ const KIND_LABELS = {
   items:       'Items',
   spells:      'Spells',
   backgrounds: 'Backgrounds',
+  races:       'Races',
   creatures:   'Creatures',
   features:    'Features',
 }
@@ -38,8 +40,9 @@ const KIND_DESC = {
   items:       'Eigene Waffen, Rüstung, Magic Items, Gegenstände',
   spells:      'Eigene Cantrips / Spells (alle Level)',
   backgrounds: 'Eigene Backgrounds inkl. Skill/Tool/Language-Grants',
+  races:       'Eigene Rassen mit Ability-Bonus, Speed, Profs, Granted Spells und Traits',
   creatures:   'Eigene Monster / NPCs (für GM-Notizen — kein Engine-Konsumer)',
-  features:    'Eigene Class- / Subclass- / Race-Features (Storage; eigene Konsumer noch nicht angebunden)',
+  features:    'Eigene Class- / Subclass- / Race-Features',
 }
 
 const DEFAULT_KIND = 'items'
@@ -81,6 +84,7 @@ export default function HomebrewPage({ session }) {
     if (kind === 'items') return { name: 'Neues Item', source, type: 'G', rarity: 'none', entries: [''] }
     if (kind === 'spells') return { name: 'Neuer Spell', source, level: 0, school: 'E', time: [{ number: 1, unit: 'action' }], range: { type: 'point', distance: { type: 'self' } }, components: { v: true }, duration: [{ type: 'instant' }], classes: [], entries: [''] }
     if (kind === 'backgrounds') return { name: 'Neuer Background', source, skillProficiencies: [], languageProficiencies: [], entries: [''] }
+    if (kind === 'races') return { name: 'Neue Rasse', source, size: ['M'], speed: { walk: 30 } }
     if (kind === 'creatures') return { name: 'Neue Kreatur', source, size: ['M'], type: 'humanoid', alignment: ['N'], ac: [10], hp: { average: 10, formula: '1d8 + 2' }, speed: { walk: 30 }, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, cr: '1/4', entries: [''] }
     return { name: 'Neues Feature', source, level: 1, entries: [''] }
   }
@@ -108,6 +112,7 @@ export default function HomebrewPage({ session }) {
     if (kind === 'items') return ItemEditor
     if (kind === 'spells') return SpellEditor
     if (kind === 'features') return FeatureEditor
+    if (kind === 'races') return RaceEditor
     return GenericJsonEditor
   }, [kind])
 

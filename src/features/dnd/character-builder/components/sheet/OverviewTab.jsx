@@ -1688,13 +1688,31 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       ...((character?.custom?.items)    || []),
     ]
     for (const item of inventoryItems) {
-      if (!item || !item.reqAttune || !item.attuned) continue
-      if (!item.equipped) continue
+      if (!item) continue
+      // Gate-Logik:
+      //   • Homebrew-Items (Source 'HB-*' ODER _localMeta):
+      //     equipped reicht; reqAttune nur wenn explicit gesetzt.
+      //   • Standard 5etools-Items: attuned + equipped (RAW).
+      //   • _hbActions vorhanden → strukturierter Pfad A
+      //   • sonst → Pfad B (entries-Text-Scan via detectActionSlot)
+      const hasHbActions = Array.isArray(item._hbActions) && item._hbActions.length > 0
+      const isHomebrew = !!item._localMeta || /^HB[-_]/i.test(String(item.source || ''))
+      const eqOk = !!item.equipped
+      const attuneOk = item.reqAttune ? !!item.attuned : true
+      if (!eqOk) continue
+      if (!isHomebrew && !hasHbActions) {
+        // Standard 5etools-Item via entries-Text-Scan: strikte Attune-Regel
+        if (!item.reqAttune || !item.attuned) continue
+      } else {
+        // Homebrew (egal ob mit _hbActions oder nur entries):
+        // reqAttune nur wenn explicit gesetzt
+        if (!attuneOk) continue
+      }
       // Pfad A: Homebrew-Item mit strukturiertem _hbActions-Array.
       // Engine liest direkt — keine entries-Text-Regex nötig. Eine Row
       // pro Action, Pills (cost/damage/save/attack/charges) werden 1:1
       // aus den gespeicherten Feldern gebaut.
-      if (Array.isArray(item._hbActions) && item._hbActions.length > 0) {
+      if (hasHbActions) {
         for (const a of item._hbActions) {
           const slot = a.cost === 'bonus' ? 'bonusAction'
             : a.cost === 'reaction' ? 'reaction'
@@ -1711,18 +1729,28 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
             pills.push({ kind: 'damage', label: a.damageDice, damageType: dmgType, title: dmgType ? `${a.damageDice} ${dmgType}` : a.damageDice })
           }
           if (a.chargesMax > 0) {
-            pills.push({ kind: 'uses', label: `${a.chargesMax}×`, title: `Max ${a.chargesMax} Charges` })
+            const costStr = (a.chargesCost && a.chargesCost > 1) ? `${a.chargesCost}/${a.chargesMax}` : `${a.chargesMax}×`
+            const restPhrase = a.chargesRest === 'short' ? 'short or long rest'
+              : a.chargesRest === 'long' ? 'long rest'
+              : a.chargesRest === 'dawn' ? 'at dawn'
+              : a.chargesRest === 'day' ? 'per day' : null
+            const tip = `${a.chargesCost > 1 ? `Cost ${a.chargesCost} of ` : ''}${a.chargesMax} charges${restPhrase ? ` (regains ${restPhrase})` : ''}`
+            pills.push({ kind: 'uses', label: costStr, title: tip })
           }
+          // Row-Name = der Name den der Spieler im Editor gesetzt hat.
+          // Item-Attribution wandert in die Sub-Zeile damit klar bleibt
+          // woher die Action kommt, ohne den Namen zu verdoppeln.
+          const sourceItemName = item.customName || item.name
           b[slot].push({
             id: `item-${item.id || item._id || item.name}-a-${a.id}`,
             markerKey: `item:${item.id || item._id || item.name}`,
-            name: `${item.customName || item.name} — ${a.name}`,
+            name: a.name || sourceItemName,
             damage: '—', attack: '', range: '—', target: '—',
             kind: 'item',
             economySlot: slot,
-            entries: [a.description || ''],
+            entries: a.description ? [a.description] : [],
             effectPills: pills,
-            sub: 'Item · Attuned · Homebrew',
+            sub: `Item · ${sourceItemName}`,
             notes: '',
           })
         }

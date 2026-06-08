@@ -198,6 +198,33 @@ export function collectCharacterSpells(character) {
 
   for (const s of (character.custom?.spells || [])) add(s?.name, 'custom', null)
 
+  // Item-Grants: jedes attuned+equipped Inventory-Item kann via
+  // _hbGrants Spells gewähren. Modus bestimmt das Bucket:
+  //   • known    → as-spell (slot-frei via 'granted' Flag)
+  //   • innate   → as-spell (slot-frei, 1× pro Day — UI-Tracking
+  //                aktuell visuell, kein automatischer Counter)
+  //   • prepared → as-class-prepared (verbraucht Slot beim Casten)
+  // Pro Grant gilt ein optionaler `level` Gate (5etools-Konvention):
+  // wenn gesetzt, wird der Spell erst aktiv ab Char-Level >= level.
+  const totalCharLevel = (character?.classes || []).reduce(
+    (s, c) => s + (c.level || 0), 0,
+  )
+  for (const it of [
+    ...((character.inventory?.items) || []),
+    ...((character.custom?.items)    || []),
+  ]) {
+    if (!Array.isArray(it?._hbGrants)) continue
+    if (it.reqAttune && !it.attuned) continue
+    if (!it.equipped) continue
+    for (const g of it._hbGrants) {
+      if (!g?.spellName) continue
+      const minLevel = parseInt(g.level, 10) || 1
+      if (totalCharLevel < minLevel) continue
+      const granted = g.mode === 'known' || g.mode === 'innate'
+      add(g.spellName, 'item', null, granted)
+    }
+  }
+
   return [...map.values()].map(e => ({
     name: e.name,
     origins: [...e.origins],
