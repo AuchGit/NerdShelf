@@ -1165,22 +1165,27 @@ export function isOfficialSource(source) {
   return official.includes(source)
 }
 
-// Strict edition gate. Pro Edition werden NUR Quellen aus dieser
-// Edition-Family zugelassen:
-//   • 5.5e mode → XPHB / XDMG / XMM (2024 core books)
-//   • 5e   mode → alles AUSSER X*-Quellen, plus offizielle Supplements
-// Falls der Spieler andere Quellen will, kann er sie nachträglich über
-// den 5e.tools-Import in seinem Sheet einspielen (manuelle Items /
-// Feats / Spells). Der Auto-Catalog bleibt edition-strict.
-//
-// `entryHasNoSource` (truthy) erlaubt unkommentierte Einträge — manche
-// optionalfeatures haben keine source und sollen dann zur jeweiligen
-// Edition gehören (Fallback).
-export function isEditionMatch(source, edition, entryHasNoSource = false) {
-  if (!source) return entryHasNoSource ? true : false
+// Edition-Gate für den Auto-Catalog. Asymmetrisch:
+//   • 5.5e mode → ALLE offiziellen 5e + 5.5e Quellen erlaubt. Das
+//                  schließt die Bridge-Daten (MPMM, FTD, TCE, XGE, EGW,
+//                  …) ein die WotC für 2024-Charaktere weiterhin als
+//                  spielbar betrachtet. XPHB/XDMG/XMM sind die Core-
+//                  Quellen; die dedup-Logik in loadClassData stellt
+//                  sicher dass für JEDEN Feature/Spell die XPHB-
+//                  Variante gewinnt wenn vorhanden.
+//   • 5e   mode → alle offiziellen Quellen AUSSER X-family (XPHB/XDMG/
+//                  XMM). Das 2024-Ruleset bleibt aus dem 5e-Catalog.
+// Falls der Spieler eine weitere Quelle (z.B. nicht-offizielle 3rd-
+// party) will, kann er sie nachträglich über den 5e.tools-Import im
+// Sheet einspielen.
+export function isEditionMatch(source, edition) {
+  if (!source) return false
   const isXfamily = source === 'XPHB' || source === 'XDMG' || source === 'XMM'
-  if (edition === '5.5e') return isXfamily
-  // 5e: alles official AUSSER X-family
+  if (edition === '5.5e') {
+    // X-Family + alle anderen offiziellen Quellen — Legacy als Bridge.
+    return isOfficialSource(source)
+  }
+  // 5e mode: drop X-family, behalte alles andere Offizielle.
   return isOfficialSource(source) && !isXfamily
 }
 
