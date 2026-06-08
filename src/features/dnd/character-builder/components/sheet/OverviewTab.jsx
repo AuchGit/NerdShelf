@@ -1753,6 +1753,17 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     for (const k of Object.keys(b)) {
       for (const row of b[k]) {
         if (row.kind === 'standard' || row.kind === 'attack') continue
+        // Additionally-prepped Kopie eines always-prepared Spells
+        // (kind='spell' + always-spell-Twin existiert): NICHT mit der
+        // racial / feature-resource verlinken. Dieser Spieler-erstellte
+        // Eintrag verbraucht Slots, nicht die rassen-/feature-Uses.
+        // Erkennung: die ID endet auf '-prepped' (vom Bucket-Builder).
+        if (row.kind === 'spell' && String(row.id || '').endsWith('-prepped')) continue
+        // Normale Class-Prep-Spells (kind='spell' ohne always-Kontext)
+        // bekommen ebenfalls KEINE Resource-Uses — sie sind slot-
+        // basiert. Die uses-Spalte ist nur für Granted-Spells mit
+        // begrenzten Uses (race/feat/feature) sinnvoll.
+        if (row.kind === 'spell') continue
         const res = resKeyOf(row.name)
         if (!res || !res.max) continue
         const used = usedResources[res.id] || 0
@@ -2514,12 +2525,54 @@ function CombatActionsCategorisedList({
                 const leftPills = []
                 const rightPills = []
 
-                // Slot- oder Always- oder Uses-Pill oben — eine
-                // Auswahl, keine Doppel-Anzeige.
-                // Slot-Pill ist klickbar: castet den Spell auf seinem
-                // Basislevel (Cantrip → kein Slot, leveled → niedrigster
-                // verfügbarer Slot ≥ Spell-Level). "Up"-Button neben-
-                // dran ist nur noch für Upcast-Auswahl.
+                // Reihenfolge im topPills-Strip (links → rechts) per
+                // Player-Spec: Custom-Note · Charges · Always · Slot.
+                // Slot sitzt direkt vor dem CombatActionButton (Upcast/
+                // Use). Erst alle "links davon"-Pills sammeln, ZULETZT
+                // die Slot-Pille pushen damit sie rechts landet.
+
+                // Custom-Note-Pill (vom Player gesetzt) ganz links.
+                const noteRow = mKey ? getCustomNote(character, mKey) : null
+                if (noteRow?.pillText) {
+                  const nc = noteRow.pillColor || 'var(--accent)'
+                  topPills.push(
+                    <span key="note" style={{
+                      ...caePill,
+                      border: `1px solid ${nc}`, color: nc,
+                      background: `color-mix(in srgb, ${nc} 14%, transparent)`,
+                    }} title={noteRow.pillText}>{noteRow.pillText}</span>
+                  )
+                }
+                // Charges-Pill (Resource-Uses für racial/feature-granted
+                // Spells und für Class-Feature-Rows mit limited uses).
+                if (r.uses) {
+                  const c = r.uses.remaining === 0 ? 'var(--accent-red)'
+                    : r.uses.remaining < r.uses.max ? 'var(--accent-yellow)'
+                    : 'var(--accent-green)'
+                  topPills.push(
+                    <span key="uses" style={{ ...caePill, border: `1px solid ${c}`, color: c, fontWeight: 700 }}
+                      title={`${r.uses.label}: ${r.uses.remaining}/${r.uses.max} übrig`}>
+                      {r.uses.remaining}/{r.uses.max}
+                    </span>
+                  )
+                }
+                // Always-Badge zeigt dass der Spell race/feat/feature-
+                // granted ist (at-will / gewährt) — sitzt zwischen
+                // Charges und Slot.
+                if (r.badge === 'Always') {
+                  topPills.push(
+                    <span key="always" style={{
+                      ...caePill,
+                      border: '1px solid var(--accent-purple)',
+                      color: 'var(--accent-purple)',
+                    }} title="Immer vorbereitet">Always</span>
+                  )
+                }
+
+                // Slot-Pill (klickbar) — RECHTS, direkt vor dem
+                // CombatActionButton. Castet den Spell auf seinem
+                // Basislevel; "Up"-Button im CombatActionButton ist
+                // für Upcast-Auswahl.
                 if (r.slotLabel) {
                   const slotColor = r.slotAvailable === false ? 'var(--text-dim)' : 'var(--accent-blue)'
                   const isSpellRow = r.kind === 'spell' || r.kind === 'always-spell'
@@ -2572,39 +2625,9 @@ function CombatActionsCategorisedList({
                     )
                   )
                 }
-                if (r.badge === 'Always') {
-                  topPills.push(
-                    <span key="always" style={{
-                      ...caePill,
-                      border: '1px solid var(--accent-purple)',
-                      color: 'var(--accent-purple)',
-                    }} title="Immer vorbereitet">Always</span>
-                  )
-                }
-                if (r.uses) {
-                  const c = r.uses.remaining === 0 ? 'var(--accent-red)'
-                    : r.uses.remaining < r.uses.max ? 'var(--accent-yellow)'
-                    : 'var(--accent-green)'
-                  topPills.push(
-                    <span key="uses" style={{ ...caePill, border: `1px solid ${c}`, color: c, fontWeight: 700 }}
-                      title={`${r.uses.label}: ${r.uses.remaining}/${r.uses.max} übrig`}>
-                      {r.uses.remaining}/{r.uses.max}
-                    </span>
-                  )
-                }
-                // Custom-Note-Pill (vom Player gesetzt): erscheint in
-                // Top-Pills mit pillText + pillColor aus character.customNotes.
-                const noteRow = mKey ? getCustomNote(character, mKey) : null
-                if (noteRow?.pillText) {
-                  const nc = noteRow.pillColor || mColor || 'var(--accent)'
-                  topPills.push(
-                    <span key="cnote" style={{
-                      ...caePill,
-                      border: `1px solid ${nc}`, color: nc,
-                      background: `color-mix(in srgb, ${nc} 14%, transparent)`,
-                    }} title={noteRow.pillText}>{noteRow.pillText}</span>
-                  )
-                }
+                // (Always / Uses / Note werden bereits oben in der
+                // korrekten Reihenfolge gepusht — Reihenfolge:
+                // Note · Uses · Always · Slot.)
 
                 // Smart-Effect-Pills (Attack/Save/Damage + Phase 4 Kinds).
                 // Dedup-Filter:
@@ -5143,13 +5166,23 @@ function SpellListRow({
             onClick={(e) => { e.stopPropagation(); if (canToggle) onTogglePrep() }}
             disabled={!canToggle}
             title={
-              dotKind === 'always' ? 'Always Prepared'
+              dotKind === 'always-prep' ? 'Always Prepared + zusätzlich prepared — klick zum Entfernen des Zusatz-Preps'
+              : dotKind === 'always' ? 'Always Prepared — klick um zusätzlich zu preparen'
               : isCantrip ? 'Cantrip — always available'
               : dotKind === 'on' ? 'Prepared (klick zum Unpreparen)'
               : 'Nicht prepared (klick zum Preparen)'
             }
             style={prepDot(dotKind, canToggle)}
-          >{dotKind === 'on' ? '●' : dotKind === 'always' ? '◆' : '○'}</button>
+          >{
+            // Glyphen pro dotKind:
+            //   'on'          → ● (gefüllter Kreis, grün)
+            //   'always'      → ◆ Diamond (blauer Outline, leerer Kern)
+            //   'always-prep' → ◆ Diamond (blau gefüllt, weil zusätzlich prep'd)
+            //   'off'         → ○ Hohl-Kreis
+            dotKind === 'on' ? '●'
+              : dotKind === 'always' || dotKind === 'always-prep' ? '◆'
+              : '○'
+          }</button>
         )}
         {showMulticlassPills && (
           <div style={{ display: 'inline-flex', gap: 2, flexShrink: 0 }}>
@@ -5163,10 +5196,14 @@ function SpellListRow({
                   key={cid}
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onPrepWithClass?.(cid) }}
-                  title={active
-                    ? `Prepared via ${cid} — klick zum Unpreparen`
-                    : `Prepare via ${cid}`}
-                  style={classPillStyle(active)}
+                  title={row.always
+                    ? (active
+                        ? `Always Prepared (race/feat/feature) + zusätzlich via ${cid} — klick zum Entfernen des Zusatz-Preps`
+                        : `Always Prepared (race/feat/feature) — klick um zusätzlich via ${cid} zu preparen`)
+                    : active
+                      ? `Prepared via ${cid} — klick zum Unpreparen`
+                      : `Prepare via ${cid}`}
+                  style={classPillStyle(active, row.always)}
                 >{abbr}</button>
               )
             })}
@@ -5649,17 +5686,23 @@ function ClassPickCategory({ label, items, optFeatMap, showClassBadge, classAbbr
 // Klasse = gefüllt + Akzentfarbe; inaktive = nur Border + dim. Klein
 // genug damit 3–4 Pillen in derselben Höhe wie der alte Single-Dot
 // nebeneinander passen.
-function classPillStyle(active) {
+// Always-prepared Spells (isAlways=true) bekommen ein BLAUES Pill statt
+// dem üblichen Grün — gleiches Farbschema wie der Solo-Dot (◆ blau)
+// damit Spieler auf einen Blick "always-prepared via race/feat/feature"
+// erkennt. Active-Zustand (zusätzlich via dieser Klasse prep'd) füllt
+// die Pille mit derselben Akzent-Farbe.
+function classPillStyle(active, isAlways = false) {
+  const accent = isAlways ? 'var(--accent-blue)' : 'var(--accent-green)'
   return {
     minWidth: 18, height: 18, padding: '0 4px',
-    borderRadius: 9, border: '1.5px solid var(--accent-green)',
-    background: active ? 'var(--accent-green)' : 'transparent',
-    color: active ? 'var(--bg-base, #111)' : 'var(--text-dim)',
+    borderRadius: 9,
+    border: `1.5px solid ${active ? accent : 'var(--text-dim)'}`,
+    background: active ? accent : 'transparent',
+    color: active ? 'var(--bg-base, #111)' : (isAlways ? accent : 'var(--text-dim)'),
     cursor: 'pointer', fontSize: 10, fontWeight: 800,
     lineHeight: 1, fontFamily: 'inherit',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
-    borderColor: active ? 'var(--accent-green)' : 'var(--text-dim)',
   }
 }
 

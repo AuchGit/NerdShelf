@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { SheetModal } from './SheetKit'
 import { loadSpellList } from '../../lib/dataLoader'
 import { getScribingDiscounts, getScribingCost } from '../../lib/wizardScribing'
+import { collectCharacterSpells } from '../../lib/sheetUtils'
 import EntryRendererLazy from '../ui/EntryRenderer'
 
 export default function SpellPrepareModal({
@@ -62,27 +63,61 @@ export default function SpellPrepareModal({
   // Features gelesen — Evocation Savant etc.
   const scribingDiscounts = useMemo(() => getScribingDiscounts(character), [character])
 
+  // Always-prepared Spells (race/feat/subclass-domain/etc. grants):
+  // erscheinen IM Picker — visuell durch eine andere Toggle-Farbe vom
+  // normalen Class-List-Spell unterschieden. Können zusätzlich
+  // prepped werden damit der Spieler einen Slot dafür reserviert.
+  const alwaysPreparedSet = useMemo(() => {
+    const set = new Set()
+    for (const entry of (collectCharacterSpells(character) || [])) {
+      // granted=true ⇒ race / feat / subclass-domain / custom: always-castable
+      if (entry?.granted && entry?.name) set.add(entry.name.toLowerCase())
+    }
+    return set
+  }, [character])
+
   // ── Spell-Pool für diesen Modal ─────────────────────────────
   // Wizard: nur Spellbook-Einträge (knownSpells).
-  // Andere prepared Caster: alle Klassen-Listen-Spells ≤ maxSpellLvl.
+  // Andere prepared Caster: alle Klassen-Listen-Spells ≤ maxSpellLvl,
+  // PLUS alle always-prepared Spells (auch wenn nicht auf der
+  // Klassenliste — z.B. Hellish Rebuke via Tiefling für eine Cleric).
   const visibleSpells = useMemo(() => {
     if (!spellMap) return []
     if (isWizard) {
       const names = wizardCls?.knownSpells || []
-      return names
+      const wizSpells = names
         .map(n => spellMap.get(String(n).toLowerCase()))
         .filter(Boolean)
-        // Cantrips raus — die werden separat über cantripsKnown / das
-        // Cantrip-Slot-System verwaltet, gehören nicht ins Spellbook.
         .filter(s => (s.level ?? 0) > 0)
+      // Auch Wizard kann always-prepared Spells haben (Tome of the
+      // Stilled Tongue, racial …). Mit reinmischen.
+      const seen = new Set(wizSpells.map(s => s.name.toLowerCase()))
+      for (const lower of alwaysPreparedSet) {
+        if (seen.has(lower)) continue
+        const sp = spellMap.get(lower)
+        if (sp && (sp.level ?? 0) > 0) wizSpells.push(sp)
+      }
+      return wizSpells
     }
     const want = String(classId).toLowerCase()
-    return (allSpells || []).filter(s =>
+    const onClassList = (allSpells || []).filter(s =>
       (s.level ?? 0) > 0 &&
       (s.level ?? 0) <= maxSpellLvl &&
       (s.classes || []).some(cn => String(cn).toLowerCase() === want),
     )
-  }, [spellMap, allSpells, isWizard, wizardCls, classId, maxSpellLvl])
+    // Always-prepared Spells die NICHT auf der Klassenliste stehen
+    // werden zusätzlich angehängt — der maxSpellLvl-Cap gilt aber,
+    // damit eine L9-Race-Granted-Spell den Cleric-L1 Modal nicht
+    // mit unzugänglichen Optionen flutet.
+    const seen = new Set(onClassList.map(s => s.name.toLowerCase()))
+    const extras = []
+    for (const lower of alwaysPreparedSet) {
+      if (seen.has(lower)) continue
+      const sp = spellMap.get(lower)
+      if (sp && (sp.level ?? 0) > 0 && (sp.level ?? 0) <= maxSpellLvl) extras.push(sp)
+    }
+    return [...onClassList, ...extras]
+  }, [spellMap, allSpells, isWizard, wizardCls, classId, maxSpellLvl, alwaysPreparedSet])
 
   // Sortierung: prepared zuerst, dann nach Level, dann alphabetisch.
   const sorted = useMemo(() => {
@@ -211,6 +246,7 @@ export default function SpellPrepareModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {filtered.map(sp => {
               const prepped = isPreppedByMe(sp.name)
+              const isAlways = alwaysPreparedSet.has(sp.name.toLowerCase())
               const overPrepLimit = !prepped && max > 0 && current >= max
               // Cross-Class-Marker: andere Caster-Klassen, die diesen
               // Spell auch auf ihrer Liste haben. Gefüllt = dort
@@ -232,11 +268,15 @@ export default function SpellPrepareModal({
                       type="button"
                       onClick={(e) => { e.stopPropagation(); togglePrep(sp.name, sp.level) }}
                       disabled={overPrepLimit}
-                      style={togglePill(prepped, overPrepLimit)}
-                      title={prepped ? 'Prepared — klick zum Unpreparen'
+                      style={togglePill(prepped, overPrepLimit, isAlways)}
+                      title={isAlways
+                        ? (prepped
+                            ? 'Always Prepared (race/feat/feature) — zusätzlich vorbereitet · klick zum Entfernen'
+                            : 'Always Prepared (race/feat/feature) — klick um zusätzlich zu preparen')
+                        : prepped ? 'Prepared — klick zum Unpreparen'
                         : overPrepLimit ? 'Prep-Limit erreicht'
                         : 'Klick zum Preparen'}
-                    >{prepped ? '●' : '○'}</button>
+                    >{isAlways ? '◆' : prepped ? '●' : '○'}</button>
                     <span style={spellName}>{sp.name}</span>
                     <span style={spellLevelTag}>L{sp.level}</span>
                     {otherClasses.length > 0 && (
@@ -460,12 +500,17 @@ const spellLevelTag = {
   padding: '1px 6px', borderRadius: 4,
   background: 'var(--bg-inset)', border: '1px solid var(--border-subtle)',
 }
-function togglePill(active, disabled) {
+function togglePill(active, disabled, isAlways = false) {
+  // Always-prepared: blau (◆). Spieler kann zusätzlich preparen ⇒
+  // dann zeigt die Pille FÜLLUNG blau plus den Rahmen gelb-bestätigt.
+  // Normaler Prep: grün (●).
+  const baseColor = isAlways ? 'var(--accent-blue)' : 'var(--accent-green)'
+  const filledTextColor = 'var(--bg-base, #111)'
   return {
     width: 20, height: 20, borderRadius: '50%',
-    background: active ? 'var(--accent-green)' : 'transparent',
-    color: active ? 'var(--bg-base, #111)' : (disabled ? 'var(--text-dim)' : 'var(--accent-green)'),
-    border: `1.5px solid ${disabled ? 'var(--text-dim)' : 'var(--accent-green)'}`,
+    background: active ? baseColor : 'transparent',
+    color: active ? filledTextColor : (disabled ? 'var(--text-dim)' : baseColor),
+    border: `1.5px solid ${disabled ? 'var(--text-dim)' : baseColor}`,
     cursor: disabled ? 'not-allowed' : 'pointer',
     fontSize: 13, lineHeight: 1, fontWeight: 700,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
