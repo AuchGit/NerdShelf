@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
-import { loadBackgroundList } from '../../../lib/dataLoader'
+import { useState, useEffect, useMemo } from 'react'
+import { loadBackgroundList, loadFeatList } from '../../../lib/dataLoader'
 import { useLanguage } from '../../../lib/i18n'
 import BrowsePanel from '../../ui/BrowsePanel'
 import EntryRenderer from '../../ui/EntryRenderer'
 import FiveEToolsLink from '../../ui/FiveEToolsLink'
+import HoverDetailTooltip from '../../ui/HoverDetailTooltip'
 
 // Extrahiert Skill-Namen aus 5etools skillProficiencies format
 function extractSkills(skillProfs) {
@@ -48,6 +49,11 @@ export default function Step5Background({ character, updateCharacter }) {
   const { t } = useLanguage()
   const [backgrounds, setBackgrounds] = useState([])
   const [loading, setLoading] = useState(true)
+  // Feat-Catalog lazy: brauchen wir für (a) Hover-Tooltip auf dem Feat-
+  // Namen im Detail-Panel und (b) den Choice-Picker unter dem Picker
+  // wenn das Background-Feat (5.5e) Skill/Tool/Language/Ability-
+  // Auswahlen verlangt.
+  const [allFeats, setAllFeats] = useState([])
 
   useEffect(() => {
     setLoading(true)
@@ -55,7 +61,18 @@ export default function Step5Background({ character, updateCharacter }) {
       setBackgrounds(data)
       setLoading(false)
     })
+    loadFeatList(character.meta.edition).then(fs => setAllFeats(fs || []))
+      .catch(() => setAllFeats([]))
   }, [character.meta.edition])
+
+  // Map: lower(name) → feat-Datensatz (für Hover + Choice-Picker)
+  const featByName = useMemo(() => {
+    const m = new Map()
+    for (const f of (allFeats || [])) {
+      if (f?.name) m.set(String(f.name).toLowerCase(), f)
+    }
+    return m
+  }, [allFeats])
 
   function handleSelect(bg) {
     updateCharacter('background.backgroundId', bg.id)
@@ -163,12 +180,47 @@ export default function Step5Background({ character, updateCharacter }) {
               <div style={detailStyles.badgeValue}>+{bg.languageProficiencies.length}</div>
             </div>
           )}
-          {character.meta.edition === '5.5e' && bg.feats?.length > 0 && (
-            <div style={{ ...detailStyles.badge, borderColor: 'var(--accent-purple)' }}>
-              <div style={detailStyles.badgeLabel}>{t('givesFeat')}</div>
-              <div style={{ ...detailStyles.badgeValue, color: 'var(--accent-purple)' }}>⭐ Ja</div>
-            </div>
-          )}
+          {character.meta.edition === '5.5e' && bg.feats?.length > 0 && (() => {
+            const featRef = bg.feats[0]
+            const featData = featByName.get(String(featRef.name || '').toLowerCase())
+            const tooltipContent = featData ? (
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-purple)', marginBottom: 6 }}>
+                  ⭐ {featData.name}
+                  {featData.source && (
+                    <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-dim)' }}>{featData.source}</span>
+                  )}
+                </div>
+                {featData.category && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    Kategorie: {featData.category}
+                  </div>
+                )}
+                {Array.isArray(featData.entries) && featData.entries.length > 0 && (
+                  <EntryRenderer entries={featData.entries} />
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {featRef.name || 'Feat'} (Daten werden geladen…)
+              </div>
+            )
+            return (
+              <HoverDetailTooltip
+                content={tooltipContent}
+                maxWidth={520}
+                pinTitle={`Feat · ${featData?.name || featRef.name}`}
+                pinKey={`feat:${(featData?.name || featRef.name).toLowerCase()}`}
+              >
+                <div style={{ ...detailStyles.badge, borderColor: 'var(--accent-purple)', cursor: 'help' }}>
+                  <div style={detailStyles.badgeLabel}>{t('givesFeat')}</div>
+                  <div style={{ ...detailStyles.badgeValue, color: 'var(--accent-purple)' }}>
+                    ⭐ {featRef.name}
+                  </div>
+                </div>
+              </HoverDetailTooltip>
+            )
+          })()}
         </div>
 
         <EntryRenderer entries={bg.entries} />
@@ -179,6 +231,15 @@ export default function Step5Background({ character, updateCharacter }) {
   const subtitle = character.meta.edition === '5.5e'
     ? `${t('bgSubtitle')} ${t('bgSubtitle55e')}`
     : t('bgSubtitle')
+
+  // Aktuelles Background-Feat-Datenset für den Choice-Picker unter
+  // dem BrowsePanel ableiten. Der Picker rendert nur wenn auch
+  // tatsächlich Choices nötig sind (skill/tool/language Auswahl).
+  const selectedBg = backgrounds.find(b => b.id === character.background?.backgroundId)
+  const bgFeatRef = selectedBg?.feats?.[0] || null
+  const bgFeatData = bgFeatRef
+    ? featByName.get(String(bgFeatRef.name || '').toLowerCase())
+    : null
 
   return (
     <div>
@@ -193,8 +254,149 @@ export default function Step5Background({ character, updateCharacter }) {
         searchKeys={['name', 'source']}
         loading={loading}
       />
+      {character.meta.edition === '5.5e' && bgFeatData && (
+        <BackgroundFeatChoices
+          feat={bgFeatData}
+          character={character}
+          updateCharacter={updateCharacter}
+        />
+      )}
     </div>
   )
+}
+
+// ── Background-Feat Choice-Picker ───────────────────────────
+// 5.5e Background-Feats können verschiedene Auswahlen erfordern:
+//   • skillProficiencies mit choose-from (Skilled: 3 Skills)
+//   • toolProficiencies mit choose-from
+//   • languageProficiencies mit choose-from (Linguist: 3 Sprachen)
+//   • ability (Ability-Bonus-Wahl bei einigen ASI-Feats)
+// Reads/writes via character.choices unter Keys `feat:<feat-id>:<type>:<idx>`.
+// Magic Initiate's Spell-Choices laufen weiterhin über Step6 / Step7 —
+// dort gibt es schon den vollwertigen Spell-Picker.
+function BackgroundFeatChoices({ feat, character, updateCharacter }) {
+  const featSlug = String(feat.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+  const choices = character.choices || {}
+
+  function choiceKey(kind, idx) {
+    return `feat:${featSlug}:${kind}:${idx}`
+  }
+  function setChoice(key, value) {
+    const next = { ...(character.choices || {}) }
+    if (value == null || (Array.isArray(value) && value.length === 0)) {
+      delete next[key]
+    } else {
+      next[key] = value
+    }
+    updateCharacter('choices', next)
+  }
+
+  // Sammle Choice-Specs aus den feat-Daten. Format-Variationen aus
+  // 5etools: skillProficiencies = [{ choose: { from: [...], count: N } }, …]
+  // oder [{ "athletics": true, "history": true, choose: {...} }].
+  const choiceSpecs = []
+  const extractChoose = (arr, kind, label) => {
+    if (!Array.isArray(arr)) return
+    arr.forEach((entry, idx) => {
+      if (!entry || typeof entry !== 'object') return
+      const ch = entry.choose
+      if (!ch) return
+      const from = Array.isArray(ch.from) ? ch.from : (Array.isArray(ch) ? ch : null)
+      const count = ch.count || 1
+      if (!from || from.length === 0) return
+      choiceSpecs.push({ kind, label, idx, options: from, count })
+    })
+  }
+  extractChoose(feat.skillProficiencies,    'skill',    'Skill')
+  extractChoose(feat.toolProficiencies,     'tool',     'Werkzeug')
+  extractChoose(feat.languageProficiencies, 'language', 'Sprache')
+  extractChoose(feat.ability,               'ability',  'Ability')
+
+  if (choiceSpecs.length === 0) {
+    return (
+      <div style={featStyles.wrap}>
+        <div style={featStyles.title}>⭐ {feat.name}</div>
+        <div style={featStyles.hint}>
+          Dieses Feat verlangt keine zusätzlichen Choices — die Effekte werden automatisch angewendet.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={featStyles.wrap}>
+      <div style={featStyles.title}>⭐ {feat.name} — Auswahlen</div>
+      <div style={featStyles.hint}>
+        Dieses Feat verlangt Auswahlen — wähle unten was dein Charakter bekommt.
+      </div>
+      {choiceSpecs.map(spec => {
+        const key = choiceKey(spec.kind, spec.idx)
+        const selected = Array.isArray(choices[key]) ? choices[key] : (choices[key] ? [choices[key]] : [])
+        function toggle(opt) {
+          const has = selected.includes(opt)
+          let next
+          if (has) next = selected.filter(x => x !== opt)
+          else if (selected.length < spec.count) next = [...selected, opt]
+          else if (spec.count === 1) next = [opt]
+          else return
+          setChoice(key, spec.count === 1 ? (next[0] || null) : next)
+        }
+        return (
+          <div key={`${spec.kind}:${spec.idx}`} style={featStyles.specBlock}>
+            <div style={featStyles.specHeader}>
+              {spec.label} — {spec.count > 1 ? `${selected.length}/${spec.count}` : 'wählen'}
+            </div>
+            <div style={featStyles.chipGrid}>
+              {spec.options.map(opt => {
+                const isSel = selected.includes(opt)
+                const cap = String(opt).charAt(0).toUpperCase() + String(opt).slice(1)
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => toggle(opt)}
+                    style={{
+                      ...featStyles.chip,
+                      ...(isSel ? featStyles.chipSel : {}),
+                    }}
+                  >{cap}{isSel ? ' ✓' : ''}</button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const featStyles = {
+  wrap: {
+    marginTop: 20, padding: 16,
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--accent-purple)',
+    borderRadius: 12,
+  },
+  title: { color: 'var(--accent-purple)', fontSize: 14, fontWeight: 700, marginBottom: 4 },
+  hint: { color: 'var(--text-muted)', fontSize: 12, marginBottom: 12 },
+  specBlock: { marginBottom: 12 },
+  specHeader: {
+    fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)',
+    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6,
+  },
+  chipGrid: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer', fontFamily: 'inherit',
+  },
+  chipSel: {
+    border: '1px solid var(--accent)',
+    background: 'color-mix(in srgb, var(--accent) 22%, transparent)',
+    color: 'var(--accent)',
+  },
 }
 
 const detailStyles = {

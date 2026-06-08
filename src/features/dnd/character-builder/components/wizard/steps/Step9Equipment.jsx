@@ -214,6 +214,37 @@ export default function Step9Equipment({ character, updateCharacter }) {
     }).sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  // Equippable Items (Waffen, Rüstung, Schilde, attunement-pflichtige
+  // Wondrous Items) bekommen jedes Exemplar einen EIGENEN Eintrag
+  // damit der Spieler sie individuell equippen, attunen oder
+  // markieren kann (z.B. zwei Dagger ⇒ zwei separate Rows statt
+  // "Dagger ×2"). Non-Equippable bleibt als Stack (eine Row mit
+  // Quantity-Box).
+  function fanOutEquippableInstances(items) {
+    const out = []
+    for (const it of items) {
+      const isEquippable = !!(it.isWeapon || it.isArmor || (it.wondrous && it.reqAttune))
+      const qty = it.quantity || 1
+      if (isEquippable && qty > 1) {
+        // N separate Entries mit Quantity 1. Jeder behält denselben
+        // grantedBy / containerId / itemId — nur die `id` (nextId) ist
+        // einzigartig damit Equipped/Attuned/Marked unabhängig
+        // toggle't werden kann.
+        for (let i = 0; i < qty; i++) {
+          out.push(makeInventoryItem({ ...it, quantity: 1 }, it.grantedBy))
+          // makeInventoryItem würde die packContents-Reset machen;
+          // containerId müssen wir separat erhalten.
+          const fresh = out[out.length - 1]
+          fresh.containerId = it.containerId || null
+          fresh.equipped = it.equipped
+        }
+      } else {
+        out.push(it)
+      }
+    }
+    return out
+  }
+
   // Expand a pack into its individual contents. Das Pack selbst bleibt
   // als Container-Item drin; sein Inhalt bekommt containerId = id des
   // Pack-Items damit InventoryTab den Inhalt als "im Pack" rendert
@@ -325,6 +356,14 @@ export default function Step9Equipment({ character, updateCharacter }) {
       bgItems.push(...expandItemForInventory(item, 'background'))
     }
 
+    // Equippable Items mit quantity > 1 in N einzelne Rows splitten
+    // (z.B. "2 Daggers" → zwei separate Einträge). Damit kann jede
+    // Waffe individuell equipped / markiert / attuned werden. Macht
+    // erst Sinn NACH dem Mergen damit auch manual-hinzugefügte
+    // Equippables mit Quantity gleichermaßen aufgeteilt werden.
+    const mergedRaw = [...classItems, ...bgItems, ...manualItems]
+    const merged = fanOutEquippableInstances(mergedRaw)
+
     // Non-equippable loose items werden in den ersten verfügbaren
     // Container (Backpack, Burglar's Pack, …) verschoben damit der
     // "Carried"-Bereich auf der Sheet nur anlegbare Items zeigt.
@@ -332,7 +371,6 @@ export default function Step9Equipment({ character, updateCharacter }) {
     // Items die schon ein containerId haben (z.B. Pack-Inhalte) bleiben
     // wo sie sind. Items in 'manual'-Quelle (vom Spieler manuell
     // hinzugefügt) lassen wir unangetastet.
-    const merged = [...classItems, ...bgItems, ...manualItems]
     const isEquippable = (it) => !!(it.isWeapon || it.isArmor || (it.wondrous && it.reqAttune))
     const containerItem = merged.find(it => it.isContainer || /\b(backpack|pouch|sack|bag|haversack|pack)\b/i.test(it.name || ''))
     if (containerItem) {

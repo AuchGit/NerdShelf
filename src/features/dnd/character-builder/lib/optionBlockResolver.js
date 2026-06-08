@@ -212,10 +212,22 @@ export function findOptionBlocks(featureEntries, opts = {}) {
         if (resolved) options.push(resolved)
       }
       if (options.length > 0) {
+        // 5etools-Konvention: `options` mit explizitem `count` ist ein
+        // CHOICE-Block (user wählt N von M). OHNE count ist es nur eine
+        // strukturierte Listen-Anzeige der Sub-Features — alle werden
+        // automatisch gewährt. Beispiel: Soulknife Psionic Power
+        // listet Psi-Bolstered Knack + Psychic Whispers als ALL-granted
+        // (RAW: "you have these powers"), nicht als Pick-one.
+        const explicitCount = Number.isFinite(node.count) ? node.count : null
+        // count = null signalisiert dem Caller "alle gewähren";
+        // count > 0 = echter Pick.
         out.push({
-          count: Number.isFinite(node.count) ? node.count : 1,
+          count: explicitCount,
           options,
           path: [...path],
+          // _grantAll = true wenn kein explizites count gesetzt war:
+          // CharacterSheetPage muss diese Refs dann auto-aktivieren.
+          _grantAll: explicitCount == null,
         })
       }
       // Don't recurse into the options' own sub-entries — they're
@@ -246,6 +258,11 @@ export function buildFeatureOptionDescriptors(feature, ownerKey, opts = {}) {
   if (blocks.length === 0) return []
   const descriptors = []
   blocks.forEach((block, blockIdx) => {
+    // Grant-all-Blöcke (5etools `options` ohne count) sind KEINE Picks
+    // — die Refs werden automatisch aktiviert. Wir emittieren KEINEN
+    // Descriptor; CharacterSheetPage hat eine separate Code-Path die
+    // diese Refs via collectActiveClassFeatures aufnimmt.
+    if (block._grantAll) return
     // Stable, edition-aware ID. Same character will get the same ID
     // for the same block across reloads → choice persistence works.
     const idParts = [

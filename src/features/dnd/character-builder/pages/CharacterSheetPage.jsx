@@ -626,7 +626,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         const blocks = findOptionBlocks(feature.entries, resolverOpts)
         if (blocks.length === 0) return
         blocks.forEach((block, blockIdx) => {
-          // Sub-Option-Namen für skip-Set merken.
+          // Sub-Option-Namen für skip-Set merken — egal ob das ein
+          // Pick-Block oder Grant-All-Block ist: die genannten Refs
+          // sollen NICHT zusätzlich über den main-loop laufen sondern
+          // nur über chosenSubFeatures kommen (vermeidet Doppel-
+          // Aktivierung wenn das Sub-Feature auch als top-level-
+          // classFeature im Datensatz existiert).
           for (const opt of block.options) {
             if (opt.kind === 'classFeature' && opt.entry) {
               const target = opt.entry
@@ -642,7 +647,29 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               optionTargetKeys.add(`${cls.classId}|sub|${opt.entry.name}|${opt.entry.level || opt.level || 1}`)
             }
           }
-          // Stored choice für diesen Block.
+          // Grant-All Block (5etools `options` ohne count): ALLE Refs
+          // werden automatisch aktiviert, kein User-Pick. Beispiel:
+          // 5e TCE Soulknife "Psionic Power" listet Psi-Bolstered
+          // Knack + Psychic Whispers — beide gleichzeitig gewährt
+          // (RAW: "The powers below use your Psionic Energy dice").
+          if (block._grantAll) {
+            for (const opt of block.options) {
+              if (!opt?.entry) continue
+              const effectiveLevel = opt.entry.level || ownerKey.level || feature.level || 1
+              chosenSubFeatures.push({
+                classId: cls.classId,
+                source: isSubclass ? 'subclass' : 'class',
+                subclassId: isSubclass ? subId : undefined,
+                name: opt.entry.name,
+                level: effectiveLevel,
+                entries: opt.entry.entries || [],
+                fromOptionFeature: feature.name,
+                isOptionalFeature: opt.kind === 'optionalfeature',
+              })
+            }
+            return
+          }
+          // Stored choice für Pick-Blöcke.
           const idParts = [
             'optblock',
             ownerKey.source,
@@ -658,11 +685,6 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           for (const valueKey of storedArr) {
             const match = block.options.find(o => optionValueKey(o) === valueKey)
             if (!match?.entry) continue
-            // Bei refOptionalfeature kennt die Entry kein `level` — wir
-            // setzen das Feature-Level des PARENT-Features, sonst
-            // greift die `lvl > cls.level`-Filterung später nicht
-            // korrekt (optfeatures sind level-agnostisch in den Daten,
-            // aber an die Parent-Feature-Stufe gekoppelt).
             const effectiveLevel = match.entry.level || ownerKey.level || feature.level || 1
             chosenSubFeatures.push({
               classId: cls.classId,
@@ -672,8 +694,6 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
               level: effectiveLevel,
               entries: match.entry.entries || [],
               fromOptionFeature: feature.name,
-              // Marker damit der Downstream-Code optfeatures bei Bedarf
-              // anders behandeln kann.
               isOptionalFeature: match.kind === 'optionalfeature',
             })
           }
