@@ -427,6 +427,17 @@ function MemberCard({ member, isGm, isMine, onOpenOwn, onOpenGm, onExport, onRem
           <div style={{ fontWeight: 'var(--fw-semibold)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {card.name || 'Unbenannt'}
             {isMine && <span style={{ color: 'var(--color-accent)', fontSize: 'var(--fs-xs)', marginLeft: 6 }}>(du)</span>}
+            {card.variantCount > 0 && (
+              <span title={`${card.variantCount} optionale Klassen-Feature-Variant${card.variantCount === 1 ? '' : 's'} aktiv (TCE)`} style={{
+                marginLeft: 6,
+                padding: '1px 6px', borderRadius: 4,
+                border: '1px solid var(--color-accent)',
+                color: 'var(--color-accent)',
+                fontSize: 9, fontWeight: 700,
+                letterSpacing: 0.4,
+                verticalAlign: 'middle',
+              }}>⚙ TCE</span>
+            )}
           </div>
           <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {classLine(card)}

@@ -80,7 +80,12 @@ function getActiveSteps(info, draft) {
   // Order, future class-feature option picks). Computed against the
   // upcoming level so descriptors fresh for this level-up appear.
   const newOptionBlockDescs = computeNewOptionBlockDescs(draft, info)
-  if (ofGains.length > 0 || hasClassFeatureChoices || newOptionBlockDescs.length > 0) a.push(STEPS[4])
+  // Optional Class Feature Variants (TCE) auf diesem Level — Step
+  // ohnehin nötig damit der Spieler sie aktivieren kann.
+  const hasNewVariants = !!(draft.classData?.features?.some(f =>
+    f?.isClassFeatureVariant && (f.level || 1) === info.nextLevel
+  ))
+  if (ofGains.length > 0 || hasClassFeatureChoices || newOptionBlockDescs.length > 0 || hasNewVariants) a.push(STEPS[4])
   // Spells: check effective casting (class or subclass)
   const castAb = draft.existingSpellAbility || draft.subclassSpellAbility || info.spellcastingAbility
   const effProg = draft.existingCasterProg || draft.subclassCasterProg || info.casterProgression
@@ -287,6 +292,18 @@ export default function LevelUpPage({ session }) {
       const merged = [...prior]
       for (const n of draft.preparedPicks) if (n && !merged.includes(n)) merged.push(n)
       updated.status.preparedSpells[info.classId] = merged
+    }
+    // Optional Class Feature Variants (TCE) — der Spieler hat in
+    // StepFeatures (Variants-Card) Toggle-Picks gemacht. Die landen
+    // in draft.optionalClassFeatures; jetzt mergen wir sie in den
+    // Char ohne bestehende Picks zu überschreiben.
+    if (draft.optionalClassFeatures && Object.keys(draft.optionalClassFeatures).length > 0) {
+      const cur = updated.optionalClassFeatures || {}
+      const next = { ...cur }
+      for (const [cid, perCls] of Object.entries(draft.optionalClassFeatures)) {
+        next[cid] = { ...(cur[cid] || {}), ...perCls }
+      }
+      updated.optionalClassFeatures = next
     }
 
     // Safety: backup both old and new state to localStorage before writing
@@ -657,6 +674,30 @@ function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
     return ce ? getExistingOptionalFeatures(ce) : []
   }, [char, info.classId])
 
+  // Optional Class Feature Variants (TCE-Erweiterungen) die auf
+  // DIESER neuen Stufe verfügbar werden. Data-driven aus
+  // classData.features mit isClassFeatureVariant=true.
+  const newVariantsAtThisLevel = useMemo(() => {
+    if (!draft.classData) return []
+    return (draft.classData.features || [])
+      .filter(f => f?.isClassFeatureVariant
+        && (f.level || 1) === info.nextLevel
+        && f.name)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [draft.classData, info.nextLevel])
+  const variantPicks = draft.optionalClassFeatures || (char.optionalClassFeatures || {})
+  const classVariants = variantPicks[info.classId] || {}
+  const toggleVariant = (featureName) => {
+    const wasOn = !!classVariants[featureName]
+    const nextClsMap = { ...classVariants }
+    if (wasOn) delete nextClsMap[featureName]
+    else nextClsMap[featureName] = true
+    const nextAll = { ...variantPicks }
+    if (Object.keys(nextClsMap).length > 0) nextAll[info.classId] = nextClsMap
+    else delete nextAll[info.classId]
+    setDraft(d => ({ ...d, optionalClassFeatures: nextAll }))
+  }
+
   // Detect class features that need choices (data-driven by feature names)
   const featureNames = info.features.map(f => f.toLowerCase())
   const showFavoredEnemy = featureNames.some(f => f.includes('favored enemy'))
@@ -685,6 +726,49 @@ function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
   return (
     <div style={{maxWidth:860,margin:'0 auto'}}>
       <h2 style={S.secTitle}>Class Features wählen</h2>
+
+      {/* ── Optional Class Feature Variants (TCE) auf dieser Stufe ── */}
+      {newVariantsAtThisLevel.length > 0 && (
+        <div style={S.card}>
+          <div style={S.cardTitle}>
+            Optionale Klassen-Features (Variant Rules · L{info.nextLevel})
+          </div>
+          <div style={{ color:'var(--text-muted)', fontSize:12, marginBottom:10 }}>
+            Diese 2020-Erweiterungen sind optional — frag ggf. deinen GM. Aktivierte
+            Variants werden auf dem Sheet wie reguläre Class Features behandelt.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:8 }}>
+            {newVariantsAtThisLevel.map(v => {
+              const isOn = !!classVariants[v.name]
+              const firstStr = Array.isArray(v.entries)
+                ? v.entries.find(e => typeof e === 'string') : null
+              const shortDesc = firstStr
+                ? String(firstStr).replace(/\{@\w+\s+([^|}]+)(?:\|[^}]*)?\}/g, '$1').slice(0, 260)
+                : ''
+              return (
+                <div
+                  key={v.name}
+                  onClick={() => toggleVariant(v.name)}
+                  style={{
+                    padding:'10px 12px', borderRadius:8, cursor:'pointer',
+                    border: isOn ? '2px solid var(--accent-purple)' : '2px solid var(--border)',
+                    background: isOn ? 'var(--bg-highlight)' : 'var(--bg-elevated)',
+                  }}>
+                  <div style={{ fontWeight:600, color:'var(--text-primary)', marginBottom:4 }}>
+                    {isOn ? '✓ ' : '+ '}{v.name}
+                    {v.source && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-dim)' }}>{v.source}</span>}
+                  </div>
+                  {shortDesc && (
+                    <div style={{ fontSize:12, color:'var(--text-muted)' }}>
+                      {shortDesc}{firstStr && firstStr.length > 260 ? ' …' : ''}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Generische Feature-Option-Blocks (Druid Primal Order etc.) ── */}
       {newOptionBlockDescs.map(desc => {

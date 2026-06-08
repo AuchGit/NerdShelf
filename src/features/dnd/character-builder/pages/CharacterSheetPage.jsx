@@ -6,6 +6,7 @@ import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib
 import { getProficiencyBonus, getTotalLevel, getModifier } from '../lib/characterModel'
 import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList } from '../lib/dataLoader'
 import { findOptionBlocks, optionValueKey } from '../lib/optionBlockResolver'
+import { isVariantEnabled } from '../lib/optionalFeatureVariants'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
 // Defer the import to click time so the initial sheet bundle stays small.
@@ -704,7 +705,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         if (!f?.name) continue
         const lvl = f.level || 1
         if (lvl > cls.level) continue
-        if (f.isClassFeatureVariant) continue
+        // Optional Class Feature Variant (TCE-Erweiterung): nur
+        // skippen wenn der Spieler die Variante NICHT aktiviert hat.
+        // Variants leben in character.optionalClassFeatures[cls.id].
+        if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
         const matchesEditionPre = is55e
           ? (!f.classSource || f.classSource === cd.source || PREFERRED.includes(f.classSource))
           : true
@@ -715,7 +719,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         if (!f?.name) continue
         const lvl = f.level || 1
         if (lvl > cls.level) continue
-        if (f.isClassFeatureVariant) continue
+        // Optional Class Feature Variant (TCE-Erweiterung): nur
+        // skippen wenn der Spieler die Variante NICHT aktiviert hat.
+        // Variants leben in character.optionalClassFeatures[cls.id].
+        if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
         collectFromBlocks(f, { source: 'subclass', classId: cls.classId, subclassId: subId, level: lvl }, true)
       }
     }
@@ -728,7 +735,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         if (!f?.name) continue
         const lvl = f.level || 1
         if (lvl > cls.level) continue
-        if (f.isClassFeatureVariant) continue
+        // Optional Class Feature Variant (TCE-Erweiterung): nur
+        // skippen wenn der Spieler die Variante NICHT aktiviert hat.
+        // Variants leben in character.optionalClassFeatures[cls.id].
+        if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
         // 5.5e filter: skip features tagged with a classSource that
         // belongs to a different edition (PHB feature for an XPHB
         // class entry). Both versions show up in classFeature[]
@@ -772,7 +782,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           if (!f?.name) continue
           const lvl = f.level || 1
           if (lvl > cls.level) continue
-          if (f.isClassFeatureVariant) continue
+          // Optional Class Feature Variant (TCE-Erweiterung): nur
+        // skippen wenn der Spieler die Variante NICHT aktiviert hat.
+        // Variants leben in character.optionalClassFeatures[cls.id].
+        if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
           if (optionTargetKeys.has(`${cls.classId}|sub|${f.name}|${lvl}`)) continue
           push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
         }

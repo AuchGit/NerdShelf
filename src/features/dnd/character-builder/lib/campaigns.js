@@ -30,6 +30,14 @@ export function buildCharacterCard(row) {
   const classes = (d.classes || []).map(c => ({ classId: c.classId, level: c.level || 1 }))
   const raceName = d.species?.raceId?.split('__')[0] || ''
   const subraceName = d.species?.subraceId?.split('__')[0] || ''
+  // Marker: Charakter nutzt optionale TCE-Klassen-Feature-Variants?
+  // Wird in Campaign-Übersichten als Badge angezeigt damit GM auf
+  // einen Blick sieht welche Spieler mit Variant Rules spielen.
+  const ocf = d.optionalClassFeatures || {}
+  const variantCount = Object.values(ocf).reduce(
+    (sum, perCls) => sum + (perCls && typeof perCls === 'object' ? Object.values(perCls).filter(Boolean).length : 0),
+    0,
+  )
   return {
     name:       row?.name || d.info?.name || 'Unbenannt',
     portrait:   d.appearance?.portrait || null,
@@ -39,6 +47,7 @@ export function buildCharacterCard(row) {
     alignment:  d.info?.alignment || '',
     classes,
     totalLevel: classes.reduce((s, c) => s + (c.level || 0), 0),
+    variantCount,
   }
 }
 

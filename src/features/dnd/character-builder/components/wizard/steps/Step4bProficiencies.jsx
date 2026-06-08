@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useLanguage } from '../../../lib/i18n'
 import { setChoiceValue } from '../../../lib/choiceParser'
 import { loadClassData, loadOptionalFeatureList } from '../../../lib/dataLoader'
 import { parseClassFeatureOptionChoices } from '../../../lib/optionBlockResolver'
+import { listAvailableVariants, setVariantEnabled } from '../../../lib/optionalFeatureVariants'
+import HoverDetailTooltip from '../../ui/HoverDetailTooltip'
+import EntryRenderer from '../../ui/EntryRenderer'
 
 // ── Skill-Konstanten ───────────────────────────────────────
 const ALL_SKILLS = [
@@ -246,6 +249,20 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     [hasRangerExtras, classData],
   )
 
+  // ── Optional Class Feature Variants (TCE-Erweiterungen) ───
+  // Data-driven aus isClassFeatureVariant=true. Stehen pro Klassen-
+  // Stufe zur Verfügung; bei L1-Creation also nur die L1-Variants.
+  const variantList = useMemo(() => {
+    if (!classData || !cls?.classId) return []
+    const map = { [cls.classId]: classData }
+    return listAvailableVariants(character, map)
+  }, [classData, character, cls?.classId])
+
+  function toggleVariant(classId, featureName, on) {
+    const next = setVariantEnabled(character, classId, featureName, on)
+    updateCharacter('optionalClassFeatures', next)
+  }
+
   // ── Kein Character / keine Klasse ─────────────────────────
   if (!cls) {
     return (
@@ -258,6 +275,7 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
 
   const hasAnythingToPick = hasRangerExtras
     || (featureOptionDescs && featureOptionDescs.length > 0)
+    || (variantList && variantList.length > 0)
 
   if (!hasAnythingToPick) {
     return (
@@ -276,6 +294,58 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     <div style={styles.container}>
       <h2 style={styles.title}>{t('classOptions')}</h2>
       <p style={styles.subtitle}>{cls.classId}</p>
+
+      {/* ── Optional Class Feature Variants (TCE-Erweiterungen) ──
+          Opt-in: der Spieler aktiviert pro Klasse + Stufe ob er die
+          2020-Erweiterung benutzen will (Bardic Versatility, Steady
+          Aim, Magical Inspiration, Wild Companion, …). Data-driven
+          aus isClassFeatureVariant=true — kein Whitelist. */}
+      {variantList.length > 0 && (
+        <div style={styles.section}>
+          <div style={styles.sectionTitle}>Optionale Klassen-Features (Variant Rules)</div>
+          <p style={styles.sectionDesc}>
+            Diese 2020-Erweiterungen (Tasha's Cauldron) ersetzen oder ergänzen Standard-
+            Features deiner Klasse. Aktivierung ist optional — frag ggf. deinen GM.
+          </p>
+          <div style={styles.chipGrid}>
+            {variantList.map(v => (
+              <HoverDetailTooltip
+                key={`${v.classId}::${v.name}`}
+                maxWidth={520}
+                content={
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-purple)', marginBottom: 6 }}>
+                      {v.name}
+                      {v.source && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-dim)' }}>{v.source}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                      {v.classId} · L{v.level}
+                    </div>
+                    {Array.isArray(v.entries) && v.entries.length > 0 && (
+                      <EntryRenderer entries={v.entries} />
+                    )}
+                  </div>
+                }
+                pinTitle={`Variant · ${v.name}`}
+                pinKey={`variant:${v.classId}:${v.name}`.toLowerCase()}
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleVariant(v.classId, v.name, !v.enabled)}
+                  style={{
+                    ...styles.chip,
+                    ...(v.enabled ? styles.chipSelected : {}),
+                    cursor: 'pointer',
+                  }}
+                >
+                  {v.enabled ? '✓ ' : '+ '}
+                  L{v.level} {v.name}
+                </button>
+              </HoverDetailTooltip>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Generische Feature-Option-Blocks ───────────────────
           Aus 5etools type:'options'-Inline-Picks (Druid Primal
