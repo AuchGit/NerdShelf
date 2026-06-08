@@ -25,7 +25,7 @@ import FeatureEditor from '../components/editors/FeatureEditor'
 import RaceEditor from '../components/editors/RaceEditor'
 import GenericJsonEditor from '../components/editors/GenericJsonEditor'
 import EntryRenderer from '../../character-builder/components/ui/EntryRenderer'
-import { pushOne, pullAll } from '../lib/homebrewSync'
+import { pushOne, pullAll, listPublic, importPublic } from '../lib/homebrewSync'
 
 const KIND_LABELS = {
   items:       'Items',
@@ -53,6 +53,7 @@ export default function HomebrewPage({ session }) {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [templatePicker, setTemplatePicker] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -159,6 +160,10 @@ export default function HomebrewPage({ session }) {
               )}
               <div style={{ flex: 1 }} />
               <button type="button" style={S.secondaryBtn}
+                title="Öffentliche Einträge anderer Spieler durchstöbern und in deine Liste importieren"
+                onClick={() => setLibraryOpen(true)}
+              >🌐 Library</button>
+              <button type="button" style={S.secondaryBtn}
                 title="Lade Cloud-Stand und mische in lokale Liste"
                 onClick={async () => {
                   try {
@@ -188,9 +193,9 @@ export default function HomebrewPage({ session }) {
                     kind={kind}
                     onEdit={() => startEdit(e)}
                     onDelete={() => handleDelete(e)}
-                    onSync={async () => {
+                    onSync={async (isPublic) => {
                       try {
-                        await pushOne(kind, e)
+                        await pushOne(kind, e, { isPublic })
                         await reload()
                       } catch (err) { alert('Sync fehlgeschlagen: ' + (err?.message || err)) }
                     }}
@@ -208,6 +213,14 @@ export default function HomebrewPage({ session }) {
             onPick={pickTemplate}
           />
         )}
+
+        {libraryOpen && (
+          <LibraryModal
+            kind={kind}
+            onClose={() => setLibraryOpen(false)}
+            onImported={async () => { await reload() }}
+          />
+        )}
       </div>
     </div>
   )
@@ -219,6 +232,7 @@ function EntryRow({ entry, kind, onEdit, onDelete, onSync }) {
   const updated = meta.updated ? new Date(meta.updated).toLocaleString('de-DE') : '—'
   const syncedAt = meta.synced ? new Date(meta.synced).toLocaleString('de-DE') : null
   const isSynced = !!meta.syncId
+  const isPublic = !!meta.public
   const summary =
     kind === 'items'   ? `${entry.rarity || 'none'} · ${entry.type || '—'}` :
     kind === 'spells'  ? `Level ${entry.level ?? '?'} · ${entry.school || '?'}` :
@@ -245,15 +259,137 @@ function EntryRow({ entry, kind, onEdit, onDelete, onSync }) {
                 fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
               }}>☁ synced</span>
           )}
+          {isPublic && (
+            <span title="Öffentlich geteilt — andere Spieler können diesen Eintrag in der Library finden"
+              style={{
+                marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+                border: '1px solid var(--accent-blue, #7aa2f7)',
+                color: 'var(--accent-blue, #7aa2f7)',
+                fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
+              }}>🌐 public</span>
+          )}
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
           {summary} · {entry.source || 'HB'} · zuletzt {updated}
         </div>
       </div>
-      <button type="button" onClick={onSync} style={S.smallBtn}
-        title="In die Cloud hochladen (Supabase)">☁ Push</button>
+      <button type="button" onClick={() => onSync(false)} style={S.smallBtn}
+        title="Privat in die Cloud hochladen — nur du siehst es">☁ Push (privat)</button>
+      <button type="button" onClick={() => onSync(true)} style={S.smallBtn}
+        title="Öffentlich teilen — andere Spieler können den Eintrag in der Library finden + importieren"
+      >🌐 Public</button>
       <button type="button" onClick={onEdit} style={S.smallBtn}>Bearbeiten</button>
       <button type="button" onClick={onDelete} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}>Löschen</button>
+    </div>
+  )
+}
+
+// ── Public Library Modal ─────────────────────────────────────
+function LibraryModal({ kind, onClose, onImported }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [importing, setImporting] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    listPublic(kind).then(list => {
+      if (!cancelled) { setItems(list || []); setLoading(false) }
+    }).catch(e => {
+      if (!cancelled) {
+        console.warn('[library] load failed', e)
+        setItems([])
+        setLoading(false)
+      }
+    })
+    return () => { cancelled = true }
+  }, [kind])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(i =>
+      String(i.name || '').toLowerCase().includes(q)
+      || String(i.author || '').toLowerCase().includes(q),
+    )
+  }, [items, search])
+
+  async function doImport(row) {
+    setImporting(row.id)
+    try {
+      await importPublic(kind, row)
+      onImported?.()
+    } catch (e) {
+      alert('Import fehlgeschlagen: ' + (e?.message || e))
+    } finally {
+      setImporting(null)
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#171a21', border: '1px solid #2a3040', borderRadius: 12,
+        padding: 16, width: 'min(700px, 92vw)', maxHeight: '85vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#e6e8ee' }}>
+            🌐 Public Library — {KIND_LABELS[kind]}
+          </div>
+          <button type="button" onClick={onClose} style={S.smallBtn}>×</button>
+        </div>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Nach Name oder Autor suchen…"
+          style={{
+            width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 10,
+            background: '#0f1115', color: '#e6e8ee',
+            border: '1px solid #2a3040', borderRadius: 6, fontFamily: 'inherit',
+          }} />
+        {loading ? (
+          <div style={{ color: '#9aa3b4' }}>Lädt Library…</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ color: '#9aa3b4', padding: 20, textAlign: 'center' }}>
+            Noch nichts in der Library für diese Kategorie.
+            <br />Andere Spieler müssen erst etwas öffentlich teilen.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {filtered.map(row => (
+              <div key={row.id} style={{
+                display: 'flex', gap: 10, alignItems: 'center',
+                padding: '8px 12px', borderRadius: 6,
+                background: '#0f1115', border: '1px solid #2a3040',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#e6e8ee', fontSize: 13, fontWeight: 700,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{row.name}
+                    <span style={{ marginLeft: 8, fontSize: 10, color: '#6b7386', fontWeight: 400 }}>
+                      {row.source || 'HB'}
+                    </span>
+                  </div>
+                  <div style={{ color: '#9aa3b4', fontSize: 11 }}>
+                    von <b>{row.author || '(anonym)'}</b> · zuletzt {row.updated_at ? new Date(row.updated_at).toLocaleString('de-DE') : '—'}
+                  </div>
+                </div>
+                <button type="button" onClick={() => doImport(row)}
+                  disabled={importing === row.id}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6,
+                    background: '#7aa2f7', color: '#0f1115',
+                    border: 'none', cursor: importing === row.id ? 'wait' : 'pointer',
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                  }}
+                >{importing === row.id ? '…' : '+ Importieren'}</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -59,14 +59,16 @@
       "identifier": "fs:allow-read-text-file",
       "allow": [
         { "path": "$APPDATA/**" },
-        { "path": "$APPLOCALDATA/**" }
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$RESOURCE/**" }
       ]
     },
     {
       "identifier": "fs:allow-exists",
       "allow": [
         { "path": "$APPDATA/**" },
-        { "path": "$APPLOCALDATA/**" }
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$RESOURCE/**" }
       ]
     }
   ]

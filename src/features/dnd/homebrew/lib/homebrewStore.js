@@ -45,18 +45,43 @@ async function tauriFs() {
 }
 
 // ── Pfade ────────────────────────────────────────────────────
+// Storage: User-Wunsch ist NEBEN DER EXE damit ein Sub-Folder
+// `homebrew/` portabel mitwandert (USB-Stick / shared drive). Tauri-
+// BaseDirectory.Resource zeigt im installierten Modus auf den
+// Installations-Ordner (wo die .exe liegt), im Dev-Modus auf
+// `src-tauri/resources/` — beides ist "next-to-exe-ish".
+// Falls Resource im Resource-only-Modus read-only ist, fallen wir
+// auf AppData zurück; das wird aber selten bei einer installierten
+// Windows-Tauri-App passieren.
 async function ensureHomebrewDir() {
   if (!isTauri()) return null
   const { BaseDirectory, exists, mkdir } = await tauriFs()
   try {
-    const dirExists = await exists('homebrew', { baseDir: BaseDirectory.AppData })
-    if (!dirExists) await mkdir('homebrew', { baseDir: BaseDirectory.AppData, recursive: true })
-  } catch (e) { console.warn('[homebrew] mkdir failed', e) }
-  return { baseDir: BaseDirectory.AppData, dir: 'homebrew' }
+    const dirExists = await exists('homebrew', { baseDir: BaseDirectory.Resource })
+    if (!dirExists) await mkdir('homebrew', { baseDir: BaseDirectory.Resource, recursive: true })
+    return { baseDir: BaseDirectory.Resource, dir: 'homebrew' }
+  } catch (e) {
+    // Fallback wenn Resource nicht beschreibbar ist
+    console.warn('[homebrew] Resource mkdir failed, fallback to AppData', e?.message || e)
+    try {
+      const dirExists = await exists('homebrew', { baseDir: BaseDirectory.AppData })
+      if (!dirExists) await mkdir('homebrew', { baseDir: BaseDirectory.AppData, recursive: true })
+    } catch (e2) { console.warn('[homebrew] AppData mkdir also failed', e2) }
+    return { baseDir: BaseDirectory.AppData, dir: 'homebrew' }
+  }
 }
 
 function pathFor(kind) {
   return `homebrew/${kind}.json`
+}
+
+// Welcher BaseDirectory wird gerade benutzt — cached für read/write.
+let _baseDirPref = null
+async function getBaseDir() {
+  if (_baseDirPref) return _baseDirPref
+  const info = await ensureHomebrewDir()
+  _baseDirPref = info?.baseDir
+  return _baseDirPref
 }
 
 // ── IDs + Timestamps ────────────────────────────────────────
@@ -73,12 +98,12 @@ async function readKind(kind) {
   if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
   if (isTauri()) {
     try {
-      await ensureHomebrewDir()
-      const { BaseDirectory, exists, readTextFile } = await tauriFs()
+      const baseDir = await getBaseDir()
+      const { exists, readTextFile } = await tauriFs()
       const file = pathFor(kind)
-      const hasFile = await exists(file, { baseDir: BaseDirectory.AppData })
+      const hasFile = await exists(file, { baseDir })
       if (!hasFile) return { [ROOT_KEY[kind]]: [] }
-      const raw = await readTextFile(file, { baseDir: BaseDirectory.AppData })
+      const raw = await readTextFile(file, { baseDir })
       const parsed = JSON.parse(raw)
       if (!parsed[ROOT_KEY[kind]]) parsed[ROOT_KEY[kind]] = []
       return parsed
@@ -103,9 +128,9 @@ async function writeKind(kind, data) {
   if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
   const payload = JSON.stringify(data, null, 2)
   if (isTauri()) {
-    const { BaseDirectory, writeTextFile } = await tauriFs()
-    await ensureHomebrewDir()
-    await writeTextFile(pathFor(kind), payload, { baseDir: BaseDirectory.AppData })
+    const baseDir = await getBaseDir()
+    const { writeTextFile } = await tauriFs()
+    await writeTextFile(pathFor(kind), payload, { baseDir })
     return
   }
   try { localStorage.setItem(STORAGE_PREFIX + kind, payload) }

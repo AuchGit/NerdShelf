@@ -17,9 +17,18 @@ import { saveHomebrew, deleteHomebrew, listHomebrew } from './homebrewStore'
 
 const TABLE = 'dnd_homebrew'
 
-export async function pushOne(kind, entry) {
+/**
+ * Push a single entry to the cloud.
+ * @param {string} kind
+ * @param {object} entry  Local homebrew entry (with _localMeta)
+ * @param {object} opts
+ * @param {boolean} [opts.isPublic=false] When true, other users can SELECT
+ *   this entry via the public RLS policy. Default false = private/owner-only.
+ */
+export async function pushOne(kind, entry, opts = {}) {
   const meta = entry?._localMeta || {}
   if (!meta.id) throw new Error('Eintrag hat keine lokale ID — bitte zuerst lokal speichern.')
+  const isPublic = !!opts.isPublic || !!meta.public
   const payload = {
     id: meta.syncId || undefined,
     kind,
@@ -27,21 +36,22 @@ export async function pushOne(kind, entry) {
     source: entry.source || 'HB',
     data: entry,
     updated_at: meta.updated || new Date().toISOString(),
+    is_public: isPublic,
   }
-  // upsert via UNIQUE (user_id, kind, local_id) — local_id im data._localMeta.id
   const { data, error } = await supabase
     .from(TABLE)
-    .upsert({
-      ...payload,
-      local_id: meta.id,
-    }, { onConflict: 'user_id,kind,local_id' })
+    .upsert({ ...payload, local_id: meta.id }, { onConflict: 'user_id,kind,local_id' })
     .select()
     .single()
   if (error) throw error
-  // Sync-Id zurück in den lokalen Eintrag schreiben.
   const updated = {
     ...entry,
-    _localMeta: { ...meta, syncId: data.id, synced: new Date().toISOString() },
+    _localMeta: {
+      ...meta,
+      syncId: data.id,
+      synced: new Date().toISOString(),
+      public: isPublic,
+    },
   }
   await saveHomebrew(kind, updated)
   return updated
@@ -84,4 +94,48 @@ export async function pushAll(kind) {
     catch (e) { console.warn('[homebrewSync] push failed', entry.name, e?.message || e) }
   }
   return count
+}
+
+/** Browse public homebrew shared by ALL users. RLS allows
+ *  is_public=true reads to any authenticated user. */
+export async function listPublic(kind, opts = {}) {
+  const limit = opts.limit || 200
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('id, kind, name, source, data, user_id, updated_at, is_public')
+    .eq('kind', kind)
+    .eq('is_public', true)
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  // Join optional: player_name from profiles
+  const userIds = [...new Set((data || []).map(d => d.user_id).filter(Boolean))]
+  let nameByUid = {}
+  if (userIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles').select('id, player_name').in('id', userIds)
+    if (profs) for (const p of profs) nameByUid[p.id] = p.player_name || null
+  }
+  return (data || []).map(row => ({
+    ...row,
+    author: nameByUid[row.user_id] || null,
+  }))
+}
+
+/** Import a public entry into the local library. Strips the original
+ *  syncId so it's treated as a NEW entry owned by the current user. */
+export async function importPublic(kind, publicRow) {
+  if (!publicRow?.data) throw new Error('Eintrag hat keine Daten.')
+  const clone = JSON.parse(JSON.stringify(publicRow.data))
+  // Fresh _localMeta — neue ID, kein syncId (das wäre der Cloud-Eintrag
+  // des Original-Authors). Der Spieler kann den Import dann selber
+  // wieder pushen — landet als sein eigener Cloud-Eintrag.
+  clone._localMeta = {
+    id: undefined,                                  // saveHomebrew vergibt neue ID
+    created: new Date().toISOString(),
+    updated: new Date().toISOString(),
+    importedFrom: publicRow.id,
+    importedFromAuthor: publicRow.author || null,
+  }
+  return await saveHomebrew(kind, clone)
 }
