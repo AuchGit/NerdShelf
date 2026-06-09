@@ -159,10 +159,10 @@ function newAction() {
     chargesRest: 'long',  // base reset (short/long/dawn/day/none)
     rechargeFormula: '',  // optional dice-formula z.B. '1d6+4' wenn Recharge geworfen wird
     critEffect: '',       // optionale Notiz für 'on crit'
-    target: '',           // freie Target/Area-Beschreibung
+    target: '',           // einzelnes Ziel — z.B. "1 creature within 30 ft"
+    area: '',             // Flächen-Effekt — z.B. "10 ft Sphere", "Kegel 15 ft"
     // Spells die diese Action castet — Action-Tracker zeigt sie als
-    // klickbare Pills mit Level/School-Info. Jeder Eintrag:
-    //   { name: 'Invisibility', source: 'XPHB', atLevel?: 2 }
+    // klickbare Pills mit Level/School-Info.
     spells: [],
   }
 }
@@ -943,10 +943,16 @@ function ActionBlock({ action: a, sharedPool, onChange, onRemove, onDuplicate })
           <textarea value={a.description} onChange={e => onChange({ description: e.target.value })}
             rows={2} placeholder="Beschreibung was die Aktion macht"
             style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
-          <Field label="Target / Area" hint='Frei: "1 target within 30 ft", "10 ft radius", "Kegel 15 ft", "Linie 30 ft × 5 ft"'>
-            <input value={a.target || ''} onChange={e => onChange({ target: e.target.value })}
-              placeholder="—" style={ed.input} />
-          </Field>
+          <div style={ed.grid}>
+            <Field label="Target" hint='Einzelziel — z.B. "1 creature within 30 ft", "1 willing creature"'>
+              <input value={a.target || ''} onChange={e => onChange({ target: e.target.value })}
+                placeholder="—" style={ed.input} />
+            </Field>
+            <Field label="Area" hint='Flächen-Effekt — z.B. "10 ft Sphere", "Kegel 15 ft", "Linie 30 ft × 5 ft"'>
+              <input value={a.area || ''} onChange={e => onChange({ area: e.target.value })}
+                placeholder="—" style={ed.input} />
+            </Field>
+          </div>
           <div style={ed.grid}>
             <Field label={a.damageType === 'HE' ? 'Healing' : 'Damage'} hint="Leer = kein Effekt. z.B. 3d6 oder 1d4+PB">
               <input value={a.damageDice} onChange={e => onChange({ damageDice: e.target.value })}

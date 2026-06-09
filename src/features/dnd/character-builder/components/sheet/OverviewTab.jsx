@@ -1816,11 +1816,9 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
                 : (dmgType ? `${a.damageDice} ${dmgType}` : a.damageDice),
             })
           }
-          if (a.target) {
-            // Target/Area als trigger-styled Pill mit lupe-emoji damit
-            // klar wird dass es eine Zielangabe ist (nicht ein Effekt).
-            pills.push({ kind: 'trigger', label: `🎯 ${a.target}`, title: `Target: ${a.target}` })
-          }
+          // Target / Area werden nicht als effectPill emittiert sondern
+          // als eigene legacy-style Pills rechts neben r.range/r.mastery
+          // (siehe row.targetInfo / row.areaInfo unten).
           if (activeMax > 0) {
             // Pill: remaining/max — z.B. "3/5". Wenn chargesCost > 1
             // hängen wir das Sub-Label dran: "3/5 (×2)".
@@ -1926,6 +1924,12 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
               sub: `Item · ${sourceItemName}${shared ? ' · shared charges' : ''}${modeSub}`,
               notes: '',
               itemChargeRef: chargeRef,
+              // Legacy-Side-Pills rechts neben r.range. Target vs Area
+              // sind beide visuell unterscheidbar — Area kriegt eigene
+              // Optik (📐) damit sphere/cone/line auf einen Blick klar
+              // sind, Target (🎯) zeigt klassisches Einzelziel.
+              targetInfo: a.target || '',
+              areaInfo: a.area || '',
             })
           }
         }
@@ -2980,6 +2984,25 @@ function CombatActionsCategorisedList({
                     ...caePill, border: '1px solid var(--text-dim)', color: 'var(--text-secondary)',
                   }} title={`Reichweite: ${r.range}`}>{r.range}</span>
                 )
+                // Area-Pill (rechts neben Range). Wenn area gesetzt ist,
+                // zeigen wir die Area-Beschreibung (📐) und droppen die
+                // Target-Pill — eine Action mit AOE braucht keine separate
+                // Single-Target-Angabe. Wenn nur target gesetzt: 🎯-Pill.
+                if (r.areaInfo) {
+                  leftPills.push(
+                    <span key="area" style={{
+                      ...caePill, border: '1px solid var(--accent-purple)',
+                      color: 'var(--accent-purple)',
+                    }} title={`Area: ${r.areaInfo}`}>📐 {r.areaInfo}</span>
+                  )
+                } else if (r.targetInfo) {
+                  leftPills.push(
+                    <span key="tgt" style={{
+                      ...caePill, border: '1px solid var(--text-dim)',
+                      color: 'var(--text-secondary)',
+                    }} title={`Target: ${r.targetInfo}`}>🎯 {r.targetInfo}</span>
+                  )
+                }
                 if (r.mastery && r.mastery.length > 0) {
                   for (const m of r.mastery) {
                     const desc = masteryShortDesc(m)

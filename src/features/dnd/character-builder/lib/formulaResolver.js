@@ -31,7 +31,24 @@ const ABILITY_TOKENS = {
 }
 
 function abilityMod(character, key) {
-  const score = character?.abilities?.[key]?.score ?? character?.abilities?.[key] ?? 10
+  // Character-Schema speichert die Score-Base bei character.abilityScores.base
+  // + Modifikatoren (racial / background / feats) — die richtige Source of
+  // Truth ist getAllAbilityScores. Wir importieren lazy um circular-imports
+  // zu vermeiden.
+  let score
+  if (character?.abilityScores?.base) {
+    const base = character.abilityScores.base[key] || 8
+    const racial = character.species?.abilityScoreImprovements?.[key] || 0
+    const bg = character.background?.abilityScoreImprovements?.[key] || 0
+    let featBonus = 0
+    for (const feat of (character.feats || [])) {
+      featBonus += feat?.abilityBonus?.[key] || 0
+    }
+    score = base + racial + bg + featBonus
+  } else {
+    // Fallback für legacy/test-character-shapes
+    score = character?.abilities?.[key]?.score ?? character?.abilities?.[key] ?? 10
+  }
   return Math.floor((Number(score) - 10) / 2)
 }
 
