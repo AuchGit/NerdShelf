@@ -59,6 +59,68 @@ export function listEquippedItems(character) {
   return [...inv, ...cus].filter(isItemActive)
 }
 
+// Aggregiert ALLE _hbPassiveGrants über aktive Homebrew-Items zu einer
+// flachen Struktur die der rulesEngine / sheetUtils direkt konsumiert.
+// Sammelt:
+//   • skillProficiencies / skillExpertise (string arrays)
+//   • toolProficiencies / languages / savingThrows (arrays)
+//   • initBonus / hpBonus (numeric; resolveFormula-kompatible Strings)
+//   • speedBonus { walk, fly, swim, climb, burrow } (additiv)
+//   • senses { darkvision, blindsight, tremorsense, truesight } (max)
+//   • damageResist / damageImmune / damageVulnerable (arrays, dedup)
+//   • conditionImmune (array, dedup)
+export function collectPassiveGrants(character) {
+  const acc = {
+    skillProficiencies: new Set(),
+    skillExpertise: new Set(),
+    toolProficiencies: new Set(),
+    languages: new Set(),
+    savingThrows: new Set(),
+    initBonus: 0,
+    hpBonus: 0,
+    speedBonus: {},
+    senses: {},
+    damageResist: new Set(),
+    damageImmune: new Set(),
+    damageVulnerable: new Set(),
+    conditionImmune: new Set(),
+  }
+  for (const it of listEquippedItems(character)) {
+    const g = it._hbPassiveGrants
+    if (!g || typeof g !== 'object') continue
+    for (const k of ['skillProficiencies','skillExpertise','toolProficiencies','languages','savingThrows','damageResist','damageImmune','damageVulnerable','conditionImmune']) {
+      for (const v of (g[k] || [])) if (v) acc[k].add(String(v).toLowerCase())
+    }
+    if (g.initBonus) acc.initBonus += parseBonusInt(g.initBonus)
+    if (g.hpBonus)   acc.hpBonus   += parseBonusInt(g.hpBonus)
+    if (g.speedBonus && typeof g.speedBonus === 'object') {
+      for (const [mode, v] of Object.entries(g.speedBonus)) {
+        if (typeof v === 'number' && v > 0) acc.speedBonus[mode] = (acc.speedBonus[mode] || 0) + v
+      }
+    }
+    if (g.senses && typeof g.senses === 'object') {
+      for (const [s, v] of Object.entries(g.senses)) {
+        if (typeof v === 'number' && v > 0) acc.senses[s] = Math.max(acc.senses[s] || 0, v)
+      }
+    }
+  }
+  return {
+    skillProficiencies: [...acc.skillProficiencies],
+    skillExpertise: [...acc.skillExpertise],
+    toolProficiencies: [...acc.toolProficiencies],
+    languages: [...acc.languages],
+    savingThrows: [...acc.savingThrows],
+    initBonus: acc.initBonus,
+    hpBonus: acc.hpBonus,
+    speedBonus: acc.speedBonus,
+    senses: acc.senses,
+    damageResist: [...acc.damageResist],
+    damageImmune: [...acc.damageImmune],
+    damageVulnerable: [...acc.damageVulnerable],
+    conditionImmune: [...acc.conditionImmune],
+  }
+}
+
 // Summiert einen Bonus-Field-Namen über alle aktiven Items.
 export function sumEquippedBonuses(character, field) {
   let total = 0

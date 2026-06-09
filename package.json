@@ -16,7 +16,8 @@
     "wh40k:seed": "node scripts/wh40k-import seed",
     "wh40k:test": "node scripts/wh40k-import test",
     "wh40k:audit": "node scripts/wh40k-import audit",
-    "wh40k:check": "node scripts/check-wh40k-dataset.mjs"
+    "wh40k:check": "node scripts/check-wh40k-dataset.mjs",
+    "download:bestiary": "node scripts/download-bestiary.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",

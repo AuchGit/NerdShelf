@@ -18,14 +18,20 @@ import {
   loadItemIndex,
   loadSpellList,
   loadBackgroundList,
+  loadRaceList,
+  loadOptionalFeatureList,
+  loadCreatureList,
 } from '../../character-builder/lib/dataLoader'
 import ItemEditor from '../components/editors/ItemEditor'
 import SpellEditor from '../components/editors/SpellEditor'
 import FeatureEditor from '../components/editors/FeatureEditor'
 import RaceEditor from '../components/editors/RaceEditor'
+import BackgroundEditor from '../components/editors/BackgroundEditor'
+import CreatureEditor from '../components/editors/CreatureEditor'
 import GenericJsonEditor from '../components/editors/GenericJsonEditor'
 import EntryRenderer from '../../character-builder/components/ui/EntryRenderer'
-import { pushOne, pullAll, listPublic, importPublic } from '../lib/homebrewSync'
+import { listPublic, importPublic } from '../lib/homebrewSync'
+import { setHomebrewPublic, ensureShareToken, revokeShareToken, importByToken } from '../lib/homebrewStore'
 
 const KIND_LABELS = {
   items:       'Items',
@@ -114,6 +120,8 @@ export default function HomebrewPage({ session }) {
     if (kind === 'spells') return SpellEditor
     if (kind === 'features') return FeatureEditor
     if (kind === 'races') return RaceEditor
+    if (kind === 'backgrounds') return BackgroundEditor
+    if (kind === 'creatures') return CreatureEditor
     return GenericJsonEditor
   }, [kind])
 
@@ -153,26 +161,30 @@ export default function HomebrewPage({ session }) {
           <>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
               <button type="button" onClick={startNew} style={S.primaryBtn}>+ Neu anlegen</button>
-              {(kind === 'items' || kind === 'spells' || kind === 'backgrounds') && (
+              {(kind === 'items' || kind === 'spells' || kind === 'backgrounds' || kind === 'races' || kind === 'features' || kind === 'creatures') && (
                 <button type="button" onClick={openTemplatePicker} style={S.secondaryBtn}>
                   Aus Vorlage laden …
                 </button>
               )}
               <div style={{ flex: 1 }} />
               <button type="button" style={S.secondaryBtn}
-                title="Öffentliche Einträge anderer Spieler durchstöbern und in deine Liste importieren"
+                title="Eintrag per Share-Token aus der Cloud importieren"
+                onClick={async () => {
+                  const tok = window.prompt('Share-Token eintippen:')
+                  if (!tok) return
+                  try {
+                    await importByToken(tok.trim())
+                    await reload()
+                    alert('Eintrag erfolgreich importiert.')
+                  } catch (e) {
+                    alert('Import fehlgeschlagen: ' + (e?.message || e))
+                  }
+                }}
+              >🔗 Token importieren</button>
+              <button type="button" style={S.secondaryBtn}
+                title="Öffentliche Einträge anderer Spieler durchstöbern"
                 onClick={() => setLibraryOpen(true)}
               >🌐 Library</button>
-              <button type="button" style={S.secondaryBtn}
-                title="Lade Cloud-Stand und mische in lokale Liste"
-                onClick={async () => {
-                  try {
-                    const n = await pullAll(kind)
-                    alert(`${n} Einträge aus der Cloud geladen.`)
-                    await reload()
-                  } catch (e) { alert('Pull fehlgeschlagen: ' + (e?.message || e)) }
-                }}
-              >☁ Pull</button>
             </div>
 
             {loading ? (
@@ -193,11 +205,27 @@ export default function HomebrewPage({ session }) {
                     kind={kind}
                     onEdit={() => startEdit(e)}
                     onDelete={() => handleDelete(e)}
-                    onSync={async (isPublic) => {
+                    onTogglePublic={async () => {
+                      const next = !e._localMeta?.public
                       try {
-                        await pushOne(kind, e, { isPublic })
+                        await setHomebrewPublic(kind, e._localMeta?.id, next)
                         await reload()
-                      } catch (err) { alert('Sync fehlgeschlagen: ' + (err?.message || err)) }
+                      } catch (err) { alert('Public-Toggle fehlgeschlagen: ' + (err?.message || err)) }
+                    }}
+                    onShare={async () => {
+                      try {
+                        const tok = await ensureShareToken(kind, e._localMeta?.id)
+                        try { await navigator.clipboard.writeText(tok) } catch {/*ignore*/}
+                        await reload()
+                        alert(`Share-Token: ${tok}\n\n(In die Zwischenablage kopiert. Andere können den Token unter "Token importieren" eintippen.)`)
+                      } catch (err) { alert('Token-Generierung fehlgeschlagen: ' + (err?.message || err)) }
+                    }}
+                    onRevokeShare={async () => {
+                      if (!window.confirm('Token wirklich widerrufen? Bisherige Empfänger verlieren den Zugriff.')) return
+                      try {
+                        await revokeShareToken(kind, e._localMeta?.id)
+                        await reload()
+                      } catch (err) { alert('Revoke fehlgeschlagen: ' + (err?.message || err)) }
                     }}
                   />
                 ))}
@@ -227,15 +255,15 @@ export default function HomebrewPage({ session }) {
 }
 
 // ── Pro-Eintrag-Zeile ────────────────────────────────────────
-function EntryRow({ entry, kind, onEdit, onDelete, onSync }) {
+function EntryRow({ entry, kind, onEdit, onDelete, onTogglePublic, onShare, onRevokeShare }) {
   const meta = entry._localMeta || {}
   const updated = meta.updated ? new Date(meta.updated).toLocaleString('de-DE') : '—'
-  const syncedAt = meta.synced ? new Date(meta.synced).toLocaleString('de-DE') : null
-  const isSynced = !!meta.syncId
   const isPublic = !!meta.public
+  const token = meta.token || null
   const summary =
     kind === 'items'   ? `${entry.rarity || 'none'} · ${entry.type || '—'}` :
     kind === 'spells'  ? `Level ${entry.level ?? '?'} · ${entry.school || '?'}` :
+    kind === 'races'   ? `${(Array.isArray(entry.size) ? entry.size[0] : entry.size) || 'M'} · ${entry.source || 'HB'}` :
     kind === 'creatures' ? `CR ${entry.cr || '?'} · ${entry.type || '?'}` :
     kind === 'backgrounds' ? `${(entry.skillProficiencies || []).length} Skill-Wahl(en)` :
     kind === 'features' ? `L${entry.level ?? '?'}` : ''
@@ -251,33 +279,43 @@ function EntryRow({ entry, kind, onEdit, onDelete, onSync }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
           {entry.name || '(unbenannt)'}
-          {isSynced && (
-            <span title={`Mit Cloud synchronisiert${syncedAt ? ' am ' + syncedAt : ''}`}
-              style={{
-                marginLeft: 8, padding: '1px 6px', borderRadius: 4,
-                border: '1px solid var(--accent-green)', color: 'var(--accent-green)',
-                fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
-              }}>☁ synced</span>
-          )}
           {isPublic && (
             <span title="Öffentlich geteilt — andere Spieler können diesen Eintrag in der Library finden"
               style={{
-                marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+                marginLeft: 8, padding: '1px 6px', borderRadius: 4,
                 border: '1px solid var(--accent-blue, #7aa2f7)',
                 color: 'var(--accent-blue, #7aa2f7)',
                 fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
               }}>🌐 public</span>
+          )}
+          {token && (
+            <span title={`Share-Token: ${token} — Klick auf 🔗 kopiert ihn`}
+              style={{
+                marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+                border: '1px solid #b07afe', color: '#b07afe',
+                fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
+                fontFamily: 'monospace',
+              }}>🔗 {token}</span>
           )}
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
           {summary} · {entry.source || 'HB'} · zuletzt {updated}
         </div>
       </div>
-      <button type="button" onClick={() => onSync(false)} style={S.smallBtn}
-        title="Privat in die Cloud hochladen — nur du siehst es">☁ Push (privat)</button>
-      <button type="button" onClick={() => onSync(true)} style={S.smallBtn}
-        title="Öffentlich teilen — andere Spieler können den Eintrag in der Library finden + importieren"
-      >🌐 Public</button>
+      <button type="button" onClick={onTogglePublic} style={S.smallBtn}
+        title={isPublic
+          ? 'Öffentlich → privat schalten'
+          : 'Eintrag in der Public Library sichtbar machen'}
+      >{isPublic ? '🌐 Public ✓' : '🌐 Public'}</button>
+      {token ? (
+        <button type="button" onClick={onRevokeShare} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}
+          title="Share-Token widerrufen"
+        >🔗 Revoke</button>
+      ) : (
+        <button type="button" onClick={onShare} style={S.smallBtn}
+          title="Share-Token generieren — andere können den Eintrag damit importieren"
+        >🔗 Token</button>
+      )}
       <button type="button" onClick={onEdit} style={S.smallBtn}>Bearbeiten</button>
       <button type="button" onClick={onDelete} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}>Löschen</button>
     </div>
@@ -407,6 +445,9 @@ function TemplatePickerModal({ kind, onCancel, onPick }) {
     const loader = kind === 'items' ? loadItemIndex
       : kind === 'spells' ? loadSpellList
       : kind === 'backgrounds' ? loadBackgroundList
+      : kind === 'races' ? loadRaceList
+      : kind === 'features' ? loadOptionalFeatureList
+      : kind === 'creatures' ? loadCreatureList
       : null
     if (!loader) { setItems([]); setLoading(false); return }
     loader(edition).then(list => {
@@ -479,6 +520,21 @@ function TemplateRow({ item, kind, onPick }) {
     if (skillN) summaryParts.push(`${skillN} Skill-Choice${skillN > 1 ? 's' : ''}`)
     const featN = (item.feats || []).length
     if (featN) summaryParts.push(`${featN} Feat`)
+  } else if (kind === 'races') {
+    const size = Array.isArray(item.size) ? item.size[0] : item.size
+    if (size) summaryParts.push({ T:'Tiny',S:'Small',M:'Medium',L:'Large',H:'Huge',G:'Gargantuan' }[size] || size)
+    if (item.speed?.walk) summaryParts.push(`Speed ${item.speed.walk}`)
+    if (item.darkvision) summaryParts.push(`Darkvision ${item.darkvision}`)
+    if (Array.isArray(item.additionalSpells) && item.additionalSpells.length > 0) summaryParts.push('Spells')
+  } else if (kind === 'features') {
+    if (item.level != null) summaryParts.push(`L${item.level}`)
+    if (item.featureType) summaryParts.push(Array.isArray(item.featureType) ? item.featureType.join('/') : item.featureType)
+    if (item.prerequisite) summaryParts.push('hat Prereq')
+  } else if (kind === 'creatures') {
+    const size = Array.isArray(item.size) ? item.size[0] : item.size
+    if (size) summaryParts.push({ T:'Tiny',S:'Small',M:'Medium',L:'Large',H:'Huge',G:'Gargantuan' }[size] || size)
+    if (item.cr) summaryParts.push(`CR ${typeof item.cr === 'object' ? item.cr.cr : item.cr}`)
+    if (item.type) summaryParts.push(typeof item.type === 'object' ? item.type.type : item.type)
   }
   const summary = summaryParts.join(' · ')
   const entries = Array.isArray(item.entries) ? item.entries : []

@@ -28,6 +28,7 @@ import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/usePersistedState'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
+import { resolveFormula, formatFormula } from '../../lib/formulaResolver'
 import { usePillColors } from '../../lib/pillColors'
 import { parseFeatureEffect, pillColorForKind } from '../../lib/featureEffectParser'
 import { applySavedOrder, getSavedOrder, moveCategory, resetCategoryOrder } from '../../lib/categoryOrder'
@@ -1292,6 +1293,26 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
     })
     setCastingFor(null)
   }
+  // Homebrew-Item-Charges verbrauchen. Schreibt in
+  // character.status.itemCharges[itemId][key] += cost wo key entweder
+  // 'shared' (Pool am Item) oder die Action-ID (individual pro Action)
+  // ist. Die Pill rendert remaining = max - used.
+  function consumeItemCharges(ref) {
+    if (!applyCharacter || !ref?.itemId) return
+    const { itemId, key, cost, max } = ref
+    const inc = Math.max(1, parseInt(cost, 10) || 1)
+    applyCharacter(d => {
+      if (!d.status) d.status = {}
+      if (!d.status.itemCharges) d.status.itemCharges = {}
+      if (!d.status.itemCharges[itemId]) d.status.itemCharges[itemId] = {}
+      const bucket = d.status.itemCharges[itemId]
+      const cur = bucket[key] || 0
+      // Clamp at max so spamming "Verwenden" nicht über den Cap pusht.
+      if (Number.isFinite(max) && cur + inc > max) bucket[key] = max
+      else bucket[key] = cur + inc
+    })
+  }
+
   function consumeResource(resourceId) {
     if (!applyCharacter || !resourceId) return
     const res = (computed?.resources || []).find(r => r.id === resourceId)
@@ -1713,46 +1734,200 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       // pro Action, Pills (cost/damage/save/attack/charges) werden 1:1
       // aus den gespeicherten Feldern gebaut.
       if (hasHbActions) {
+        // Shared-Pool-Setup: berechne max EINMAL für alle Actions wenn
+        // das Item einen geteilten Pool hat. Pro-Action chargesMax wird
+        // ignoriert; nur chargesCost zieht vom Pool ab.
+        const shared = item._hbSharedCharges || null
+        const itemId = item.id || item._id || item.name
+        let sharedMax = 0
+        if (shared) {
+          const v = resolveFormula(shared.max, character)
+          sharedMax = Number.isFinite(v) ? v
+            : (typeof shared.max === 'number' ? shared.max : 0)
+        }
+        const sharedUsed = character?.status?.itemCharges?.[itemId]?.shared || 0
+        const sharedRemaining = Math.max(0, sharedMax - sharedUsed)
+
+        // Helper: cost → bucket-Slot
+        const costToSlot = (c) => c === 'bonus' ? 'bonusAction'
+          : c === 'reaction' ? 'reaction'
+          : 'action'
+        const COST_LABELS = {
+          action: 'Action', bonus: 'Bonus Action', reaction: 'Reaction',
+          'attack-replace': 'Atk Replace', passive: 'Passive',
+        }
+
         for (const a of item._hbActions) {
-          const slot = a.cost === 'bonus' ? 'bonusAction'
-            : a.cost === 'reaction' ? 'reaction'
-            : a.cost === 'passive' ? 'action'  // Passive Trigger landen in Action damit der Spieler sie sieht; Trigger-Pille klärt das
-            : 'action'
-          // Direkt strukturierte Pills emittieren (kein parseFeatureEffect-Roundtrip).
+          // Activations[] expandieren. Fallback wenn nur das legacy
+          // `cost`-Feld existiert.
+          const activations = (Array.isArray(a.activations) && a.activations.length > 0)
+            ? a.activations
+            : [{ cost: a.cost || 'action' }]
+          const mode = a.activationMode || 'or'
+
+          // Formel-Auflösung für saveDc.
+          const dcResolved = a.saveDc ? formatFormula(a.saveDc, character) : ''
+          // Pro-Action chargesMax — wird ignoriert wenn shared aktiv.
+          const perActionMaxResolved = resolveFormula(a.chargesMax, character)
+          const perActionMax = (typeof a.chargesMax === 'number')
+            ? a.chargesMax
+            : (Number.isFinite(perActionMaxResolved) ? perActionMaxResolved : 0)
+          const actionUsed = character?.status?.itemCharges?.[itemId]?.[a.id] || 0
+          // Active max + remaining für die Pille:
+          const activeMax = shared ? sharedMax : perActionMax
+          const activeRemaining = shared ? sharedRemaining : Math.max(0, perActionMax - actionUsed)
+
+          // Pills 1:1 aus strukturierten Feldern. Cost-spezifische
+          // Pills (attack-replace / passive / AND-combo) werden pro
+          // Bucket-Emission unten dazugefügt.
           const pills = []
-          if (a.cost === 'passive') pills.push({ kind: 'trigger', label: 'On Trigger', title: a.description?.slice(0, 80) })
-          if (a.attackBonus) pills.push({ kind: 'attack', label: 'Atk', value: a.attackBonus })
-          if (a.saveAbility && a.saveDc) pills.push({ kind: 'save', label: a.saveAbility.toUpperCase(), value: a.saveDc, title: `${a.saveAbility.toUpperCase()} Save DC` })
+          if (a.attackBonus || a.attackRoll) {
+            // Auto-Derive: wenn das Item eine Waffe ist UND der User keinen
+            // manuellen attackBonus gesetzt hat, ziehen wir den berechneten
+            // Attack-Bonus aus computed.attacks (DEX/STR + PB + Magic-Boni).
+            let v = null
+            if (a.attackBonus) {
+              v = formatFormula(a.attackBonus, character)
+            } else if (item.isWeapon || ['M','R'].includes(String(item.type || '').split('|')[0])) {
+              const weaponAtk = (computed?.attacks || []).find(at => at.id === itemId || at.weaponId === itemId)
+              if (weaponAtk?.attackDisplay) v = weaponAtk.attackDisplay
+            }
+            pills.push({ kind: 'attack', label: 'Atk', value: v,
+              title: a.attackRoll && !a.damageDice
+                ? `Attack Roll${v ? ' ' + v : ''} — kein Damage, auf Hit wählst du den Effekt`
+                : `Attack Roll${v ? ' ' + v : ''}` })
+          }
+          if (a.saveAbility && a.saveDc) {
+            pills.push({ kind: 'save', label: a.saveAbility.toUpperCase(), value: dcResolved, title: `${a.saveAbility.toUpperCase()} Save DC ${dcResolved}` })
+          }
           if (a.damageDice) {
-            const typeMap = { B: 'bludgeoning', P: 'piercing', S: 'slashing', A: 'acid', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', I: 'poison', Y: 'psychic', R: 'radiant', T: 'thunder' }
+            // Healing-Type ('HE') wird als gruene Heal-Pill mit eigener
+            // Optik gerendert — damageType=null + label 'Heal' damit der
+            // standard renderer nicht versehentlich Schaden-Tooltip baut.
+            const typeMap = { B: 'bludgeoning', P: 'piercing', S: 'slashing', A: 'acid', C: 'cold', F: 'fire', O: 'force', L: 'lightning', N: 'necrotic', I: 'poison', Y: 'psychic', R: 'radiant', T: 'thunder', HE: 'healing' }
             const dmgType = typeMap[a.damageType] || null
-            pills.push({ kind: 'damage', label: a.damageDice, damageType: dmgType, title: dmgType ? `${a.damageDice} ${dmgType}` : a.damageDice })
+            const isHeal = a.damageType === 'HE' || dmgType === 'healing'
+            pills.push({
+              kind: isHeal ? 'heal' : 'damage',
+              label: isHeal ? `Heal ${a.damageDice}` : a.damageDice,
+              damageType: isHeal ? 'healing' : dmgType,
+              title: isHeal
+                ? `Heilt ${a.damageDice}`
+                : (dmgType ? `${a.damageDice} ${dmgType}` : a.damageDice),
+            })
           }
-          if (a.chargesMax > 0) {
-            const costStr = (a.chargesCost && a.chargesCost > 1) ? `${a.chargesCost}/${a.chargesMax}` : `${a.chargesMax}×`
-            const restPhrase = a.chargesRest === 'short' ? 'short or long rest'
-              : a.chargesRest === 'long' ? 'long rest'
-              : a.chargesRest === 'dawn' ? 'at dawn'
-              : a.chargesRest === 'day' ? 'per day' : null
-            const tip = `${a.chargesCost > 1 ? `Cost ${a.chargesCost} of ` : ''}${a.chargesMax} charges${restPhrase ? ` (regains ${restPhrase})` : ''}`
-            pills.push({ kind: 'uses', label: costStr, title: tip })
+          if (a.target) {
+            // Target/Area als trigger-styled Pill mit lupe-emoji damit
+            // klar wird dass es eine Zielangabe ist (nicht ein Effekt).
+            pills.push({ kind: 'trigger', label: `🎯 ${a.target}`, title: `Target: ${a.target}` })
           }
-          // Row-Name = der Name den der Spieler im Editor gesetzt hat.
-          // Item-Attribution wandert in die Sub-Zeile damit klar bleibt
-          // woher die Action kommt, ohne den Namen zu verdoppeln.
+          if (activeMax > 0) {
+            // Pill: remaining/max — z.B. "3/5". Wenn chargesCost > 1
+            // hängen wir das Sub-Label dran: "3/5 (×2)".
+            const baseLbl = `${activeRemaining}/${activeMax}`
+            const subLbl  = (a.chargesCost && a.chargesCost > 1) ? ` (×${a.chargesCost})` : ''
+            const sharedTag = shared ? ' shared' : ''
+            const rest = shared ? shared.rest : a.chargesRest
+            const recharge = shared ? shared.rechargeFormula : a.rechargeFormula
+            const restPhrase = rest === 'short' ? 'short or long rest'
+              : rest === 'long' ? 'long rest'
+              : rest === 'dawn' ? 'at dawn'
+              : rest === 'day' ? 'per day' : null
+            const rechargeNote = recharge ? ` (recharge ${recharge})` : ''
+            const tip = `${activeRemaining}/${activeMax}${sharedTag} — cost ${a.chargesCost || 1}${restPhrase ? `, regains ${restPhrase}${rechargeNote}` : rechargeNote}`
+            pills.push({ kind: 'uses', label: baseLbl + subLbl, title: tip })
+          }
+          if (a.critEffect) {
+            pills.push({ kind: 'trigger', label: 'on Crit', title: a.critEffect })
+          }
+          // Spell-Verknüpfungen: pro Spell eine Pill mit Name + Level
+          // (sofern spellMap geladen). Tooltip enthält School + Casting Time.
+          if (Array.isArray(a.spells) && a.spells.length > 0) {
+            for (const sp of a.spells) {
+              if (!sp?.name) continue
+              const meta = spellMap?.get(sp.name.toLowerCase())
+              const lvl = typeof meta?.level === 'number'
+                ? (meta.level === 0 ? 'Cantrip' : `L${meta.level}`) : ''
+              const tip = meta
+                ? `${sp.name}${lvl ? ' · ' + lvl : ''}${meta.school ? ' · ' + meta.school : ''}`
+                : sp.name
+              pills.push({
+                kind: 'utility',
+                label: `${sp.name}${lvl ? ' (' + lvl + ')' : ''}`,
+                title: tip,
+              })
+            }
+          }
+          // Charge-Ref für consumeItemCharges-Aufruf via onUseAction.
+          const chargeRef = activeMax > 0 ? {
+            itemId,
+            key: shared ? 'shared' : a.id,
+            cost: a.chargesCost || 1,
+            max: activeMax,
+          } : null
+
           const sourceItemName = item.customName || item.name
-          b[slot].push({
-            id: `item-${item.id || item._id || item.name}-a-${a.id}`,
-            markerKey: `item:${item.id || item._id || item.name}`,
-            name: a.name || sourceItemName,
-            damage: '—', attack: '', range: '—', target: '—',
-            kind: 'item',
-            economySlot: slot,
-            entries: a.description ? [a.description] : [],
-            effectPills: pills,
-            sub: `Item · ${sourceItemName}`,
-            notes: '',
-          })
+
+          // ── Activations zu Rows umwandeln ──────────────────
+          // OR-Modus: gruppiere Activations nach ihrem Slot (action /
+          //           bonusAction / reaction) — pro Slot eine Row,
+          //           die zusätzlichen Cost-Kinds (attack-replace,
+          //           passive) als Pills.
+          // AND-Modus: nur EINE Row im Slot der ersten Activation, mit
+          //            "+ <other cost>"-Pill für jede weitere.
+          const slotGroups = {}  // slot → [activation, ...]
+          for (const act of activations) {
+            const s = costToSlot(act.cost)
+            if (!slotGroups[s]) slotGroups[s] = []
+            slotGroups[s].push(act)
+          }
+          const slotEntries = mode === 'and'
+            ? [[costToSlot(activations[0].cost), activations]]
+            : Object.entries(slotGroups)
+
+          for (const [slot, acts] of slotEntries) {
+            const slotPills = [...pills]
+            // Pro Activation eine Cost-Pille mit dem Activation-Label.
+            // Routine-Action (cost='action' im Action-Bucket) zeigt keine
+            // extra Pill — das ist der Default. Bonus / Reaction / Atk-
+            // Replace / Passive bekommen ihre eigene Erkennungs-Pill.
+            for (const act of acts) {
+              if (act.cost === 'attack-replace') {
+                slotPills.unshift({ kind: 'trigger', label: 'Atk Replace', title: 'Ersetzt eine deiner Attacks während der Attack-Action' })
+              } else if (act.cost === 'passive') {
+                slotPills.unshift({ kind: 'trigger', label: 'On Trigger', title: a.description?.slice(0, 80) })
+              }
+            }
+            // AND-Modus: zusätzliche Cost-Pills für die anderen Buckets.
+            if (mode === 'and' && activations.length > 1) {
+              for (const act of activations) {
+                if (costToSlot(act.cost) === slot) continue
+                slotPills.unshift({
+                  kind: 'trigger',
+                  label: `+ ${COST_LABELS[act.cost] || act.cost}`,
+                  title: `Diese Action kostet ZUSÄTZLICH ${COST_LABELS[act.cost] || act.cost}`,
+                })
+              }
+            }
+            // OR-Modus mit MULTIPLE Slots: Sub-Label klärt was möglich ist
+            const modeSub = mode === 'or' && Object.keys(slotGroups).length > 1
+              ? ` · oder ${Object.keys(slotGroups).filter(s => s !== slot).map(s => COST_LABELS[Object.keys(slotGroups).find(k => k === s)] || s).join('/')}`
+              : ''
+
+            b[slot].push({
+              id: `item-${itemId}-a-${a.id}-${slot}`,
+              markerKey: `item:${itemId}`,
+              name: a.name || sourceItemName,
+              damage: '—', attack: '', range: '—', target: '—',
+              kind: 'item',
+              economySlot: slot,
+              entries: a.description ? [a.description] : [],
+              effectPills: slotPills,
+              sub: `Item · ${sourceItemName}${shared ? ' · shared charges' : ''}${modeSub}`,
+              notes: '',
+              itemChargeRef: chargeRef,
+            })
+          }
         }
         continue
       }
@@ -2030,6 +2205,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
                       castSpellFromExplorer={castSpellFromExplorer}
                       markActionUsed={markActionUsed}
                       consumeResource={consumeResource}
+                      consumeItemCharges={consumeItemCharges}
                       applyRowSideEffects={applyRowSideEffects}
                       character={character}
                       applyCharacter={applyCharacter}
@@ -2393,7 +2569,7 @@ function viewToggleBtnInline(active) {
 function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
-  castSpellFromExplorer, markActionUsed, consumeResource, applyRowSideEffects,
+  castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges, applyRowSideEffects,
   character, applyCharacter,
   hidePinnedCategory = false,
 }) {
@@ -2448,12 +2624,27 @@ function CombatActionsCategorisedList({
       out.push({ id: 'features', label: 'Class & Species Features', items: combinedFeatures })
     }
 
-    // 2b. Magic Items — eigene Kategorie, damit attunete Items
-    // (Wand of Magic Missiles, Cloak of Displacement, Ring of
-    // Invisibility, …) als Block lesbar zwischen Features und
-    // Attacks/Cantrips sitzen statt vermischt zu erscheinen.
+    // 2b. Magic Items — EINE Kategorie PRO Item. Gruppiert alle Rows
+    // mit demselben markerKey (`item:<itemId>`) zusammen, damit der
+    // Action-Tracker pro magischem Item einen eigenen Block hat
+    // (z.B. eigener Header für 'Feythorn Blowgun' mit allen 8 Darts
+    // darunter, separat von 'Ring of Borrowed Silence').
     if (items.length > 0) {
-      out.push({ id: 'items', label: 'Magic Items', items })
+      const byMarker = {}
+      const order = []
+      for (const r of items) {
+        const k = r.markerKey || r.id
+        if (!byMarker[k]) { byMarker[k] = []; order.push(k) }
+        byMarker[k].push(r)
+      }
+      for (const k of order) {
+        const rs = byMarker[k]
+        // Item-Name aus dem sub-Label extrahieren ('Item · Name · …').
+        const sub = rs[0]?.sub || ''
+        const m = sub.match(/^Item\s*·\s*([^·]+?)(?:\s*·.*)?$/)
+        const itemName = m ? m[1].trim() : 'Magic Item'
+        out.push({ id: `items-${k.replace(/[^a-z0-9]/gi, '_')}`, label: itemName, items: rs })
+      }
     }
 
     // 3. Attacks & Cantrips together
@@ -2934,8 +3125,9 @@ function CombatActionsCategorisedList({
                           castingFor={castingFor} setCastingFor={setCastingFor}
                           onCastSpell={castSpellFromExplorer}
                           onUseAction={() => {
-                            if (r.economySlot) markActionUsed(r.economySlot)
-                            if (r.resourceId)  consumeResource(r.resourceId)
+                            if (r.economySlot)    markActionUsed(r.economySlot)
+                            if (r.resourceId)     consumeResource(r.resourceId)
+                            if (r.itemChargeRef)  consumeItemCharges(r.itemChargeRef)
                             applyRowSideEffects(r)
                           }}
                         />

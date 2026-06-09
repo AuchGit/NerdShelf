@@ -1314,6 +1314,36 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // ── Rests ─────────────────────────────────────────────────
   // Rest handlers now just open the guided prompts; the actual state
   // changes happen on confirm inside each modal.
+  // Resettet _hbActions-Item-Charges (shared + per-action) wenn das
+  // jeweilige rest-Field in `rests` enthalten ist. Iteriert das ECHTE
+  // Inventory (nicht computed.resources) damit auch Items ohne
+  // Resource-Backing korrekt zurückgesetzt werden.
+  function resetItemCharges(d, rests) {
+    if (!d?.status?.itemCharges) return
+    const restSet = new Set(rests)
+    const itemPool = [
+      ...(d.inventory?.items || []),
+      ...(d.custom?.items    || []),
+    ]
+    for (const it of itemPool) {
+      const id = it?.id || it?._id || it?.name
+      if (!id) continue
+      const bucket = d.status.itemCharges[id]
+      if (!bucket) continue
+      // Shared pool — eine Reset-Regel pro Item.
+      if (it._hbSharedCharges && restSet.has(it._hbSharedCharges.rest || 'long')) {
+        delete bucket.shared
+      }
+      // Per-Action — pro Action eigene Regel.
+      if (Array.isArray(it._hbActions)) {
+        for (const a of it._hbActions) {
+          if (restSet.has(a.chargesRest || 'long')) delete bucket[a.id]
+        }
+      }
+      if (Object.keys(bucket).length === 0) delete d.status.itemCharges[id]
+    }
+  }
+
   function shortRest() {
     if (readOnly) return
     setShortRestOpen(true)
@@ -1344,6 +1374,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         if (res.recharge === 'short_rest') delete used[res.id]
       }
       d.status.usedResources = used
+      // Homebrew-Item-Charges: reset per shared.rest oder action.chargesRest
+      // wenn 'short'. Iteriert direkt über die Inventory damit jeder Eintrag
+      // (auch ohne computed.resources-Backing) zurückgesetzt wird.
+      resetItemCharges(d, ['short'])
       // Active-Effects-Cleanup: alle Effekte mit until=short_rest /
       // concentration-end / turn-end fallen weg.
       if (Array.isArray(d.status.activeEffects)) {
@@ -1361,6 +1395,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       d.status.usedSpellSlots = {}
       d.status.usedPactSlots = 0
       d.status.usedResources = {}
+      // Homebrew-Item-Charges: alle die long-rest-, short-rest- oder
+      // dawn-cleared sind reseten. Long Rest deckt alle "kürzer-als-day"
+      // Resets ab (RAW: Long-Rest erholt alle Charges die schneller als
+      // einmal pro Tag zurückkommen).
+      resetItemCharges(d, ['short', 'long', 'dawn'])
       d.status.currentHp = maxHp
       d.status.temporaryHp = 0
       d.status.deathSaves = { successes: 0, failures: 0 }

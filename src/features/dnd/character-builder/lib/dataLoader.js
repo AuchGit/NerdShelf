@@ -483,6 +483,20 @@ function parseFeatRefs(featsArray) {
   return result
 }
 
+// ── CREATURES / MONSTERS ────────────────────────────────────
+// Bestiary-Daten von 5etools, gebundled via scripts/download-bestiary.cjs.
+// Output-Format: einzelne monsters.json pro edition mit { monster: [...] }.
+// Homebrew-Creatures werden über den Homebrew-Store gemerget.
+export async function loadCreatureList(edition) {
+  const data = await fetchData(edition, 'monsters.json')
+  const homebrew = await listHomebrew('creatures')
+  if (!data && homebrew.length === 0) return []
+  const officials = (data?.monster || []).filter(m => isEditionMatch(m.source, edition))
+  return [...officials, ...homebrew]
+    .filter(m => m && m.name)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+}
+
 export async function loadBackgroundList(edition) {
   const data = await fetchData(edition, 'backgrounds.json')
   // Homebrew Backgrounds (5etools-Shape) durchgängig einmischen

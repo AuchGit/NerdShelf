@@ -119,7 +119,7 @@ export default function GrantSpellPicker({ grants = [], onChange, defaultEdition
   )
 }
 
-function SpellPickerModal({ defaultEdition, alreadyAdded, onPick, onCancel }) {
+export function SpellPickerModal({ defaultEdition, alreadyAdded, onPick, onCancel }) {
   const [edition, setEdition] = useState(defaultEdition)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)

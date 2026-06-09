@@ -4,7 +4,7 @@ import { combinedMarkEffects, gatherCharacterFeatures } from './weaponMarkingRul
 import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
 import { activeConcentrationEffects, activeVariableDamageEffect } from './concentrationEffects'
 import { getMechanicalEffects } from './featureEffects'
-import { sumEquippedBonuses, getWeaponBonus } from './itemBonuses'
+import { sumEquippedBonuses, getWeaponBonus, collectPassiveGrants } from './itemBonuses'
 import { aggregateFeatureBonuses } from './featureBonusExtractor'
 import { getEffectsForWeapon } from './activeEffects'
 import { getClassTableValue as _gcTableValue, getClassTableDie as _gcTableDie, getClassTableCell as _gcTableCell } from './classTableLookup'
@@ -380,6 +380,34 @@ export function computeProficiencies(character, classDataMap = {}) {
     }
   }
 
+  // ── Homebrew Item _hbPassiveGrants ────────────────────────
+  // Items mit attuned + equipped können beliebige passive Grants
+  // beitragen — Skills, Tools, Languages, Saves, Senses, Resists.
+  const itemGrants = collectPassiveGrants(character)
+  for (const skill of itemGrants.skillProficiencies) {
+    const key = normalizeSkill(skill)
+    if (!result.skills[key] || result.skills[key] === 'none') {
+      result.skills[key] = 'proficient'
+    }
+  }
+  for (const skill of itemGrants.skillExpertise) {
+    const key = normalizeSkill(skill)
+    result.skills[key] = 'expertise'
+  }
+  for (const tool of itemGrants.toolProficiencies) {
+    if (!result.tools) result.tools = []
+    if (!result.tools.some(t => t.toLowerCase() === tool)) result.tools.push(tool)
+  }
+  for (const lang of itemGrants.languages) {
+    if (!result.languages.some(l => l.toLowerCase() === lang.toLowerCase())) {
+      result.languages.push(lang)
+    }
+  }
+  for (const ab of itemGrants.savingThrows) {
+    if (!result.savingThrows) result.savingThrows = {}
+    if (!result.savingThrows[ab]) result.savingThrows[ab] = 'proficient'
+  }
+
   // ── Aus Feats ─────────────────────────────────────────────
   for (const feat of (character.feats || [])) {
     // (Resilient and similar save-prof grants are handled below via
@@ -751,12 +779,17 @@ export function computeHP(character, modifiers, classDataMap) {
   const toughBonus = hpPerLevel ? getTotalLevel(character) * hpPerLevel : 0
   maxHp += toughBonus
 
+  // Homebrew item _hbPassiveGrants.hpBonus — flat HP add wenn attuned + equipped.
+  const itemHp = collectPassiveGrants(character).hpBonus || 0
+  maxHp += itemHp
+
   return {
     max: maxHp,
     current: character.status.currentHp ?? maxHp,
     temporary: character.status.temporaryHp || 0,
     breakdown,
     toughBonus,
+    itemHpBonus: itemHp,
   }
 }
 
@@ -1714,6 +1747,13 @@ function computeSpeed(character, abilityScores, classDataMap = {}) {
   // hardcoded here.
   const mechSpeed = getMechanicalEffects(character).speedBonus
   if (mechSpeed) speed.walk += mechSpeed
+  // Homebrew item _hbPassiveGrants.speedBonus — pro mode additiv.
+  const localGrants = collectPassiveGrants(character)
+  if (localGrants?.speedBonus) {
+    for (const [mode, bonus] of Object.entries(localGrants.speedBonus)) {
+      speed[mode] = (speed[mode] || 0) + bonus
+    }
+  }
 
   // ── Concentration-spell speed effects ──────────────────────
   // Longstrider (+10), Haste (×2 walk), Fly/Spider Climb (grant mode).
@@ -1736,7 +1776,9 @@ function computeSpeed(character, abilityScores, classDataMap = {}) {
 function getInitiativeBonus(character) {
   // Data-driven: featureEffects catalog reports any initBonus mechanics
   // (Alert feat = +5; future entries can stack additively here).
-  return getMechanicalEffects(character).initBonus || 0
+  // Plus Homebrew _hbPassiveGrants.initBonus on attuned + equipped items.
+  return (getMechanicalEffects(character).initBonus || 0)
+    + (collectPassiveGrants(character).initBonus || 0)
 }
 
 // ============================================================

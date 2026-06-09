@@ -1,27 +1,23 @@
 // homebrewStore.js
 //
-// Local-first homebrew storage. Eine JSON-Datei pro Kind im
-// Tauri-AppData-Verzeichnis (`<appData>/homebrew/<kind>.json`) im
-// 5etools-Root-Shape — exakt das Format das die existierenden Loader
-// schon konsumieren. Beispiel `items.json`:
-//   { "item": [ { name, source, type, ... }, ... ] }
+// Online-First Homebrew Storage via Supabase. Jeder Save geht DIREKT
+// in die Cloud — keine lokalen Files mehr. In-Memory-Cache pro Kind
+// damit Loader (loadItemIndex / loadSpellList / …) nicht jeden Render
+// eine Netzwerk-Roundtrip machen. Cache wird bei jedem Mutation-Call
+// invalidiert.
 //
-// Jeder Eintrag bekommt zusätzlich ein `_localMeta`-Subobjekt mit
-// Timestamps + optionaler Sync-Identität:
-//   _localMeta: { id, updated, created, synced?: ISOString, syncId?: uuid }
-// Das Feld wird von 5etools-Loadern ignoriert (unknown property →
-// fällt durch). Wir können also ungestraft eigene Metadaten anhängen.
-//
-// Browser-Fallback (Tauri nicht verfügbar → DevTools / Web-Build):
-// localStorage unter `dndbuilder_homebrew_<kind>`. Selbe Struktur,
-// funktioniert für Dev-Tests; in der gebauten Tauri-App geht der
-// Filesystem-Pfad.
+// Browser-Fallback (kein Login = anonyme Browse-Sicht): kein Storage.
+// Token-Sharing (siehe dnd-homebrew-tokens.sql):
+//   • makeToken / shareViaToken — Token generieren + auf Eintrag setzen
+//   • fetchByToken — Empfänger holt sich den Eintrag über den Token
+//   • importByToken — fetch + lokal speichern
+
+import { supabase } from '../../character-builder/lib/supabase'
+
+const TABLE = 'dnd_homebrew'
 
 const KINDS = ['items', 'spells', 'backgrounds', 'races', 'creatures', 'features']
 
-// 5etools Top-Level-Key pro Kind. Vorsicht: items uses 'item' (singular)
-// als Top-Level-Array; das Gleiche bei spells, background, race,
-// monster, classFeature. monster ist 5etools-Naming für Creature.
 const ROOT_KEY = {
   items:       'item',
   spells:      'spell',
@@ -31,173 +27,220 @@ const ROOT_KEY = {
   features:    'classFeature',
 }
 
-const STORAGE_PREFIX = 'dndbuilder_homebrew_'
-
-// ── Tauri vs. Browser Detection ─────────────────────────────
-function isTauri() {
-  try { return typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__ }
-  catch { return false }
-}
-
-// Lazy-load Tauri-Module damit der Browser-Build nicht kracht.
-async function tauriFs() {
-  return await import('@tauri-apps/plugin-fs')
-}
-
-// ── Pfade ────────────────────────────────────────────────────
-// Storage: User-Wunsch ist NEBEN DER EXE damit ein Sub-Folder
-// `homebrew/` portabel mitwandert (USB-Stick / shared drive). Tauri-
-// BaseDirectory.Resource zeigt im installierten Modus auf den
-// Installations-Ordner (wo die .exe liegt), im Dev-Modus auf
-// `src-tauri/resources/` — beides ist "next-to-exe-ish".
-// Falls Resource im Resource-only-Modus read-only ist, fallen wir
-// auf AppData zurück; das wird aber selten bei einer installierten
-// Windows-Tauri-App passieren.
-async function ensureHomebrewDir() {
-  if (!isTauri()) return null
-  const { BaseDirectory, exists, mkdir } = await tauriFs()
-  try {
-    const dirExists = await exists('homebrew', { baseDir: BaseDirectory.Resource })
-    if (!dirExists) await mkdir('homebrew', { baseDir: BaseDirectory.Resource, recursive: true })
-    return { baseDir: BaseDirectory.Resource, dir: 'homebrew' }
-  } catch (e) {
-    // Fallback wenn Resource nicht beschreibbar ist
-    console.warn('[homebrew] Resource mkdir failed, fallback to AppData', e?.message || e)
-    try {
-      const dirExists = await exists('homebrew', { baseDir: BaseDirectory.AppData })
-      if (!dirExists) await mkdir('homebrew', { baseDir: BaseDirectory.AppData, recursive: true })
-    } catch (e2) { console.warn('[homebrew] AppData mkdir also failed', e2) }
-    return { baseDir: BaseDirectory.AppData, dir: 'homebrew' }
-  }
-}
-
-function pathFor(kind) {
-  return `homebrew/${kind}.json`
-}
-
-// Welcher BaseDirectory wird gerade benutzt — cached für read/write.
-let _baseDirPref = null
-async function getBaseDir() {
-  if (_baseDirPref) return _baseDirPref
-  const info = await ensureHomebrewDir()
-  _baseDirPref = info?.baseDir
-  return _baseDirPref
-}
-
-// ── IDs + Timestamps ────────────────────────────────────────
-function makeId() {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-  } catch { /* fall through */ }
-  return `hb-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
-}
-function nowIso() { return new Date().toISOString() }
-
-// ── Load / Save (per kind) ──────────────────────────────────
-async function readKind(kind) {
-  if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
-  if (isTauri()) {
-    try {
-      const baseDir = await getBaseDir()
-      const { exists, readTextFile } = await tauriFs()
-      const file = pathFor(kind)
-      const hasFile = await exists(file, { baseDir })
-      if (!hasFile) return { [ROOT_KEY[kind]]: [] }
-      const raw = await readTextFile(file, { baseDir })
-      const parsed = JSON.parse(raw)
-      if (!parsed[ROOT_KEY[kind]]) parsed[ROOT_KEY[kind]] = []
-      return parsed
-    } catch (e) {
-      console.warn('[homebrew] read failed for', kind, e)
-      return { [ROOT_KEY[kind]]: [] }
-    }
-  }
-  // Browser fallback
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + kind)
-    if (!raw) return { [ROOT_KEY[kind]]: [] }
-    const parsed = JSON.parse(raw)
-    if (!parsed[ROOT_KEY[kind]]) parsed[ROOT_KEY[kind]] = []
-    return parsed
-  } catch {
-    return { [ROOT_KEY[kind]]: [] }
-  }
-}
-
-async function writeKind(kind, data) {
-  if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
-  const payload = JSON.stringify(data, null, 2)
-  if (isTauri()) {
-    const baseDir = await getBaseDir()
-    const { writeTextFile } = await tauriFs()
-    await writeTextFile(pathFor(kind), payload, { baseDir })
-    return
-  }
-  try { localStorage.setItem(STORAGE_PREFIX + kind, payload) }
-  catch (e) { console.warn('[homebrew] write failed', e) }
-}
-
-// ── Public API ──────────────────────────────────────────────
-
 export const HOMEBREW_KINDS = KINDS
 export const HOMEBREW_ROOT_KEY = ROOT_KEY
 
-/** Get all homebrew entries for a kind. Returns array. */
-export async function listHomebrew(kind) {
-  const data = await readKind(kind)
-  return data[ROOT_KEY[kind]] || []
+// ── In-memory Cache ─────────────────────────────────────────
+const _cache = {}  // { [kind]: array }
+function invalidate(kind) { delete _cache[kind] }
+export function invalidateHomebrewCache(kind) {
+  if (kind) invalidate(kind)
+  else for (const k of KINDS) invalidate(k)
 }
 
-/** Get one entry by its `_localMeta.id`. */
+function rowToEntry(row) {
+  // Row → User-facing entry. Daten-shape (data jsonb) bleibt 5etools-
+  // konform; _localMeta wird aus den Server-Feldern frisch zusammen-
+  // gebaut damit es nicht auseinanderläuft.
+  if (!row) return null
+  const base = (row.data && typeof row.data === 'object') ? row.data : {}
+  return {
+    ...base,
+    _localMeta: {
+      id: row.local_id,
+      syncId: row.id,
+      created: row.created_at,
+      updated: row.updated_at,
+      public: !!row.is_public,
+      token: row.share_token || null,
+    },
+  }
+}
+
+function makeLocalId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* ignore */ }
+  return `hb-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+}
+
+// ── Public CRUD ─────────────────────────────────────────────
+
+/** Eingeloggter User? Nicht-eingeloggt → leere Liste statt Fehler. */
+async function currentUser() {
+  const { data } = await supabase.auth.getUser()
+  return data?.user || null
+}
+
+/** Alle eigenen Einträge dieser Kategorie (RLS owner-policy). */
+export async function listHomebrew(kind) {
+  if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
+  if (_cache[kind]) return _cache[kind]
+  const user = await currentUser()
+  if (!user) { _cache[kind] = []; return [] }
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .eq('kind', kind)
+    .order('updated_at', { ascending: false })
+  if (error) {
+    console.warn('[homebrew] list failed', kind, error)
+    return []
+  }
+  const list = (data || []).map(rowToEntry).filter(Boolean)
+  _cache[kind] = list
+  return list
+}
+
+/** Einen Eintrag per lokaler ID. */
 export async function getHomebrew(kind, id) {
   const all = await listHomebrew(kind)
   return all.find(e => e?._localMeta?.id === id) || null
 }
 
-/** Save (create or update) an entry. Assigns id + timestamp. */
+/** Erstellt oder updated einen Eintrag direkt in der Cloud.
+ *  ID wird beim ersten Save vergeben. */
 export async function saveHomebrew(kind, entry) {
-  const data = await readKind(kind)
-  const arr = data[ROOT_KEY[kind]] || []
+  if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
+  const user = await currentUser()
+  if (!user) throw new Error('Bitte einloggen — Homebrew wird direkt online gespeichert.')
   const meta = entry._localMeta || {}
-  const id = meta.id || makeId()
-  const now = nowIso()
-  const next = {
+  const localId = meta.id || makeLocalId()
+  const now = new Date().toISOString()
+  // Daten-Payload (5etools-shape + frisches _localMeta) in `data` jsonb.
+  const dataPayload = {
     ...entry,
     _localMeta: {
-      ...meta,
-      id,
-      updated: now,
+      id: localId,
       created: meta.created || now,
+      updated: now,
     },
   }
-  const idx = arr.findIndex(e => e?._localMeta?.id === id)
-  if (idx >= 0) arr[idx] = next
-  else arr.push(next)
-  data[ROOT_KEY[kind]] = arr
-  await writeKind(kind, data)
-  return next
+  const row = {
+    kind,
+    local_id: localId,
+    name: entry.name || 'Unbenannt',
+    source: entry.source || 'HB',
+    data: dataPayload,
+    updated_at: now,
+    is_public: !!meta.public,
+  }
+  if (meta.syncId) row.id = meta.syncId
+  const { data, error } = await supabase
+    .from(TABLE)
+    .upsert(row, { onConflict: 'user_id,kind,local_id' })
+    .select()
+    .single()
+  if (error) throw error
+  invalidate(kind)
+  return rowToEntry(data)
 }
 
-/** Delete an entry by id. */
+/** Löscht einen Eintrag. */
 export async function deleteHomebrew(kind, id) {
-  const data = await readKind(kind)
-  const arr = data[ROOT_KEY[kind]] || []
-  data[ROOT_KEY[kind]] = arr.filter(e => e?._localMeta?.id !== id)
-  await writeKind(kind, data)
+  if (!KINDS.includes(kind)) throw new Error(`unknown homebrew kind: ${kind}`)
+  const user = await currentUser()
+  if (!user) throw new Error('Bitte einloggen.')
+  const { error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq('kind', kind)
+    .eq('local_id', id)
+  if (error) throw error
+  invalidate(kind)
 }
 
-/** All entries across all kinds — for a global "your homebrew" view. */
-export async function listAllHomebrew() {
-  const out = {}
-  for (const k of KINDS) out[k] = await listHomebrew(k)
-  return out
+/** Toggle is_public flag — direkt am Server. */
+export async function setHomebrewPublic(kind, id, isPublic) {
+  const user = await currentUser()
+  if (!user) throw new Error('Bitte einloggen.')
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({ is_public: !!isPublic })
+    .eq('kind', kind)
+    .eq('local_id', id)
+    .select()
+    .single()
+  if (error) throw error
+  invalidate(kind)
+  return rowToEntry(data)
 }
 
-// ── Catalog Integration ─────────────────────────────────────
-// `applyHomebrewToData(kind, rawDataFromFetch)` mergt die lokalen
-// Homebrew-Einträge in die 5etools-Roh-Daten BEVOR der Loader sie
-// parst. Aufgerufen aus dataLoader.fetchData für `items.json`,
-// `spells/sources.json`, etc.
+// ── Token Sharing ───────────────────────────────────────────
+
+/** Erzeugt (falls noch nicht vorhanden) einen Share-Token für den
+ *  Eintrag. Returnt den Token-String. Idempotent — falls schon ein
+ *  Token existiert, wird der bestehende zurückgegeben. */
+export async function ensureShareToken(kind, id) {
+  const user = await currentUser()
+  if (!user) throw new Error('Bitte einloggen.')
+  // Zuerst checken ob schon ein Token existiert.
+  const { data: existing } = await supabase
+    .from(TABLE)
+    .select('share_token')
+    .eq('kind', kind)
+    .eq('local_id', id)
+    .single()
+  if (existing?.share_token) return existing.share_token
+  // Neuen Token via RPC ziehen, dann auf den Eintrag schreiben.
+  const { data: newTok, error: rpcErr } = await supabase.rpc('dnd_homebrew_make_token')
+  if (rpcErr || !newTok) throw rpcErr || new Error('Token-Erzeugung fehlgeschlagen.')
+  const { error: upErr } = await supabase
+    .from(TABLE)
+    .update({ share_token: newTok })
+    .eq('kind', kind)
+    .eq('local_id', id)
+  if (upErr) throw upErr
+  invalidate(kind)
+  return newTok
+}
+
+/** Entfernt den Share-Token eines Eintrags (revoke). */
+export async function revokeShareToken(kind, id) {
+  const user = await currentUser()
+  if (!user) throw new Error('Bitte einloggen.')
+  const { error } = await supabase
+    .from(TABLE)
+    .update({ share_token: null })
+    .eq('kind', kind)
+    .eq('local_id', id)
+  if (error) throw error
+  invalidate(kind)
+}
+
+/** Holt einen fremden Eintrag per Token. Funktioniert via SECURITY-
+ *  DEFINER RPC — der Empfänger muss eingeloggt sein, kennt aber nur
+ *  den Token. Returnt {kind, data, author_name, ...} oder null. */
+export async function fetchByToken(token) {
+  if (!token || typeof token !== 'string') return null
+  const { data, error } = await supabase
+    .rpc('dnd_homebrew_fetch_by_token', { p_token: token.trim() })
+  if (error) { console.warn('[homebrew] fetchByToken', error); return null }
+  const row = Array.isArray(data) ? data[0] : data
+  return row || null
+}
+
+/** Importiert einen fremden Eintrag per Token in die eigene Library
+ *  (legt eine neue Kopie an, mit eigenem local_id + ohne share_token). */
+export async function importByToken(token) {
+  const row = await fetchByToken(token)
+  if (!row) throw new Error('Token nicht gefunden oder ungültig.')
+  const clone = JSON.parse(JSON.stringify(row.data || {}))
+  clone._localMeta = {
+    id: undefined,            // saveHomebrew vergibt neue ID
+    importedFrom: row.id,
+    importedFromAuthor: row.author_name || null,
+    importedFromToken: token,
+  }
+  // Damit es nicht direkt wieder public ist, expliziert auf false.
+  delete clone._localMeta.public
+  return await saveHomebrew(row.kind, clone)
+}
+
+// ── Catalog-Integration für Loader ──────────────────────────
+// Wird von dataLoader (loadItemIndex / loadSpellList / loadBackgroundList /
+// loadRaceList) aufgerufen um Homebrew in die 5etools-Shape zu mergen
+// BEVOR der Loader sie parsed.
 export async function applyHomebrewToData(kind, rawData) {
   if (!rawData || typeof rawData !== 'object') return rawData
   const list = await listHomebrew(kind)
@@ -206,4 +249,11 @@ export async function applyHomebrewToData(kind, rawData) {
   const next = { ...rawData }
   next[root] = [...(rawData[root] || []), ...list]
   return next
+}
+
+/** Alle Kinds gleichzeitig — z.B. für Backup-Dialog. */
+export async function listAllHomebrew() {
+  const out = {}
+  for (const k of KINDS) out[k] = await listHomebrew(k)
+  return out
 }

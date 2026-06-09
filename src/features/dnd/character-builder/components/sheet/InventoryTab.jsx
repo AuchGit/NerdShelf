@@ -240,7 +240,9 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       type: entry.type || 'G',
       weight: entry.weight ?? null, value: entry.value ?? null,
       ac: entry.ac ?? null, strength: entry.strength ?? null,
+      stealth: !!entry.stealth,
       dmg1: entry.dmg1 || '', dmgType: entry.dmgType || '',
+      dmg2: entry.dmg2 || '',
       weaponCategory: entry.weaponCategory || null,
       range: typeof entry.range === 'string' ? entry.range : '',
       properties, rarity: entry.rarity || 'common',
@@ -285,6 +287,9 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
         ? { _hbActions: entry._hbActions } : {}),
       ...(Array.isArray(entry._hbGrants) && entry._hbGrants.length > 0
         ? { _hbGrants: entry._hbGrants } : {}),
+      ...(entry._hbSharedCharges ? { _hbSharedCharges: entry._hbSharedCharges } : {}),
+      ...(entry._hbPassiveGrants ? { _hbPassiveGrants: entry._hbPassiveGrants } : {}),
+      ...(entry._localMeta ? { _localMeta: entry._localMeta } : {}),
     }
     // The browser modal adds one row per click; if it ever gains a
     // quantity input, the same singleton-split logic from saveItem would
