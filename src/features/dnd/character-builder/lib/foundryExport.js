@@ -20,6 +20,62 @@ import {
 import { getProficiencyBonus, getTotalLevel } from './characterModel'
 import { parseTags } from './tagParser'
 import { isContainerItem } from './sheetUtils'
+import { loadClassData, loadRaceList } from './dataLoader'
+
+// ─── Minimal-Hydration für den Export ────────────────────────────
+// Im Live-Sheet befüllt CharacterSheetPage.hydrateClassDataAndRecompute
+// das `character`-Object mit transient-fields wie __fixedSkills (für race-
+// granted Skills wie Half-Orc Menacing oder Elf Keen Senses) und einer
+// classDataMap. Beim Bulk-Export werden die Charaktere direkt aus
+// Supabase geladen — ohne diese Felder bleibt z.B. eine race-fixed
+// Skill-Proficiency unsichtbar UND Expertise-Picks darauf greifen nicht.
+//
+// hydrateForExport macht denselben Aufruf-Pfad async ein einziges Mal,
+// fügt die Hilfsfelder an und liefert den klassDataMap zurück damit
+// computeCharacter ihn korrekt nutzt.
+async function hydrateForExport(character) {
+  const edition = character?.meta?.edition || '5e'
+  const out = { ...character }
+  // ── classDataMap (subclass + level-table lookups) ──
+  const classes = (character.classes || []).map(c => c.classId).filter(Boolean)
+  const unique = [...new Set(classes)]
+  const loaded = await Promise.all(unique.map(id => loadClassData(edition, id).catch(() => null)))
+  const classDataMap = {}
+  unique.forEach((cid, i) => { if (loaded[i]) classDataMap[cid] = loaded[i] })
+  // ── Race-derived __fixedSkills ──
+  // computeProficiencies liest character.species.__fixedSkills — wir
+  // bauen das aus der races.json: alle fixed-skill-blocks die nicht
+  // choice-style sind werden in den Array gepusht. Identisch zum
+  // loadRaceTraits-Code in CharacterSheetPage.
+  try {
+    const raceId = character?.species?.raceId
+    if (raceId) {
+      const races = await loadRaceList(edition).catch(() => [])
+      const race = races.find(r => r.id === raceId || r.name === raceId)
+      if (race) {
+        const sub = (race.subraces || []).find(s =>
+          s.id === character.species.subraceId || s.name === character.species.subraceId
+        )
+        const skillBlocks = [
+          ...(race.skillProficiencies || []),
+          ...(sub?.skillProficiencies || []),
+        ]
+        const fixedSkills = []
+        for (const block of skillBlocks) {
+          if (!block || typeof block !== 'object') continue
+          if (block.choose || typeof block.any === 'number') continue
+          for (const [k, v] of Object.entries(block)) {
+            if (v === true && k !== 'choose' && k !== 'any') fixedSkills.push(k)
+          }
+        }
+        if (fixedSkills.length > 0) {
+          out.species = { ...(out.species || {}), __fixedSkills: fixedSkills }
+        }
+      }
+    }
+  } catch (e) { console.warn('[Export] race hydration failed:', e?.message || e) }
+  return { hydrated: out, classDataMap }
+}
 // JSON-Daten aus dem public/-Ordner werden zur Laufzeit per fetch() geladen.
 // Vite erlaubt keine statischen imports aus public/ — fetch() ist der korrekte Weg.
 let CLASS_INDEX = null
@@ -2388,6 +2444,15 @@ export async function exportToFoundry(character) {
   const characterEdition = character.meta?.edition || '5e'
   await ensureIndexes(characterEdition)
 
+  // Bulk-Export aus der Campaign-Übersicht zieht den Char-Datensatz roh
+  // aus Supabase — ohne die transient-Felder die das Live-Sheet auf
+  // `character` stasht (__fixedSkills, classDataMap). Wir hydratieren
+  // hier minimal: race-fixed skills + classDataMap. featureChoices
+  // (Expertise, Languages, Tools) brauchen die Skill-Proficiencies aus
+  // der Race um korrekt auf Expertise upzugraden.
+  const { hydrated, classDataMap } = await hydrateForExport(character)
+  character = hydrated
+
   // Load live spell data for accurate levels/schools/descriptions. Cache
   // is keyed by the edition we loaded for; if it changed since the last
   // export we must rebuild (XPHB spells differ from PHB on level / class
@@ -2409,7 +2474,10 @@ export async function exportToFoundry(character) {
   }
 
   // ── Computed Character Stats ─────────────────────────
-  const computed  = computeCharacter(character) || {}
+  // classDataMap-Argument ist wichtig damit Subclass-Features, Level-
+  // Table-Resources (Ki/Bardic Inspiration/etc), und scaling-dice
+  // (Sneak Attack) korrekt aufgelöst werden.
+  const computed  = computeCharacter(character, classDataMap) || {}
   const scores    = computeAbilityScores(character)
   const modifiers = computeModifiers(scores)
   const profBonus = getProficiencyBonus(character)
