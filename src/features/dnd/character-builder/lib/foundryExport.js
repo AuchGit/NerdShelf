@@ -42,11 +42,8 @@ async function hydrateForExport(character) {
   const loaded = await Promise.all(unique.map(id => loadClassData(edition, id).catch(() => null)))
   const classDataMap = {}
   unique.forEach((cid, i) => { if (loaded[i]) classDataMap[cid] = loaded[i] })
+
   // ── Race-derived __fixedSkills ──
-  // computeProficiencies liest character.species.__fixedSkills — wir
-  // bauen das aus der races.json: alle fixed-skill-blocks die nicht
-  // choice-style sind werden in den Array gepusht. Identisch zum
-  // loadRaceTraits-Code in CharacterSheetPage.
   try {
     const raceId = character?.species?.raceId
     if (raceId) {
@@ -74,6 +71,163 @@ async function hydrateForExport(character) {
       }
     }
   } catch (e) { console.warn('[Export] race hydration failed:', e?.message || e) }
+
+  // ── __activeFeatures (class + subclass features ≤ level) ──
+  // Used by Zeile 2697 für spell-resource-matching ("Favored Enemy"
+  // grants Hunter's Mark → 2x kostenlos → Resource-Counter im Actor).
+  // Vollständige Sub-Feature-Option-Logik (PrimalOrder/etc.) brauchen wir
+  // hier nicht — Top-Level-Features reichen für die Always-Prepared-Scans.
+  const activeFeatures = []
+  for (const cls of (character.classes || [])) {
+    const cd = classDataMap[cls.classId]
+    if (!cd) continue
+    const subId = cls.subclassId
+    const cleanSubId = subId ? String(subId).split(/__|\|/)[0].trim() : null
+    const sub = cleanSubId
+      ? (cd.subclasses || []).find(s =>
+          s.id === subId || s.name === subId
+          || s.id === cleanSubId || s.name === cleanSubId
+          || s.shortName === cleanSubId)
+      : null
+
+    // Top-level class features
+    for (const f of (cd.classFeature || cd.features || [])) {
+      if (!f?.name) continue
+      const lvl = f.level || 1
+      if (lvl > cls.level) continue
+      // Edition-Match: 5.5e bevorzugt XPHB/XDMG/XMM
+      activeFeatures.push({
+        classId: cls.classId,
+        source: 'class',
+        name: f.name,
+        level: lvl,
+        entries: f.entries || [],
+      })
+    }
+    // Subclass features at ≤ cls.level
+    if (sub) {
+      const subFeats = [
+        ...(Array.isArray(sub.features) ? sub.features : []),
+        ...(sub.featuresPerLevel
+          ? Object.entries(sub.featuresPerLevel).flatMap(([lvl, fs]) =>
+              (fs || []).map(f => ({ ...f, level: parseInt(lvl, 10) || 1 })))
+          : []),
+        // 5etools subclassFeature[] (flat structure)
+        ...(Array.isArray(cd.subclassFeature)
+          ? cd.subclassFeature.filter(f =>
+              f.className === cd.name
+              && (f.subclassShortName === sub.shortName || f.subclassShortName === sub.name))
+          : []),
+      ]
+      for (const f of subFeats) {
+        if (!f?.name) continue
+        const lvl = f.level || 1
+        if (lvl > cls.level) continue
+        activeFeatures.push({
+          classId: cls.classId,
+          source: 'subclass',
+          subclassId: subId,
+          name: f.name,
+          level: lvl,
+          entries: f.entries || [],
+        })
+      }
+    }
+  }
+  // Dedup nach (classId, name, level)
+  const seenAf = new Set()
+  out.__activeFeatures = activeFeatures.filter(f => {
+    const k = `${f.classId}|${f.name}|${f.level}`
+    if (seenAf.has(k)) return false
+    seenAf.add(k)
+    return true
+  })
+
+  // ── __grantedSpells (additionalSpells.prepared scans) ──
+  // Cleric Domain Spells, Paladin Oath Spells, Sorcerer Origin Spells,
+  // Warlock Patron Spells, etc. — collectCharacterSpells (sheetUtils)
+  // liest character.__grantedSpells als zusätzliche always-prepared
+  // Spells. Ohne diesen Feed fehlt z.B. einem Cleric L1 alle Domain-
+  // Spells im Foundry-Actor.
+  const grantedSpells = []
+  const seenGs = new Set()
+  const pushGranted = (name, classId, sourceFeature) => {
+    if (!name) return
+    const key = `${classId}|${String(name).toLowerCase()}`
+    if (seenGs.has(key)) return
+    seenGs.add(key)
+    grantedSpells.push({ name: String(name), classId, sourceFeature })
+  }
+  const consumeAdditional = (additionalSpells, level, classId, sourceFeature) => {
+    for (const block of (additionalSpells || [])) {
+      if (!block || typeof block !== 'object') continue
+      const prep = block.prepared
+      if (!prep || typeof prep !== 'object') continue
+      for (const [lvlKey, arr] of Object.entries(prep)) {
+        const lv = parseInt(lvlKey, 10)
+        if (!Number.isFinite(lv) || lv > level) continue
+        for (const raw of (Array.isArray(arr) ? arr : [])) {
+          const name = typeof raw === 'string'
+            ? raw.split('|')[0].replace(/\b\w/g, c => c.toUpperCase()).trim()
+            : null
+          if (name) pushGranted(name, classId, sourceFeature)
+        }
+      }
+    }
+  }
+  for (const cls of (character.classes || [])) {
+    const cd = classDataMap[cls.classId]
+    if (!cd) continue
+    consumeAdditional(cd.additionalSpells, cls.level, cls.classId, cls.classId)
+    const subId = cls.subclassId
+    if (!subId) continue
+    const cleanSubId = String(subId).split(/__|\|/)[0].trim()
+    const sub = (cd.subclasses || []).find(s =>
+      s.id === subId || s.name === subId
+      || s.id === cleanSubId || s.name === cleanSubId
+      || s.shortName === cleanSubId
+    )
+    if (sub) consumeAdditional(sub.additionalSpells, cls.level, cls.classId, subId)
+  }
+  // 5.5e XPHB-Pattern: subclasses encoden Always-Prepared via inline
+  // {type:'table'} mit colLabels ["<Class> Level", "Spells"]. Wir scannen
+  // jedes activeFeature auf solche Tabellen.
+  const SPELL_TAG_RE = /\{@spell\s+([^|}]+)(?:\|[^}]*)?\}/g
+  const scanForSpellTables = (feature, classId, classLevel) => {
+    if (!feature?.entries) return
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return
+      if (Array.isArray(node)) { for (const x of node) walk(x); return }
+      if (node.type === 'table' && Array.isArray(node.colLabels) && Array.isArray(node.rows)) {
+        const isLevelCol = /\blevel\b/i.test(node.colLabels[0] || '')
+        const isSpellCol = /\bspell/i.test(node.colLabels[1] || '')
+        if (isLevelCol && isSpellCol) {
+          for (const row of node.rows) {
+            const lvCell = row?.[0]
+            const spCell = row?.[1]
+            const lv = parseInt(typeof lvCell === 'string' ? lvCell : (lvCell?.roll?.exact ?? lvCell), 10)
+            if (!Number.isFinite(lv) || lv > classLevel) continue
+            const cellText = typeof spCell === 'string' ? spCell : JSON.stringify(spCell || '')
+            for (const m of cellText.matchAll(SPELL_TAG_RE)) {
+              const name = String(m[1] || '').trim()
+              if (name) pushGranted(name, classId, feature.name)
+            }
+          }
+        }
+      }
+      if (Array.isArray(node.entries)) walk(node.entries)
+      if (Array.isArray(node.items))   walk(node.items)
+    }
+    walk(feature.entries)
+  }
+  for (const f of out.__activeFeatures) {
+    if (!f?.classId) continue
+    const cls = (character.classes || []).find(c => c.classId === f.classId)
+    if (!cls) continue
+    scanForSpellTables(f, f.classId, cls.level)
+  }
+  out.__grantedSpells = grantedSpells
+
   return { hydrated: out, classDataMap }
 }
 // JSON-Daten aus dem public/-Ordner werden zur Laufzeit per fetch() geladen.
@@ -2550,12 +2704,41 @@ export async function exportToFoundry(character) {
   }
   const effCL  = Math.min(20, Math.round(casterLevel))
   const slotArr = effCL > 0 ? FULL_CASTER_SLOTS[effCL] : null
+
+  // ── Prepared-Spell maximum (system.spells.prep.max in dnd5e v5+) ──
+  // Foundry zeigt unten am Spell-Tab "Prepared X/Y" — Y kommt aus diesem
+  // aggregierten Wert. dnd5e v5+ rechnet das normalerweise selber aus
+  // den class-item preparation.formulas, aber wir pre-computen den Wert
+  // damit das Sheet sofort nach Import korrekt anzeigt (ohne dass der
+  // User erst ein Long-Rest klickt um Recompute zu triggern).
+  // Per-Klasse: max(abilityMod + classLevel|half|ceil, 1). Multi-Class
+  // summiert die einzelnen Maxima.
+  let prepMax = 0
+  const PREP_CASTERS_SET = PREPARED_CASTERS
+  for (const cls of (character.classes || [])) {
+    if (!PREP_CASTERS_SET.has(cls.classId)) continue
+    const ab = cls.spellcastingAbility
+    if (!ab) continue
+    const abMod = modifiers[ab] || 0
+    const prog = cls.casterProgression
+    const lvl = cls.level || 0
+    let classCount = 0
+    if (prog === 'half' || prog === '1/2') classCount = Math.floor(lvl / 2)
+    else if (prog === 'artificer')         classCount = Math.ceil(lvl / 2)
+    else                                   classCount = lvl
+    prepMax += Math.max(abMod + classCount, 1)
+  }
+
   const spellSlots = {
     spell1: { value: slotArr?.[0] || 0 }, spell2: { value: slotArr?.[1] || 0 },
     spell3: { value: slotArr?.[2] || 0 }, spell4: { value: slotArr?.[3] || 0 },
     spell5: { value: slotArr?.[4] || 0 }, spell6: { value: slotArr?.[5] || 0 },
     spell7: { value: slotArr?.[6] || 0 }, spell8: { value: slotArr?.[7] || 0 },
     spell9: { value: slotArr?.[8] || 0 }, pact:   { value: warlockData?.slots || 0 },
+    // Top-Level Prepared-Counter — Foundry rendert "Prepared X/Y"
+    // unten im Spell-Tab. value = aktuell prep'd (unbekannt im Export
+    // → 0; Foundry zählt prepared spells automatisch nach Import).
+    prep: { value: 0, max: prepMax },
   }
 
   // ── Proficiency Strings → Foundry Arrays ─────────────
@@ -2912,6 +3095,23 @@ export async function exportToFoundry(character) {
     addedSpells.add(key)
     spellItems.push(makeCustomSpellItem(spell, character))
   }
+
+  // ── Prepared-Count finalisieren ──────────────────────────
+  // Nachdem alle Spell-Items gebaut sind, zählen wir wie viele davon
+  // tatsächlich prep'd sind: mode='prepared' + prepared=true + level>0
+  // (Cantrips zählen nicht). Das ist das "X" in Foundry's "Prepared X/Y"
+  // unten am Spell-Tab. Always-Prepared (mode='always') / Innate / Pact /
+  // At-will werden NICHT mitgezählt — sie verbrauchen kein Prep-Slot.
+  let prepValueCount = 0
+  for (const sp of spellItems) {
+    const prep = sp?.system?.preparation
+    if (!prep) continue
+    if (prep.mode !== 'prepared') continue
+    if (!prep.prepared) continue
+    const lvl = sp?.system?.level
+    if (typeof lvl === 'number' && lvl > 0) prepValueCount++
+  }
+  spellSlots.prep.value = prepValueCount
 
   // 6. Inventar (regular + custom items)
   // Track each row's sheet-side `containerId` alongside the Foundry item so
