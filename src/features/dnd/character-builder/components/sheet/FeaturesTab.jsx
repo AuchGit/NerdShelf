@@ -11,6 +11,27 @@ import { getCustomNote, setCustomNote } from '../../lib/customNotes'
 import { DEFAULT_PILL_COLORS } from '../../lib/pillColors'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
+
+// Standard-Sprachen für den language-Picker (PHB common + exotic).
+// User kann diese als Spielerwahl picken — der Picker erlaubt auch
+// freie Eingabe via einer "+ Eigene" Option ist nice-to-have, aber
+// für den Standard-Fall reichen die 16.
+const STANDARD_LANGUAGES = [
+  'Common', 'Dwarvish', 'Elvish', 'Giant', 'Gnomish', 'Goblin',
+  'Halfling', 'Orc', 'Abyssal', 'Celestial', 'Draconic', 'Deep Speech',
+  'Infernal', 'Primordial', 'Sylvan', 'Undercommon',
+]
+// Standard-Tools für tool-proficiency choice (subset für UI; user
+// kann via Background/Class auch andere bekommen — der Picker zeigt
+// hier nur die häufig wählbaren).
+const STANDARD_TOOLS = [
+  "thieves' tools", "disguise kit", "forgery kit", "herbalism kit",
+  "smith's tools", "tinker's tools", "cartographer's tools",
+  "cook's utensils", "alchemist's supplies", "calligrapher's supplies",
+  "carpenter's tools", "leatherworker's tools", "mason's tools",
+  "navigator's tools", "painter's supplies", "poisoner's kit",
+  "potter's tools", "weaver's tools", "woodcarver's tools",
+]
 import { parseFeatureChoices } from '../../lib/choiceParser'
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
@@ -44,7 +65,7 @@ function getFeatBonusSummary(character) {
 
 const SIZE_LABELS = { M: 'Medium', S: 'Small', L: 'Large', T: 'Tiny', H: 'Huge' }
 
-export default function FeaturesTab({ character, updateCharacter, applyCharacter, expanded, setExpanded }) {
+export default function FeaturesTab({ character, computed, updateCharacter, applyCharacter, expanded, setExpanded }) {
   const featBonuses = getFeatBonusSummary(character)
   const [featDataMap, setFeatDataMap] = useState({})
   const [expandedFeat, setExpandedFeat] = useState(null)
@@ -71,27 +92,30 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
   // skill proficiencies) so we resolve them here against the current
   // skill set; everything else uses the static `options` list the
   // parser returned.
-  const proficientSkillsByClass = useMemo(() => {
-    // We don't have computed here, so derive from the proficiency
-    // tags on character.classes / background / race the same way the
-    // engine would aggregate. Keep this scoped to anything the parent
-    // already knows about: chosen class skills, expertise picks
-    // already made, background skills, and the catch-all per-feature
-    // choices.
-    const set = new Set()
-    for (const s of (character.background?.skillProficiencies || [])) set.add(s)
-    for (const cls of (character.classes || [])) {
-      for (const lc of Object.values(cls.levelChoices || {})) {
-        for (const s of (lc.skillProficiencies || [])) set.add(s)
-      }
+  // RAW-konforme Eligibility-Sets: Skills/Languages/Tools die der
+  // Charakter HAT — diese müssen je nach Choice-Type entweder Voraus-
+  // setzung (Expertise) ODER Ausschluss (Languages/Tools die man schon
+  // hat darf man nicht nochmal wählen) sein.
+  // Quelle: computed.proficiencies (vom rulesEngine, voll aggregiert).
+  const proficiencyState = useMemo(() => {
+    const profs = computed?.proficiencies || {}
+    const skillMap = profs.skills || {}   // { 'stealth': 'proficient' | 'expertise' }
+    return {
+      proficientSkills:  Object.entries(skillMap).filter(([, v]) => v === 'proficient' || v === 'expertise').map(([k]) => k),
+      expertiseSkills:   new Set(Object.entries(skillMap).filter(([, v]) => v === 'expertise').map(([k]) => k)),
+      languages:         new Set((profs.languages || []).map(l => String(l).toLowerCase())),
+      tools:             new Set(Object.keys(profs.tools || {}).map(k => String(k).toLowerCase())),
     }
-    for (const [k, v] of Object.entries(character.choices || {})) {
-      if (!k.includes(':skill:')) continue
-      const arr = Array.isArray(v) ? v : [v]
-      for (const s of arr) if (s) set.add(s)
-    }
-    return [...set]
-  }, [character])
+  }, [computed])
+
+  // Eligible für expertise: nur Skills die proficient sind UND noch
+  // NICHT expertise (RAW: "with which you lack Expertise").
+  const eligibleExpertiseSkills = useMemo(() => {
+    return proficiencyState.proficientSkills.filter(s => !proficiencyState.expertiseSkills.has(s))
+  }, [proficiencyState])
+
+  // Backwards-compat: einige Use-Sites benutzen noch den alten Namen.
+  const proficientSkillsByClass = eligibleExpertiseSkills
 
   // Resolved-state map keyed by the choice descriptor's id so the
   // same-named feature at different class levels (Bard Expertise
@@ -107,7 +131,13 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
       const stored = cls?.featureChoices || {}
       for (const ch of choices) {
         const current = stored[ch.id]
-        if (ch.type === 'expertise') {
+        // Multi-select Pick-Types: expertise, languageProficiency, toolProficiency
+        // → fertig wenn array-length >= count
+        // Single-select: skillProficiency, savingThrowProficiency → fertig wenn .value gesetzt
+        const isMulti = ch.type === 'expertise'
+          || ch.type === 'languageProficiency'
+          || ch.type === 'toolProficiency'
+        if (isMulti) {
           if (current?.id === ch.id && Array.isArray(current.value)
               && current.value.length >= ch.count) continue
         } else {
@@ -139,6 +169,19 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
     }
     if (cur.length >= choiceDescriptor.count) return
     setFeatureChoice(classId, choiceDescriptor, [...cur, skill])
+  }
+
+  // Multi-Select Toggle für language/tool — gleiche Logik wie expertise
+  // aber ohne die "must already be proficient"-Constraint.
+  function toggleMulti(classId, choiceDescriptor, value, currentArr) {
+    const cur = Array.isArray(currentArr) ? [...currentArr] : []
+    const has = cur.includes(value)
+    if (has) {
+      setFeatureChoice(classId, choiceDescriptor, cur.filter(v => v !== value))
+      return
+    }
+    if (cur.length >= choiceDescriptor.count) return
+    setFeatureChoice(classId, choiceDescriptor, [...cur, value])
   }
 
   useEffect(() => {
@@ -208,36 +251,69 @@ export default function FeaturesTab({ character, updateCharacter, applyCharacter
                   // Expertise picker: options come from the character's
                   // currently-proficient skills (you can only Expert
                   // something you're already Proficient in). Multi-
-                  // select up to `choice.count`. Empty list → show a
-                  // hint so the player knows why nothing's clickable.
+                  // select up to `choice.count`.
                   proficientSkillsByClass.length === 0 ? (
                     <div style={{ color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
                       Keine Skill-Proficiencies gefunden — wähle erst Klassen-Skills.
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {proficientSkillsByClass.map(skill => {
-                        const curArr = Array.isArray(current?.value) ? current.value : []
-                        const isSel = curArr.includes(skill)
-                        const atCap = !isSel && curArr.length >= choice.count
-                        return (
-                          <button key={skill} type="button"
-                            disabled={atCap}
-                            onClick={() => toggleExpertise(classId, choice, skill, curArr)}
-                            style={{
-                              padding: '4px 10px', borderRadius: 999, fontSize: 12,
-                              cursor: atCap ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                              opacity: atCap ? 0.4 : 1,
-                              background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
-                              border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
-                              color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
-                            }}>
-                            {isSel && '✓ '}{formatSkillName(skill)}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <MultiSelectChips
+                      options={proficientSkillsByClass.map(s => ({ value: s, label: formatSkillName(s) }))}
+                      current={Array.isArray(current?.value) ? current.value : []}
+                      count={choice.count}
+                      onToggle={(val, cur) => toggleExpertise(classId, choice, val, cur)}
+                    />
                   )
+                ) : choice.type === 'languageProficiency' ? (
+                  // RAW: nur Sprachen anbieten die der Charakter NICHT
+                  // bereits kennt. Eigene Picks (current.value) bleiben
+                  // anklickbar zum Toggle/Abwählen.
+                  (() => {
+                    const curArr = Array.isArray(current?.value) ? current.value : []
+                    const knownLowSet = proficiencyState.languages
+                    const eligible = STANDARD_LANGUAGES.filter(l => {
+                      const low = l.toLowerCase()
+                      // Bereits aktuelle Pick? → behalten damit Toggle funktioniert
+                      if (curArr.some(c => String(c).toLowerCase() === low)) return true
+                      // Bereits anderweitig bekannt? → ausschließen
+                      if (knownLowSet.has(low)) return false
+                      return true
+                    })
+                    if (eligible.length === 0) {
+                      return <div style={{ color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
+                        Du kennst bereits alle Standard-Sprachen.
+                      </div>
+                    }
+                    return <MultiSelectChips
+                      options={eligible.map(l => ({ value: l, label: l }))}
+                      current={curArr}
+                      count={choice.count}
+                      onToggle={(val, cur) => toggleMulti(classId, choice, val, cur)}
+                    />
+                  })()
+                ) : choice.type === 'toolProficiency' ? (
+                  // RAW: nur Tools die der Char NICHT schon proficient hat.
+                  (() => {
+                    const curArr = Array.isArray(current?.value) ? current.value : []
+                    const knownLowSet = proficiencyState.tools
+                    const eligible = STANDARD_TOOLS.filter(t => {
+                      const low = t.toLowerCase()
+                      if (curArr.some(c => String(c).toLowerCase() === low)) return true
+                      if (knownLowSet.has(low)) return false
+                      return true
+                    })
+                    if (eligible.length === 0) {
+                      return <div style={{ color: 'var(--text-dim)', fontSize: 12, fontStyle: 'italic' }}>
+                        Du hast bereits alle Standard-Tools als Proficiency.
+                      </div>
+                    }
+                    return <MultiSelectChips
+                      options={eligible.map(t => ({ value: t, label: formatToolName(t) }))}
+                      current={curArr}
+                      count={choice.count}
+                      onToggle={(val, cur) => toggleMulti(classId, choice, val, cur)}
+                    />
+                  })()
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {choice.options.map(opt => {
@@ -786,4 +862,33 @@ function viewToggleBtn(active) {
     color: active ? 'var(--accent)' : 'var(--text-muted)',
     border: 'none', cursor: 'pointer', fontFamily: 'inherit',
   }
+}
+
+// Multi-Select Chip-Group für die Feature-Picker (expertise / language /
+// tool). `count` = max-Anzahl gleichzeitig wählbar; bei Erreichen werden
+// nicht-gewählte Chips disabled.
+function MultiSelectChips({ options, current, count, onToggle }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {options.map(opt => {
+        const isSel = current.includes(opt.value)
+        const atCap = !isSel && current.length >= count
+        return (
+          <button key={opt.value} type="button"
+            disabled={atCap}
+            onClick={() => onToggle(opt.value, current)}
+            style={{
+              padding: '4px 10px', borderRadius: 999, fontSize: 12,
+              cursor: atCap ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              opacity: atCap ? 0.4 : 1,
+              background: isSel ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'transparent',
+              border: `1px solid ${isSel ? 'var(--accent)' : 'var(--border)'}`,
+              color: isSel ? 'var(--accent)' : 'var(--text-secondary)',
+            }}>
+            {isSel && '✓ '}{opt.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }

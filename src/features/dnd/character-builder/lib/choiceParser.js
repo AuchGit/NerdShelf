@@ -1198,6 +1198,47 @@ export function parseFeatureChoices(feature) {
     })
   }
 
+  // ── Language choice ("You know N languages of your choice") ──
+  // 5e: "You learn one language of your choice"
+  // 5.5e: "You know two languages of your choice from the language tables…"
+  // Auch "you gain proficiency in N additional languages" wird gefangen.
+  // Options sind die Standard-PHB-Sprachen; der Picker resolved sie aus
+  // einer kanonischen Liste damit kein Datenfile pro Klasse gepflegt
+  // werden muss.
+  {
+    const langRe = /(?:you\s+)?(?:know|learn|gain)\s+(one|two|three|four|five|six|\d+)\s+(?:additional\s+)?languages?\s+of\s+your\s+choice/i
+    const lm = low.match(langRe)
+    if (lm) {
+      const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+      const count = NUM[lm[1].toLowerCase()] ?? parseInt(lm[1], 10) ?? 1
+      out.push({
+        id: `${featureKey}__language`,
+        type: 'languageProficiency',
+        label: `${featureKey} — ${count} Sprache${count > 1 ? 'n' : ''} wählen`,
+        count,
+        options: [], // picker resolved aus STANDARD_LANGUAGES
+      })
+    }
+  }
+
+  // ── Tool proficiency choice ──
+  // "you gain proficiency with one tool of your choice" / "with N tools"
+  {
+    const toolRe = /(?:gain|have)\s+proficiency\s+(?:with|in)\s+(one|two|three|four|\d+)\s+(?:additional\s+)?tools?\s+of\s+your\s+choice/i
+    const tm = low.match(toolRe)
+    if (tm) {
+      const NUM = { one: 1, two: 2, three: 3, four: 4 }
+      const count = NUM[tm[1].toLowerCase()] ?? parseInt(tm[1], 10) ?? 1
+      out.push({
+        id: `${featureKey}__tool`,
+        type: 'toolProficiency',
+        label: `${featureKey} — ${count} Tool${count > 1 ? 's' : ''} wählen`,
+        count,
+        options: [], // picker resolved aus STANDARD_TOOLS
+      })
+    }
+  }
+
   // ── Saving-throw choice (Iron Mind pattern) ──
   // "you gain proficiency in WIS saving throws. If you already have
   //  this proficiency, you instead gain proficiency in INT or CHA

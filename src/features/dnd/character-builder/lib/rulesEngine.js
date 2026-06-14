@@ -587,6 +587,23 @@ export function computeProficiencies(character, classDataMap = {}) {
           const k = normalizeSkill(skill)
           if (result.skills[k] === 'proficient') result.skills[k] = 'expertise'
         }
+      } else if (picked.type === 'languageProficiency' && Array.isArray(picked.value)) {
+        // Language picks vom Feature-Picker (Ranger Deft Explorer L2,
+        // Sorcerer Origin Spell language, …) landen direkt in der
+        // languages-Liste. Dedup gegen bereits vorhandene Sprachen.
+        for (const lang of picked.value) {
+          if (typeof lang !== 'string' || !lang) continue
+          if (!result.languages.some(l => String(l).toLowerCase() === lang.toLowerCase())) {
+            result.languages.push(lang)
+          }
+        }
+      } else if (picked.type === 'toolProficiency' && Array.isArray(picked.value)) {
+        // Tool-Profs landen im tools-Object (existing structure).
+        for (const tool of picked.value) {
+          if (typeof tool !== 'string' || !tool) continue
+          const key = tool.toLowerCase()
+          if (!result.tools[key]) result.tools[key] = true
+        }
       }
     }
   }

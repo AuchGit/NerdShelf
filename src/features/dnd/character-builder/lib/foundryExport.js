@@ -2505,12 +2505,30 @@ export async function exportToFoundry(character) {
     if (mapped) armorProfValues.push(mapped)
     else        armorProfCustom.push(ap)
   }
-  const langValues = (profs.languages || []).map(l => l.toLowerCase().replace(/\s+/g, ''))
+  // Foundry erkennt einen festen Set Standard-Sprachen mit fixierten
+  // IDs. Unbekannte Namen (Homebrew, Subrace-specific) landen sonst
+  // in value und werden in der Sheet stumm verschluckt — wir routen
+  // sie deshalb in custom (semicolon-separated).
+  const FOUNDRY_LANGS = new Set([
+    'common','dwarvish','elvish','giant','gnomish','goblin','halfling','orc',
+    'abyssal','celestial','draconic','deepspeech','infernal','primordial','sylvan','undercommon',
+    'druidic','thievescant','signlanguage','aarakocra','gith','aquan','auran','ignan','terran',
+  ])
+  const langValuesAll = (profs.languages || []).map(l => String(l || '').trim()).filter(Boolean)
+  const langValues = []
+  const langCustom = []
+  for (const l of langValuesAll) {
+    const norm = l.toLowerCase().replace(/[\s'-]/g, '')
+    if (FOUNDRY_LANGS.has(norm)) langValues.push(norm)
+    else langCustom.push(l)
+  }
 
   // Tool Proficiencies
   const tools = {}
   for (const [toolKey, lvl] of Object.entries(profs.tools || {})) {
     const tid    = makeId(`tool_${toolKey}`)
+    // featureChoices schreibt `lvl = true` (boolean) — alles was wahr
+    // ist aber nicht explicit 'expertise' = profValue 1.
     tools[tid]   = { value: lvl === 'expertise' ? 2 : 1, ability: 'int' }
   }
 
@@ -3095,7 +3113,7 @@ export async function exportToFoundry(character) {
         ci: { value: [], custom: '' },                 // condition immunity
         languages: {
           value:         langValues,
-          custom:        '',
+          custom:        langCustom.join(';'),
           communication: {},                           // v13 neu
         },
         weaponProf: {

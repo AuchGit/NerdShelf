@@ -2157,6 +2157,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             {activeTab === 'features' && (
               <FeaturesTab
                 character={character}
+                computed={computed}
                 updateCharacter={updateCharacter}
                 applyCharacter={applyCharacter}
                 expanded={featuresExpanded}
