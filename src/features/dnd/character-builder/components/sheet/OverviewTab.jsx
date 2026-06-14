@@ -27,7 +27,7 @@ import { CONDITIONS } from '../../lib/conditions'
 import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/usePersistedState'
-import { parseSpellEffect, DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
+import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
 import { resolveFormula, formatFormula } from '../../lib/formulaResolver'
 import { usePillColors } from '../../lib/pillColors'
 import { parseFeatureEffect, pillColorForKind } from '../../lib/featureEffectParser'
@@ -471,9 +471,24 @@ function HpControls({ hp, baseMaxHp, maxHpBonus, applyCharacter, updateCharacter
   )
 }
 
-export default function OverviewTab({ character, computed, abilityScores, hp, updateCharacter, applyCharacter, charId, session, onReload, onNavigateTab, readOnly = false }) {
+export default function OverviewTab({
+  character, computed, abilityScores, hp,
+  updateCharacter, applyCharacter, charId, session, onReload, onNavigateTab,
+  inPopout = false, popoutSize = 'L', popoutTab = 'default',
+  openConditions: openConditionsExternal = false,
+  onCloseConditions: onCloseConditionsExternal,
+  readOnly = false,
+}) {
   const { isPwaMobile } = usePwaMobile()
   const [conditionsOpen, setConditionsOpen] = useState(false)
+  // Allow parent (CharacterSheetPage in popout-mode) to drive the
+  // conditions modal — the StatBar opens it via prop, the modal
+  // mount lives here next to its dependencies (CONDITIONS, updateCharacter).
+  const conditionsOpenEff = conditionsOpen || openConditionsExternal
+  const closeConditions = () => {
+    setConditionsOpen(false)
+    if (onCloseConditionsExternal) onCloseConditionsExternal()
+  }
   const deathSaves = character.status?.deathSaves || { successes: 0, failures: 0 }
   const usedResources = character.status?.usedResources || {}
   const baseMaxHp = computed?.hp?.max || 1
@@ -526,8 +541,13 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
   // button next to each spell name. No more state hauling here.
 
   return (
-    <div className="dnd-sheet-tab-body" style={S.tabBody}>
+    <div className="dnd-sheet-tab-body" style={S.tabBody}
+      data-popout={inPopout ? '1' : undefined}
+      data-popout-size={inPopout ? popoutSize : undefined}
+      data-popout-tab={inPopout ? popoutTab : undefined}>
       {/* ── Combat-Tracker-Bar (oberhalb der Hero-Row) ──
+          In Popout-Mode komplett weggelassen — PopoutStatBar oberhalb
+          übernimmt diese Informationen kompakter und gameplay-fokussiert.
           flexWrap: nowrap zwingt die Bar einzeilig zu bleiben — die
           Slots schrumpfen via flex-shrink statt umzubrechen. Inhalte
           sind klein genug dass sie auch bei knappem Platz lesbar
@@ -536,6 +556,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           Slot 2 (Actions): Action Economy + Neue Runde.
           Slot 3 (rechts): Spell Atk/DC — bleibt rechts unabhaengig
                   vom Spells/Favoriten-Swap. */}
+      {!inPopout && (
       <div
         data-tauri-drag-region={isPopoutEnv() ? '' : undefined}
         style={{
@@ -597,6 +618,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           </div>
         )}
       </div>
+      )}
 
       {/* ── Top row: HP card, Quick-Access grid, then 3 action columns ──
           Layout (left → right):
@@ -607,10 +629,11 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             • Blue / Green / Yellow — Available Actions, Spells, Favorites
           Death saves + action pills are a separate full-width strip
           below this row (closing border across the whole page). */}
-      <div style={isPwaMobile ? heroRowPwa : heroRow}>
-        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 240px', minWidth: 0 }}>
+      <div style={isPwaMobile ? heroRowPwa : heroRow} data-hero-row="1">
+        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 240px', minWidth: 0 }}
+          data-popout-cell="hp">
         <Section
-          title="Hit Points"
+          title={inPopout ? 'Conditions' : 'Hit Points'}
           // Conditions-Button im Section-Header (rechts, neben dem
           // Titel), parallel zum "Inventory" / "Prepare"-Button-Muster
           // in den anderen Spalten. Aktiv-Counter steht direkt drauf.
@@ -640,8 +663,10 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
               Spalte rechts daneben über die ganze Höhe in Anspruch. */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
             {/* Linker Block: HP-Karte + alle HP-Controls zentriert
-                darunter. Eigene Spalte mit fester Breite damit die
-                Buttons exakt unter dem HP-Wert sitzen. */}
+                darunter. In Popout-Mode wird das ganze Karten-Inner
+                weggelassen — der StatBar oben übernimmt HP-Wert und
+                Damage/Heal-Edit. Nur TempMax bleibt unter Resistance. */}
+            {!inPopout && (
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', gap: 4,
@@ -671,6 +696,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
                   updateCharacter={updateCharacter} />
               )}
             </div>
+            )}
             {/* Rechter Block: Resistance/Vulnerability. Stretcht über
                 die ganze Höhe der HP-Section bis zur unteren Border. */}
             <DamageResistancePills character={character} compact />
@@ -701,7 +727,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         {/* Quick Access — narrow single column. Items render one per
             row instead of the previous auto-grid; potions + pinned
             items stack vertically. */}
-        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 160px', minWidth: 0 }}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '0 0 160px', minWidth: 0 }}
+          data-popout-cell="quick">
           <PotionAndQuickAccessColumn
             character={character}
             applyCharacter={applyCharacter}
@@ -709,7 +736,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           />
         </div>
 
-        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
+        <div style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}
+          data-popout-cell="actions">
           <Section
             title={
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -739,7 +767,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
           const swapped = !!character?.status?.heroColSwap
           const swapColumns = () => updateCharacter('status.heroColSwap', !swapped)
           const spellsCol = (
-            <div key="spells" style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}>
+            <div key="spells" style={isPwaMobile ? heroColPwa : { flex: '1 1 260px', minWidth: 0 }}
+              data-popout-cell="spells">
               <FeaturesAndPreparedSpellsColumn
                 character={character}
                 computed={computed}
@@ -751,7 +780,8 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
             </div>
           )
           const favCol = (
-            <div key="favs" style={isPwaMobile ? heroColPwa : { flex: '1 1 240px', minWidth: 0 }}>
+            <div key="favs" style={isPwaMobile ? heroColPwa : { flex: '1 1 240px', minWidth: 0 }}
+              data-popout-cell="favs">
               <div style={isPwaMobile ? flexibleScroll : fixedHeightSection}>
                 <FavoritesSection
                   character={character}
@@ -770,11 +800,11 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
       {/* Conditions-Footer entfernt — der Toggle-Button sitzt jetzt
           unter den HP-Controls, und aktive Conditions sind oben in
           der Resistance/Vulnerability-Spalte einzeln aufgelistet. */}
-      {conditionsOpen && (
+      {conditionsOpenEff && (
         <ConditionsPickerModal
           character={character}
           updateCharacter={updateCharacter}
-          onClose={() => setConditionsOpen(false)}
+          onClose={closeConditions}
         />
       )}
 
@@ -793,7 +823,7 @@ export default function OverviewTab({ character, computed, abilityScores, hp, up
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: 12,
-      }}>
+      }} data-popout-cell="mastery">
         {computed?.attacks?.length > 0 && (
           <WeaponMasteryPicker character={character} computed={computed} updateCharacter={updateCharacter} />
         )}
@@ -1531,6 +1561,10 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
         attack: '',
         range: full?.range || m?.range || '—',
         target: '—',
+        // Area-Pill rechts neben Range — data-driven aus spell.areaTags
+        // + entries-Text. Fog Cloud → "20 ft. Sphere", Cone of Cold →
+        // "60 ft. Cone", Lightning Bolt → "100 ft. Line", etc.
+        areaInfo: deriveSpellArea(full || m) || '',
         kind: isAlways ? 'always-spell' : 'spell',
         badge: isAlways ? 'Always' : null,
         spell: {

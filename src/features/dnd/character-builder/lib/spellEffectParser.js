@@ -489,6 +489,98 @@ export function parseSpellEffect(spell, opts = {}) {
 // Parser für Spells synthesisiert die HP wiederherstellen statt
 // Schaden machen — eigene Türkis-Grün-Farbe damit Healer-Spells in
 // der Action-Spalte auf einen Blick erkennbar sind.
+// ── Area-Extraktion aus Spell-Daten ────────────────────────
+// Liest spell.areaTags (Shape-Code) und scant entries-Text auf die
+// passende Größe. Liefert eine kompakte Beschreibung für die Pill,
+// z.B. "20 ft. Sphere" / "15 ft. Cone" / "30 ft. Line".
+// Data-driven — keine Spell-Namen hardcoded.
+
+// 5etools areaTags-Konvention:
+//   S=Sphere · N=Cone · L=Line · C=Cube · Q=Square · Y=Cylinder
+//   R=Radius · W=Wall · H=Hemisphere · B=alt Cube
+// ST/MT (single/multi-target) sind kein flächen-shape und werden gefiltert.
+const AREA_SHAPE_LABEL = {
+  S: 'Sphere',
+  N: 'Cone',
+  L: 'Line',
+  C: 'Cube',
+  B: 'Cube',
+  Q: 'Square',
+  Y: 'Cylinder',
+  W: 'Wall',
+  H: 'Hemisphere',
+  R: 'Radius',
+}
+
+// Regex-Patterns pro Shape — wir extrahieren die Größe aus dem entries-
+// Text. Reihenfolge: spezifischere Patterns (mit "-radius") zuerst.
+const AREA_PATTERNS = {
+  Sphere:     [
+    /(\d+)[ -]foot[ -]radius\b/i,
+    /(\d+)[ -]ft\.?[ -]radius\b/i,
+    /(\d+)[ -]foot\b[^.]{0,30}\bemanation\b/i,  // 5.5e: "15-foot Emanation" = sphere
+  ],
+  Cone:       [/(\d+)[ -]foot\b[^.]{0,30}\bcone\b/i, /(\d+)[ -]ft\b[^.]{0,30}\bcone\b/i],
+  Line:       [/(\d+)[ -]foot[ -]long\b/i, /(\d+)[ -]foot\b[^.]{0,30}\bline\b/i, /(\d+)[ -]ft\b[^.]{0,30}\bline\b/i],
+  Cube:       [/(\d+)[ -]foot\b[^.]{0,30}\bcube\b/i, /(\d+)[ -]ft\b[^.]{0,30}\bcube\b/i],
+  Square:     [/(\d+)[ -]foot\b[^.]{0,30}\bsquare\b/i],
+  Cylinder:   [/(\d+)[ -]foot[ -]radius\b/i],
+  Wall:       [/(\d+)[ -]foot\b[^.]{0,30}\bwall\b/i],
+  Hemisphere: [/(\d+)[ -]foot[ -]radius\b/i],
+  Radius:     [/(\d+)[ -]foot[ -]radius\b/i, /(\d+)[ -]ft\.?[ -]radius\b/i],
+}
+
+function flattenSpellEntries(entries) {
+  const parts = []
+  const walk = (n) => {
+    if (typeof n === 'string') { parts.push(n); return }
+    if (Array.isArray(n)) { for (const x of n) walk(x); return }
+    if (n && typeof n === 'object') {
+      if (Array.isArray(n.entries)) walk(n.entries)
+      if (Array.isArray(n.items)) walk(n.items)
+    }
+  }
+  walk(entries)
+  return parts.join(' ')
+}
+
+export function deriveSpellArea(spell) {
+  if (!spell) return ''
+  const tags = Array.isArray(spell.areaTags) ? spell.areaTags : []
+  // Single-target / non-area Shapes auslassen
+  const shapeCode = tags.find(t => AREA_SHAPE_LABEL[t])
+  if (!shapeCode) return ''
+  const shape = AREA_SHAPE_LABEL[shapeCode]
+  const text = flattenSpellEntries(spell.entries)
+  // Tags vorher strippen damit die Regex nicht über {@variantrule … |Sphere}
+  // stolpert.
+  const stripped = String(text).replace(/\{@\w+\s+[^|}]+(?:\|[^}]*)?\}/g, (m) => {
+    // Falls 3-Teile Display-Text vorhanden, nutze den
+    const parts = m.slice(1, -1).split(/\s+/, 2)
+    const inner = m.slice(parts[0].length + 2, -1)
+    const sub = inner.split('|')
+    return sub[sub.length - 1] || sub[0]
+  })
+  // Spezialfall Line: oft "30-foot-long, 5-foot-wide line" — prefer length
+  if (shape === 'Line') {
+    const lenW = stripped.match(/(\d+)[ -]foot[ -]long,\s*(\d+)[ -]foot[ -]wide\s+line/i)
+    if (lenW) return `${lenW[1]} ft. Line (${lenW[2]} ft. wide)`
+  }
+  // Spezialfall Cylinder: "radius, X feet high"
+  if (shape === 'Cylinder') {
+    const cyl = stripped.match(/(\d+)[ -]foot[ -]radius,\s*(\d+)[ -]?(?:foot|ft)\b[ -]high/i)
+    if (cyl) return `${cyl[1]} ft. Cylinder (${cyl[2]} ft. high)`
+  }
+  const patterns = AREA_PATTERNS[shape] || []
+  for (const re of patterns) {
+    const m = stripped.match(re)
+    if (m) return `${m[1]} ft. ${shape}`
+  }
+  // Fallback wenn areaTag gesetzt aber keine Größe im Text gefunden:
+  // nur den Shape-Namen zeigen.
+  return shape
+}
+
 export const DAMAGE_TYPE_COLOR = {
   acid:        '#7bc950',
   bludgeoning: '#8a8a8a',

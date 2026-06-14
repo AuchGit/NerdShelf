@@ -49,7 +49,12 @@ export function parseTags(text) {
     .replace(/\{@book ([^|]+)\|?[^}]*\}/g, '$1')
     .replace(/\{@note ([^}]+)\}/g, '[$1]')
     .replace(/\{@quickref ([^|]+)\|?[^}]*\}/g, '$1')
-    .replace(/\{@variantrule ([^|]+)\|?[^}]*\}/g, '$1')
+    // variantrule: 5etools-Konvention für 3-Teile ist NAME|SOURCE|DISPLAY
+    //   z.B. {@variantrule Sphere [Area of Effect]|XPHB|Sphere}
+    // Wenn ein 3. Teil (Display-Text) vorhanden → bevorzugen; sonst NAME.
+    .replace(/\{@variantrule [^|]+\|[^|]*\|([^}]+)\}/g, '$1')
+    .replace(/\{@variantrule ([^|]+)\|[^}]*\}/g, '$1')
+    .replace(/\{@variantrule ([^|}]+)\}/g, '$1')
     .replace(/\{@loader ([^|]+)\|?[^}]*\}/g, '$1')
     .replace(/\{@table ([^|]+)\|?[^}]*\}/g, '$1')
     .replace(/\{@deity ([^|]+)\|?[^}]*\}/g, '$1')

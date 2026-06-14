@@ -101,3 +101,196 @@ body[data-pwa-mobile="true"] .dnd-sheet-root .dnd-sheet-tab-body {
 body[data-pwa-mobile="true"] .dnd-sheet-root [data-grid="inventory-sections"] {
   grid-template-columns: 1fr !important;
 }
+
+/* ═══ POPOUT-Mode Layout-Tweaks ═══════════════════════════════════════
+   VTT-Overlay-optimiert. HP + Actions sind die wichtigsten Spalten —
+   bei genug Platz IMMER side-by-side, bei XS oben gestapelt.
+   data-popout-cell="hp|quick|actions|spells|favs" markiert jede
+   Hero-Row-Spalte; CSS-Grid arrangiert per Cell-Name explicit. */
+
+.dnd-sheet-tab-body[data-popout="1"] {
+  padding: 5px 6px !important;
+  font-size: 12px;
+}
+.dnd-sheet-tab-body[data-popout="1"] [data-section-body],
+.dnd-sheet-tab-body[data-popout="1"] section,
+.dnd-sheet-tab-body[data-popout="1"] .dnd-section {
+  padding: 6px 8px !important;
+}
+
+/* Tightere Section-Header in Popout — alle Größen. */
+.dnd-sheet-tab-body[data-popout="1"] h3 {
+  font-size: 11px !important;
+  padding: 3px 6px !important;
+  margin: 0 0 4px 0 !important;
+}
+
+/* ── Hero-Row als Explicit-Grid in Popout ──────────────────
+   Jede Cell ist über data-popout-cell ansprechbar. Wir geben jeder
+   Spalte einen named grid-area und legen das Layout per Größe fest. */
+.dnd-sheet-tab-body[data-popout="1"] [data-hero-row="1"] {
+  display: grid !important;
+  gap: 6px !important;
+  flex-wrap: unset !important;
+}
+.dnd-sheet-tab-body[data-popout="1"] [data-hero-row="1"] > div {
+  min-width: 0 !important;
+  flex: unset !important;
+}
+
+/* L (≥1100): HP+Actions oben, dann Spells + Favs + Quick darunter */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-hero-row="1"] {
+  grid-template-columns: 220px 1fr 260px 240px !important;
+  grid-template-areas:
+    "hp     actions spells favs"
+    "quick  actions spells favs" !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-popout-cell="hp"]      { grid-area: hp; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-popout-cell="quick"]   { grid-area: quick; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-popout-cell="actions"] { grid-area: actions; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-popout-cell="spells"]  { grid-area: spells; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="L"] [data-popout-cell="favs"]    { grid-area: favs; }
+
+/* M (720-1099): HP+Actions als top-Row, Spells & Favs darunter. Quick
+   wandert unter HP (deshalb 2 Rows). */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-hero-row="1"] {
+  grid-template-columns: 220px 1fr !important;
+  grid-template-areas:
+    "hp      actions"
+    "quick   actions"
+    "spells  spells"
+    "favs    favs" !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-popout-cell="hp"]      { grid-area: hp; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-popout-cell="quick"]   { grid-area: quick; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-popout-cell="actions"] { grid-area: actions; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-popout-cell="spells"]  { grid-area: spells; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="M"] [data-popout-cell="favs"]    { grid-area: favs; }
+
+/* S (480-719): HP über Actions, immer noch beide visible per Stack.
+   Spells/Favs/Quick darunter in voller Breite. */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-hero-row="1"] {
+  grid-template-columns: 1fr !important;
+  grid-template-areas:
+    "hp"
+    "actions"
+    "quick"
+    "spells"
+    "favs" !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-popout-cell="hp"]      { grid-area: hp; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-popout-cell="actions"] { grid-area: actions; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-popout-cell="quick"]   { grid-area: quick; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-popout-cell="spells"]  { grid-area: spells; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="S"] [data-popout-cell="favs"]    { grid-area: favs; }
+
+/* XS (<480): wie S, aber alle Sub-Sections-Inhalte tighter. */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-hero-row="1"] {
+  grid-template-columns: 1fr !important;
+  grid-template-areas:
+    "hp"
+    "actions"
+    "quick"
+    "spells"
+    "favs" !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-popout-cell="hp"]      { grid-area: hp; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-popout-cell="actions"] { grid-area: actions; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-popout-cell="quick"]   { grid-area: quick; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-popout-cell="spells"]  { grid-area: spells; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] [data-popout-cell="favs"]    { grid-area: favs; }
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] h3 {
+  font-size: 10px !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-size="XS"] {
+  font-size: 11px;
+}
+
+/* HP-Section minimum height = Actions-Section damit Side-by-Side
+   in L/M visuell ausgerichtet bleibt. Innen-Padding tighter. */
+.dnd-sheet-tab-body[data-popout="1"] [data-popout-cell="hp"] > div,
+.dnd-sheet-tab-body[data-popout="1"] [data-popout-cell="actions"] > div {
+  height: 100%;
+}
+
+/* Spells/Favs Body: max-height begrenzen damit lange Listen scrollen
+   und nicht das ganze Popout sprengen. */
+.dnd-sheet-tab-body[data-popout="1"] [data-popout-cell="spells"] section,
+.dnd-sheet-tab-body[data-popout="1"] [data-popout-cell="favs"] section {
+  max-height: 50vh;
+}
+
+/* Folge-Section (Weapon Mastery / Class Resources Grid) tighter padding. */
+.dnd-sheet-tab-body[data-popout="1"] > div[style*="grid-template-columns"] {
+  gap: 6px !important;
+  margin-top: 6px !important;
+}
+
+/* ─── data-popout-tab Visibility-Steuerung ─────────────────────────
+   Bottom-Nav schaltet zwischen 4 Cell-Sets um:
+     • default → hp + quick + actions  (Combat-Reiter)
+     • spells  → spells
+     • favs    → favs
+     • mastery → mastery (Weapon Mastery + Class Resources Section) */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"] [data-popout-cell="spells"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"] [data-popout-cell="favs"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"] [data-popout-cell="mastery"] {
+  display: none !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"] [data-popout-cell="hp"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"] [data-popout-cell="quick"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"] [data-popout-cell="actions"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"] [data-popout-cell="favs"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"] [data-popout-cell="mastery"] {
+  display: none !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"] [data-popout-cell="hp"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"] [data-popout-cell="quick"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"] [data-popout-cell="actions"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"] [data-popout-cell="spells"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"] [data-popout-cell="mastery"] {
+  display: none !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="hp"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="quick"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="actions"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="spells"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="favs"] {
+  display: none !important;
+}
+
+/* Wenn nur EIN cell sichtbar (Tabs außer default), full-width. */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="spells"]  [data-popout-cell="spells"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="favs"]    [data-popout-cell="favs"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="mastery"] [data-popout-cell="mastery"] {
+  grid-column: 1 / -1 !important;
+}
+
+/* Default-Tab (Combat) — HP linke Schmal-Spalte, Actions rechte breite */
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"][data-popout-size="L"] [data-hero-row="1"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"][data-popout-size="M"] [data-hero-row="1"] {
+  grid-template-columns: 200px 1fr !important;
+  grid-template-areas:
+    "hp     actions"
+    "quick  actions" !important;
+}
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"][data-popout-size="S"] [data-hero-row="1"],
+.dnd-sheet-tab-body[data-popout="1"][data-popout-tab="default"][data-popout-size="XS"] [data-hero-row="1"] {
+  grid-template-columns: 1fr !important;
+  grid-template-areas:
+    "hp"
+    "actions"
+    "quick" !important;
+}
+
+/* Mainpane: sticky StatBar oben. */
+.dnd-sheet-main[data-popout-size] {
+  position: relative;
+  padding: 0 4px !important;
+}
+.dnd-sheet-main[data-popout-size] > div:first-child {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin-bottom: 4px;
+}

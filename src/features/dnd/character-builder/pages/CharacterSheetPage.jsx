@@ -175,6 +175,8 @@ import { lazy, Suspense } from 'react'
 const CustomEditModal = lazy(() => import('../components/ui/CustomEditModal'))
 const FiveEImportModal = lazy(() => import('../components/FiveEImportModal'))
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile'
+import usePopoutSize from '../../../../shared/hooks/usePopoutSize'
+import PopoutStatBar from '../components/sheet/PopoutStatBar'
 import useWindowWidth from '../../../../shared/hooks/useWindowWidth'
 import { ActionSheet } from '../../../../shared/ui'
 import { SideSection, ProfBlock, SenseRow } from '../components/sheet/SheetKit'
@@ -280,6 +282,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // bleibt aber gemounted, also überlebt der State hier oben).
   const [featuresExpanded, setFeaturesExpanded] = useState(() => new Set())
   const { isPwaMobile, isPopout } = usePwaMobile()
+  const popoutSize = usePopoutSize()
+  const [popoutConditionsOpen, setPopoutConditionsOpen] = useState(false)
+  // Popout-Bottom-Nav: default / spells / favs / mastery (Class-Ressources
+  // + Weapon-Mastery). State lebt hier damit der Reload den Stand behält
+  // wenn das Popout-Fenster gewechselt wird.
+  const [popoutTab, setPopoutTab] = useState('default')
   const { mode: winMode } = useWindowWidth()
   const sheetSidebarAsDrawer = winMode === 'hidden'
   // Drawer schließt automatisch, wenn das Fenster wieder breit wird.
@@ -1528,8 +1536,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
     <div className="dnd-sheet-root" style={S.page}>
       <input ref={portraitRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePortrait} />
 
-      {/* ═══ HEADER ═══ */}
-      {isPwaMobile ? (
+      {/* ═══ HEADER ═══
+          Im Popout-Fenster wird die Mobile-Header-Bar (Back / Portrait /
+          Name / ⋯) komplett weggelassen — Top-Slot ist die PopoutStatBar.
+          Die Drag-Region sitzt direkt auf der StatBar. */}
+      {isPwaMobile && !isPopout ? (
         <div data-pwa-target="dnd-sheet-header" style={S.headerMobile}>
           <button type="button" style={S.headerIconBtn} onClick={() => navigate(backTo)} aria-label="Zurück" title="Zurück">←</button>
           <div style={S.headerMobileTitle}>
@@ -1548,42 +1559,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           <button type="button" style={S.headerIconBtn} onClick={() => setShowMobileMenu(true)} aria-label="Optionen" title="Optionen">⋯</button>
         </div>
       ) : (<>
-        {/* Im Popout-Fenster eine kleine Drag-/Close-Leiste oben.
-            Tauri liefert keine OS-Decorations (decorations: false beim
-            Spawn), also brauchen wir eine eigene Möglichkeit zum
-            Verschieben und Schließen. `data-tauri-drag-region` macht
-            den Bereich zur Window-Drag-Handle; der × ruft
-            getCurrentWindow().close() (Browser-Fallback: window.close()).
-            Im Hauptfenster wird das nicht gerendert — dort gibt's die
-            normale OS-Titelleiste. */}
-        {isPopout && (
-          <div
-            data-tauri-drag-region
-            style={popoutDragBar}
-          >
-            <span style={popoutDragTitle}>
-              {character.info.name || 'Character'}
-              <span style={popoutDragSubtitle}>
-                {className} · L{totalLevel}
-              </span>
-            </span>
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={() => navigate(`/character/${id}/levelup`)}
-                title="Level Up — auch im Popout möglich"
-                style={popoutActionBtn}
-              >Level Up</button>
-            )}
-            <button
-              type="button"
-              onClick={closePopoutWindow}
-              title="Popout schließen"
-              aria-label="Popout schließen"
-              style={popoutCloseBtn}
-            >×</button>
-          </div>
-        )}
+        {/* Im Popout-Fenster: KEINE separate Drag-/Close-Leiste —
+            die PopoutStatBar (weiter unten) trägt selbst die
+            `data-tauri-drag-region` Markierung damit der ganze
+            obere Bereich zum Verschieben benutzt werden kann. Der
+            × Close-Button sitzt rechts in der StatBar. */}
         {/* Slim always-visible toggle: chevron + character name. The
             full header (Dashboard back-link, name editor, Export /
             Level Up / Custom buttons) appears as an overlay below when
@@ -2084,12 +2064,34 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         </div>
 
         {/* ── MAIN ── */}
-        <div className="dnd-sheet-main" style={S.main}>
+        <div className="dnd-sheet-main" style={S.main}
+          data-popout-size={isPopout ? popoutSize.size : undefined}>
+          {/* Popout-Mode: kompakter Stat-Bar oben statt der breiten
+              CombatStat-Kacheln. Beinhaltet HP + AC/Init/Spd/PP +
+              Conditions + Concentration + Inspiration + Action-Economy
+              + (bei Bedarf) Death Saves. Adaptiert sich an popoutSize. */}
+          {isPopout && (
+            <PopoutStatBar
+              character={character}
+              computed={computed}
+              abilityScores={abilityScores}
+              hp={hp}
+              size={popoutSize.size}
+              updateCharacter={updateCharacter}
+              applyCharacter={applyCharacter}
+              onOpenConditions={() => setPopoutConditionsOpen(true)}
+              onClose={closePopoutWindow}
+              activeTab={popoutTab}
+              onTabChange={setPopoutTab}
+              readOnly={readOnly}
+            />
+          )}
           {/* Combat stat tiles — moved INTO the right pane so the
               sidebar can stretch up to the very top of the page. The
               tiles auto-fit across the remaining width, sidebar edge
-              to right edge. */}
-          <div style={{
+              to right edge. Im Popout wird die Bar durch PopoutStatBar
+              ersetzt (s.o.). */}
+          {!isPopout && <div style={{
             ...S.combatBar,
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(0, 1fr))',
@@ -2116,7 +2118,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
             />
             <CombatStat label="Proficiency" value={modStr(profBonus)} color="var(--accent-yellow)" />
             <CombatStat label="Passive Perception" value={computed?.passivePerception ?? 10} color="var(--text-muted)" />
-          </div>
+          </div>}
 
           {/* Im Popout wird die Tab-Leiste weggelassen. Das Popout ist
               auf die Overview-Spalten beschränkt — der Spieler kann
@@ -2138,6 +2140,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
                 hp={hp} updateCharacter={updateCharacter} applyCharacter={applyCharacter}
                 charId={id} session={session} onReload={loadCharacter}
                 onNavigateTab={setActiveTab}
+                inPopout={isPopout} popoutSize={popoutSize.size}
+                popoutTab={popoutTab}
+                openConditions={popoutConditionsOpen}
+                onCloseConditions={() => setPopoutConditionsOpen(false)}
                 readOnly={readOnly} />
             )}
             {activeTab === 'spells' && (
