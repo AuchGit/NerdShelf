@@ -2729,17 +2729,24 @@ export async function exportToFoundry(character) {
     prepMax += Math.max(abMod + classCount, 1)
   }
 
+  // dnd5e v5+: system.spells ist NUR die Slot-Mapping (spell1..spell9
+  // + pact). Keine top-level prep-Felder — die "Prepared X/Y"-Anzeige
+  // unten am Spell-Tab wird DYNAMISCH vom Foundry-Sheet aus:
+  //   • Class-Items mit system.spellcasting.preparation.formula (Y, max)
+  //   • Spell-Items mit preparation.mode='prepared' + prepared=true (X)
+  // gerendert. Wir setzen die formula auf den Klass-Items unten
+  // (siehe buildPreparationFormula). Manuelles prepValue/prepMax hier
+  // würde von Foundry beim Import ignoriert (nicht im Schema).
   const spellSlots = {
     spell1: { value: slotArr?.[0] || 0 }, spell2: { value: slotArr?.[1] || 0 },
     spell3: { value: slotArr?.[2] || 0 }, spell4: { value: slotArr?.[3] || 0 },
     spell5: { value: slotArr?.[4] || 0 }, spell6: { value: slotArr?.[5] || 0 },
     spell7: { value: slotArr?.[6] || 0 }, spell8: { value: slotArr?.[7] || 0 },
     spell9: { value: slotArr?.[8] || 0 }, pact:   { value: warlockData?.slots || 0 },
-    // Top-Level Prepared-Counter — Foundry rendert "Prepared X/Y"
-    // unten im Spell-Tab. value = aktuell prep'd (unbekannt im Export
-    // → 0; Foundry zählt prepared spells automatisch nach Import).
-    prep: { value: 0, max: prepMax },
   }
+  // prepMax wird oben berechnet als Sanity-Log + Validation; Foundry
+  // selbst kommt aus den class-item-formulas.
+  void prepMax
 
   // ── Proficiency Strings → Foundry Arrays ─────────────
   const weaponProfValues  = []
@@ -3096,22 +3103,11 @@ export async function exportToFoundry(character) {
     spellItems.push(makeCustomSpellItem(spell, character))
   }
 
-  // ── Prepared-Count finalisieren ──────────────────────────
-  // Nachdem alle Spell-Items gebaut sind, zählen wir wie viele davon
-  // tatsächlich prep'd sind: mode='prepared' + prepared=true + level>0
-  // (Cantrips zählen nicht). Das ist das "X" in Foundry's "Prepared X/Y"
-  // unten am Spell-Tab. Always-Prepared (mode='always') / Innate / Pact /
-  // At-will werden NICHT mitgezählt — sie verbrauchen kein Prep-Slot.
-  let prepValueCount = 0
-  for (const sp of spellItems) {
-    const prep = sp?.system?.preparation
-    if (!prep) continue
-    if (prep.mode !== 'prepared') continue
-    if (!prep.prepared) continue
-    const lvl = sp?.system?.level
-    if (typeof lvl === 'number' && lvl > 0) prepValueCount++
-  }
-  spellSlots.prep.value = prepValueCount
+  // Prepared-Count wird in dnd5e v5+ NICHT in system.spells abgelegt.
+  // Foundry zählt selbst beim Render der Spell-Tab: alle spell-items mit
+  // preparation.mode='prepared' + prepared=true + level>0. Wir müssen
+  // also nur sicherstellen dass die Items selbst korrekt markiert sind
+  // (siehe makeSpellItem) — was bereits geschieht.
 
   // 6. Inventar (regular + custom items)
   // Track each row's sheet-side `containerId` alongside the Foundry item so
