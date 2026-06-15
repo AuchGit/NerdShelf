@@ -2894,6 +2894,59 @@ export async function exportToFoundry(character) {
     }
   }
 
+  // ── Optional Features (Eldritch Invocations, Battle Master Maneuvers,
+  //    Fighting Styles, Metamagic Options, etc.) ───────────────────
+  // Spieler-Picks leben in `cls.levelChoices[N].optionalFeatures` als
+  // [{name: 'Disarming Attack', group: 'maneuver_…'}]. Wir suchen jedes
+  // gepickte Feature in OPTFEAT_DATA und bauen ein FeatureItem dafür.
+  // Patches (Icon / Activities / Effects) kommen aus OPTFEAT_FNDRY wenn
+  // vorhanden — Maneuvers/Invocations sind dort typischerweise mit
+  // korrekten Effect-Patches dabei.
+  for (const cls of (character.classes || [])) {
+    for (const lc of Object.values(cls.levelChoices || {})) {
+      const picks = lc.optionalFeatures || []
+      for (const pick of picks) {
+        const rawName = typeof pick === 'string' ? pick : pick?.name
+        if (!rawName) continue
+        // Name kann "X|TCE"-Source-Suffix tragen — wir vergleichen ohne.
+        const cleanName = String(rawName).split('|')[0].trim()
+        // Eintrag im 5etools-Optfeature-Katalog finden
+        const entry = (OPTFEAT_DATA?.optionalfeature || []).find(o =>
+          o.name && o.name.toLowerCase() === cleanName.toLowerCase()
+        )
+        if (!entry) {
+          console.warn(`[Export] optional feature "${cleanName}" not found in OPTFEAT_DATA`)
+          continue
+        }
+        // Dedup: gleiche Maneuver/Invocation nicht doppelt (kann via
+        // Multiclass oder doppeltem Pick passieren).
+        const dedupKey = `opt|${cls.classId}|${entry.name}`
+        if (seenFeatures.has(dedupKey)) continue
+        seenFeatures.add(dedupKey)
+        // Patch aus foundry-optionalfeatures.json (Effects/Icon/Activities)
+        const patch = (OPTFEAT_FNDRY || []).find(p =>
+          p?.name && p.name.toLowerCase() === entry.name.toLowerCase()
+        ) || {}
+        try {
+          classFeatureItems.push(makeClassFeatureItem({
+            name:              entry.name,
+            level:             0, // optfeature hat kein class-level; 0 für "always active once picked"
+            source:            entry.source,
+            className:         cls.classId,
+            subclassShortName: null,
+            entries:           entry.entries || [],
+            img:               patch.img        || null,
+            effects:           patch.effects    || [],
+            activities:        patch.activities || [],
+            system:            patch.system     || {},
+          }, cls, character))
+        } catch (e) {
+          console.warn(`[Export] skipped optional feature "${entry.name}":`, e)
+        }
+      }
+    }
+  }
+
   // 4. Feats
   const featItems = safeMap(character.feats, feat => makeFeatItem(feat, character), 'feat')
 
