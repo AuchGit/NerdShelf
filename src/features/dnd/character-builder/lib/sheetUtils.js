@@ -419,7 +419,7 @@ export function isSingletonItem(item) {
   const meta = itemTypeMeta(item.type)
   if (meta.isWeapon || meta.isArmor) return true
   if (item.isWeapon || item.isArmor) return true
-  if (item.type === 'W') return true
+  if (String(item.type || '').split('|')[0] === 'W') return true
   if (isContainerItem(item)) return true
   return false
 }

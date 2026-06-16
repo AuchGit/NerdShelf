@@ -195,21 +195,24 @@ export default function Step9Equipment({ character, updateCharacter }) {
   // Returns filtered itemIndex for a given equipmentType string (base/mundane items only)
   function getItemsForEquipType(equipmentType) {
     if (!equipmentType) return []
+    // 5.5e items haben type wie 'M|XPHB' — vor jedem literal-Vergleich
+    // den Source-Suffix wegschneiden.
+    const tc = (it) => String(it?.type || '').split('|')[0]
     return itemIndex.filter(item => {
       if (isMagicRarity(item.rarity)) return false
-      if (equipmentType === 'weaponMartialMelee')  return item.weaponCategory === 'martial' && item.type === 'M'
-      if (equipmentType === 'weaponMartialRanged') return item.weaponCategory === 'martial' && item.type === 'R'
+      if (equipmentType === 'weaponMartialMelee')  return item.weaponCategory === 'martial' && tc(item) === 'M'
+      if (equipmentType === 'weaponMartialRanged') return item.weaponCategory === 'martial' && tc(item) === 'R'
       if (equipmentType === 'weaponMartial')       return item.weaponCategory === 'martial'
       if (equipmentType === 'weaponSimple')        return item.weaponCategory === 'simple'
-      if (equipmentType === 'weaponSimpleMelee')   return item.weaponCategory === 'simple' && item.type === 'M'
-      if (equipmentType === 'weaponSimpleRanged')  return item.weaponCategory === 'simple' && item.type === 'R'
+      if (equipmentType === 'weaponSimpleMelee')   return item.weaponCategory === 'simple' && tc(item) === 'M'
+      if (equipmentType === 'weaponSimpleRanged')  return item.weaponCategory === 'simple' && tc(item) === 'R'
       // Spellcasting focus types: focusSpellcastingArcane → scfType "arcane", etc.
       if (equipmentType.startsWith('focusSpellcasting')) {
         const sub = equipmentType.replace('focusSpellcasting', '').toLowerCase()
-        return item.type === 'SCF' && item.scfType && item.scfType.toLowerCase() === sub
+        return tc(item) === 'SCF' && item.scfType && item.scfType.toLowerCase() === sub
       }
       // Musical instruments
-      if (equipmentType === 'instrumentMusical') return item.type === 'INS'
+      if (equipmentType === 'instrumentMusical') return tc(item) === 'INS'
       return false
     }).sort((a, b) => a.name.localeCompare(b.name))
   }

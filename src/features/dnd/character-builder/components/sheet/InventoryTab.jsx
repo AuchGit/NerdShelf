@@ -198,7 +198,7 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       ...form,
       isWeapon: !!meta.isWeapon,
       isArmor: !!meta.isArmor,
-      isShield: form.type === 'S',
+      isShield: String(form.type || '').split('|')[0] === 'S',
     }
     const singleton = isSingletonItem(clean)
     const requestedQty = Math.max(1, parseInt(clean.quantity, 10) || 1)
@@ -254,7 +254,7 @@ export default function InventoryTab({ character, updateCharacter, applyCharacte
       reqAttune: entry.reqAttune || false,
       isWeapon: !!meta.isWeapon || !!entry.isWeapon,
       isArmor: !!meta.isArmor || !!entry.isArmor,
-      isShield: entry.type === 'S',
+      isShield: String(entry.type || '').split('|')[0] === 'S',
       isContainer: isContainerItem(entry),
       // 5.5e weapon mastery — empty array on 5e weapons (the data
       // doesn't carry the field there). Surfaced on the inventory row
@@ -633,7 +633,7 @@ function ItemRow({ item, moveOptions, onMove, onPatch, onEdit, onRemove, onReord
     || item.bonusWeaponAttack || item.bonusWeaponDamage
     || item.bonusSpellAttack  || item.bonusSpellSaveDc
     || item.bonusSavingThrow  || item.bonusAbilityCheck)
-  const canEquip = meta.isWeapon || meta.isArmor || item.type === 'S'
+  const canEquip = meta.isWeapon || meta.isArmor || String(item.type || '').split('|')[0] === 'S'
     || item.wondrous || item.reqAttune || hasMagicBonus
   const singleton = isSingletonItem(item)
 
@@ -900,7 +900,7 @@ function ItemFormModal({ item, isNew, onClose, onSave }) {
         </>
       )}
 
-      {isArmor && form.type !== 'S' && (
+      {isArmor && String(form.type || '').split('|')[0] !== 'S' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <FormRow label="Base AC">
             <TextInput type="number" value={form.ac ?? ''} onChange={v => set('ac', v === '' ? null : parseInt(v, 10))} />
@@ -910,7 +910,7 @@ function ItemFormModal({ item, isNew, onClose, onSave }) {
           </FormRow>
         </div>
       )}
-      {form.type === 'S' && (
+      {String(form.type || '').split('|')[0] === 'S' && (
         <FormRow label="Shield AC bonus" hint="Standard shields grant +2 AC when equipped.">
           <TextInput type="number" value={form.ac ?? 2} onChange={v => set('ac', parseInt(v, 10) || 2)} />
         </FormRow>

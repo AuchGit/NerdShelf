@@ -2395,7 +2395,7 @@ function makeInventoryItem(item, edition) {
 
   // ── Waffe ──────────────────────────────────────────
   if (item.isWeapon) {
-    const isRanged  = item.type === 'R'
+    const isRanged  = String(item.type || '').split('|')[0] === 'R'
       || (item.properties || []).some(p => ['Ammunition', 'Thrown'].includes(p))
     const isMartial = (item.weaponCategory || '').toLowerCase() === 'martial'
     const wTypeVal  = isRanged

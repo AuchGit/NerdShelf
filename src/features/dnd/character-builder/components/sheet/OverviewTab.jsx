@@ -4348,7 +4348,7 @@ function PotionAndQuickAccessColumn({ character, applyCharacter, updateCharacter
   ]
   const isHealingPotion = (it) =>
     /healing/i.test(it?.name || '') &&
-    (it?.type === 'P' || /potion/i.test(it?.name || ''))
+    (String(it?.type || '').split('|')[0] === 'P' || /potion/i.test(it?.name || ''))
   const potions = items.filter(isHealingPotion)
   const quickAccess = items.filter(it => it?.quickAccess && !isHealingPotion(it))
 

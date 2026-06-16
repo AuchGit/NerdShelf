@@ -881,7 +881,10 @@ export function computeAC(character, modifiers, abilityScores) {
   //   HA (Heavy Armor):  AC only (no DEX)
   //   S  (Shield):       +2 to AC (handled below)
   const allItems = [...(character.inventory?.items || []), ...(character.custom?.items || [])]
-  const equippedArmor = allItems.filter(i => i.equipped && i.isArmor && i.type !== 'S')
+  // type kann 5etools-Source-Suffix tragen (`S|XPHB`, `LA|XPHB`, …)
+  // → vor jedem literal-Vergleich auf den Code vor dem `|` runterstutzen.
+  const typeCode = (it) => String(it?.type || '').split('|')[0]
+  const equippedArmor = allItems.filter(i => i.equipped && i.isArmor && typeCode(i) !== 'S')
   for (const armor of equippedArmor) {
     const baseAC = armor.ac || 10
     const armorType = (armor.type || '').split('|')[0]  // strip source suffix
@@ -904,7 +907,7 @@ export function computeAC(character, modifiers, abilityScores) {
   }
 
   // Shield: +2 if equipped
-  const hasShield = allItems.some(i => i.equipped && (i.isShield || i.type === 'S'))
+  const hasShield = allItems.some(i => i.equipped && (i.isShield || typeCode(i) === 'S'))
   const shieldBonus = hasShield ? 2 : 0
 
   // ── Concentration-spell AC effects ──────────────────────────

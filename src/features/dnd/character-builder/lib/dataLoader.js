@@ -1007,7 +1007,7 @@ export async function loadItemIndex(edition) {
       items = items.map(i => {
         const key = `${i.name?.toLowerCase()}::${i.source}`
         const patch = {}
-        if (i.type === 'SCF' && !i.scfType && scfMap[key]) patch.scfType = scfMap[key]
+        if (String(i.type || '').split('|')[0] === 'SCF' && !i.scfType && scfMap[key]) patch.scfType = scfMap[key]
         if (masteryMap[key]) patch.mastery = masteryMap[key]
         if ((!i.entries || i.entries.length === 0) && entriesMap[key]) patch.entries = entriesMap[key]
         if ((!i.entries || i.entries.length === 0) && magicEntriesMap[key]) patch.entries = magicEntriesMap[key]
