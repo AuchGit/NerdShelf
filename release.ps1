@@ -23,6 +23,19 @@ Write-Host ""
 Write-Host "=== Auto-Release ($Bump) ===" -ForegroundColor Cyan
 Write-Host ""
 
+# Release vom AKTUELL ausgecheckten Branch (nicht mehr fix 'main'). Der
+# Release-Workflow baut den getaggten Commit aus, daher landet alles auf dem
+# aktuellen Branch (z.B. vtt-integration mit dem VTT-Feature) im Release und
+# damit im Auto-Update. So muss das Feature nicht erst nach main gemerged sein.
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ([string]::IsNullOrEmpty($branch) -or $branch -eq "HEAD") {
+    Write-Host "FEHLER: Kein Branch ausgecheckt (detached HEAD). Bitte zuerst auschecken." -ForegroundColor Red
+    Read-Host "Enter druecken"
+    exit 1
+}
+Write-Host "Release-Branch: $branch" -ForegroundColor Yellow
+Write-Host ""
+
 # Read current version from tauri.conf.json
 $conf = Get-Content 'src-tauri\tauri.conf.json' -Raw
 if ($conf -match '"version": "(\d+)\.(\d+)\.(\d+)"') {
@@ -110,11 +123,11 @@ if ([string]::IsNullOrEmpty($changelog)) {
 Write-Host "[4/5] Git tag v$new..."
 git tag "v$new"
 
-Write-Host "[5/5] Push..."
-git push origin main --tags
+Write-Host "[5/5] Push (Branch $branch + Tags)..."
+git push origin $branch --tags
 
 Write-Host ""
-Write-Host "=== v$new released! GitHub Actions baut jetzt. ===" -ForegroundColor Green
+Write-Host "=== v$new released vom Branch '$branch'! GitHub Actions baut jetzt. ===" -ForegroundColor Green
 Write-Host "https://github.com/AuchGit/NerdShelf/actions"
 Write-Host ""
 Read-Host "Enter druecken"

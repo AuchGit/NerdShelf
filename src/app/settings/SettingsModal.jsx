@@ -5,7 +5,6 @@ import { useTheme } from '../../core/theme/ThemeProvider';
 import { useAuth } from '../../core/auth/AuthContext';
 import { supabase } from '../../core/supabase/client';
 import {
-  getMtgPriceSettings,
   setMtgPriceSettings,
   useMtgPriceSettings,
 } from '../../features/mtg/deck-builder/services/priceThresholds';
@@ -406,6 +405,8 @@ function DndSettings() {
       <Field label="Cross-Edition-Marker">
         <CrossEditionToggle />
       </Field>
+
+      {/* Virtual-Tabletop settings now live INSIDE the VTT (top-right ⚙). */}
     </div>
   );
 }
@@ -854,10 +855,3 @@ function MtgSettings() {
   );
 }
 
-function ToolsSettings() {
-  return (
-    <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 'var(--space-4) 0' }}>
-      Tool-spezifische Einstellungen kommen hier in Zukunft hin.
-    </div>
-  );
-}

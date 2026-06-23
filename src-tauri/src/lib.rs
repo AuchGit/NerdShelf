@@ -23,7 +23,10 @@ pub fn run() {
     // Used by FiveEToolsLink (and any future external-link UI) to open
     // a URL in the user's default browser. Without this plugin, anchor
     // tags inside the Tauri webview do nothing for http(s) targets.
-    .plugin(tauri_plugin_opener::init());
+    .plugin(tauri_plugin_opener::init())
+    // CORS-free HTTP for fetching remote images (e.g. 5e.tools token art that
+    // the webview can't use as a WebGL texture due to missing CORS headers).
+    .plugin(tauri_plugin_http::init());
 
   // Desktop-only plugin (Android-safe)
   #[cfg(not(target_os = "android"))]

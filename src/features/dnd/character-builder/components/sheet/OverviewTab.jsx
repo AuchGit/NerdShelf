@@ -1217,7 +1217,7 @@ const STANDARD_ACTIONS = {
   },
 }
 
-function CombatActionsExplorer({ character, computed, applyCharacter, embedded = false }) {
+export function CombatActionsExplorer({ character, computed, applyCharacter, embedded = false, columns = false }) {
   // Pill-Farbpalette mit den User-Settings-Overrides. Wird bei jeder
   // Änderung in den Settings via custom-event refreshed.
   const pillColors = usePillColors()
@@ -1229,6 +1229,8 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
   // Auswahl beibehalten (User-Wunsch).
   const charPrefId = character?.id || 'default'
   const [tab, setTab]   = usePersistedState(`cae_tab_${charPrefId}`, 'action')
+  // Columns mode (VTT bottom bar): which economy subgroup the Pinned column
+  // currently shows (its own little tabs in the column header).
   const [expanded, setExpanded] = useState(null)
   // Per-row slot picker: which row's "Cast" prompt is currently
   // open. Single string keyed by row.id so only one expand pops at
@@ -2186,6 +2188,59 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
       )}
       {open && (
         <div style={embedded ? { ...caeBody, padding: 0, border: 'none', background: 'transparent' } : caeBody}>
+          {columns ? (
+            // VTT bottom-bar layout: every economy bucket as its own column,
+            // side by side (no tab switching), so a player sees Pinned / Action
+            // / Bonus / Reaction at a glance in a flatter panel.
+            (() => {
+              const economy = character?.status?.economy || {};
+              const listBundle = {
+                expanded, setExpanded, slots, usedSlots, usedPact, castingFor, setCastingFor,
+                castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges,
+                applyRowSideEffects, character, applyCharacter,
+              };
+              const META = {
+                pinned: { label: 'Pinned', color: 'var(--accent-cyan)' },
+                action: { label: 'Action', color: 'var(--accent-red)', spent: 'action' },
+                bonusAction: { label: 'Bonus Action', color: 'var(--accent-yellow)', spent: 'bonusAction' },
+                reaction: { label: 'Reaction', color: 'var(--accent-purple)', spent: 'reaction' },
+                hastedAction: { label: 'Hasted Action', color: 'var(--accent-blue)', spent: 'action' },
+              };
+              // Pinned column's own sub-tabs (only the economy slots that
+              // actually hold pinned rows); fall back if the active one empties.
+              const pinSlots = ['action', 'bonusAction', 'reaction', 'hastedAction'].filter((s) => pinnedByEconomy?.[s]?.length > 0);
+              return (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                {[...(pinnedTotal > 0 ? ['pinned'] : []), 'action', 'bonusAction', 'reaction', ...(hasted && buckets.hastedAction?.length > 0 ? ['hastedAction'] : [])].map((slot) => {
+                  const meta = META[slot];
+                  // The colored header dims once that economy action is spent.
+                  const spent = meta.spent ? !!economy[meta.spent] : false;
+                  const headColor = spent ? 'var(--text-dim)' : meta.color;
+                  const colRows = slot === 'pinned' ? null : (buckets[slot] || []);
+                  return (
+                    <div key={slot} style={{ flex: 1, minWidth: 0, opacity: spent ? 0.55 : 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: headColor, padding: '2px 0 4px', borderBottom: `1px solid ${headColor}`, marginBottom: 6 }}>{meta.label}</div>
+                      {slot === 'pinned' ? (
+                        // Stack EVERY pinned economy slot (like the sheet) so nothing is
+                        // hidden behind a sub-tab — each with its own small label.
+                        pinSlots.length === 0 ? <div style={caeEmpty}>—</div> : pinSlots.map((ps) => (
+                          <div key={ps} style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: META[ps].color, marginBottom: 3 }}>{META[ps].label}</div>
+                            <CombatActionsCategorisedList rows={pinnedByEconomy[ps]} {...listBundle} hidePinnedCategory />
+                          </div>
+                        ))
+                      ) : colRows.length === 0 ? (
+                        <div style={caeEmpty}>—</div>
+                      ) : (
+                        <CombatActionsCategorisedList rows={colRows} {...listBundle} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              );
+            })()
+          ) : (<>
           <div style={caeTabs}>
             {tabs.map(t => {
               const sel = tab === t.id
@@ -2272,6 +2327,7 @@ function CombatActionsExplorer({ character, computed, applyCharacter, embedded =
               applyCharacter={applyCharacter}
             />
           )}
+          </>)}
         </div>
       )}
       {/* Weapon-Buff-Target-Modal — überlagert die Action-Spalte
@@ -6121,7 +6177,7 @@ function CombatTile({ label, value, color, tooltip, badge }) {
 // One button per slot. Click toggles "used" state. "Neue Runde" resets
 // all three to unused at the start of the player's next turn. State
 // lives at character.status.economy.
-function CombatEconomy({ value, onChange, character }) {
+export function CombatEconomy({ value, onChange, character }) {
   // Conditional extra pills:
   //  • Action Surge — a flag the Fighter sets via the explorer when
   //    they spend their Action Surge resource; gives a second

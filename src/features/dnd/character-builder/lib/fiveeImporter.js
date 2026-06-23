@@ -18,7 +18,7 @@
 // User kann das in den DnD-Settings (`hideCrossEditionMarker`) aus-
 // schalten wenn er sich die Marker spart.
 
-import { loadSpellList, loadFeatList, loadItemList } from './dataLoader'
+import { loadSpellList, loadFeatList, loadItemList, loadCreatureList } from './dataLoader'
 
 // 5e.tools-Pfade → unser interner Entity-Typ.
 const PATH_TO_TYPE = {
@@ -79,20 +79,28 @@ export function parseFiveEUrl(rawUrl) {
 // Edition-Toggle erinnern müssen).
 export async function lookupEntry({ type, name, source, edition, currentEdition }) {
   const loaders = {
-    spell: loadSpellList,
-    feat:  loadFeatList,
-    item:  loadItemList,
+    spell:   loadSpellList,
+    feat:    loadFeatList,
+    item:    loadItemList,
+    monster: loadCreatureList,
   }
   const loader = loaders[type]
   if (!loader) return { found: false, reason: 'unsupported-type' }
   const nameLow = String(name).toLowerCase()
+  const srcLow  = String(source || '').toLowerCase()
   async function lookupIn(ed) {
     const list = await loader(ed).catch(() => [])
-    // Erst by-name (case-insensitive) — case in 5etools-Hash ist
+    // Name+Source bevorzugen (entscheidend bei gleichnamigen Monstern aus
+    // verschiedenen Quellen), sonst name-only — der 5etools-Hash-Case ist
     // selten exakt der Datei-Case, deshalb lowercase Vergleich.
-    return (list || []).find(e =>
-      String(e?.name || '').toLowerCase() === nameLow,
-    ) || null
+    const byNameSource = srcLow
+      ? (list || []).find(e =>
+          String(e?.name || '').toLowerCase() === nameLow
+          && String(e?.source || '').toLowerCase() === srcLow)
+      : null
+    return byNameSource
+      || (list || []).find(e => String(e?.name || '').toLowerCase() === nameLow)
+      || null
   }
   let hit = await lookupIn(edition)
   let foundEdition = edition
@@ -294,12 +302,16 @@ async function _liveFetchJson(url) {
   }
 }
 
-function _liveHost(edition) {
-  return edition === '5e' ? 'https://2014.5e.tools' : 'https://5e.tools'
-}
+// 5e.tools blocks external access to its /data/ files (HTTP 403 hotlink
+// protection), so we read the same data from the official GitHub source repo
+// instead — raw.githubusercontent.com serves it with `Access-Control-Allow-
+// Origin: *`, so fetch() works from the webview. One repo holds every source
+// (2014 + 2024), keyed by the source code in the URL hash, so edition doesn't
+// matter for the file lookup.
+const DATA_MIRROR = 'https://raw.githubusercontent.com/5etools-mirror-3/5etools-src/main'
 
-async function _fetchLiveEntry({ type, name, source, edition }) {
-  const base = _liveHost(edition)
+async function _fetchLiveEntry({ type, name, source }) {
+  const base = DATA_MIRROR
   const nameLow = String(name || '').toLowerCase()
   const srcLow  = String(source || '').toLowerCase()
   if (type === 'spell') {
@@ -344,6 +356,26 @@ async function _fetchLiveEntry({ type, name, source, edition }) {
       if (hit) return hit
     }
     return _fetchLiveHomebrew({ type: 'item', name, source })
+  }
+  if (type === 'monster') {
+    // Bestiary ist pro Quelle in eine Datei gesplittet; index.json mappt
+    // <source-code> (z.B. "MM") → <filename>. URL-Hash-Source ist lowercase,
+    // Index-Keys sind die Original-Source-Codes → case-insensitiv matchen.
+    const idx = await _liveFetchJson(`${base}/data/bestiary/index.json`)
+    if (idx && typeof idx === 'object') {
+      let file = null
+      for (const k of Object.keys(idx)) {
+        if (String(k).toLowerCase() === srcLow) { file = idx[k]; break }
+      }
+      if (file) {
+        const data = await _liveFetchJson(`${base}/data/bestiary/${file}`)
+        if (data) {
+          const hit = (data.monster || []).find(m => String(m.name).toLowerCase() === nameLow)
+          if (hit) return hit
+        }
+      }
+    }
+    return _fetchLiveHomebrew({ type: 'monster', name, source })
   }
   return null
 }

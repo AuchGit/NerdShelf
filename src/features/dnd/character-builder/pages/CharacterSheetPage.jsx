@@ -12,50 +12,11 @@ import { isVariantEnabled } from '../lib/optionalFeatureVariants'
 // Defer the import to click time so the initial sheet bundle stays small.
 const importFoundryExport = () => import('../lib/foundryExport')
 
-// Sheet-Popout: spawnt im Tauri-Shell ein eigenes Always-on-Top
-// Fenster mit dem Sheet im PWA-Layout — gedacht für die Nutzung
-// neben einem VTT. URL bekommt `?popout=1` mit, was über usePwaMobile
-// & Layout die App-Sidebar / BottomNav abschaltet und das PWA-
-// Layout im Sheet erzwingt. Im Browser ohne Tauri fällt's auf
-// window.open() zurück (kein alwaysOnTop dort, aber sonst gleich).
-async function openPopout(characterId) {
-  const url = `${window.location.origin}${window.location.pathname}#/character/${characterId}?popout=1`
-  const isTauri = typeof window !== 'undefined'
-    && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
-  if (isTauri) {
-    try {
-      const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-      // Label sollte pro Character eindeutig sein, aber Tauri erlaubt
-      // keine Sonderzeichen im Label. UUID-Fragment + Timestamp tun's.
-      const label = `sheet-popout-${String(characterId).replace(/[^a-z0-9]/gi, '')}-${Date.now()}`
-      const w = new WebviewWindow(label, {
-        url,
-        title: 'NerdShelf — Character Sheet',
-        width: 420,
-        height: 760,
-        alwaysOnTop: true,
-        decorations: false,
-        resizable: true,
-        skipTaskbar: false,
-      })
-      w.once('tauri://error', (e) => {
-        console.error('[popout] WebviewWindow error', e)
-        // Fallback wenn das Spawn schief geht.
-        try { window.open(url, '_blank', 'width=420,height=760') } catch { /* ignore */ }
-      })
-      return
-    } catch (e) {
-      console.error('[popout] WebviewWindow import failed', e)
-      // Fallthrough auf window.open.
-    }
-  }
-  try {
-    window.open(url, 'nerdshelf-popout', 'width=420,height=760,toolbar=no,menubar=no,location=no,status=no')
-  } catch (e) {
-    console.error('[popout] window.open failed', e)
-    alert('Popout konnte nicht geöffnet werden.')
-  }
-}
+// Sheet-Popout: spawnt im Tauri-Shell ein eigenes Always-on-Top Fenster mit
+// dem Sheet im PWA-Layout — gedacht für die Nutzung neben einem VTT. Die
+// Spawn-Logik liegt in lib/sheetPopout.js, damit auch der VTT (Token-Sheet)
+// sie ohne das schwere Sheet-Modul nutzen kann.
+import { openSheetPopout as openPopout } from '../lib/sheetPopout'
 
 // Schließt das aktuelle Popout-Fenster. Tauri-Shell: schließt das
 // WebviewWindow via `getCurrentWindow().close()` — funktioniert weil

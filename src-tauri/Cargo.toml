@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.2.33"
+version = "1.0.0"
 description = "A Tauri App"
 authors = ["you"]
 license = ""
@@ -29,3 +29,6 @@ tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-opener = "2"
+# CORS-free image fetch (5e.tools token art lacks ACAO headers, so the webview
+# can't use it as a WebGL texture directly — we fetch the bytes via Rust).
+tauri-plugin-http = "2"

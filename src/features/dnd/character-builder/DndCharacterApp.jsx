@@ -13,6 +13,7 @@ import CharacterViewPage from './pages/CharacterViewPage'
 import CampaignsPage from './pages/CampaignsPage'
 import CampaignDetailPage from './pages/CampaignDetailPage'
 import SessionPage from './pages/SessionPage'
+import VttPage from './pages/VttPage'
 import HomebrewPage from '../homebrew/pages/HomebrewPage'
 
 setupErrorCollector()
@@ -94,6 +95,9 @@ function matchRoute(route) {
   // /campaign/:id/session  (session overview)
   m = route.match(/^\/campaign\/([^/]+)\/session\/?$/)
   if (m) return { page: 'session', campaignId: m[1] }
+  // /campaign/:id/vtt  (virtual tabletop)
+  m = route.match(/^\/campaign\/([^/]+)\/vtt\/?$/)
+  if (m) return { page: 'vtt', campaignId: m[1] }
   // /campaign/:id/character/:charId  (GM read-only character sheet)
   m = route.match(/^\/campaign\/([^/]+)\/character\/([^/]+)\/?$/)
   if (m) return { page: 'gmsheet', campaignId: m[1], charId: m[2] }
@@ -122,6 +126,7 @@ function DndRoutes({ session }) {
     case 'homebrew':  return <HomebrewPage session={session} />
     case 'campaign':  return <CampaignDetailPage session={session} campaignId={match.campaignId} />
     case 'session':   return <SessionPage session={session} campaignId={match.campaignId} />
+    case 'vtt':       return <VttPage session={session} campaignId={match.campaignId} />
     case 'gmsheet':   return <CharacterSheetPage session={session} readOnly
                                characterId={match.charId} campaignId={match.campaignId}
                                fromSession={!!match.fromSession} />

@@ -20,6 +20,14 @@
     "dialog:allow-open",
     "opener:default",
     {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://5e.tools/**" },
+        { "url": "https://2014.5e.tools/**" },
+        { "url": "https://*.5e.tools/**" }
+      ]
+    },
+    {
       "identifier": "opener:allow-open-url",
       "allow": [
         { "url": "https://5e.tools/**" },

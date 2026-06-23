@@ -266,6 +266,7 @@ export default function CampaignDetailPage({ session, campaignId }) {
         </h1>
         {isGm ? (
           <>
+            <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>🗺 VTT</Button>
             <Button
               onClick={async () => {
                 try { await setSessionActive(campaign.id, true) }
@@ -281,7 +282,12 @@ export default function CampaignDetailPage({ session, campaignId }) {
             <Button variant="danger" onClick={handleDeleteCampaign}>Löschen</Button>
           </>
         ) : (
-          <Button variant="secondary" onClick={handleLeave}>Verlassen</Button>
+          <>
+            {campaign.session_active && (
+              <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>▶ Zur Session</Button>
+            )}
+            <Button variant="secondary" onClick={handleLeave}>Verlassen</Button>
+          </>
         )}
       </div>
 
