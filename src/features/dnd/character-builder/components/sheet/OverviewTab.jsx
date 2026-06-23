@@ -2676,8 +2676,17 @@ function CombatActionsCategorisedList({
   // localStorage, gekeyt per Character damit Reload den Layout-State
   // 1:1 wiederherstellt.
   const cidForPrefs = character?.id || 'default'
-  const [closedCats, setClosedCats] = usePersistedSet(`cae_closedCats_${cidForPrefs}`, [])
-  const [basicOpen, setBasicOpen]   = usePersistedState(`cae_basicOpen_${cidForPrefs}`, false)
+  // Collapse state PERSISTS only for the pinned column; the normal economy
+  // columns (Action / Bonus / Reaction / Hasted) collapse EPHEMERALLY and
+  // independently per column (per user spec — not saved across the whole sheet).
+  // Both hook pairs are always called (no conditional hooks); we just pick one.
+  const persistCollapse = hidePinnedCategory
+  const persistedCats = usePersistedSet(`cae_closedCats_${cidForPrefs}`, [])
+  const ephemeralCats = useState(() => new Set())
+  const [closedCats, setClosedCats] = persistCollapse ? persistedCats : ephemeralCats
+  const persistedBasic = usePersistedState(`cae_basicOpen_${cidForPrefs}`, false)
+  const ephemeralBasic = useState(false)
+  const [basicOpen, setBasicOpen] = persistCollapse ? persistedBasic : ephemeralBasic
 
   // Categorisation: per user spec, the action overview is now
   //   1. Basic Actions  (consolidated)
