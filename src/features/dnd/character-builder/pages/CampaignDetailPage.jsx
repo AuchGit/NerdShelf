@@ -36,6 +36,17 @@ export default function CampaignDetailPage({ session, campaignId }) {
   const [reloadKey, setReloadKey] = useState(0)
   const reload = () => setReloadKey(k => k + 1)
 
+  // A campaign session IS the VTT session: a player landing here while a session
+  // is live is taken straight into the VTT (once per browser session, so coming
+  // back from the VTT doesn't bounce them — the "▶ Session beitreten" button
+  // stays available).
+  useEffect(() => {
+    if (!campaign || campaign.gm_id === uid || !campaign.session_active) return
+    const key = `vttAutoJoined:${campaign.id}`
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1') } catch { /* ignore */ }
+    navigate(`/campaign/${campaign.id}/vtt`)
+  }, [campaign, uid, navigate])
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -266,16 +277,18 @@ export default function CampaignDetailPage({ session, campaignId }) {
         </h1>
         {isGm ? (
           <>
-            <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>🗺 VTT</Button>
+            <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>🗺 VTT vorbereiten</Button>
+            {/* A campaign session IS the VTT session: start = flip the live flag
+                and open the VTT (players can then join straight into it). */}
             <Button
               onClick={async () => {
                 try { await setSessionActive(campaign.id, true) }
                 catch { /* fire-and-navigate — flag flip is best-effort */ }
-                navigate(`/campaign/${campaign.id}/session`)
+                navigate(`/campaign/${campaign.id}/vtt`)
               }}
               disabled={!members.length}
             >
-              ▶ Session starten
+              {campaign.session_active ? '▶ Zur Session' : '▶ Session starten'}
             </Button>
             <Button variant="secondary" onClick={handleExportAll} disabled={!members.length}>Alle exportieren</Button>
             <Button variant="secondary" onClick={() => setEditing(true)}>Bearbeiten</Button>
@@ -284,7 +297,7 @@ export default function CampaignDetailPage({ session, campaignId }) {
         ) : (
           <>
             {campaign.session_active && (
-              <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>▶ Zur Session</Button>
+              <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>▶ Session beitreten</Button>
             )}
             <Button variant="secondary" onClick={handleLeave}>Verlassen</Button>
           </>

@@ -68,6 +68,11 @@ alter table public.vtt_maps add column if not exists memory_strength real not nu
 alter table public.vtt_maps add column if not exists light_contrast real not null default 0.5;
 alter table public.vtt_maps add column if not exists light_blur real not null default 0;
 alter table public.vtt_maps add column if not exists bloody_tokens boolean not null default false;
+-- On-token turn markers + badge sizing (DM-set, synced to the table):
+alter table public.vtt_maps add column if not exists turn_marker_scope text not null default 'all';   -- 'all' | 'players'
+alter table public.vtt_maps add column if not exists turn_marker_view  text not null default 'all';   -- 'all' | 'dm'
+alter table public.vtt_maps add column if not exists turn_marker_style text not null default 'ring';  -- 'ring' | 'chevron' | 'glow'
+alter table public.vtt_maps add column if not exists token_badge_scale real not null default 1;       -- scales conditions/HP/AC/elev badges
 
 create table if not exists public.vtt_tokens (
   id            text primary key,
@@ -104,6 +109,7 @@ alter table public.vtt_tokens add column if not exists auras jsonb not null defa
 alter table public.vtt_tokens add column if not exists sight_reset_at bigint;
 alter table public.vtt_tokens add column if not exists inside boolean;
 alter table public.vtt_tokens add column if not exists controllers jsonb not null default '[]'::jsonb;
+alter table public.vtt_tokens add column if not exists bloodied text;  -- per-token blood override: 'on' | 'off' | null(auto)
 
 create table if not exists public.vtt_zones (
   id           text primary key,

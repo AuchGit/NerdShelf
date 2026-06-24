@@ -65,11 +65,14 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const [sessionLive, setSessionLive] = useState(false);
   const { signOut } = useAuth();
 
-  // DM starts the live session straight from the VTT — flips dnd_campaigns
-  // .session_active so players see "▶ Zur Session" and can join the map.
-  const startSession = async () => {
-    try { await setSessionActive(campaignId, true); setSessionLive(true); }
-    catch (e) { console.error('Session start failed', e); }
+  // DM starts/ends the live session straight from the VTT — flips
+  // dnd_campaigns.session_active so players can join (▶ Zur Session) or are
+  // dropped when it ends.
+  const toggleSession = async () => {
+    const next = !sessionLive;
+    if (next === false && !window.confirm('Live-Session wirklich beenden?')) return;
+    try { await setSessionActive(campaignId, next); setSessionLive(next); }
+    catch (e) { console.error('Session toggle failed', e); }
   };
   const [travelPrompt, setTravelPrompt] = useState(null);
   const [statTokenIds, setStatTokenIds] = useState([]); // double-click stat/sheet overlays (multiple)
@@ -285,9 +288,9 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
             </button>
           )}
           {isDM && (
-            <button style={{ ...S.viewToggle, ...(sessionLive ? S.sessionOn : null) }} onClick={startSession} disabled={sessionLive}
-              title="Live-Session starten — Spieler können der Map beitreten">
-              {sessionLive ? '✓ Session aktiv' : '▶ Session starten'}
+            <button style={{ ...S.viewToggle, ...(sessionLive ? S.sessionOn : null) }} onClick={toggleSession}
+              title={sessionLive ? 'Live-Session beenden' : 'Live-Session starten — Spieler können der Map beitreten'}>
+              {sessionLive ? '■ Session beenden' : '▶ Session starten'}
             </button>
           )}
           {isDM && (

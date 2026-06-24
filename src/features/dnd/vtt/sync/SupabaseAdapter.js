@@ -180,6 +180,10 @@ export class SupabaseAdapter {
       lightContrast: r.light_contrast ?? 0.5,
       lightBlur: r.light_blur ?? 0,
       bloodyTokens: r.bloody_tokens === true,
+      turnMarkerScope: r.turn_marker_scope || 'all',
+      turnMarkerView: r.turn_marker_view || 'all',
+      turnMarkerStyle: r.turn_marker_style || 'ring',
+      tokenBadgeScale: r.token_badge_scale ?? 1,
     };
   }
 
@@ -196,7 +200,8 @@ function mapToRow(m, cid) {
     levels: m.levels || [], player_visible: !!m.playerVisible, lighting_enabled: m.lightingEnabled !== false, light_style: m.lightStyle || 'modern',
     light_baseline: m.lightBaseline || 'bright', darkness: m.darkness || [], terrain: m.terrain || [],
     memory_style: m.memoryStyle || 'darkened', memory_strength: m.memoryStrength ?? 0.55,
-    light_contrast: m.lightContrast ?? 0.5, light_blur: m.lightBlur ?? 0, bloody_tokens: m.bloodyTokens === true };
+    light_contrast: m.lightContrast ?? 0.5, light_blur: m.lightBlur ?? 0, bloody_tokens: m.bloodyTokens === true,
+    turn_marker_scope: m.turnMarkerScope || 'all', turn_marker_view: m.turnMarkerView || 'all', turn_marker_style: m.turnMarkerStyle || 'ring', token_badge_scale: m.tokenBadgeScale ?? 1 };
 }
 function mapPatchToRow(p) {
   const r = {};
@@ -214,6 +219,10 @@ function mapPatchToRow(p) {
   if ('lightContrast' in p) r.light_contrast = p.lightContrast;
   if ('lightBlur' in p) r.light_blur = p.lightBlur;
   if ('bloodyTokens' in p) r.bloody_tokens = p.bloodyTokens;
+  if ('turnMarkerScope' in p) r.turn_marker_scope = p.turnMarkerScope;
+  if ('turnMarkerView' in p) r.turn_marker_view = p.turnMarkerView;
+  if ('turnMarkerStyle' in p) r.turn_marker_style = p.turnMarkerStyle;
+  if ('tokenBadgeScale' in p) r.token_badge_scale = p.tokenBadgeScale;
   if ('grid' in p) r.grid = p.grid;
   if ('imagePath' in p) r.image_path = p.imagePath;
   return r;
@@ -222,7 +231,7 @@ function tokenToRow(t, cid) {
   return { id: t.id, campaign_id: cid, map_id: t.mapId, level: t.level || null, kind: t.kind,
     owner_user_id: t.ownerId || null, character_id: t.characterId || null, name: t.name,
     image_url: t.imageUrl || null, color: t.color, x: t.x, y: t.y, size_cells: t.sizeCells,
-    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [] };
+    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [], bloodied: t.bloodied ?? null };
 }
 function tokenPatchToRow(p) {
   const map = { mapId: 'map_id', ownerId: 'owner_user_id', characterId: 'character_id', imageUrl: 'image_url', sizeCells: 'size_cells', hpMax: 'hp_max', visibleTo: 'visible_to', sightResetAt: 'sight_reset_at' };
@@ -265,7 +274,7 @@ function lightPatchToRow(p) {
 function rowToToken(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, kind: r.kind, ownerId: r.owner_user_id,
     characterId: r.character_id, name: r.name, imageUrl: r.image_url, color: r.color,
-    x: r.x, y: r.y, sizeCells: r.size_cells, hp: r.hp, hpMax: r.hp_max, ac: r.ac, conditions: r.conditions || [], light: r.light || null, statblock: r.statblock || null, visibleTo: r.visible_to || [], auras: r.auras || [], sightResetAt: r.sight_reset_at || 0, inside: r.inside ?? undefined, controllers: r.controllers || [] };
+    x: r.x, y: r.y, sizeCells: r.size_cells, hp: r.hp, hpMax: r.hp_max, ac: r.ac, conditions: r.conditions || [], light: r.light || null, statblock: r.statblock || null, visibleTo: r.visible_to || [], auras: r.auras || [], sightResetAt: r.sight_reset_at || 0, inside: r.inside ?? undefined, controllers: r.controllers || [], bloodied: r.bloodied ?? undefined };
 }
 function rowToZone(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, createdBy: r.created_by, type: r.type,

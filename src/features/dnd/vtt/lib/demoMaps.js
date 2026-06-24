@@ -26,10 +26,16 @@ export async function uploadSharedMap(name) {
   if (existing.some((m) => (m.name || '').trim().toLowerCase() === clean.toLowerCase())) throw new Error('NAME_TAKEN');
   const onMap = (obj) => Object.values(obj).filter((e) => e.mapId === map.id);
   const snapshot = {
+    // Save EVERY map-level setting so a loaded shared map looks/behaves exactly
+    // like the original (walls/lights/zones/transitions keep their own fields via
+    // the full objects below).
     map: {
-      name: map.name, levels: map.levels, lightingEnabled: map.lightingEnabled, lightStyle: map.lightStyle,
-      lightBaseline: map.lightBaseline, darkness: map.darkness || [], terrain: map.terrain || [],
+      name: map.name, levels: map.levels, fogMode: map.fogMode,
+      lightingEnabled: map.lightingEnabled, lightStyle: map.lightStyle, lightBaseline: map.lightBaseline,
+      darkness: map.darkness || [], terrain: map.terrain || [],
       memoryStyle: map.memoryStyle, memoryStrength: map.memoryStrength, lightContrast: map.lightContrast, lightBlur: map.lightBlur,
+      bloodyTokens: map.bloodyTokens, turnMarkerScope: map.turnMarkerScope, turnMarkerView: map.turnMarkerView,
+      turnMarkerStyle: map.turnMarkerStyle, tokenBadgeScale: map.tokenBadgeScale,
     },
     walls: onMap(s.walls), lights: onMap(s.lights), zones: onMap(s.zones), transitions: onMap(s.transitions),
   };
@@ -52,10 +58,14 @@ export function loadDemoIntoCampaign(demo) {
     grid: demo.grid || {},
   });
   const patch = {
-    lightingEnabled: m.lightingEnabled, lightStyle: m.lightStyle, lightBaseline: m.lightBaseline,
+    fogMode: m.fogMode, lightingEnabled: m.lightingEnabled, lightStyle: m.lightStyle, lightBaseline: m.lightBaseline,
     darkness: m.darkness || [], terrain: m.terrain || [], memoryStyle: m.memoryStyle,
     memoryStrength: m.memoryStrength, lightContrast: m.lightContrast, lightBlur: m.lightBlur,
+    bloodyTokens: m.bloodyTokens, turnMarkerScope: m.turnMarkerScope, turnMarkerView: m.turnMarkerView,
+    turnMarkerStyle: m.turnMarkerStyle, tokenBadgeScale: m.tokenBadgeScale,
   };
+  // Drop undefined keys so we don't overwrite fresh-map defaults with nulls.
+  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
   if (Array.isArray(m.levels) && m.levels.length) patch.levels = m.levels;
   A.updateMap(newMapId, patch);
   const strip = (e) => { const c = { ...e }; delete c.id; delete c.mapId; return c; };

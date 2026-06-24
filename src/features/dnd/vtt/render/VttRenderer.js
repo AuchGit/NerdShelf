@@ -152,7 +152,7 @@ export class VttRenderer {
     // React to VTT display-pref changes (memory style) live.
     this._onPrefs = () => { this.applyMemoryStyle(); this.reconcile(); };
     window.addEventListener(VTT_PREFS_EVENT, this._onPrefs);
-    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); });
+    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); this.tokens.tickTokens(this.drag?.id || this._tween?.id); });
     this.reconcile();
   }
 
@@ -393,12 +393,38 @@ export class VttRenderer {
       const selectedTokenSet = [...(s.ui.selectedTokenIds || []), ...(s.ui.selectedTokenId ? [s.ui.selectedTokenId] : [])];
       // Combat turn markers (active + next-up token) + hovered-menu coupling.
       const init = s.initiative;
-      const markers = { activeId: null, nextId: null, hoverId: s.ui.hoverTokenId || null };
+      const markers = {
+        activeId: null, nextId: null, hoverId: s.ui.hoverTokenId || null,
+        scope: map.turnMarkerScope || 'all', view: map.turnMarkerView || 'all', isDM,
+        style: map.turnMarkerStyle || 'ring',
+      };
       if (init?.active && init.order?.length) {
         markers.activeId = init.order[init.activeIndex]?.tokenId || null;
         markers.nextId = init.order[(init.activeIndex + 1) % init.order.length]?.tokenId || null;
       }
-      this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers);
+      // Live HP for the blood overlay: character-bound tokens keep their HP in
+      // the character sheet (status.currentHp), not token.hp — resolve it so a
+      // player's own token bleeds correctly and in sync, not just NPCs.
+      let bloodHp = null;
+      if (map.bloodyTokens === true || Object.values(levelTokens).some((tk) => tk.bloodied === 'on')) {
+        bloodHp = {};
+        for (const tk of Object.values(levelTokens)) {
+          if (tk.characterId == null) continue;
+          const ch = s.ui.characters?.[tk.characterId]?.data;
+          if (!ch) continue;
+          if (!this._maxHpCache) this._maxHpCache = new Map();
+          let cached = this._maxHpCache.get(tk.characterId);
+          if (!cached || cached.ref !== ch) {
+            let max = tk.hpMax;
+            try { max = computeCharacter(ch).hp?.max ?? tk.hpMax; } catch { /* keep token max */ }
+            cached = { ref: ch, max };
+            this._maxHpCache.set(tk.characterId, cached);
+          }
+          const hp = ch.status?.currentHp ?? cached.max;
+          if (hp != null && cached.max) bloodHp[tk.id] = { hp, hpMax: cached.max };
+        }
+      }
+      this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, map.tokenBadgeScale ?? 1, bloodHp);
       this.updateMovementPreview(s, map, level, base, isDM);
       this.drawTargeting(levelTokens, map.grid);
       this.transitions.update(s.transitions, map.id, level, map.grid, isDM, s.ui.selectedTransitionId, seenTransIds);

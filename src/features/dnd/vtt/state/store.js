@@ -185,15 +185,31 @@ export function undo() {
 }
 
 // Local mutation entry point: apply + broadcast.
+// When did WE last move a token locally? The postgres_changes backstop echoes
+// our own (possibly slightly stale) position back as a token/add or token/move;
+// applying it yanks the token backwards mid-WASD/drag. Broadcasts already keep
+// peers live, so we ignore the DB echo's POSITION for a token we just moved.
+const _localMoveAt = new Map();
+const LOCAL_MOVE_GUARD_MS = 2500;
+
 export function apply(op) {
   pushUndo(op);
+  if (op.type === 'token/move') _localMoveAt.set(op.id, Date.now());
   reduce(op);
   emit();
   adapter?.send(op);
 }
 
-// Inbound from a peer: apply only, never re-broadcast (avoids echo loops).
+// Inbound from a peer / backstop: apply only, never re-broadcast (avoids echo
+// loops). Position from a token echo is dropped if WE moved that token just now.
 export function applyRemote(op) {
+  const recent = (id) => (Date.now() - (_localMoveAt.get(id) || 0)) < LOCAL_MOVE_GUARD_MS;
+  if (op.type === 'token/move' && recent(op.id)) return; // our own stale echo
+  if (op.type === 'token/add' && op.token && recent(op.token.id)) {
+    // Keep everything the backstop refreshed EXCEPT the position we own locally.
+    const { x, y, ...rest } = op.token; void x; void y;
+    op = { ...op, token: rest };
+  }
   reduce(op);
   emit();
 }

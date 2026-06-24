@@ -31,10 +31,26 @@ export default function TokenPanel() {
   return (
     <>
       {isDM && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--color-border)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={map.bloodyTokens === true} onChange={(e) => updateMap(map.id, { bloodyTokens: e.target.checked })} />
-          🩸 Blut-Overlay auf Token (nach fehlenden HP)
-        </label>
+        <div style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={map.bloodyTokens === true} onChange={(e) => updateMap(map.id, { bloodyTokens: e.target.checked })} />
+            🩸 Blut-Overlay auf Token (nach fehlenden HP)
+          </label>
+
+          <div style={S.lbl}>Token-Anzeige (für alle)</div>
+          <Row label="Zug-Marker auf">
+            <Seg value={map.turnMarkerScope || 'all'} opts={[['all', 'Allen'], ['players', 'Nur Spielern']]} onPick={(v) => updateMap(map.id, { turnMarkerScope: v })} />
+          </Row>
+          <Row label="Marker sichtbar für">
+            <Seg value={map.turnMarkerView || 'all'} opts={[['all', 'Alle'], ['dm', 'Nur DM']]} onPick={(v) => updateMap(map.id, { turnMarkerView: v })} />
+          </Row>
+          <Row label="Marker-Stil">
+            <Seg value={map.turnMarkerStyle || 'ring'} opts={[['ring', 'Ring'], ['glow', 'Schein'], ['chevron', 'Pfeil']]} onPick={(v) => updateMap(map.id, { turnMarkerStyle: v })} />
+          </Row>
+          <Row label={`Badge-Größe (${Math.round((map.tokenBadgeScale ?? 1) * 100)}%)`}>
+            <input type="range" min="0.6" max="1.8" step="0.1" value={map.tokenBadgeScale ?? 1} onChange={(e) => updateMap(map.id, { tokenBadgeScale: +e.target.value })} style={{ width: '100%' }} />
+          </Row>
+        </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {isDM ? (
@@ -74,8 +90,30 @@ export default function TokenPanel() {
   );
 }
 
+function Row({ label, children }) {
+  return (
+    <div>
+      <div style={S.lbl}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function Seg({ value, opts, onPick }) {
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {opts.map(([v, l]) => (
+        <button key={v} onClick={() => onPick(v)} style={{ ...S.seg, ...(value === v ? S.segOn : null) }}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
 const S = {
   row: { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
   hp: { color: 'var(--color-text-muted)', fontSize: 11 },
   del: { color: 'var(--color-text-muted)', cursor: 'pointer', padding: '0 2px' },
+  lbl: { fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', marginBottom: 3 },
+  seg: { flex: 1, padding: '4px 6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 11 },
+  segOn: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: '1px solid var(--color-accent)' },
 };

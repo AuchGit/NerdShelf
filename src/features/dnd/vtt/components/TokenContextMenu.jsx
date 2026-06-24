@@ -263,6 +263,15 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
             )}
           </div>
           <div style={S.section}>
+            <div style={S.label} title="Blut-Overlay für dieses Token: Auto folgt der Karteneinstellung.">🩸 Blut-Overlay</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[{ v: null, l: 'Auto' }, { v: 'on', l: 'An' }, { v: 'off', l: 'Aus' }].map((o) => (
+                <button key={o.l} onClick={() => updateToken(tokenId, { bloodied: o.v })}
+                  style={{ ...S.size, ...((token.bloodied ?? null) === o.v ? S.sizeActive : null) }}>{o.l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={S.section}>
             <div style={S.label}>Kontrolle (Spieler dürfen dieses Token steuern & durch es sehen)</div>
             <label style={S.visRow}>
               <input type="checkbox" checked={(token.controllers || []).includes('all')} onChange={() => toggleController('all')} />
