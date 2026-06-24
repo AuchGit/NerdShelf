@@ -1667,7 +1667,15 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       ...(STANDARD_ACTIONS[edition]?.reaction    || []),
     ]
     for (const f of (character?.__activeFeatures || [])) {
-      const slot = detectActionSlot(f.entries)
+      const explicitSlot = detectActionSlot(f.entries)
+      const fxF = parseFeatureEffect(f, character, profBonus, { classDataMap: character?.__classDataMap })
+      // Usable-but-free features ("when you hit / when you use" with a trigger or
+      // damage effect but NO action verb — maneuvers, Sneak Attack, smites, …)
+      // still surface as usable, exactly like species traits. Fully data-driven
+      // via the effect pills + text parser — no hardcoded feature names.
+      const hasTriggerPill = (fxF?.pills || []).some(p => p.kind === 'trigger')
+      const hasDamagePill  = (fxF?.pills || []).some(p => p.kind === 'damage' || p.kind === 'damage-bonus')
+      const slot = explicitSlot || ((hasTriggerPill || hasDamagePill) ? 'action' : null)
       if (!slot) continue
       const raw = flattenEntries(f.entries).toLowerCase()
       // Collect referenced standard actions — case-insensitive whole-
@@ -1679,7 +1687,6 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         if (re.test(raw)) matched.push(a)
       }
       const subActions = matched.length >= 2 ? matched : null
-      const fxF = parseFeatureEffect(f, character, profBonus, { classDataMap: character?.__classDataMap })
       b[slot].push({
         id: `feat-${f.classId}-${f.name}-${f.level}`,
         // Color-Marker / Favoriten-Key im einheitlichen
@@ -1691,7 +1698,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         kind: 'feature',
         economySlot: slot,
         entries: f.entries || null,
-        sub: `${f.classId}${f.level ? ` · Lv ${f.level}` : ''}`,
+        sub: `${f.classId || 'Feature'}${f.level ? ` · Lv ${f.level}` : ''}${explicitSlot ? '' : ' · Trigger'}`,
         subActions,
         effectPills: fxF?.pills || [],
         notes: '',

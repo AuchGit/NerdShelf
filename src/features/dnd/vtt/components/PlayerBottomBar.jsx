@@ -10,6 +10,10 @@ import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { computeSpellSlots } from '../../character-builder/lib/sheetUtils';
 import { CombatEconomy, CombatActionsExplorer } from '../../character-builder/components/sheet/OverviewTab';
 import { Pinnable } from './tooltip/Tooltips';
+import PlayerSheetCategory from './PlayerSheetCategory';
+
+// Stackable bottom-bar panels (open upward; last-opened sits on top).
+const PANEL_LABELS = { actions: '⚔ Aktionen', features: '✨ Features / Manöver', items: '🎒 Items' };
 
 // Inventory quick-access items (the sheet's `quickAccess` flag) — potions,
 // scrolls, anything the player pinned for one-click use at the table.
@@ -38,16 +42,22 @@ export default function PlayerBottomBar() {
   const chars = useVtt((s) => s.ui.characters || {});
   const myId = useVtt((s) => s.ui.myCharacterId);
   const [dmg, setDmg] = useState('');
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const [barH, setBarH] = useState(140); // resizable height (wraps instead of scrolling)
-  const [actionsH, setActionsH] = useState(280); // resizable actions panel height
-  const [dragging, setDragging] = useState(false); // 'bar' | 'actions' | false
+  const [openPanels, setOpenPanels] = useState([]); // panel ids in open order (last = top)
+  const [panelH, setPanelH] = useState({});         // id -> height px
+  const [barH, setBarH] = useState(140);
+  const [dragging, setDragging] = useState(false);  // 'bar' | { id } | false
   const startRef = useRef({ y: 0, h: 0 });
+  const contentRefs = useRef({});                    // id -> content el (to clamp height to content)
   useEffect(() => {
     if (!dragging) return undefined;
     const move = (e) => {
-      if (dragging === 'actions') setActionsH(Math.max(120, Math.min(window.innerHeight - 160, startRef.current.h + (startRef.current.y - e.clientY))));
-      else setBarH(Math.max(88, Math.min(380, startRef.current.h + (startRef.current.y - e.clientY))));
+      if (dragging === 'bar') { setBarH(Math.max(88, Math.min(380, startRef.current.h + (startRef.current.y - e.clientY)))); return; }
+      const id = dragging.id;
+      const el = contentRefs.current[id];
+      // Don't let a panel grow past its own content (no empty space).
+      const contentMax = el ? el.scrollHeight + 14 : 99999;
+      const max = Math.min(window.innerHeight - 150, contentMax);
+      setPanelH((h) => ({ ...h, [id]: Math.max(110, Math.min(max, startRef.current.h + (startRef.current.y - e.clientY))) }));
     };
     const up = () => setDragging(false);
     window.addEventListener('mousemove', move);
@@ -55,7 +65,8 @@ export default function PlayerBottomBar() {
     return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
   }, [dragging]);
   const startResize = (e) => { startRef.current = { y: e.clientY, h: barH }; setDragging('bar'); };
-  const startActionsResize = (e) => { e.preventDefault(); startRef.current = { y: e.clientY, h: actionsH }; setDragging('actions'); };
+  const startPanelResize = (id, e) => { e.preventDefault(); startRef.current = { y: e.clientY, h: panelH[id] || 300 }; setDragging({ id }); };
+  const togglePanel = (id) => setOpenPanels((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   const ch = myId != null ? chars[myId] : null;
   const character = ch?.data || null;
   const computed = useMemo(() => {
@@ -151,6 +162,16 @@ export default function PlayerBottomBar() {
 
   const ac = computed.ac?.total ?? '—';
 
+  // Content for each stackable panel (reuses the sheet's components).
+  const renderPanel = (id) => {
+    if (id === 'actions') return <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
+    if (id === 'features') return <PlayerSheetCategory tab="features" />;
+    if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} />;
+    return null;
+  };
+  // Which toggle buttons to offer (Items only when there are quick items).
+  const panelButtons = ['actions', 'features', ...(quickItems.length ? ['items'] : [])];
+
   // Inspiration highlights the whole bar (gold border/glow) so you always see it.
   const barStyle = inspiration
     ? { ...S.bar, height: barH, borderColor: 'var(--color-warning,#e0af68)', boxShadow: '0 -4px 20px #0007, 0 0 0 1px var(--color-warning,#e0af68), 0 0 18px -2px var(--color-warning,#e0af68)' }
@@ -158,14 +179,23 @@ export default function PlayerBottomBar() {
 
   return (
     <div style={barStyle}>
-      {actionsOpen && (
-        <div style={{ ...S.actionsPanel, height: actionsH }}>
-          <div style={S.actionsHandle} onMouseDown={startActionsResize} title="Höhe ziehen">
-            <div style={{ width: 44, height: 4, borderRadius: 2, background: 'var(--color-border)' }} />
-          </div>
-          <div style={S.actionsScroll}>
-            <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />
-          </div>
+      {openPanels.length > 0 && (
+        <div style={S.panelStack}>
+          {/* Reverse so the LAST-opened panel sits on top, first-opened at the bottom. */}
+          {[...openPanels].reverse().map((id) => (
+            <div key={id} style={S.panel}>
+              <div style={S.panelHead} onMouseDown={(e) => startPanelResize(id, e)} title="Höhe ziehen">
+                <span style={S.panelTitle}>{PANEL_LABELS[id]}</span>
+                <span style={{ flex: 1 }} />
+                <span style={S.panelClose} onMouseDown={(e) => e.stopPropagation()} onClick={() => togglePanel(id)} title="Schließen">✕</span>
+              </div>
+              {/* Fits its content (no empty space); drag the header to cap the
+                  height — beyond the content it just scrolls. */}
+              <div style={{ ...S.panelScroll, maxHeight: panelH[id] || 300 }} ref={(el) => { contentRefs.current[id] = el; }}>
+                {renderPanel(id)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       <div style={S.handle} onMouseDown={startResize} title="Höhe ziehen (vergrößern/verkleinern)">
@@ -229,30 +259,17 @@ export default function PlayerBottomBar() {
         </Group>
       )}
 
-      {/* Action economy + full action list (from the sheet's Overview tab) */}
-      <Group label="Aktionen">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Action economy + panel toggles (Actions / Features-Maneuvers / Items).
+          Each opens as a bar that stacks upward; toggling moves it to the top. */}
+      <Group label="Bereiche">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <CombatEconomy value={status.economy || {}} character={character} onChange={(next) => updateCharacter('status.economy', next)} />
-          <button style={actionsOpen ? S.inspOn : S.rest} onClick={() => setActionsOpen((o) => !o)} title="Aktionsliste (Action / Bonus / Reaction) mit Hinweisen">⚔ Aktionen</button>
+          {panelButtons.map((id) => (
+            <button key={id} style={openPanels.includes(id) ? S.inspOn : S.rest}
+              onClick={() => togglePanel(id)} title={PANEL_LABELS[id]}>{PANEL_LABELS[id]}</button>
+          ))}
         </div>
       </Group>
-
-      {/* Quick-access items — potions/scrolls/etc. flagged on the sheet. */}
-      {quickItems.length > 0 && (
-        <Group label="Quick-Access">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 360 }}>
-            {quickItems.map((it) => (
-              <Pinnable key={it.id || it.name} title={it.name} render={() => <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{itemDetail(it) || '—'}</div>}>
-                <div style={S.qa}>
-                  <span style={S.qaName}>{it.name}</span>
-                  <span style={S.qaQty}>{it.quantity ?? 1}</span>
-                  <button style={S.qaUse} title="Verbrauchen" onClick={() => consumeQuickItem(it)}>−</button>
-                </div>
-              </Pinnable>
-            ))}
-          </div>
-        </Group>
-      )}
 
       <div style={{ flex: 1 }} />
 
@@ -269,6 +286,25 @@ function Group({ label, children }) {
     <div style={S.group}>
       <div style={S.groupLbl}>{label}</div>
       {children}
+    </div>
+  );
+}
+
+// Items panel content — quick-access items in a roomy wrap (moved out of the bar
+// so the bar doesn't overflow). Click − to consume one.
+function ItemsPanel({ items, consume }) {
+  if (!items.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 }}>Keine Quick-Access-Items. Markiere Items im Charakterbogen als Quick-Access.</div>;
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 8 }}>
+      {items.map((it) => (
+        <Pinnable key={it.id || it.name} title={it.name} render={() => <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{itemDetail(it) || '—'}</div>}>
+          <div style={S.qa}>
+            <span style={S.qaName}>{it.name}</span>
+            <span style={S.qaQty}>{it.quantity ?? 1}</span>
+            <button style={S.qaUse} title="Verbrauchen" onClick={() => consume(it)}>−</button>
+          </div>
+        </Pinnable>
+      ))}
     </div>
   );
 }
@@ -315,11 +351,13 @@ const S = {
   qaName: { fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   qaQty: { fontSize: 10, fontWeight: 700, color: 'var(--color-accent)', minWidth: 12, textAlign: 'center' },
   qaUse: { width: 18, height: 18, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 800, lineHeight: 1, padding: 0 },
-  actionsPanel: { position: 'absolute', bottom: '100%', left: 0, right: 0, display: 'flex', flexDirection: 'column', background: 'rgba(15,17,21,0.97)', border: '1px solid var(--color-border)', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008' },
-  actionsHandle: { height: 12, flexShrink: 0, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  actionsScroll: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px 10px' },
-  notesPanel: { position: 'absolute', bottom: '100%', right: 0, width: 360, maxWidth: '90%', background: 'rgba(15,17,21,0.97)', border: '1px solid var(--color-border)', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', padding: 10, zIndex: 1 },
-  notesArea: { width: '100%', boxSizing: 'border-box', minHeight: 140, resize: 'vertical', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 8px', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.4 },
+  // Stacked panels above the bar (column: first child = top = last-opened).
+  panelStack: { position: 'absolute', bottom: '100%', left: 0, right: 0, display: 'flex', flexDirection: 'column' },
+  panel: { display: 'flex', flexDirection: 'column', background: 'rgba(15,17,21,0.97)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', overflow: 'hidden' },
+  panelHead: { display: 'flex', alignItems: 'center', gap: 8, height: 24, flexShrink: 0, padding: '0 10px', cursor: 'ns-resize', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' },
+  panelTitle: { fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
+  panelClose: { cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 13, padding: '0 2px' },
+  panelScroll: { overflowY: 'auto', padding: '6px 10px 10px' },
   inspOn: { flexShrink: 0, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 20%, transparent)', color: 'var(--color-warning,#e0af68)', fontWeight: 700, cursor: 'pointer' },
   inspOff: { flexShrink: 0, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 700, cursor: 'pointer' },
   rest: { flexShrink: 0, padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontWeight: 800, cursor: 'pointer' },

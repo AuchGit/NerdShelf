@@ -64,15 +64,23 @@ export function loadDemoIntoCampaign(demo) {
     bloodyTokens: m.bloodyTokens, turnMarkerScope: m.turnMarkerScope, turnMarkerView: m.turnMarkerView,
     turnMarkerStyle: m.turnMarkerStyle, tokenBadgeScale: m.tokenBadgeScale,
   };
-  // Drop undefined keys so we don't overwrite fresh-map defaults with nulls.
   for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
-  if (Array.isArray(m.levels) && m.levels.length) patch.levels = m.levels;
+  // Multi-level maps keep their original level objects (so entity level-ids still
+  // match); single-level snapshots stay on the new map's fresh base level.
+  const oldLevels = Array.isArray(m.levels) ? m.levels : [];
+  const multi = oldLevels.length > 1;
+  if (multi) patch.levels = oldLevels;
   A.updateMap(newMapId, patch);
-  const strip = (e) => { const c = { ...e }; delete c.id; delete c.mapId; return c; };
+  // Activate the new map FIRST so creationLevel() targets it, then remap every
+  // entity onto a level the new map actually has (the cause of "walls/lights
+  // didn't carry over" was entities keeping the OLD map's level id → filtered out).
+  A.setActiveMap(newMapId);
+  const newBase = getState().maps[newMapId]?.levels?.[0]?.id || null;
+  const remapLevel = (lvl) => (multi && lvl ? lvl : newBase);
+  const strip = (e) => { const c = { ...e }; delete c.id; delete c.mapId; c.level = remapLevel(c.level); return c; };
   if ((snap.walls || []).length) A.addWalls(newMapId, snap.walls.map(strip));
   if ((snap.lights || []).length) A.addLights(newMapId, snap.lights.map(strip));
   for (const z of (snap.zones || [])) A.addZone({ ...strip(z), mapId: newMapId });
   for (const t of (snap.transitions || [])) A.addTransition({ ...strip(t), mapId: newMapId });
-  A.setActiveMap(newMapId);
   return newMapId;
 }

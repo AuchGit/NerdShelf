@@ -85,6 +85,13 @@ export default defineConfig(async ({ mode }) => {
     // Tauri loads from `tauri://localhost`, so it MUST stay at '/'. PWA on
     // GitHub Pages needs the repo subpath prefix.
     base: isPwa ? PWA_BASE : '/',
+    // Emit build assets into `dist/static/` instead of the default `dist/assets/`.
+    // The VTT ships SVGs under `public/Assets/` (capital A); on case-INSENSITIVE
+    // filesystems (Windows/macOS) `dist/Assets` and `dist/assets` collide into one
+    // folder, so the bundled webview can't find `/assets/*.js` and Tauri returns
+    // index.html → "MIME text/html" module-load failure → white screen. A distinct
+    // dir avoids the clash.
+    build: { assetsDir: 'static' },
     plugins,
     server: {
       port: DEV_PORT,
