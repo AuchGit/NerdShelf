@@ -202,13 +202,20 @@ export default function PlayerBottomBar() {
         <div style={{ width: 44, height: 4, borderRadius: 2, background: 'var(--color-border)' }} />
       </div>
       <div style={S.row}>
-      {/* AC — click toggles Inspiration; the badge (and whole bar) glow when held */}
+      {/* AC — click toggles Inspiration; the badge (and whole bar) glow when held.
+          Short/Long Rest sit directly under it. */}
       <Group label={inspiration ? 'AC · INSPIRATION' : 'AC (Klick = Insp)'}>
-        <div style={inspiration ? { ...S.acBadge, ...S.acInsp } : S.acBadge}
-          onClick={() => patch({ inspiration: !inspiration })}
-          title={inspiration ? 'Inspiration aktiv — Klick entfernt sie' : 'Klick: Inspiration setzen'}>
-          🛡 <b style={{ fontSize: 20 }}>{ac}</b>
-          {inspiration && <span style={{ color: 'var(--color-warning,#e0af68)', fontWeight: 800 }}>◆</span>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={inspiration ? { ...S.acBadge, ...S.acInsp } : S.acBadge}
+            onClick={() => patch({ inspiration: !inspiration })}
+            title={inspiration ? 'Inspiration aktiv — Klick entfernt sie' : 'Klick: Inspiration setzen'}>
+            🛡 <b style={{ fontSize: 20 }}>{ac}</b>
+            {inspiration && <span style={{ color: 'var(--color-warning,#e0af68)', fontWeight: 800 }}>◆</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button style={{ ...S.rest, flex: 1, padding: '4px 0' }} onClick={shortRest} title="Short Rest — Pact-Slots & Short-Rest-Ressourcen">SR</button>
+            <button style={{ ...S.rest, ...S.restLong, flex: 1, padding: '4px 0' }} onClick={longRest} title="Long Rest — HP, Slots, Ressourcen, halbe Hit Dice">LR</button>
+          </div>
         </div>
       </Group>
 
@@ -272,10 +279,6 @@ export default function PlayerBottomBar() {
       </Group>
 
       <div style={{ flex: 1 }} />
-
-      {/* Rests (Inspiration = AC badge above; Notizen = FAB neben dem Würfel) */}
-      <button style={S.rest} onClick={shortRest} title="Short Rest — Pact-Slots & Short-Rest-Ressourcen">SR</button>
-      <button style={{ ...S.rest, ...S.restLong }} onClick={longRest} title="Long Rest — HP, Slots, Ressourcen, halbe Hit Dice">LR</button>
       </div>
     </div>
   );

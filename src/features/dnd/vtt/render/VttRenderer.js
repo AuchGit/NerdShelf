@@ -200,23 +200,27 @@ export class VttRenderer {
     // End an in-progress wall chain if the DM switched tools.
     if (this.wallChain && s.ui.tool !== 'walls') this.finishWallChain();
 
-    // background
-    if (map?.imageUrl !== this._bgUrl) {
-      this._bgUrl = map?.imageUrl || null;
+    // background — prefer the full-res ORIGINAL served by the relay (P2P,
+    // uncompressed); fall back to the Supabase image if it's unreachable (relay
+    // offline / local file lost) or fails; bounded retry on transient errors.
+    const bgPrimary = map?.imageUrlFull || map?.imageUrl || null;
+    const bgFallback = map?.imageUrl || null;
+    if (bgPrimary !== this._bgUrl) {
+      this._bgUrl = bgPrimary;
       this._bgTries = 0;
       this.bg.texture = Texture.EMPTY;
-      if (map?.imageUrl) {
-        const want = map.imageUrl;
-        loadTexture(want).then((tex) => {
+      if (bgPrimary) {
+        const want = bgPrimary;
+        const tryLoad = (url, isFallback) => loadTexture(url).then((tex) => {
           if (this._bgUrl !== want) return;
           if (tex) { this.bg.texture = tex; return; }
-          // Failed (transient): retry after a short delay so the map image
-          // appears without needing a full VTT restart (bounded attempts).
+          if (!isFallback && bgFallback && bgFallback !== url) { tryLoad(bgFallback, true); return; } // relay original failed → Supabase
           if ((this._bgTries || 0) < 5) {
             this._bgTries = (this._bgTries || 0) + 1;
             setTimeout(() => { if (this._bgUrl === want) { this._bgUrl = null; this.scheduleReconcile?.(); } }, 700);
           }
         });
+        tryLoad(bgPrimary, bgPrimary === bgFallback);
       }
     }
     this.bg.visible = !!map;

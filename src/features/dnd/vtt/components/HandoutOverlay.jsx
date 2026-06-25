@@ -32,7 +32,12 @@ export default function HandoutOverlay({ entry, onClose, footer, initial }) {
         <button style={S.close} onClick={onClose} title="Schließen">×</button>
       </div>
       <div style={S.body}>
-        {entry.imageUrl && <img src={entry.imageUrl} alt={entry.title || ''} style={S.img} draggable={false} />}
+        {entry.imageUrl && (
+          // Prefer the full-res relay original; fall back to the Supabase image
+          // if the relay is unreachable (GM offline / file lost).
+          <img src={entry.imageUrlFull || entry.imageUrl} alt={entry.title || ''} style={S.img} draggable={false}
+            onError={(ev) => { if (entry.imageUrlFull && ev.target.src !== entry.imageUrl) ev.target.src = entry.imageUrl; }} />
+        )}
         {entry.body && <div style={S.text}>{entry.body}</div>}
       </div>
       {footer && <div style={S.footer}>{footer}</div>}

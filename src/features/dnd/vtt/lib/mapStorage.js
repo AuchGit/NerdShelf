@@ -16,6 +16,24 @@ export async function uploadMapImage(campaignId, blob, hash) {
   return { imagePath: path, imageUrl };
 }
 
+// Relay (P2P) full-res maps: the relay runs an HTTP file server on the same
+// host/port as its WebSocket. Convert ws://host:port → http(s)://host:port.
+export function relayHttpBase(wsUrl) {
+  if (!wsUrl) return null;
+  try { const u = new URL(wsUrl); return `${u.protocol === 'wss:' ? 'https:' : 'http:'}//${u.host}`; } catch { return null; }
+}
+
+// PUT a full-resolution original to the relay so players fetch it directly from
+// the GM's PC (no Supabase compression). Returns the GET URL, or null on failure.
+export async function uploadMapToRelay(relayWsUrl, name, file) {
+  const base = relayHttpBase(relayWsUrl);
+  if (!base) return null;
+  const url = `${base}/map/${encodeURIComponent(name)}`;
+  const res = await fetch(url, { method: 'PUT', body: file });
+  if (!res.ok) throw new Error(`Relay-Upload fehlgeschlagen (${res.status})`);
+  return url;
+}
+
 // Upload a journal/handout image (kept in its original format) to the same
 // bucket under a /handouts/ prefix. Returns the public URL + storage path.
 export async function uploadHandoutImage(campaignId, file) {

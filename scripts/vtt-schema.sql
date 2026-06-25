@@ -73,6 +73,7 @@ alter table public.vtt_maps add column if not exists turn_marker_scope text not 
 alter table public.vtt_maps add column if not exists turn_marker_view  text not null default 'all';   -- 'all' | 'dm'
 alter table public.vtt_maps add column if not exists turn_marker_style text not null default 'ring';  -- 'ring' | 'chevron' | 'glow'
 alter table public.vtt_maps add column if not exists token_badge_scale real not null default 1;       -- scales conditions/HP/AC/elev badges
+alter table public.vtt_maps add column if not exists image_url_full text;  -- full-res original served by the relay (P2P); imageUrl (Supabase) is the fallback
 
 create table if not exists public.vtt_tokens (
   id            text primary key,

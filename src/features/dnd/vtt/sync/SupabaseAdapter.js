@@ -184,6 +184,7 @@ export class SupabaseAdapter {
       turnMarkerView: r.turn_marker_view || 'all',
       turnMarkerStyle: r.turn_marker_style || 'ring',
       tokenBadgeScale: r.token_badge_scale ?? 1,
+      imageUrlFull: r.image_url_full || null,
     };
   }
 
@@ -201,7 +202,8 @@ function mapToRow(m, cid) {
     light_baseline: m.lightBaseline || 'bright', darkness: m.darkness || [], terrain: m.terrain || [],
     memory_style: m.memoryStyle || 'darkened', memory_strength: m.memoryStrength ?? 0.55,
     light_contrast: m.lightContrast ?? 0.5, light_blur: m.lightBlur ?? 0, bloody_tokens: m.bloodyTokens === true,
-    turn_marker_scope: m.turnMarkerScope || 'all', turn_marker_view: m.turnMarkerView || 'all', turn_marker_style: m.turnMarkerStyle || 'ring', token_badge_scale: m.tokenBadgeScale ?? 1 };
+    turn_marker_scope: m.turnMarkerScope || 'all', turn_marker_view: m.turnMarkerView || 'all', turn_marker_style: m.turnMarkerStyle || 'ring', token_badge_scale: m.tokenBadgeScale ?? 1,
+    image_url_full: m.imageUrlFull || null };
 }
 function mapPatchToRow(p) {
   const r = {};
@@ -223,6 +225,7 @@ function mapPatchToRow(p) {
   if ('turnMarkerView' in p) r.turn_marker_view = p.turnMarkerView;
   if ('turnMarkerStyle' in p) r.turn_marker_style = p.turnMarkerStyle;
   if ('tokenBadgeScale' in p) r.token_badge_scale = p.tokenBadgeScale;
+  if ('imageUrlFull' in p) r.image_url_full = p.imageUrlFull;
   if ('grid' in p) r.grid = p.grid;
   if ('imagePath' in p) r.image_path = p.imagePath;
   return r;

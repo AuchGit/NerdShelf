@@ -1229,8 +1229,9 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   // Auswahl beibehalten (User-Wunsch).
   const charPrefId = character?.id || 'default'
   const [tab, setTab]   = usePersistedState(`cae_tab_${charPrefId}`, 'action')
-  // Columns mode (VTT bottom bar): which economy subgroup the Pinned column
-  // currently shows (its own little tabs in the column header).
+  // Columns mode (VTT bottom bar): the Pinned column can be filtered by economy
+  // type ('all' shows every pinned slot stacked; pick a slot to see just it).
+  const [pinnedFilter, setPinnedFilter] = useState('all')
   const [expanded, setExpanded] = useState(null)
   // Per-row slot picker: which row's "Cast" prompt is currently
   // open. Single string keyed by row.id so only one expand pops at
@@ -2224,13 +2225,31 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                   const spent = meta.spent ? !!economy[meta.spent] : false;
                   const headColor = spent ? 'var(--text-dim)' : meta.color;
                   const colRows = slot === 'pinned' ? null : (buckets[slot] || []);
+                  // Pinned column: optional filter by economy type ('all' default).
+                  const shownPinSlots = slot === 'pinned'
+                    ? (pinnedFilter === 'all' ? pinSlots : pinSlots.filter((s) => s === pinnedFilter))
+                    : null;
                   return (
                     <div key={slot} style={{ flex: 1, minWidth: 0, opacity: spent ? 0.55 : 1 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: headColor, padding: '2px 0 4px', borderBottom: `1px solid ${headColor}`, marginBottom: 6 }}>{meta.label}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0 4px', borderBottom: `1px solid ${headColor}`, marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: headColor }}>{meta.label}</span>
+                        {slot === 'pinned' && pinSlots.length > 1 && (
+                          <div style={{ display: 'flex', gap: 3, marginLeft: 'auto' }}>
+                            {['all', ...pinSlots].map((s) => {
+                              const sel = s === pinnedFilter; const m = META[s];
+                              const lbl = s === 'all' ? 'Alle' : m.label.split(' ').map((w) => w[0]).join('');
+                              return (
+                                <button key={s} type="button" title={s === 'all' ? 'Alle' : m.label} onClick={() => setPinnedFilter(s)}
+                                  style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, cursor: 'pointer', border: `1px solid ${sel ? (m?.color || 'var(--accent-cyan)') : 'var(--border)'}`, color: sel ? (m?.color || 'var(--accent-cyan)') : 'var(--text-muted)', background: sel ? 'color-mix(in srgb, var(--bg-elevated) 70%, transparent)' : 'transparent' }}>
+                                  {lbl}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                       {slot === 'pinned' ? (
-                        // Stack EVERY pinned economy slot (like the sheet) so nothing is
-                        // hidden behind a sub-tab — each with its own small label.
-                        pinSlots.length === 0 ? <div style={caeEmpty}>—</div> : pinSlots.map((ps) => (
+                        shownPinSlots.length === 0 ? <div style={caeEmpty}>—</div> : shownPinSlots.map((ps) => (
                           <div key={ps} style={{ marginBottom: 8 }}>
                             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: META[ps].color, marginBottom: 3 }}>{META[ps].label}</div>
                             <CombatActionsCategorisedList rows={pinnedByEconomy[ps]} {...listBundle} hidePinnedCategory />

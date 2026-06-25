@@ -12,12 +12,20 @@
 // On the same LAN no port-forwarding is needed; over the internet the GM must
 // forward the port or use a tunnel (e.g. `ngrok tcp 7373`).
 import { WebSocketServer } from 'ws';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { readFileSync, writeFileSync, createReadStream, statSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, basename } from 'node:path';
 
 const PORT = Number(process.env.PORT) || 7373;
 const STATE_FILE = process.env.STATE_FILE || join(dirname(fileURLToPath(import.meta.url)), '.vtt-relay-state.json');
+// Full-resolution map originals live here (no Supabase, no compression). The
+// app PUTs originals when uploading in relay mode, and players GET them. Drop
+// files here manually too — they're served at /map/<filename>.
+const MAPS_DIR = process.env.MAPS_DIR || join(dirname(fileURLToPath(import.meta.url)), '..', 'vtt', 'campaigns');
+try { mkdirSync(MAPS_DIR, { recursive: true }); } catch { /* ignore */ }
+const MIME = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif', webm: 'video/webm', mp4: 'video/mp4' };
+const safeName = (n) => basename(String(n)).replace(/[^\w.\-]/g, '_');
 
 // Persisted state = the latest full snapshot, stored as the store's snapshot
 // object. Served to every new peer as a __snapshot message.
@@ -36,7 +44,31 @@ function snapshotMessage() {
   return JSON.stringify({ senderId: 'relay', op: { type: '__snapshot', snapshot } });
 }
 
-const wss = new WebSocketServer({ host: '0.0.0.0', port: PORT });
+// HTTP server: serves/accepts full-res map files at /map/<name>, and hosts the
+// WebSocket upgrade on the same port.
+const http = createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+  const m = (req.url || '').match(/^\/map\/([^/?#]+)/);
+  if (!m) { res.writeHead(req.url === '/' ? 200 : 404); res.end(req.url === '/' ? 'VTT relay OK' : 'not found'); return; }
+  const file = join(MAPS_DIR, safeName(decodeURIComponent(m[1])));
+  if (req.method === 'PUT') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => { try { writeFileSync(file, Buffer.concat(chunks)); console.log('[relay] stored map', file); res.writeHead(200); res.end('ok'); } catch (e) { res.writeHead(500); res.end(String(e?.message || e)); } });
+    req.on('error', () => { res.writeHead(500); res.end('err'); });
+    return;
+  }
+  try {
+    const st = statSync(file);
+    const ext = file.split('.').pop().toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': st.size, 'Cache-Control': 'public, max-age=31536000' });
+    createReadStream(file).pipe(res);
+  } catch { res.writeHead(404); res.end('not found'); }
+});
+const wss = new WebSocketServer({ server: http });
 
 wss.on('connection', (ws, req) => {
   const who = req.socket.remoteAddress;
@@ -63,5 +95,8 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => {});
 });
 
-console.log(`VTT relay listening on ws://0.0.0.0:${PORT}`);
-console.log('Players connect with Relay-URL  ws://<this-PC-LAN-IP>:' + PORT);
+http.listen(PORT, '0.0.0.0', () => {
+  console.log(`VTT relay listening on ws://0.0.0.0:${PORT}  (+ HTTP map files at /map/…)`);
+  console.log('Players connect with Relay-URL  ws://<this-PC-LAN-IP>:' + PORT);
+  console.log('Full-res map originals dir:', MAPS_DIR);
+});

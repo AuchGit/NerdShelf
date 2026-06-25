@@ -26,7 +26,7 @@ const MAX_INPUT_BYTES = 60 * 1024 * 1024; // reject absurd uploads before canvas
  *           Raise per-import for an exceptionally detailed map.
  *   quality: WebP quality 0..1 (default 0.92 — visually near-lossless for maps)
  */
-export async function importMapImage(file, { maxDim = 8192, quality = 0.92 } = {}) {
+export async function importMapImage(file, { maxDim = 12288, quality = 0.95 } = {}) {
   if (!file) throw new Error('Keine Datei ausgewählt.');
   if (file.size > MAX_INPUT_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(1);

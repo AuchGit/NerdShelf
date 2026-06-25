@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import { useVtt, useIsDM } from '../state/useVtt';
 import { addJournalEntry, removeJournalEntry, presentHandout } from '../state/actions';
-import { uploadHandoutImage } from '../lib/mapStorage';
+import { uploadHandoutImage, uploadMapToRelay } from '../lib/mapStorage';
+import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
 import HandoutOverlay from './HandoutOverlay';
 
 export default function JournalSidebar() {
@@ -24,7 +25,18 @@ export default function JournalSidebar() {
     setBusy(true);
     try {
       let img = {};
-      if (file) img = await uploadHandoutImage(campaignId, file);
+      if (file) {
+        img = await uploadHandoutImage(campaignId, file);
+        // Relay mode: also push the full-res ORIGINAL to the GM's relay so it's
+        // served direct/uncompressed during a live session; Supabase stays the
+        // fallback for when the GM is offline.
+        if (getConnectionMode() === 'relay' && getRelayUrl()) {
+          try {
+            const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+            img.imageUrlFull = await uploadMapToRelay(getRelayUrl(), `h_${Math.random().toString(36).slice(2, 10)}.${ext}`, file);
+          } catch (e3) { console.warn('[vtt] relay handout upload failed, Supabase only', e3?.message); }
+        }
+      }
       addJournalEntry({ title: title.trim() || file?.name || 'Handout', body: body.trim(), ...img });
       setTitle(''); setBody(''); setFile(null);
     } catch (e) {
@@ -53,7 +65,8 @@ export default function JournalSidebar() {
             return (
               <div key={e.id} style={{ ...S.row, ...(shown ? S.rowShown : null) }}>
                 {e.imageUrl
-                  ? <img src={e.imageUrl} alt="" style={S.thumb} onClick={() => setView(e)} />
+                  ? <img src={e.imageUrlFull || e.imageUrl} alt="" style={S.thumb} onClick={() => setView(e)}
+                      onError={(ev) => { if (e.imageUrlFull && ev.target.src !== e.imageUrl) ev.target.src = e.imageUrl; }} />
                   : <div style={{ ...S.thumb, display: 'grid', placeItems: 'center' }}>📜</div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={S.rowTitle}>{e.title}</div>

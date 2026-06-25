@@ -38,7 +38,23 @@ export default function GridControls({ map }) {
   return (
     <>
       <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
-        <input type="range" min="20" max="200" value={g.size} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+        <input type="range" min="20" max="200" value={Math.min(200, g.size)} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+      </Row>
+
+      {/* Exact calibration for printed/DPI battlemaps: type the cell size in px
+          (the map's grid pitch) OR how many cells span the width — either pins
+          the grid to the map's own squares. Offset (below) aligns the origin. */}
+      <Row label="Genau kalibrieren (DPI-Karten)">
+        <div style={{ display: 'flex', gap: 6 }}>
+          <label style={S.numLbl}>px/Feld
+            <input type="number" min="8" max="1000" value={Math.round(g.size)}
+              onChange={(e) => onSize(Math.max(8, +e.target.value || g.size))} style={S.numIn} />
+          </label>
+          <label style={S.numLbl}>Felder breit
+            <input type="number" min="1" max="500" value={Math.max(1, Math.round(map.width / g.size))}
+              onChange={(e) => { const n = Math.max(1, +e.target.value || 1); onSize(map.width / n); }} style={S.numIn} />
+          </label>
+        </div>
       </Row>
 
       <label style={S.check}>
@@ -151,6 +167,8 @@ function Row({ label, children }) {
 
 const S = {
   check: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', margin: '6px 0' },
+  numLbl: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: 'var(--color-text-muted)' },
+  numIn: { width: '100%', boxSizing: 'border-box', padding: '4px 6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' },
   select: { width: '100%', padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' },
   reset: { width: '100%', marginTop: 6, padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
   modeBtn: { flex: 1, padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },

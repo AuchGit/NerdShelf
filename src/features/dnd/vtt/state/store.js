@@ -235,7 +235,10 @@ function reduce(op) {
       break;
     case 'map/setGrid':
       if (state.maps[op.mapId]) {
-        state.maps[op.mapId].grid = { ...state.maps[op.mapId].grid, ...op.grid };
+        // New map object (not in-place) so React selectors (GridControls slider)
+        // detect the change — the canvas reconciles regardless, but the controls
+        // need a fresh reference to re-render.
+        state.maps[op.mapId] = { ...state.maps[op.mapId], grid: { ...state.maps[op.mapId].grid, ...op.grid } };
       }
       break;
     case 'map/remove': {
