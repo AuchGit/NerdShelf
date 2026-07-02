@@ -169,6 +169,7 @@ export default function Specials() {
       {groups.map((g) => (
         <div key={g.src} style={S.group}>
           <div style={S.groupHead}>{g.src}</div>
+          <div style={S.groupGrid}>
           {g.items.map((it) => {
             const id = `${g.src}|${it.name}`;
             const isOpen = !!open[id];
@@ -186,6 +187,7 @@ export default function Specials() {
               </div>
             );
           })}
+          </div>
         </div>
       ))}
     </div>
@@ -193,9 +195,11 @@ export default function Specials() {
 }
 
 const S = {
-  // 4 Kategorien nebeneinander (gleiche Spaltenbreiten wie Aktionen/Pinned) —
-  // spart Höhe; weitere Kategorien fließen in die nächste Zeile.
-  wrap: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'start', padding: '2px 2px 6px' },
+  // Kategorien UNTEREINANDER (Fighter, dann Fey Wanderer, …); die Einträge
+  // jeder Kategorie fließen 4-spaltig von links nach rechts — spart Höhe,
+  // ohne die Kategorien zu vermischen.
+  wrap: { display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' },
+  groupGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, alignItems: 'start' },
   empty: { color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 },
   group: { display: 'flex', flexDirection: 'column', gap: 3 },
   groupHead: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-text-muted)', padding: '2px 4px' },
