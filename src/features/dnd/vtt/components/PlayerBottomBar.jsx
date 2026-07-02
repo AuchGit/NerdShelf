@@ -82,12 +82,26 @@ export default function PlayerBottomBar() {
   const cur = status.currentHp ?? max;
   const temp = status.temporaryHp || 0;
   const patch = (p) => patchCombat(myId, p);
-  // Sheet-style writers for the embedded Action components: mutate a draft, then
-  // push the whitelisted combat-state through patchCombat (RPC).
+  // Sheet-style writers for the embedded Action/Favorites components. Combat
+  // state goes through the fast patchCombat RPC (whitelisted keys, GM sees it
+  // live). Everything ELSE the sheet components write — favorites pins,
+  // category sort order, colour markers, custom notes, item charges — is NOT in
+  // that whitelist and would be silently dropped ('Pfeile/Pin machen nichts'),
+  // so those changes route through the full own-character write instead.
   const applyCharacter = (mutator) => {
     const draft = typeof structuredClone === 'function' ? structuredClone(character) : JSON.parse(JSON.stringify(character));
     if (!draft.status) draft.status = {};
     mutator(draft);
+    const strip = (c) => {
+      const { status, ...rest } = c || {};
+      const st = { ...(status || {}) };
+      for (const k of COMBAT_KEYS) delete st[k];
+      return JSON.stringify({ ...rest, status: st });
+    };
+    if (strip(draft) !== strip(character)) {
+      applyOwnCharacter(myId, mutator); // full write covers status + the rest
+      return;
+    }
     patch(statusPatch(draft.status));
   };
   const updateCharacter = (path, value) => applyCharacter((d) => setPath(d, path, value));
