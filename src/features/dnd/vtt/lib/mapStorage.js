@@ -52,6 +52,7 @@ export async function saveMapOriginalLocal(name, file) {
     try { await mkdir(dir, { recursive: true }); } catch { /* exists */ }
     const path = await join(dir, name);
     await writeFile(path, new Uint8Array(await file.arrayBuffer()));
+    console.log('[vtt] Original gespeichert:', path);
     return name;
   } catch (e) { console.warn('[vtt] save original failed', e?.message || e); return null; }
 }

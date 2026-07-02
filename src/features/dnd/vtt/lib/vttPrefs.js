@@ -54,6 +54,12 @@ export function getAcBadgeScale() { const v = parseFloat(read(AC_KEY, '1')); ret
 export function setAcBadgeScale(v) { write(AC_KEY, v); }
 export function useAcBadgeScale() { return usePref(getAcBadgeScale); }
 
+// ── DM cursor light: warm local glow around the DM's mouse (never synced) ──
+const DMCUR_KEY = 'nerdshelf:vttDmCursorLight';
+export function getDmCursorLight() { return read(DMCUR_KEY, '1') !== '0'; }
+export function setDmCursorLight(on) { write(DMCUR_KEY, on ? null : '0'); } // default on
+export function useDmCursorLight() { return usePref(getDmCursorLight); }
+
 // ── 3D dice in the tray (personal; falls back to CSS dice when WebGL fails) ──
 const D3_KEY = 'nerdshelf:vttDice3d';
 export function getDice3d() { return read(D3_KEY, '1') !== '0'; }

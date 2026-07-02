@@ -9,7 +9,7 @@ import { loadIcon } from '../textures';
 const WINDOW_ICON = '/Assets/map/window.svg';
 // Default on-screen width (in grid cells) of a door/window icon; per-wall
 // `widthCells` overrides it (narrow arrow-slit … wide gate).
-const DEFAULT_OPENING_CELLS = 0.7;
+const DEFAULT_OPENING_CELLS = 0.55;
 
 export class WallsLayer {
   constructor() {

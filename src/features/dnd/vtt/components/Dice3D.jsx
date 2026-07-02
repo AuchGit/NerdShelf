@@ -204,11 +204,13 @@ export default function Dice3D({ dice, onFallback }) {
     const host = hostRef.current;
     if (!host || !dice.length) return undefined;
 
-    Promise.all([import('three'), import('cannon-es')]).then(([THREE, CANNON]) => {
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('3D-Import-Timeout')), 8000));
+    Promise.race([Promise.all([import('three'), import('cannon-es')]), timeout]).then(([THREE, CANNON]) => {
       if (disposed || !hostRef.current) return;
       try {
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      } catch { onFallback?.(); return; }
+      } catch (e) { console.error('[vtt] WebGL für 3D-Würfel nicht verfügbar', e); onFallback?.(); return; }
+      try {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(W, H);
       renderer.domElement.style.display = 'block';
@@ -342,7 +344,13 @@ export default function Dice3D({ dice, onFallback }) {
         else if (d4Chips.length) setChips(d4Chips);
       };
       raf = requestAnimationFrame(tick);
-    }).catch(() => { if (!disposed) onFallback?.(); });
+      } catch (e) {
+        // Jede Init-Panne (Geometrie/Physik/Material) fällt sichtbar geloggt auf
+        // die klassischen Würfel zurück statt stumm nichts zu zeigen.
+        console.error('[vtt] 3D-Würfel-Init fehlgeschlagen', e);
+        onFallback?.();
+      }
+    }).catch((e) => { console.error('[vtt] 3D-Würfel laden fehlgeschlagen', e); if (!disposed) onFallback?.(); });
 
     return () => {
       disposed = true;

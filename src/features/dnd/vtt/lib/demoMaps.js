@@ -25,19 +25,13 @@ export async function uploadSharedMap(name) {
   const existing = await listDemoMaps();
   if (existing.some((m) => (m.name || '').trim().toLowerCase() === clean.toLowerCase())) throw new Error('NAME_TAKEN');
   const onMap = (obj) => Object.values(obj).filter((e) => e.mapId === map.id);
+  // Save the WHOLE map object minus identity/image fields — data-driven, so any
+  // map setting added in the future rides along automatically instead of being
+  // forgotten in a hand-maintained field list.
+  const { id: _id, imagePath: _ip, imageUrl: _iu, imageUrlFull: _iuf, imageFullName: _ifn, ...mapSettings } = map;
+  void _id; void _ip; void _iu; void _iuf; void _ifn;
   const snapshot = {
-    // Save EVERY map-level setting so a loaded shared map looks/behaves exactly
-    // like the original (walls/lights/zones/transitions keep their own fields via
-    // the full objects below).
-    map: {
-      name: map.name, levels: map.levels, fogMode: map.fogMode,
-      lightingEnabled: map.lightingEnabled, lightStyle: map.lightStyle, lightBaseline: map.lightBaseline,
-      darkness: map.darkness || [], terrain: map.terrain || [],
-      memoryStyle: map.memoryStyle, memoryStrength: map.memoryStrength, lightContrast: map.lightContrast, lightBlur: map.lightBlur,
-      bloodyTokens: map.bloodyTokens, turnMarkerScope: map.turnMarkerScope, turnMarkerView: map.turnMarkerView,
-      turnMarkerStyle: map.turnMarkerStyle, tokenBadgeScale: map.tokenBadgeScale,
-      enclosedDark: map.enclosedDark, worldShadowDir: map.worldShadowDir, worldShadowStrength: map.worldShadowStrength,
-    },
+    map: mapSettings,
     walls: onMap(s.walls), lights: onMap(s.lights), zones: onMap(s.zones), transitions: onMap(s.transitions),
   };
   const row = { id: rid('shared_'), name: clean, image_path: map.imagePath || null, width: map.width, height: map.height, grid: map.grid, snapshot, created_by: s.session.userId };
@@ -55,48 +49,49 @@ export async function deleteSharedMap(id) {
 }
 
 // Create a fresh copy of a shared map in the current campaign (new ids).
+// ALL map settings from the snapshot ride along (data-driven spread); only
+// identity/image/levels are rebuilt. Everything lands in ONE map/add op —
+// a follow-up updateMap raced the INSERT over HTTP and silently hit 0 rows,
+// which is why terrain & friends kept "vanishing" after a reload.
 export function loadDemoIntoCampaign(demo) {
   const snap = demo.snapshot || {};
   const m = snap.map || {};
+  // Multi-level maps keep their original level objects (so entity level-ids
+  // still match); single-level snapshots get a fresh base level.
+  const oldLevels = Array.isArray(m.levels) ? m.levels : [];
+  const multi = oldLevels.length > 1;
+  const newLevels = multi ? oldLevels : [{ id: rid('lvl_'), name: oldLevels[0]?.name || 'Ebene 1' }];
+  const newBase = newLevels[0].id;
+  // terrain/darkness entries carry a `level` id of the ORIGINAL map — kept
+  // verbatim they point at a level the new map doesn't have and get filtered
+  // out everywhere. Same remap the walls/lights below always got.
+  const remapLevel = (lvl) => (multi && lvl ? lvl : newBase);
+  const { id: _x, name: _n, imagePath: _a, imageUrl: _b, imageUrlFull: _c, imageFullName: _d, width: _w, height: _h, levels: _l, grid: mGrid, terrain, darkness, ...rest } = m;
+  void _x; void _n; void _a; void _b; void _c; void _d; void _w; void _h; void _l;
   const newMapId = A.addMap({
     name: `${demo.name || m.name || 'Demo'} (Kopie)`,
     imagePath: demo.image_path || null,
     imageUrl: demoPublicUrl(demo.image_path),
-    width: demo.width || 0,
-    height: demo.height || 0,
-    grid: demo.grid || {},
+    width: demo.width || m.width || 0,
+    height: demo.height || m.height || 0,
+    grid: mGrid || demo.grid || {},
+    extra: {
+      ...rest, // every other map setting, incl. future ones
+      levels: newLevels,
+      terrain: (terrain || []).map((t) => ({ ...t, level: remapLevel(t.level) })),
+      darkness: (darkness || []).map((dd) => ({ ...dd, level: remapLevel(dd.level) })),
+    },
   });
-  // Multi-level maps keep their original level objects (so entity level-ids still
-  // match); single-level snapshots stay on the new map's fresh base level.
-  const oldLevels = Array.isArray(m.levels) ? m.levels : [];
-  const multi = oldLevels.length > 1;
-  // Level remap BEFORE building the patch: terrain and darkness entries carry a
-  // `level` id of the ORIGINAL map — kept verbatim they point at a level the new
-  // map doesn't have and get filtered out everywhere ("Gelände wurde nicht
-  // übernommen"). Same remap the walls/lights below always got.
-  const newBase = getState().maps[newMapId]?.levels?.[0]?.id || null;
-  const remapLevel = (lvl) => (multi && lvl ? lvl : newBase);
-  const patch = {
-    fogMode: m.fogMode, lightingEnabled: m.lightingEnabled, lightStyle: m.lightStyle, lightBaseline: m.lightBaseline,
-    darkness: (m.darkness || []).map((d) => ({ ...d, level: remapLevel(d.level) })),
-    terrain: (m.terrain || []).map((t) => ({ ...t, level: remapLevel(t.level) })),
-    memoryStyle: m.memoryStyle,
-    memoryStrength: m.memoryStrength, lightContrast: m.lightContrast, lightBlur: m.lightBlur,
-    bloodyTokens: m.bloodyTokens, turnMarkerScope: m.turnMarkerScope, turnMarkerView: m.turnMarkerView,
-    turnMarkerStyle: m.turnMarkerStyle, tokenBadgeScale: m.tokenBadgeScale,
-    enclosedDark: m.enclosedDark, worldShadowDir: m.worldShadowDir, worldShadowStrength: m.worldShadowStrength,
-  };
-  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
-  if (multi) patch.levels = oldLevels;
-  A.updateMap(newMapId, patch);
-  // Activate the new map FIRST so creationLevel() targets it, then remap every
-  // entity onto a level the new map actually has (the cause of "walls/lights
-  // didn't carry over" was entities keeping the OLD map's level id → filtered out).
   A.setActiveMap(newMapId);
+  // Entities reference the map row via FK — give the map INSERT a head start so
+  // the entity upserts can't arrive first and fail silently.
   const strip = (e) => { const c = { ...e }; delete c.id; delete c.mapId; c.level = remapLevel(c.level); return c; };
-  if ((snap.walls || []).length) A.addWalls(newMapId, snap.walls.map(strip));
-  if ((snap.lights || []).length) A.addLights(newMapId, snap.lights.map(strip));
-  for (const z of (snap.zones || [])) A.addZone({ ...strip(z), mapId: newMapId });
-  for (const t of (snap.transitions || [])) A.addTransition({ ...strip(t), mapId: newMapId });
+  setTimeout(() => {
+    if (getState().maps[newMapId] == null) return; // map deleted meanwhile
+    if ((snap.walls || []).length) A.addWalls(newMapId, snap.walls.map(strip));
+    if ((snap.lights || []).length) A.addLights(newMapId, snap.lights.map(strip));
+    for (const z of (snap.zones || [])) A.addZone({ ...strip(z), mapId: newMapId });
+    for (const t of (snap.transitions || [])) A.addTransition({ ...strip(t), mapId: newMapId });
+  }, 400);
   return newMapId;
 }

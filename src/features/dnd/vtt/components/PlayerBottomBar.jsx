@@ -124,16 +124,20 @@ export default function PlayerBottomBar() {
 
   const inspiration = !!(status.inspiration || character.info?.inspiration);
 
-  // ── Quick-access items (consume one on click) ──
+  // ── Quick-access items: consume/add one, equip/unequip — all through the
+  // owner full-character path so sheet + VTT stay in lock-step. ──
   const quickItems = quickAccessItems(character);
-  const consumeQuickItem = (it) => applyOwnCharacter(myId, (d) => {
+  const mutateQuickItem = (it, fn) => applyOwnCharacter(myId, (d) => {
     for (const bucket of ['inventory', 'custom']) {
       const arr = d[bucket]?.items;
       if (!Array.isArray(arr)) continue;
       const t = arr.find((x) => (x.id || x._id || x.name) === (it.id || it._id || it.name));
-      if (t && (t.quantity ?? 1) > 0) { t.quantity = (t.quantity ?? 1) - 1; return; }
+      if (t) { fn(t); return; }
     }
   });
+  const consumeQuickItem = (it) => mutateQuickItem(it, (t) => { if ((t.quantity ?? 1) > 0) t.quantity = (t.quantity ?? 1) - 1; });
+  const addQuickItem = (it) => mutateQuickItem(it, (t) => { t.quantity = (t.quantity ?? 1) + 1; });
+  const toggleEquipItem = (it) => mutateQuickItem(it, (t) => { t.equipped = !t.equipped; });
 
   // ── Rests ──
   const shortRest = () => {
@@ -166,7 +170,7 @@ export default function PlayerBottomBar() {
   const renderPanel = (id) => {
     if (id === 'actions') return <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
     if (id === 'specials') return <Specials />;
-    if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} />;
+    if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} addOne={addQuickItem} toggleEquip={toggleEquipItem} />;
     if (id === 'favorites') return <FavoritesSection character={character} computed={computed} applyCharacter={applyCharacter} />;
     return null;
   };
@@ -296,17 +300,21 @@ function Group({ label, children }) {
 }
 
 // Items panel content — quick-access items in a roomy wrap (moved out of the bar
-// so the bar doesn't overflow). Click − to consume one.
-function ItemsPanel({ items, consume }) {
+// so the bar doesn't overflow). − consumes, + adds one, An/Ab equips gear.
+function ItemsPanel({ items, consume, addOne, toggleEquip }) {
   if (!items.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 }}>Keine Quick-Access-Items. Markiere Items im Charakterbogen als Quick-Access.</div>;
   return (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 8 }}>
       {items.map((it) => (
         <Pinnable key={it.id || it.name} title={it.name} render={() => <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{itemDetail(it) || '—'}</div>}>
-          <div style={S.qa}>
+          <div style={{ ...S.qa, ...(it.equipped ? S.qaEquipped : null) }}>
             <span style={S.qaName}>{it.name}</span>
             <span style={S.qaQty}>{it.quantity ?? 1}</span>
-            <button style={S.qaUse} title="Verbrauchen" onClick={() => consume(it)}>−</button>
+            <button style={S.qaUse} title="Einen verbrauchen" onClick={() => consume(it)}>−</button>
+            <button style={{ ...S.qaUse, color: 'var(--accent-green,#4ade80)' }} title="Einen hinzufügen" onClick={() => addOne(it)}>+</button>
+            <button style={{ ...S.qaEquip, ...(it.equipped ? S.qaEquipOn : null) }}
+              title={it.equipped ? 'Angelegt — Klick legt ab' : 'Nicht angelegt — Klick legt an'}
+              onClick={() => toggleEquip(it)}>{it.equipped ? 'Ab' : 'An'}</button>
           </div>
         </Pinnable>
       ))}
@@ -356,6 +364,9 @@ const S = {
   qaName: { fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   qaQty: { fontSize: 10, fontWeight: 700, color: 'var(--color-accent)', minWidth: 12, textAlign: 'center' },
   qaUse: { width: 18, height: 18, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 800, lineHeight: 1, padding: 0 },
+  qaEquip: { height: 18, padding: '0 5px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 700, fontSize: 9, lineHeight: 1 },
+  qaEquipOn: { borderColor: 'var(--color-accent)', color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' },
+  qaEquipped: { borderColor: 'var(--color-accent)' },
   // Stacked panels above the bar (column: first child = top = last-opened).
   panelStack: { position: 'absolute', bottom: '100%', left: 0, right: 0, display: 'flex', flexDirection: 'column' },
   panel: { display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 97%, transparent)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', overflow: 'hidden' },

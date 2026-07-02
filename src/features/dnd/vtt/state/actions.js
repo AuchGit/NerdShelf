@@ -12,7 +12,10 @@ const uid = (p = '') => p + Math.random().toString(36).slice(2, 10);
 export const setSession = (session) => applyLocal({ type: 'session/set', session });
 
 // ---- maps ----
-export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath, width, height, grid }) {
+// `extra` = additional map fields (fog/light/terrain/levels/…) applied in the
+// SAME map/add op — a follow-up updateMap would race the INSERT over HTTP and
+// silently hit 0 rows (the "shared map lost its terrain" bug).
+export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath, width, height, grid, extra }) {
   const baseLevel = { id: uid('lvl_'), name: 'Ebene 1' };
   const map = {
     id: uid('map_'),
@@ -25,9 +28,10 @@ export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath,
     height,
     grid: { ...DEFAULT_GRID, ...grid },
     levels: [baseLevel],
+    ...(extra || {}),
   };
   apply({ type: 'map/add', map });
-  setActiveLevel(baseLevel.id);
+  setActiveLevel((extra?.levels?.[0] || baseLevel).id);
   return map.id;
 }
 

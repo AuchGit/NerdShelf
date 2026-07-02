@@ -130,6 +130,7 @@ export class LightLayer {
         covCD: RenderTexture.create({ width: w, height: h }),
         covDV: RenderTexture.create({ width: w, height: h }),
         covDVD: RenderTexture.create({ width: w, height: h }),
+        dark: RenderTexture.create({ width: w, height: h }),
       };
       this._rtKey = key;
       this._baseSig = null; // fresh blank RTs → force a coverage rebuild
@@ -239,60 +240,64 @@ export class LightLayer {
     }
 
     // ── 2. Composite the visible lighting texture ──
-    const scene = new Container();
-    // darkness (baseline + placed regions)
-    if (baseA > 0) scene.addChild(new Graphics().rect(0, 0, w, h).fill({ color: 0x000000, alpha: baseA }));
+    // TWO passes so light interacts correctly with BOTH kinds of darkness:
+    //   • baseline pass (scene): the map-wide ambient overlay. Dim light must
+    //     NOT lighten a dim/bright baseline (it matches the ambient), so its
+    //     erase is gated by BL there.
+    //   • deep-dark pass (rtDark): rooms ("Räume dunkel"), painted darkness and
+    //     the world shadow — these are DARK regardless of the baseline, so a
+    //     light's dim band ALWAYS lifts them (to the dim level) and the bright
+    //     band clears them. This is what lets a lantern's dim glow spill through
+    //     a window/door into a dark house on a bright map.
+    const darkLevelA = Math.min(0.97, BASELINE_ALPHA.dark * darkScale);
+    const dimTargetA = Math.min(0.97, BASELINE_ALPHA.dim * darkScale);
+    const liftToDim = Math.max(0, 1 - dimTargetA / Math.max(0.01, darkLevelA));
+    const dark = new Container();
     for (const d of darkness) {
       if (!d) continue;
       const g = new Graphics();
       if (d.r > 0) g.circle((d.x || 0) - ox, (d.y || 0) - oy, d.r);
       else if (d.w > 0 && d.h > 0) g.rect((d.x || 0) - ox, (d.y || 0) - oy, d.w, d.h);
       else continue;
-      scene.addChild(g.fill({ color: 0x000000, alpha: darkA }));
+      dark.addChild(g.fill({ color: 0x000000, alpha: darkA }));
     }
-    // Roofed-loop interiors: paint each enclosed room dark (one step deeper than
-    // the baseline). The erase passes below cut light back in through windows /
-    // open doors (whose ambient sources were appended to `sources`).
-    // A roofed room's "dark" is the CONSTANT canonical dark level (scaled only by
-    // contrast), independent of the outdoor baseline. ERASE the baseline overlay
-    // inside the room first, then fill the dark level — otherwise it would stack
-    // on top of the baseline and read darker on darker maps.
-    const darkLevelA = Math.min(0.97, BASELINE_ALPHA.dark * darkScale);
     for (const poly of darkPolys) {
       if (!poly || poly.length < 3) continue;
-      const pts = poly.flatMap((p) => [p.x - ox, p.y - oy]);
-      const er = new Graphics().poly(pts).fill({ color: 0x000000, alpha: 1 });
+      dark.addChild(new Graphics().poly(poly.flatMap((p) => [p.x - ox, p.y - oy])).fill({ color: 0x000000, alpha: darkLevelA }));
+    }
+    if (wantShadow && shadowA > 0) dark.addChild(stamp(covShadow, 'normal', shadowA, 0x000000));
+    // Lights carve the deep dark: dim reach down to ~the dim level, bright fully;
+    // darkvision likewise lifts one step within its range.
+    dark.addChild(stamp(covD, 'erase', liftToDim));
+    dark.addChild(stamp(covB, 'erase', 1));
+    if (wantDV) dark.addChild(stamp(covDV, 'erase', liftToDim));
+    renderer.render({ container: dark, target: this._rts.dark, clear: true });
+    dark.destroy({ children: true });
+
+    const scene = new Container();
+    // baseline ambient overlay
+    if (baseA > 0) scene.addChild(new Graphics().rect(0, 0, w, h).fill({ color: 0x000000, alpha: baseA }));
+    // rooms replace the baseline inside (their own constant dark lives in rtDark)
+    for (const poly of darkPolys) {
+      if (!poly || poly.length < 3) continue;
+      const er = new Graphics().poly(poly.flatMap((p) => [p.x - ox, p.y - oy])).fill({ color: 0x000000, alpha: 1 });
       er.blendMode = 'erase';
       scene.addChild(er);
-      scene.addChild(new Graphics().poly(pts).fill({ color: 0x000000, alpha: darkLevelA }));
     }
-    // World shadow: darken the swept shadow quads (one flat union, so crossing
-    // shadows don't double-darken). Painted BEFORE the erase so placed lights
-    // light up the shadow they reach into.
-    if (wantShadow && shadowA > 0) scene.addChild(stamp(covShadow, 'normal', shadowA, 0x000000));
-    // erase darkness: dim union (partial) then bright union (full) — flat, so
-    // overlaps don't create internal rings. 'classic' keeps the dim band darker
-    // for a crisper dark→dim→bright STEP ("Abstufungen"); 'modern' lifts the dim
-    // band and adds a warm tint for a softer glow.
-    // Contrast (0..1) controls how dark the dim band is: higher contrast erases
-    // less → darker dim → sharper dark/dim/bright separation.
+    // erase the BASELINE darkness: dim union only when the baseline is dark
+    // ('classic' keeps the dim band darker for a crisper step; contrast tunes it),
+    // bright union always (a torch lifts a dim/dark baseline to bright).
     const dimErase = Math.max(0.2, Math.min(0.8, (style === 'classic' ? 0.7 : 0.75) - c * 0.45));
-    if (hasDark) {
-      // Dim coverage only lifts darkness when the baseline is DARK — on a dim (or
-      // bright) baseline the dim band matches the ambient, so it must not lighten.
+    if (baseA > 0) {
       if (BL < 1) scene.addChild(stamp(covD, 'erase', dimErase));
       scene.addChild(stamp(covB, 'erase', 1));
-      // Darkvision lifts whatever darkness REMAINS by one step (dark→dim) inside
-      // each viewer-token's range — applied last so it operates on the net
-      // overlay. The factor maps the dark level down to the dim level.
-      if (wantDV) {
-        scene.addChild(stamp(covDV, 'erase', 1 - BASELINE_ALPHA.dim / BASELINE_ALPHA.dark));
-        // …but mark the world-dark part of that vision with a cool, desaturated
-        // wash: the player SEES there, yet recognises "hier ist es eigentlich
-        // dunkel" (Schleichen!). Only where no real light reaches (covDVD).
-        scene.addChild(stamp(covDVD, 'normal', 0.22, 0x3d4a63));
-      }
+      if (wantDV && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
+    // deep-dark layer (already carved by the lights) composites on top
+    scene.addChild(stamp(this._rts.dark, 'normal', 1));
+    // world-dark marking inside darkvision: cool desaturating wash where the
+    // viewer sees only thanks to darkvision (Schleichen!).
+    if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.22, 0x3d4a63));
     // Coloured glow: stamp the merged colour unions ONCE (overlaps already merged
     // in the RT, so no brighter lens/rims where lights overlap). Gated by the
     // baseline level so a bright light on a bright map (or dim on dim) adds

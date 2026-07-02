@@ -24,7 +24,7 @@ import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
 import { WALL_TYPES, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
-import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
+import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
 import { relayFullUrl } from '../lib/mapStorage';
 import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance } from '../lib/wallGeometry';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
@@ -109,6 +109,16 @@ export class VttRenderer {
     this.moveLayer = new Graphics(); // reachable-cells movement preview (on the floor)
     this.moveLayer.eventMode = 'none';
     this.liveGroup.addChild(this.bg, this.grid.container, this.zones.container, this.terrain.container, this.moveLayer, this.lights.container, this.auras, this.transitions.container, this.tokens.container, this.currentMaskGfx);
+
+    // DM cursor light: a warm additive glow that follows the mouse so the DM
+    // can peek into dark corners. LOCAL only (never synced — players never see
+    // it) — it lives purely in this client's scene graph.
+    this.cursorGlow = new Sprite(makeCursorGlowTexture());
+    this.cursorGlow.anchor.set(0.5);
+    this.cursorGlow.blendMode = 'add';
+    this.cursorGlow.eventMode = 'none';
+    this.cursorGlow.visible = false;
+    this.liveGroup.addChild(this.cursorGlow);
 
     this.lightSwitches = new Container(); // player-clickable light switches (everyone)
     this.lightSwitches.eventMode = 'static';
@@ -510,6 +520,9 @@ export class VttRenderer {
         }
       }
       this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, (map.tokenBadgeScale ?? 1) * getTokenBadgeScale(), bloodHp, getAcBadgeScale());
+      // DM-only local cursor light (personal pref; players never see it).
+      this.cursorGlow.visible = isDM && getDmCursorLight();
+      if (this.cursorGlow.visible) { const gs = map.grid.size * 4.2; this.cursorGlow.width = gs; this.cursorGlow.height = gs; }
       this.updateMovementPreview(s, map, level, base, isDM);
       this.drawTargeting(levelTokens, map.grid);
       this.transitions.update(s.transitions, map.id, level, map.grid, isDM, s.ui.selectedTransitionId, seenTransIds);
@@ -1108,6 +1121,7 @@ export class VttRenderer {
       return;
     }
     const pos = this.mapPos(e);
+    if (this.cursorGlow.visible) this.cursorGlow.position.set(pos.x, pos.y);
     this.drawFogBrush(pos); // brush cursor preview (no-op unless fog tool)
     this.drawDarkBrushHover(pos); // brush cursor preview (no-op unless dark tool)
     if (this.lightDrag) { A.updateLight(this.lightDrag.id, { x: pos.x + this.lightDrag.offX, y: pos.y + this.lightDrag.offY }); return; }
@@ -1325,7 +1339,10 @@ export class VttRenderer {
     // onStageDown → placeDoorOnWall), so bail WITHOUT stopping propagation and
     // let the event bubble to the stage. Clicking an EXISTING door still falls
     // through to the normal select/edit logic below.
-    if (s.ui.tool === 'walls' && (s.ui.wallKind === 'door' || s.ui.wallKind === 'window') && s.walls[id]?.kind !== s.ui.wallKind) return;
+    // While a door/window DRAFT is in progress the click must fall through to
+    // the stage (it places the next vertex). Otherwise ANY wall-tool element is
+    // selectable/editable regardless of which sub-kind is armed.
+    if (s.ui.tool === 'walls' && this.doorDraft) return;
     // While drawing a wall chain, a click must place/close a vertex — never
     // select the wall (otherwise you can't snap the loop shut on the start).
     if (this.wallChain) return;
@@ -1360,7 +1377,7 @@ export class VttRenderer {
     // Door mode: on a NON-door wall, let the click fall through to the stage so
     // a NEW door is placed instead of grabbing the endpoint handle. An existing
     // door's handles stay grabbable so placed doors remain editable.
-    if (t === 'walls' && (s0.ui.wallKind === 'door' || s0.ui.wallKind === 'window') && s0.walls[id]?.kind !== s0.ui.wallKind) return;
+    if (t === 'walls' && this.doorDraft) return; // mid-draft: click places the vertex
     e.stopPropagation?.();
     A.selectWall(id);
     const s = getState();
@@ -1394,7 +1411,7 @@ export class VttRenderer {
     const s = getState();
     // Personal display choice: a player can hide the on-map light switches.
     if (s.session.role !== 'dm' && !getShowLightSwitches()) return;
-    const size = (map.grid.size || 70) * 0.5;
+    const size = (map.grid.size || 70) * 0.38;
     for (const lt of Object.values(s.lights)) {
       if (lt.mapId !== map.id || (lt.level || base) !== level || !lt.playerSwitch) continue;
       const on = lt.enabled !== false;
@@ -2139,6 +2156,18 @@ const round5 = (v) => Math.max(5, Math.round(v / 5) * 5);
 
 // (fiveEDistanceFt, rulerMoveFt, darkenColor & friends now live in
 // lib/wallGeometry.js — pure, unit-tested, imported at the top of this file.)
+// Warm radial glow texture for the DM cursor light (drawn once).
+function makeCursorGlowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 8, 128, 128, 126);
+  g.addColorStop(0, 'rgba(255,224,170,0.85)');
+  g.addColorStop(0.45, 'rgba(255,214,150,0.38)');
+  g.addColorStop(1, 'rgba(255,210,140,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  return Texture.from(c);
+}
+
 const filterObj = (obj, pred) => { const o = {}; for (const k in obj) if (pred(obj[k])) o[k] = obj[k]; return o; };
 const toObj = (arr) => { const o = {}; for (const e of arr) o[e.id] = e; return o; };
 

@@ -2,6 +2,7 @@
 // vttPrefs). Opened from the gear in the VTT top bar. Not shared game state.
 import {
   useUiScale, setUiScale, useTokenBadgeScale, setTokenBadgeScale, useAcBadgeScale, setAcBadgeScale, useMemoryStyle, setMemoryStyle,
+  useDice3d, setDice3d, useDmCursorLight, setDmCursorLight,
   useMemoryBrightness, setMemoryBrightness,
   useShowLightSwitches, setShowLightSwitches,
   useTerrainOpacity, setTerrainOpacity, useTerrainPattern, setTerrainPattern,
@@ -23,6 +24,8 @@ export default function VttSettings({ onClose }) {
   const climb = useClimbHeightStyle();
   const difficult = useDifficultStyle();
   const initRoll = useInitiativeRollEnabled();
+  const dice3d = useDice3d();
+  const dmCursor = useDmCursorLight();
   const connMode = useConnectionMode();
   const relayUrl = useRelayUrl();
 
@@ -94,6 +97,14 @@ export default function VttSettings({ onClose }) {
           </Row>
 
           <div style={S.section}>Sonstiges</div>
+          <label style={S.check} title="3D-Würfel mit echter Physik im Würfeltray. Abschalten, falls die Performance leidet — dann klassische 2D-Würfel.">
+            <input type="checkbox" checked={dice3d} onChange={(e) => setDice3d(e.target.checked)} />
+            3D-Würfel im Würfeltray (aus = klassische 2D-Anzeige)
+          </label>
+          <label style={S.check} title="Nur für den DM und nur lokal sichtbar: ein warmer Lichtschein folgt dem Mauszeiger, um dunkle Ecken auszuleuchten.">
+            <input type="checkbox" checked={dmCursor} onChange={(e) => setDmCursorLight(e.target.checked)} />
+            DM-Mauslicht (dunkle Ecken unterm Cursor erhellen)
+          </label>
           <label style={S.check}>
             <input type="checkbox" checked={initRoll} onChange={(e) => setInitiativeRollEnabled(e.target.checked)} />
             Würfel-Knopf in der Initiative-Leiste (d20 + Bonus)

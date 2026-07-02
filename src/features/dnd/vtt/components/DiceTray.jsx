@@ -93,6 +93,12 @@ export default function DiceTray() {
   });
   const clear = () => setRoll({ dice: [], total: null });
 
+  // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
+  // animates instantly instead of waiting on the lazy import.
+  useEffect(() => {
+    if (open && want3d) { import('three').catch(() => {}); import('cannon-es').catch(() => {}); }
+  }, [open, want3d]);
+
   if (!open) return <button style={S.fab} onClick={() => setOpen(true)} title="Würfel">🎲</button>;
 
   const style = pos ? { ...S.wrap, left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : S.wrap;
