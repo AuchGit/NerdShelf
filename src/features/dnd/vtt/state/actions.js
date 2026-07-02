@@ -5,7 +5,6 @@ import { apply, applyLocal, getState } from './store';
 import { toast } from '../lib/toast';
 import { DEFAULT_GRID, PING_TTL_MS, DEFAULT_LIGHT, LIGHT_PRESETS, DISPOSITIONS } from '../lib/constants';
 import { patchCombat } from '../sync/characterBinding';
-import { snapToGrid } from '../lib/geometry';
 
 const uid = (p = '') => p + Math.random().toString(36).slice(2, 10);
 
@@ -95,8 +94,18 @@ export const removeToken = (id) => apply({ type: 'token/remove', id });
 const SIZE_CELLS = { T: 1, S: 1, M: 1, L: 2, H: 3, G: 4 };
 const HOSTILE = DISPOSITIONS.find((d) => d.id === 'hostile').color;
 
-// Spawn an NPC token from a 5etools-shaped bestiary statblock (DM only). Name,
-// HP and footprint come straight from the statblock; positioned at map center.
+// Arm CLICK-TO-PLACE: the next left-click on the map creates the token on the
+// clicked grid cell (Esc cancels). Local-only UI state — nothing spawns until
+// the DM picks the spot.
+export function armTokenPlacement(tokenDef) {
+  applyLocal({ type: 'ui/set', ui: { pendingTokenPlace: tokenDef } });
+  toast(`Klicke ein Feld, um „${tokenDef?.name || 'Token'}" zu platzieren (Esc bricht ab)`, 'info');
+}
+export const cancelTokenPlacement = () => applyLocal({ type: 'ui/set', ui: { pendingTokenPlace: null } });
+
+// Prepare an NPC token from a 5etools-shaped bestiary statblock (DM only).
+// Name, HP and footprint come straight from the statblock; the DM then clicks
+// the grid cell where it should spawn (armTokenPlacement).
 export function createTokenFromStatblock(monster) {
   const s = getState();
   const map = s.maps[s.activeMapId];
@@ -104,8 +113,7 @@ export function createTokenFromStatblock(monster) {
   const sizeKey = Array.isArray(monster.size) ? monster.size[0] : monster.size;
   const sizeCells = SIZE_CELLS[sizeKey] || 1;
   const hp = monster.hp?.average ?? null;
-  const center = snapToGrid(map.width / 2, map.height / 2, map.grid, sizeCells);
-  return addToken({
+  armTokenPlacement({
     kind: 'npc',
     name: monster.name || 'Monster',
     hp, hpMax: hp,
@@ -113,9 +121,9 @@ export function createTokenFromStatblock(monster) {
     imageUrl: monsterTokenUrl(monster),
     statblock: monster, // raw 5etools statblock → DM double-click overlay
     sizeCells,
-    x: center.x, y: center.y,
     color: HOSTILE, // monsters default to hostile; DM can recolor in the menu
   });
+  return null;
 }
 
 // AC out of a 5etools statblock: `ac` is an array of numbers or {ac,from}.

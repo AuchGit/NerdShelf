@@ -900,6 +900,7 @@ export class VttRenderer {
       // Ctrl+Z = undo; Ctrl+Y / Ctrl+Shift+Z = redo.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { redo(); e.preventDefault(); return; }
+      if (e.key === 'Escape' && getState().ui.pendingTokenPlace) { A.cancelTokenPlacement(); return; }
       if ((e.key === 'Escape' || e.key === 'Enter') && this.wallChain) { this.finishWallChain(); return; }
       if (e.key === 'Escape' && this.doorDraft) { this.doorDraft = null; this.walls.drawPreview(null, null); return; }
       const step = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] }[e.key.toLowerCase()];
@@ -952,6 +953,16 @@ export class VttRenderer {
     // Alt-click = ping, in any tool. DM + Ctrl dazu = FOKUS-Ping: alle Kameras
     // schwenken auf die Stelle (Aufmerksamkeit der ganzen Runde).
     if (this.keys.alt) { A.ping(map.id, pos.x, pos.y, undefined, this.keys.ctrl && s.session.role === 'dm'); return; }
+
+    // Click-to-place: an armed token (Bestiary/TokenPanel) spawns on the
+    // clicked grid cell. Left click only; Esc cancels (see onAction).
+    if (s.ui.pendingTokenPlace && e.button === 0 && s.session.role === 'dm') {
+      const def = s.ui.pendingTokenPlace;
+      const spot = snapToGrid(pos.x, pos.y, map.grid, def.sizeCells || 1);
+      A.addToken({ ...def, x: spot.x, y: spot.y });
+      A.cancelTokenPlacement();
+      return;
+    }
 
     // Right-click while drawing walls ends the chain (instead of panning).
     if (e.button === 2 && s.ui.tool === 'walls' && this.wallChain) { this.finishWallChain(); return; }

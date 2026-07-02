@@ -2,9 +2,8 @@
 // add their own token. New tokens spawn at the map center, snapped to grid.
 import { Button } from '../../../../shared/ui';
 import { useVtt, useActiveMap, useIsDM, useSession } from '../state/useVtt';
-import { addToken, selectToken, removeToken, updateMap } from '../state/actions';
+import { armTokenPlacement, selectToken, removeToken, updateMap } from '../state/actions';
 import { spawnMemberToken, spawnAllMemberTokens } from '../sync/characterBinding';
-import { snapToGrid } from '../lib/geometry';
 
 const PALETTE = ['#42a5f5', '#ef5350', '#66bb6a', '#ab47bc', '#ffa726', '#26c6da'];
 
@@ -19,11 +18,10 @@ export default function TokenPanel() {
   const boundChars = new Set(tokens.map((t) => t.characterId).filter((x) => x != null).map(String));
   const unplaced = members.filter((m) => !boundChars.has(String(m.characterId)));
 
+  // Click-to-place: arm the token, the DM clicks the grid cell it spawns on.
   const spawn = (partial) => {
-    const center = snapToGrid(map.width / 2, map.height / 2, map.grid, partial.sizeCells || 1);
-    addToken({
+    armTokenPlacement({
       ...partial,
-      x: center.x, y: center.y,
       color: PALETTE[Math.floor(Math.random() * PALETTE.length)],
     });
   };

@@ -36,6 +36,7 @@ export async function uploadSharedMap(name) {
       memoryStyle: map.memoryStyle, memoryStrength: map.memoryStrength, lightContrast: map.lightContrast, lightBlur: map.lightBlur,
       bloodyTokens: map.bloodyTokens, turnMarkerScope: map.turnMarkerScope, turnMarkerView: map.turnMarkerView,
       turnMarkerStyle: map.turnMarkerStyle, tokenBadgeScale: map.tokenBadgeScale,
+      enclosedDark: map.enclosedDark, worldShadowDir: map.worldShadowDir, worldShadowStrength: map.worldShadowStrength,
     },
     walls: onMap(s.walls), lights: onMap(s.lights), zones: onMap(s.zones), transitions: onMap(s.transitions),
   };
@@ -57,26 +58,33 @@ export function loadDemoIntoCampaign(demo) {
     height: demo.height || 0,
     grid: demo.grid || {},
   });
-  const patch = {
-    fogMode: m.fogMode, lightingEnabled: m.lightingEnabled, lightStyle: m.lightStyle, lightBaseline: m.lightBaseline,
-    darkness: m.darkness || [], terrain: m.terrain || [], memoryStyle: m.memoryStyle,
-    memoryStrength: m.memoryStrength, lightContrast: m.lightContrast, lightBlur: m.lightBlur,
-    bloodyTokens: m.bloodyTokens, turnMarkerScope: m.turnMarkerScope, turnMarkerView: m.turnMarkerView,
-    turnMarkerStyle: m.turnMarkerStyle, tokenBadgeScale: m.tokenBadgeScale,
-  };
-  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
   // Multi-level maps keep their original level objects (so entity level-ids still
   // match); single-level snapshots stay on the new map's fresh base level.
   const oldLevels = Array.isArray(m.levels) ? m.levels : [];
   const multi = oldLevels.length > 1;
+  // Level remap BEFORE building the patch: terrain and darkness entries carry a
+  // `level` id of the ORIGINAL map — kept verbatim they point at a level the new
+  // map doesn't have and get filtered out everywhere ("Gelände wurde nicht
+  // übernommen"). Same remap the walls/lights below always got.
+  const newBase = getState().maps[newMapId]?.levels?.[0]?.id || null;
+  const remapLevel = (lvl) => (multi && lvl ? lvl : newBase);
+  const patch = {
+    fogMode: m.fogMode, lightingEnabled: m.lightingEnabled, lightStyle: m.lightStyle, lightBaseline: m.lightBaseline,
+    darkness: (m.darkness || []).map((d) => ({ ...d, level: remapLevel(d.level) })),
+    terrain: (m.terrain || []).map((t) => ({ ...t, level: remapLevel(t.level) })),
+    memoryStyle: m.memoryStyle,
+    memoryStrength: m.memoryStrength, lightContrast: m.lightContrast, lightBlur: m.lightBlur,
+    bloodyTokens: m.bloodyTokens, turnMarkerScope: m.turnMarkerScope, turnMarkerView: m.turnMarkerView,
+    turnMarkerStyle: m.turnMarkerStyle, tokenBadgeScale: m.tokenBadgeScale,
+    enclosedDark: m.enclosedDark, worldShadowDir: m.worldShadowDir, worldShadowStrength: m.worldShadowStrength,
+  };
+  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
   if (multi) patch.levels = oldLevels;
   A.updateMap(newMapId, patch);
   // Activate the new map FIRST so creationLevel() targets it, then remap every
   // entity onto a level the new map actually has (the cause of "walls/lights
   // didn't carry over" was entities keeping the OLD map's level id → filtered out).
   A.setActiveMap(newMapId);
-  const newBase = getState().maps[newMapId]?.levels?.[0]?.id || null;
-  const remapLevel = (lvl) => (multi && lvl ? lvl : newBase);
   const strip = (e) => { const c = { ...e }; delete c.id; delete c.mapId; c.level = remapLevel(c.level); return c; };
   if ((snap.walls || []).length) A.addWalls(newMapId, snap.walls.map(strip));
   if ((snap.lights || []).length) A.addLights(newMapId, snap.lights.map(strip));
