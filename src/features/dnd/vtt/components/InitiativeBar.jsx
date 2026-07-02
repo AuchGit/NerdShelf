@@ -48,7 +48,7 @@ export default function InitiativeBar() {
               style={{ ...S.item, ...bg, ...(active ? activeStyle : next ? S.next : null) }}
               title={active ? `${e.name} — am Zug${mine ? ' (du!)' : ''}` : next ? `${e.name} — als Nächstes${mine ? ' (du!)' : ''}` : e.name}>
               {!t?.imageUrl && <div style={S.initial}>{(e.name || '?').slice(0, 1).toUpperCase()}</div>}
-              {next && <div style={{ ...S.nextTag, ...(mine ? S.nextTagMine : null) }}>{mine ? 'du bist nächste' : 'nächste'}</div>}
+              {next && <div style={{ ...S.nextTag, ...(mine ? S.nextTagMine : null) }}>{mine ? 'du bist dran' : 'als Nächstes'}</div>}
               <div style={S.val}>{e.value}</div>
               <div style={S.caption}>
                 <div style={S.nameTxt}>{e.name}</div>
@@ -64,7 +64,7 @@ export default function InitiativeBar() {
 }
 
 const S = {
-  wrap: { position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'rgba(15,17,21,0.85)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', backdropFilter: 'blur(4px)', zIndex: 50, maxWidth: '90%' },
+  wrap: { position: 'absolute', top: 100, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'color-mix(in srgb, var(--color-bg-elevated) 85%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', backdropFilter: 'blur(4px)', zIndex: 50, maxWidth: '90%' },
   round: { textAlign: 'center', fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.1, padding: '0 4px' },
   nav: { background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', width: 32, height: 58 },
   list: { display: 'flex', gap: 7, overflowX: 'auto', padding: '2px' },

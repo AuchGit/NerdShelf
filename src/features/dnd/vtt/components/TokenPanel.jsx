@@ -47,9 +47,8 @@ export default function TokenPanel() {
           <Row label="Marker-Stil">
             <Seg value={map.turnMarkerStyle || 'ring'} opts={[['ring', 'Ring'], ['glow', 'Schein'], ['chevron', 'Pfeil']]} onPick={(v) => updateMap(map.id, { turnMarkerStyle: v })} />
           </Row>
-          <Row label={`Badge-Größe (${Math.round((map.tokenBadgeScale ?? 1) * 100)}%)`}>
-            <input type="range" min="0.6" max="1.8" step="0.1" value={map.tokenBadgeScale ?? 1} onChange={(e) => updateMap(map.id, { tokenBadgeScale: +e.target.value })} style={{ width: '100%' }} />
-          </Row>
+          {/* Badge size is now a personal per-client setting (VTT-Einstellungen),
+              so each viewer scales them as they like — no DM-wide control here. */}
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

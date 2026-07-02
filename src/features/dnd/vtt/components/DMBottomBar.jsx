@@ -187,7 +187,7 @@ function Stat({ label, value, title, icon }) {
 }
 
 const S = {
-  bar: { position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 0, maxWidth: 'calc(100% - 80px)', zIndex: 23, display: 'flex', flexDirection: 'column', background: 'rgba(15,17,21,0.95)', backdropFilter: 'blur(4px)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -4px 20px #0007', overflow: 'hidden' },
+  bar: { position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 0, maxWidth: 'calc(100% - 80px)', zIndex: 23, display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 95%, transparent)', backdropFilter: 'blur(4px)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -4px 20px #0007', overflow: 'hidden' },
   toggle: { padding: '4px 12px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 'var(--fs-sm)', fontWeight: 700 },
   row: { display: 'flex', gap: 10, padding: '10px 14px', overflowX: 'auto' },
   card: { flexShrink: 0, width: 210, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 'var(--radius-lg, 10px)', background: 'linear-gradient(180deg, var(--color-surface), var(--color-bg-sunken))', border: '1px solid var(--color-border)', cursor: 'pointer', transition: 'border-color 120ms' },

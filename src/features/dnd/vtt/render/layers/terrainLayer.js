@@ -24,7 +24,11 @@ export class TerrainLayer {
   }
 
   // objects: [{ id, kind, ft, cells:['c,r'], visible, disabledEdges }]
-  // prefs (player only): { opacity, pattern:'fill'|'hatch'|'dots', color, climbHeightStyle:'loud'|'normal'|'minimal'|'off' }
+  // prefs: { opacity, pattern:'fill'|'hatch'|'dots', color, climbHeightStyle:'loud'|'normal'|'minimal'|'off' }
+  // The base display (fill / pattern / climb labels / outline) is driven by the
+  // prefs for BOTH the DM and players, so the DM sees the look they configure
+  // for the table. The DM gets editing-only overlays on top: hidden-object
+  // fading, green "open passage" edge hints and the marquee selection.
   update(objects, grid, isDM, selectedId, selection = [], prefs = null) {
     const g = this.gfx;
     g.clear();
@@ -33,51 +37,57 @@ export class TerrainLayer {
     const x0 = (c) => grid.offsetX + c * s;
     const y0 = (r) => grid.offsetY + r * s;
     const colorOf = (o) => (o.kind === 'difficult' ? 0xff9800 : (o.ft || 0) < 0 ? 0xff7043 : 0x4aa3ff);
-    const prefColor = (!isDM && prefs?.color) ? hexNum(prefs.color) : null;
+    const prefColor = prefs?.color ? hexNum(prefs.color) : null;
     const pOpacity = prefs?.opacity ?? 0.35;
     const pPattern = prefs?.pattern || 'fill';
     const climbStyle = prefs?.climbHeightStyle || 'normal';
+    const difficultStyle = prefs?.difficultStyle || 'normal'; // loud|normal|minimal|off
 
     for (const o of objects) {
       if (!isDM && o.visible === false) continue;
+      const isDifficult = o.kind === 'difficult';
+      // Difficult terrain has its own prominence pref (mirrors the climb style).
+      // The DM keeps at least 'minimal' so it stays editable; a player can hide it.
+      const effDiff = isDM && difficultStyle === 'off' ? 'minimal' : difficultStyle;
+      if (isDifficult && effDiff === 'off') continue;
+      const diffMul = isDifficult ? (effDiff === 'loud' ? 1.5 : effDiff === 'minimal' ? 0.5 : 1) : 1;
       const color = prefColor ?? colorOf(o);
       const sel = o.id === selectedId;
       const inObj = new Set(o.cells);
       const disabled = new Set(o.disabledEdges || []);
+      // DM-only: a terrain object hidden from players is drawn faded so it's
+      // obvious it won't show at the table.
+      const hiddenDM = isDM && o.visible === false;
+      // The DM always keeps at least a minimal climb label (editing needs the
+      // value); players honour the chosen style, incl. 'off'.
+      const effClimb = isDM && climbStyle === 'off' ? 'minimal' : climbStyle;
       let labelDone = false; // for 'minimal' climb style: one label per object
       o.cells.forEach((c, ci) => {
         const [col, row] = c.split(',').map(Number);
         const x = x0(col);
         const y = y0(row);
-        if (isDM) {
-          g.rect(x, y, s, s).fill({ color, alpha: sel ? 0.26 : 0.15 });
-          if (o.kind === 'difficult') {
-            g.moveTo(x, y + s).lineTo(x + s, y).stroke({ width: 1, color, alpha: 0.4 });
-            g.moveTo(x, y).lineTo(x + s, y + s).stroke({ width: 1, color, alpha: 0.4 });
-          } else {
-            const txt = new Text({ text: `${o.ft > 0 ? '+' : ''}${o.ft || 0}ft`, style: { fill: '#fff', fontSize: Math.max(9, s * 0.24), fontWeight: '700', stroke: { color: '#000', width: 3 } } });
-            txt.anchor.set(0.5); txt.position.set(x + s / 2, y + s / 2); this.labels.addChild(txt);
-          }
-        } else {
-          // ── Player display, driven by personal prefs ──
-          if (pOpacity > 0) g.rect(x, y, s, s).fill({ color, alpha: pOpacity });
-          if (pPattern === 'hatch') {
-            g.moveTo(x, y + s).lineTo(x + s, y).stroke({ width: 1, color, alpha: Math.min(0.8, pOpacity + 0.2) });
-          } else if (pPattern === 'dots') {
-            g.circle(x + s / 2, y + s / 2, Math.max(1.5, s * 0.06)).fill({ color, alpha: Math.min(0.9, pOpacity + 0.3) });
-          }
-          // Climb height label prominence.
-          if (o.kind !== 'difficult' && climbStyle !== 'off') {
-            const showHere = climbStyle === 'minimal' ? (!labelDone && ci === 0) : true;
-            if (showHere) {
-              labelDone = true;
-              const fs = climbStyle === 'loud' ? Math.max(12, s * 0.34) : climbStyle === 'minimal' ? Math.max(8, s * 0.2) : Math.max(9, s * 0.24);
-              const txt = new Text({ text: `${o.ft > 0 ? '+' : ''}${o.ft || 0}ft`, style: { fill: '#fff', fontSize: fs, fontWeight: climbStyle === 'loud' ? '800' : '700', stroke: { color: '#000', width: climbStyle === 'minimal' ? 2 : 3 } } });
-              txt.anchor.set(0.5); txt.alpha = climbStyle === 'minimal' ? 0.7 : 1;
-              txt.position.set(x + s / 2, y + s / 2); this.labels.addChild(txt);
-            }
+        // ── Base display (shared) ── (difficult terrain scaled by its prominence pref)
+        const fillA = (hiddenDM ? Math.min(0.16, pOpacity) : (sel ? Math.min(0.9, pOpacity + 0.12) : pOpacity)) * diffMul;
+        if (fillA > 0) g.rect(x, y, s, s).fill({ color, alpha: Math.min(0.95, fillA) });
+        // Difficult terrain always reads as hatched (so it's distinct from
+        // climb) even when the pattern pref is a plain fill.
+        if (pPattern === 'hatch' || (isDifficult && pPattern !== 'dots')) {
+          g.moveTo(x, y + s).lineTo(x + s, y).stroke({ width: 1, color, alpha: Math.min(0.85, (pOpacity + 0.2) * diffMul) });
+        } else if (pPattern === 'dots') {
+          g.circle(x + s / 2, y + s / 2, Math.max(1.5, s * 0.06)).fill({ color, alpha: Math.min(0.9, (pOpacity + 0.3) * diffMul) });
+        }
+        // Climb height label.
+        if (o.kind !== 'difficult' && effClimb !== 'off') {
+          const showHere = effClimb === 'minimal' ? (!labelDone && ci === 0) : true;
+          if (showHere) {
+            labelDone = true;
+            const fs = effClimb === 'loud' ? Math.max(12, s * 0.34) : effClimb === 'minimal' ? Math.max(8, s * 0.2) : Math.max(9, s * 0.24);
+            const txt = new Text({ text: `${o.ft > 0 ? '+' : ''}${o.ft || 0}ft`, style: { fill: '#fff', fontSize: fs, fontWeight: effClimb === 'loud' ? '800' : '700', stroke: { color: '#000', width: effClimb === 'minimal' ? 2 : 3 } } });
+            txt.anchor.set(0.5); txt.alpha = effClimb === 'minimal' ? 0.8 : 1;
+            txt.position.set(x + s / 2, y + s / 2); this.labels.addChild(txt);
           }
         }
+        // ── Perimeter edges ──
         for (const [side, dc, dr, lineFn] of SIDES) {
           if (inObj.has(`${col + dc},${row + dr}`)) continue; // interior edge
           const [x1, y1, x2, y2] = lineFn(x, y, s);
@@ -87,7 +97,7 @@ export class TerrainLayer {
             if (isDM) g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 2, color: 0x4ade80, alpha: 0.7 });
             continue;
           }
-          g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: sel ? 3 : 2, color, alpha: isDM ? 0.6 : Math.min(0.7, pOpacity + 0.25) });
+          g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: sel ? 3 : 2, color, alpha: Math.min(0.7, pOpacity + 0.25) });
         }
       });
     }

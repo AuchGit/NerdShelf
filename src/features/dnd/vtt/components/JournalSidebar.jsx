@@ -5,8 +5,12 @@
 import { useState } from 'react';
 import { useVtt, useIsDM } from '../state/useVtt';
 import { addJournalEntry, removeJournalEntry, presentHandout } from '../state/actions';
-import { uploadHandoutImage, uploadMapToRelay } from '../lib/mapStorage';
+import { uploadHandoutImage, uploadMapToRelay, saveMapOriginalLocal } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
+import { renderMarkdown } from '../lib/miniMarkdown';
+import { toast } from '../lib/toast';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
+import RichTextEditor from './RichTextEditor';
 import HandoutOverlay from './HandoutOverlay';
 
 export default function JournalSidebar() {
@@ -20,6 +24,17 @@ export default function JournalSidebar() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState(null); // locally-opened entry
 
+  // Import a .md/.txt file → convert markdown to HTML and drop it into the editor.
+  const importMd = async (f) => {
+    if (!f) return;
+    try {
+      const txt = await f.text();
+      const html = sanitizeHtml(renderMarkdown(txt));
+      setBody((b) => (b ? `${b}${html}` : html));
+      if (!title.trim()) setTitle(f.name.replace(/\.[^.]+$/, ''));
+    } catch (e) { console.warn('[vtt] markdown import failed', e?.message); }
+  };
+
   const add = async () => {
     if (!file && !title.trim()) return;
     setBusy(true);
@@ -27,21 +42,20 @@ export default function JournalSidebar() {
       let img = {};
       if (file) {
         img = await uploadHandoutImage(campaignId, file);
-        // Relay mode: also push the full-res ORIGINAL to the GM's relay so it's
-        // served direct/uncompressed during a live session; Supabase stays the
-        // fallback for when the GM is offline.
-        if (getConnectionMode() === 'relay' && getRelayUrl()) {
-          try {
-            const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-            img.imageUrlFull = await uploadMapToRelay(getRelayUrl(), `h_${Math.random().toString(36).slice(2, 10)}.${ext}`, file);
-          } catch (e3) { console.warn('[vtt] relay handout upload failed, Supabase only', e3?.message); }
+        // Keep the full-res original in the relay maps dir so a direct connection
+        // serves it uncompressed (built live from the relay address at view time).
+        const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+        const name = `h_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+        img.imageFullName = await saveMapOriginalLocal(name, file);
+        if (img.imageFullName && getConnectionMode() === 'relay' && getRelayUrl()) {
+          try { await uploadMapToRelay(getRelayUrl(), name, file); } catch (e3) { console.warn('[vtt] relay handout PUT failed', e3?.message); }
         }
       }
       addJournalEntry({ title: title.trim() || file?.name || 'Handout', body: body.trim(), ...img });
       setTitle(''); setBody(''); setFile(null);
     } catch (e) {
       console.error('[vtt] handout upload failed', e);
-      alert('Upload fehlgeschlagen: ' + (e?.message || e));
+      toast('Handout-Upload fehlgeschlagen: ' + (e?.message || e));
     } finally { setBusy(false); }
   };
 
@@ -49,9 +63,18 @@ export default function JournalSidebar() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {isDM && (
         <div style={S.add}>
-          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={S.file} />
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titel" style={S.input} />
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Notiz (optional)" style={S.textarea} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Handout-Text</span>
+            <label style={{ ...S.miniBtn, cursor: 'pointer' }} title="Eine Markdown-/Text-Datei importieren">↧ Markdown
+              <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" style={{ display: 'none' }}
+                onChange={(e) => { importMd(e.target.files?.[0]); e.target.value = ''; }} />
+            </label>
+          </div>
+          <RichTextEditor value={body} onChange={setBody} />
+          <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Bild (optional):
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={S.file} />
+          </label>
           <button style={S.addBtn} disabled={busy} onClick={add}>{busy ? 'Lädt…' : '+ Eintrag'}</button>
         </div>
       )}
@@ -94,7 +117,9 @@ const S = {
   add: { display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 8, borderBottom: '1px solid var(--color-border)' },
   file: { fontSize: 11, color: 'var(--color-text-muted)' },
   input: { padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' },
-  textarea: { padding: '5px 8px', minHeight: 44, resize: 'vertical', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontFamily: 'inherit', fontSize: 'var(--fs-sm)' },
+  textarea: { padding: '6px 8px', minHeight: 140, resize: 'vertical', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.45 },
+  miniBtn: { display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px', fontSize: 11, background: 'var(--color-bg-sunken)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' },
+  previewBox: { minHeight: 140, maxHeight: 320, overflow: 'auto', padding: '6px 10px', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-sm)', lineHeight: 1.45 },
   addBtn: { padding: '6px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 },
   row: { display: 'flex', gap: 8, padding: 6, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' },
   rowShown: { borderColor: 'var(--color-accent)', boxShadow: '0 0 0 1px var(--color-accent)' },

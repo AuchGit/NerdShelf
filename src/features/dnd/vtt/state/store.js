@@ -114,6 +114,7 @@ function serialize() {
 
 function hydrate(snap) {
   if (!snap) return;
+  versions.walls++; versions.lights++; versions.maps++; // full replace → all caches stale
   state.maps = snap.maps || {};
   state.activeMapId = snap.activeMapId || null;
   state.tokens = snap.tokens || {};
@@ -126,6 +127,7 @@ function hydrate(snap) {
   state.journal = snap.journal || [];
   state.presentedHandout = snap.presentedHandout || null;
   state.paused = !!snap.paused;
+  if (snap.announcedRelayUrl !== undefined) state.ui = { ...state.ui, announcedRelayUrl: snap.announcedRelayUrl };
   emit();
 }
 
@@ -135,6 +137,7 @@ function hydrate(snap) {
 // so it broadcasts/persists and every client converges. Consecutive drags of
 // the same token collapse to one entry.
 let undoStack = [];
+let redoStack = [];
 let applyingHistory = false;
 
 function inverseOf(op) {
@@ -173,15 +176,29 @@ function pushUndo(op) {
   const inv = inverseOf(op);
   if (!inv) return;
   undoStack.push(inv);
+  redoStack = []; // a fresh edit invalidates the redo branch
   if (undoStack.length > 100) undoStack.shift();
 }
 
 export function undo() {
   const inv = undoStack.pop();
   if (!inv) return;
+  // Inverse of the inverse (read from CURRENT state, before applying) = redo.
+  const redoOp = inverseOf(inv);
   applyingHistory = true;
   try { reduce(inv); emit(); adapter?.send(inv); }
   finally { applyingHistory = false; }
+  if (redoOp) { redoStack.push(redoOp); if (redoStack.length > 100) redoStack.shift(); }
+}
+
+export function redo() {
+  const op = redoStack.pop();
+  if (!op) return;
+  const inv = inverseOf(op);
+  applyingHistory = true;
+  try { reduce(op); emit(); adapter?.send(op); }
+  finally { applyingHistory = false; }
+  if (inv) undoStack.push(inv);
 }
 
 // Local mutation entry point: apply + broadcast.
@@ -191,10 +208,24 @@ export function undo() {
 // peers live, so we ignore the DB echo's POSITION for a token we just moved.
 const _localMoveAt = new Map();
 const LOCAL_MOVE_GUARD_MS = 2500;
+// Same idea for light on/off: a player toggle is optimistic + an RPC; the
+// DB/broadcast echo can arrive with the PRE-toggle value and revert it (the
+// light "springs back" / needs several clicks). Ignore stale enabled echoes for
+// a light we just toggled.
+const _localLightAt = new Map();
+const LOCAL_LIGHT_GUARD_MS = 2000;
+// Same again for door/window open/closed: a player toggle is optimistic + an
+// RPC (the wall write itself is GM-only under RLS), so the DB/broadcast echo can
+// arrive with the PRE-toggle `open` and revert it (door "springs back" / needs
+// two clicks). Ignore a stale `open` echo for a wall we just toggled.
+const _localWallAt = new Map();
+const LOCAL_WALL_GUARD_MS = 2000;
 
 export function apply(op) {
   pushUndo(op);
   if (op.type === 'token/move') _localMoveAt.set(op.id, Date.now());
+  if (op.type === 'light/update' && op.patch && 'enabled' in op.patch) _localLightAt.set(op.id, Date.now());
+  if (op.type === 'wall/update' && op.patch && 'open' in op.patch) _localWallAt.set(op.id, Date.now());
   reduce(op);
   emit();
   adapter?.send(op);
@@ -210,13 +241,47 @@ export function applyRemote(op) {
     const { x, y, ...rest } = op.token; void x; void y;
     op = { ...op, token: rest };
   }
+  // Drop a stale `enabled` echo for a light we just switched (keep other fields).
+  if (op.type === 'light/update' && op.patch && 'enabled' in op.patch
+    && (Date.now() - (_localLightAt.get(op.id) || 0)) < LOCAL_LIGHT_GUARD_MS) {
+    const { enabled, ...rest } = op.patch; void enabled;
+    if (!Object.keys(rest).length) return;
+    op = { ...op, patch: rest };
+  }
+  // Drop a stale `open` echo for a door/window we just toggled (keep other edits).
+  if (op.type === 'wall/update' && op.patch && 'open' in op.patch
+    && (Date.now() - (_localWallAt.get(op.id) || 0)) < LOCAL_WALL_GUARD_MS) {
+    const { open, ...rest } = op.patch; void open;
+    if (!Object.keys(rest).length) return;
+    op = { ...op, patch: rest };
+  }
   reduce(op);
   emit();
+}
+
+// ---- change counters --------------------------------------------------------
+// Coarse per-domain versions, bumped by every op (local AND remote) that can
+// affect the expensive renderer derivations (vision polygons, wall graphs,
+// light field). Renderers key their caches off these instead of hashing whole
+// collections every frame.
+export const versions = { walls: 0, lights: 0, maps: 0 };
+
+function bumpVersions(op) {
+  const t = op.type;
+  if (t.startsWith('wall/')) { versions.walls++; return; }
+  if (t.startsWith('light/')) { versions.lights++; return; }
+  if (t.startsWith('map/')) { versions.maps++; return; }
+  // Luminous tokens are light sources: their move/resize/(un)light re-lights.
+  if (t === 'token/update' && op.patch && ('light' in op.patch || ('sizeCells' in op.patch && state.tokens[op.id]?.light))) versions.lights++;
+  else if (t === 'token/move' && state.tokens[op.id]?.light) versions.lights++;
+  else if (t === 'token/add' && op.token?.light) versions.lights++;
+  else if (t === 'token/remove' && state.tokens[op.id]?.light) versions.lights++;
 }
 
 // ---- the reducer -----------------------------------------------------------
 // Ops are plain {type, ...payload}. Mutates `state` in place; emit() snapshots.
 function reduce(op) {
+  bumpVersions(op);
   switch (op.type) {
     case 'session/set':
       state.session = { ...state.session, ...op.session };
@@ -356,6 +421,11 @@ function reduce(op) {
       break;
     case 'session/pause':
       state.paused = !!op.paused;
+      break;
+    case 'relay/announce':
+      // GM published (or cleared) a direct-connection relay URL — players see a
+      // one-click "join direct connection" prompt (handled in React).
+      state.ui = { ...state.ui, announcedRelayUrl: op.url || null };
       break;
     case 'initiative/set':
       state.initiative = op.initiative;

@@ -8,12 +8,12 @@ import { useVtt } from '../state/useVtt';
 import { patchCombat, applyOwnCharacter } from '../sync/characterBinding';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { computeSpellSlots } from '../../character-builder/lib/sheetUtils';
-import { CombatEconomy, CombatActionsExplorer } from '../../character-builder/components/sheet/OverviewTab';
+import { CombatEconomy, CombatActionsExplorer, FavoritesSection } from '../../character-builder/components/sheet/OverviewTab';
 import { Pinnable } from './tooltip/Tooltips';
-import PlayerSheetCategory from './PlayerSheetCategory';
+import Specials from './Specials';
 
 // Stackable bottom-bar panels (open upward; last-opened sits on top).
-const PANEL_LABELS = { actions: '⚔ Aktionen', features: '✨ Features / Manöver', items: '🎒 Items' };
+const PANEL_LABELS = { actions: '⚔ Aktionen', specials: '✨ Specials', items: '🎒 Items', favorites: '★ Favoriten' };
 
 // Inventory quick-access items (the sheet's `quickAccess` flag) — potions,
 // scrolls, anything the player pinned for one-click use at the table.
@@ -165,12 +165,13 @@ export default function PlayerBottomBar() {
   // Content for each stackable panel (reuses the sheet's components).
   const renderPanel = (id) => {
     if (id === 'actions') return <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
-    if (id === 'features') return <PlayerSheetCategory tab="features" />;
+    if (id === 'specials') return <Specials />;
     if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} />;
+    if (id === 'favorites') return <FavoritesSection character={character} computed={computed} applyCharacter={applyCharacter} />;
     return null;
   };
   // Which toggle buttons to offer (Items only when there are quick items).
-  const panelButtons = ['actions', 'features', ...(quickItems.length ? ['items'] : [])];
+  const panelButtons = ['actions', 'specials', ...(quickItems.length ? ['items'] : []), 'favorites'];
 
   // Inspiration highlights the whole bar (gold border/glow) so you always see it.
   const barStyle = inspiration
@@ -208,7 +209,8 @@ export default function PlayerBottomBar() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={inspiration ? { ...S.acBadge, ...S.acInsp } : S.acBadge}
             onClick={() => patch({ inspiration: !inspiration })}
-            title={inspiration ? 'Inspiration aktiv — Klick entfernt sie' : 'Klick: Inspiration setzen'}>
+            onDoubleClick={() => window.dispatchEvent(new CustomEvent('vtt:center-token', { detail: { characterId: myId } }))}
+            title={(inspiration ? 'Inspiration aktiv — Klick entfernt sie' : 'Klick: Inspiration setzen') + ' · Doppelklick: Kamera auf mein Token'}>
             🛡 <b style={{ fontSize: 20 }}>{ac}</b>
             {inspiration && <span style={{ color: 'var(--color-warning,#e0af68)', fontWeight: 800 }}>◆</span>}
           </div>
@@ -334,7 +336,7 @@ function SlotPips({ label, max, used, color = 'var(--color-accent)', onSet, titl
 
 const S = {
   // Centered, resizable bar (drag the top handle to grow/shrink).
-  bar: { position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 0, width: 'min(1320px, calc(100% - 80px))', zIndex: 24, display: 'flex', flexDirection: 'column', background: 'rgba(15,17,21,0.95)', backdropFilter: 'blur(4px)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -4px 20px #0007' },
+  bar: { position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 0, width: 'min(1320px, calc(100% - 80px))', zIndex: 24, display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 95%, transparent)', backdropFilter: 'blur(4px)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -4px 20px #0007' },
   handle: { height: 10, flexShrink: 0, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   // Wrap onto multiple lines instead of scrolling sideways; the bar is resizable
   // taller (drag the handle) when wrapping needs more room.
@@ -356,7 +358,7 @@ const S = {
   qaUse: { width: 18, height: 18, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 800, lineHeight: 1, padding: 0 },
   // Stacked panels above the bar (column: first child = top = last-opened).
   panelStack: { position: 'absolute', bottom: '100%', left: 0, right: 0, display: 'flex', flexDirection: 'column' },
-  panel: { display: 'flex', flexDirection: 'column', background: 'rgba(15,17,21,0.97)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', overflow: 'hidden' },
+  panel: { display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 97%, transparent)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', overflow: 'hidden' },
   panelHead: { display: 'flex', alignItems: 'center', gap: 8, height: 24, flexShrink: 0, padding: '0 10px', cursor: 'ns-resize', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' },
   panelTitle: { fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
   panelClose: { cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 13, padding: '0 2px' },

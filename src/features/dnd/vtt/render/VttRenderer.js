@@ -19,12 +19,14 @@ import { WallsLayer } from './layers/wallsLayer';
 import { TransitionsLayer } from './layers/transitionsLayer';
 import { TerrainLayer } from './layers/terrainLayer';
 import { LightLayer } from './layers/lightLayer';
-import { getState, subscribe, undo } from '../state/store';
+import { getState, subscribe, undo, redo, versions } from '../state/store';
 import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
 import { WALL_TYPES, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
-import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, VTT_PREFS_EVENT } from '../lib/vttPrefs';
+import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
+import { relayFullUrl } from '../lib/mapStorage';
+import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance } from '../lib/wallGeometry';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
 // Wall blocking, accounting for doors: an open door blocks neither.
@@ -110,9 +112,15 @@ export class VttRenderer {
 
     this.lightSwitches = new Container(); // player-clickable light switches (everyone)
     this.lightSwitches.eventMode = 'static';
+    // Token badges/HP/AC overlay sits ABOVE walls & fog so they're never hidden
+    // behind a wall icon or another token; masked to vision for players (below).
+    this.badgeMaskGfx = new Graphics();
+    this.tokens.overlay.addChild(this.badgeMaskGfx);
     this.world.addChild(
       this.bgGray, this.ghostLayer, this.liveGroup,
-      this.fog.container, this.walls.container, this.lightMarkers, this.lightSwitches, this.pings.container, this.ruler.container,
+      this.fog.container, this.walls.container, this.lightMarkers, this.lightSwitches,
+      this.tokens.overlay,
+      this.pings.container, this.ruler.container,
       this.marqueeGfx, this.flashGfx, this.brushGfx, this.targetingGfx, this.dragLabel,
     );
 
@@ -203,7 +211,12 @@ export class VttRenderer {
     // background — prefer the full-res ORIGINAL served by the relay (P2P,
     // uncompressed); fall back to the Supabase image if it's unreachable (relay
     // offline / local file lost) or fails; bounded retry on transient errors.
-    const bgPrimary = map?.imageUrlFull || map?.imageUrl || null;
+    // On a direct connection, prefer the untouched full-res original served by
+    // the GM's relay (URL built from the LIVE relay address, so it survives a new
+    // IP/port); else the legacy baked URL; else the Supabase (compressed) image.
+    const onRelay = getConnectionMode() === 'relay' && getRelayUrl();
+    const bgFull = onRelay ? (relayFullUrl(getRelayUrl(), map?.imageFullName) || map?.imageUrlFull || null) : null;
+    const bgPrimary = bgFull || map?.imageUrl || null;
     const bgFallback = map?.imageUrl || null;
     if (bgPrimary !== this._bgUrl) {
       this._bgUrl = bgPrimary;
@@ -255,15 +268,25 @@ export class VttRenderer {
       const levelZones = filterObj(s.zones, (z) => z.mapId === map.id && onLevel(z));
       const mapWalls = Object.values(s.walls).filter((w) => w.mapId === map.id && onLevel(w));
       const lightWalls = mapWalls.filter((w) => wallBlocksLight(w)); // cast shadows
+      // Milky/frosted CLOSED windows pass dim light but block the bright band, so
+      // light beyond them is dimmed one step. They block bright only, not dim.
+      const milkyWindows = mapWalls.filter((w) => w.kind === 'window' && w.milky && !w.open);
       const sightWalls = mapWalls.filter((w) => wallBlocksSight(w)); // block vision
       const observers = this.fogObservers(s, map, level, base);
 
       const bounds = { minX: 0, minY: 0, maxX: map.width, maxY: map.height };
       const playerDynamic = mode === 'dynamic' && !isDM;
-      // Walls that lie on a closed loop (non-bridge edges) = enclosing/roofed.
-      const loopIds = loopWallIds(sightWalls);
-      // Centroid of each see-through loop component (one-sided occlusion).
-      const stCentroids = seeThroughCentroids(sightWalls);
+      // Wall-graph derivations (loop edges + see-through centroids) only change
+      // when a WALL changes — cache them on the store's walls version instead of
+      // recomputing the graphs on every reconcile (e.g. each WASD step).
+      const wallsKey = `${map.id}|${level}|${versions.walls}`;
+      if (this._wallDerivedKey !== wallsKey) {
+        this._wallDerivedKey = wallsKey;
+        this._loopIds = loopWallIds(sightWalls);
+        this._stCentroids = seeThroughCentroids(sightWalls);
+      }
+      const loopIds = this._loopIds;
+      const stCentroids = this._stCentroids;
       // Per-observer sight set:
       //  • a cover/bush wall is bypassed within its seeOutFt (peek out),
       //  • a low wall (heightFt>0) is seen over when the observer is elevated
@@ -288,17 +311,48 @@ export class VttRenderer {
           return true;
         });
       };
-      const visiblePolys = playerDynamic
-        ? observers.map((o) => visibilityPolygon(o, sightWallsFor(o), bounds))
-        : null;
-
+      // Per-observer vision polygons, memoized per TOKEN: only the observer that
+      // actually moved recomputes; everyone else reuses their cached polygon.
+      // Key covers everything the polygon depends on: position, inside-flag,
+      // walls, map fields (terrain heights / cover reach), map + level.
+      this._visCache ||= new Map(); // token id -> { key, poly }
+      const polyFor = (o) => {
+        const key = `${Math.round(o.x)},${Math.round(o.y)},${o.inside ? 1 : 0},${versions.walls},${versions.maps},${map.id},${level}`;
+        const hit = this._visCache.get(o.id);
+        if (hit && hit.key === key) return hit.poly;
+        const poly = visibilityPolygon(o, sightWallsFor(o), bounds);
+        this._visCache.set(o.id, { key, poly });
+        if (this._visCache.size > 200) this._visCache.delete(this._visCache.keys().next().value);
+        return poly;
+      };
+      const visiblePolys = playerDynamic ? observers.map(polyFor) : null;
       // DM "preview a token's sight": with dynamic fog and a selected token on
       // this level, the DM sees everything in grayscale except what that token
       // currently sees (in colour). Without a selection, the DM sees all colour.
       const previewTok = (isDM && mode === 'dynamic' && s.ui.selectedTokenId)
         ? levelTokens[s.ui.selectedTokenId] : null;
       const dmPreviewPolys = previewTok
-        ? [visibilityPolygon({ x: previewTok.x, y: previewTok.y }, sightWallsFor(previewTok), bounds)] : null;
+        ? [polyFor({ id: previewTok.id, x: previewTok.x, y: previewTok.y, inside: previewTok.inside })] : null;
+
+      // Darkvision: ONLY the relevant viewer's own token(s) see one step better
+      // (dark→dim) within range, clipped to line of sight, local to this client.
+      //  • A player: each of their OWN controlled tokens that has darkvision.
+      //    A player whose character has none gets nothing (never others' DV).
+      //  • The DM: only the SELECTED token, and only if it has darkvision.
+      let darkvision = [];
+      if (playerDynamic) {
+        darkvision = observers.map((o, i) => {
+          const ft = this.tokenDarkvisionFt(s.tokens[o.id]);
+          return ft > 0 ? { x: o.x, y: o.y, radiusPx: feetToPx(ft, map.grid.size), poly: visiblePolys[i] } : null;
+        }).filter(Boolean);
+      } else if (isDM && s.ui.selectedTokenId) {
+        const tok = levelTokens[s.ui.selectedTokenId];
+        const ft = tok ? this.tokenDarkvisionFt(tok) : 0;
+        if (ft > 0) {
+          const poly = (dmPreviewPolys && dmPreviewPolys[0]) || polyFor({ id: tok.id, x: tok.x, y: tok.y, inside: tok.inside });
+          darkvision = [{ x: tok.x, y: tok.y, radiusPx: feetToPx(ft, map.grid.size), poly }];
+        }
+      }
 
       // Light sources on this level: standalone lights + "luminous tokens"
       // (a token with a .light, positioned at the token). Glow + wall shadows.
@@ -319,15 +373,34 @@ export class VttRenderer {
       // Baseline darkness + placed darkness regions only apply while dynamic
       // lighting is on; disabling lighting leaves the map fully lit.
       const lightingOn = map.lightingEnabled !== false;
+      const baseline = lightingOn ? (map.lightBaseline || 'bright') : 'bright';
+      // "Geschlossene Räume immer dunkel": roofed wall-loops (incl. with a door /
+      // window in them) get a dark interior even outdoors. Windows + open doors
+      // then leak the OUTDOOR ambient (bright/dim) a short way inside, so a lit
+      // exterior still spills through openings.
+      let darkPolys = [];
+      let ambientSources = [];
+      if (lightingOn && map.enclosedDark) {
+        darkPolys = this.enclosedRoomPolys(mapWalls, map.id, level);
+        ambientSources = this.ambientOpeningSources(mapWalls, baseline, map.grid.size, darkPolys, { dir: map.worldShadowDir ?? 135, strength: map.worldShadowStrength ?? 0 });
+      }
       this.lights.update({
         renderer: this.app.renderer,
-        sources: lightSources,
+        // Cheap recompute gate: bumped by every wall/light/map change (incl.
+        // luminous-token moves) — replaces hashing all walls+lights per frame.
+        rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}`,
+        sources: ambientSources.length ? lightSources.concat(ambientSources) : lightSources,
         grid: map.grid,
         walls: lightWalls,
+        brightWalls: milkyWindows.length ? lightWalls.concat(milkyWindows) : lightWalls,
+        shadowWalls: sightWalls, // Welt-Schatten nur von Sicht-blockenden Wänden
         bounds,
         style: map.lightStyle || 'modern',
-        baseline: lightingOn ? (map.lightBaseline || 'bright') : 'bright',
+        baseline,
         darkness: lightingOn ? (map.darkness || []).filter((d) => (d.level || base) === level) : [],
+        darkPolys,
+        worldShadow: lightingOn ? { dir: map.worldShadowDir ?? 135, strength: map.worldShadowStrength ?? 0 } : null,
+        darkvision: lightingOn ? darkvision : [],
         contrast: map.lightContrast ?? 0.5,
         blur: map.lightBlur ?? 0,
       });
@@ -386,8 +459,12 @@ export class VttRenderer {
       this.zones.update(levelZones, map.grid, s.ui.selectedZoneId, zoneClips);
       this.walls.update(toObj(mapWalls), map.id, isDM, (s.ui.selectedWallIds && s.ui.selectedWallIds.length ? s.ui.selectedWallIds : s.ui.selectedWallId), map.grid.size, isDM && tool === 'walls', seenDoorIds);
       const terrObjs = (map.terrain || []).filter((t) => Array.isArray(t.cells) && (t.level || base) === level);
+      // Display prefs are PER-CLIENT (local vttPrefs) — each player/DM chooses
+      // how terrain looks for their own view. They apply in BOTH the DM and
+      // player views (so the DM's own view matches what they configure); the
+      // DM-only editing overlays are added on top inside the layer.
       this.terrain.update(terrObjs, map.grid, isDM, s.ui.selectedTerrainId, isDM && tool === 'terrain' ? (s.ui.terrainSelection || []) : [],
-        isDM ? null : { opacity: getTerrainOpacity(), pattern: getTerrainPattern(), color: getTerrainColor(), climbHeightStyle: getClimbHeightStyle() });
+        { opacity: getTerrainOpacity(), pattern: getTerrainPattern(), color: getTerrainColor(), climbHeightStyle: getClimbHeightStyle(), difficultStyle: getDifficultStyle() });
       this.drawAuras(levelTokens, map.grid);
       const elevations = {};
       if ((map.terrain || []).some((t) => t.kind === 'climb')) {
@@ -428,7 +505,7 @@ export class VttRenderer {
           if (hp != null && cached.max) bloodHp[tk.id] = { hp, hpMax: cached.max };
         }
       }
-      this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, map.tokenBadgeScale ?? 1, bloodHp);
+      this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, (map.tokenBadgeScale ?? 1) * getTokenBadgeScale(), bloodHp, getAcBadgeScale());
       this.updateMovementPreview(s, map, level, base, isDM);
       this.drawTargeting(levelTokens, map.grid);
       this.transitions.update(s.transitions, map.id, level, map.grid, isDM, s.ui.selectedTransitionId, seenTransIds);
@@ -444,7 +521,15 @@ export class VttRenderer {
       else if (this.lightMarkers.visible) { this.lightMarkers.visible = false; this.lightMarkers.removeChildren().forEach((c) => c.destroy({ children: true })); }
       // Player-switchable light switches are visible & clickable for everyone.
       this.drawLightSwitches(map, level, base);
-      this.pings.update(s.pings.filter((p) => p.mapId === map.id));
+      const mapPings = s.pings.filter((p) => p.mapId === map.id);
+      this.pings.update(mapPings);
+      // A DM focus ping pans this client's camera to it — once per ping.
+      for (const p of mapPings) {
+        if (p.focus && !(this._focusedPings ||= new Set()).has(p.id)) {
+          this._focusedPings.add(p.id);
+          this.viewport.centerOn(p.x, p.y);
+        }
+      }
       this.ruler.update(s.ruler, map.grid, this.rulerMoveFt(s.ruler, map, level, base));
 
       // While the DM holds the fog tool, always show the manual fog mask in a
@@ -526,6 +611,7 @@ export class VttRenderer {
     this.currentMaskGfx.clear();
     for (const poly of polys) if (poly.length >= 3) this.currentMaskGfx.poly(poly.flatMap((p) => [p.x, p.y])).fill(0xffffff);
     this.liveGroup.mask = this.currentMaskGfx;
+    this.setBadgeMask(polys); // badges-on-top overlay clipped to the same vision
 
     // token memory: update last-seen for visible tokens; forget a remembered
     // spot once we look at it and the token isn't there.
@@ -552,6 +638,7 @@ export class VttRenderer {
     this.currentMaskGfx.clear();
     for (const poly of polys) if (poly.length >= 3) this.currentMaskGfx.poly(poly.flatMap((p) => [p.x, p.y])).fill(0xffffff);
     this.liveGroup.mask = this.currentMaskGfx;
+    this.setBadgeMask(polys);
 
     // gray markers for tokens outside the previewed vision (current positions)
     this.ghostLayer.visible = true;
@@ -626,12 +713,26 @@ export class VttRenderer {
     // The mask graphics is a child of liveGroup; once it's no longer a mask it
     // would render as a solid white shape, so clear it.
     this.currentMaskGfx.clear();
+    this.clearBadgeMask(); // DM sees all → badges unmasked
     this.bgGray.visible = false;
     this.bgGray.mask = null;
     if (this.ghostLayer.visible) {
       this.ghostLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
       this.ghostLayer.visible = false;
     }
+  }
+
+  // Clip the always-on-top token-badge overlay to the given vision polygons (a
+  // SEPARATE mask graphic — a Pixi mask can only belong to one object).
+  setBadgeMask(polys) {
+    const g = this.badgeMaskGfx;
+    g.clear();
+    for (const poly of polys) if (poly.length >= 3) g.poly(poly.flatMap((p) => [p.x, p.y])).fill(0xffffff);
+    this.tokens.overlay.mask = g;
+  }
+  clearBadgeMask() {
+    this.badgeMaskGfx.clear();
+    this.tokens.overlay.mask = null;
   }
 
   // ---- permissions ----
@@ -682,6 +783,8 @@ export class VttRenderer {
     const onMap = Object.values(s.tokens).filter((t) => t.mapId === map.id && (t.level || base) === level);
     let controlled = onMap.filter((t) => this.canControl(t));
     if (!controlled.length) controlled = onMap.filter((t) => t.kind === 'player'); // demo fallback
+    // Selecting one of your tokens focuses vision on it (so a player who controls
+    // several — e.g. a companion NPC — can switch whose eyes they look through).
     const sel = s.ui.selectedTokenId;
     if (sel && controlled.some((t) => t.id === sel)) controlled = controlled.filter((t) => t.id === sel);
     return controlled.map((t) => ({ x: t.x, y: t.y, inside: t.inside, id: t.id }));
@@ -794,7 +897,9 @@ export class VttRenderer {
       const tag = (e.target?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       // Ctrl/Cmd+Z = undo the last change (anywhere on the map).
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { undo(); e.preventDefault(); return; }
+      // Ctrl+Z = undo; Ctrl+Y / Ctrl+Shift+Z = redo.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { redo(); e.preventDefault(); return; }
       if ((e.key === 'Escape' || e.key === 'Enter') && this.wallChain) { this.finishWallChain(); return; }
       if (e.key === 'Escape' && this.doorDraft) { this.doorDraft = null; this.walls.drawPreview(null, null); return; }
       const step = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0] }[e.key.toLowerCase()];
@@ -810,6 +915,15 @@ export class VttRenderer {
     window.addEventListener('keydown', onAction);
     const onDbl = () => this.finishWallChain();
     canvas.addEventListener('dblclick', onDbl);
+    // Bottom bar → "center on my token" (double-click the AC badge).
+    const onCenter = (ev) => {
+      const cid = ev.detail?.characterId;
+      if (cid == null) return;
+      const s2 = getState();
+      const tok = Object.values(s2.tokens).find((t) => t.mapId === s2.activeMapId && String(t.characterId) === String(cid));
+      if (tok) this.viewport.centerOn(tok.x, tok.y);
+    };
+    window.addEventListener('vtt:center-token', onCenter);
 
     this.removeInput = () => {
       canvas.removeEventListener('wheel', onWheel);
@@ -818,6 +932,7 @@ export class VttRenderer {
       window.removeEventListener('keyup', ku);
       window.removeEventListener('keydown', onAction);
       canvas.removeEventListener('dblclick', onDbl);
+      window.removeEventListener('vtt:center-token', onCenter);
     };
   }
 
@@ -834,8 +949,9 @@ export class VttRenderer {
     const pos = this.mapPos(e);
     const level = this.displayedLevel(s, map, map.levels?.[0]?.id || null);
 
-    // Alt-click = ping, in any tool.
-    if (this.keys.alt) { A.ping(map.id, pos.x, pos.y); return; }
+    // Alt-click = ping, in any tool. DM + Ctrl dazu = FOKUS-Ping: alle Kameras
+    // schwenken auf die Stelle (Aufmerksamkeit der ganzen Runde).
+    if (this.keys.alt) { A.ping(map.id, pos.x, pos.y, undefined, this.keys.ctrl && s.session.role === 'dm'); return; }
 
     // Right-click while drawing walls ends the chain (instead of panning).
     if (e.button === 2 && s.ui.tool === 'walls' && this.wallChain) { this.finishWallChain(); return; }
@@ -876,18 +992,19 @@ export class VttRenderer {
         // Place a new light here and select it for editing.
         A.selectLight(A.addLight({ x: pos.x, y: pos.y }));
       }
-    } else if (tool === 'walls' && s.ui.wallKind === 'door' && s.session.role === 'dm') {
-      // Doors are drawn like a wall: click a start vertex (grid-snapped), then an
-      // end vertex → a resizable door segment. Existing doors are selected/grabbed
-      // via their body/handles first (those stopPropagation before reaching the
-      // stage), so a click here always means "place a new door". Shift = free.
+    } else if (tool === 'walls' && (s.ui.wallKind === 'door' || s.ui.wallKind === 'window') && s.session.role === 'dm') {
+      // Doors AND windows are placed the same way: click a start vertex (grid-
+      // snapped), then an end vertex → a resizable door/window segment. Clicking
+      // ON an existing wall passes through (the click bails in onWallDown), so you
+      // can drop one straight into a wall. Shift = free placement.
+      const kind = s.ui.wallKind;
       const v = this.keys.shift ? pos : this.snapWallVertex(pos);
       if (!this.doorDraft) {
-        this.doorDraft = { start: v };
-        this.walls.drawPreview(v, v, 'door');
+        this.doorDraft = { start: v, kind };
+        this.walls.drawPreview(v, v, kind);
       } else {
         if (Math.hypot(v.x - this.doorDraft.start.x, v.y - this.doorDraft.start.y) > 2) {
-          A.selectWall(A.addWall({ mapId: map.id, a: this.doorDraft.start, b: v, kind: 'door' }));
+          A.selectWall(A.addWall({ mapId: map.id, a: this.doorDraft.start, b: v, kind: this.doorDraft.kind || kind }));
         }
         this.doorDraft = null;
         this.walls.drawPreview(null, null);
@@ -992,7 +1109,7 @@ export class VttRenderer {
     }
     if (this.doorDraft) {
       const v = this.keys.shift ? pos : this.snapWallVertex(pos);
-      this.walls.drawPreview(this.doorDraft.start, v, 'door');
+      this.walls.drawPreview(this.doorDraft.start, v, this.doorDraft.kind || 'door');
       return;
     }
     if (this.placing) this.onPlacingMove(pos);
@@ -1193,7 +1310,7 @@ export class VttRenderer {
     // onStageDown → placeDoorOnWall), so bail WITHOUT stopping propagation and
     // let the event bubble to the stage. Clicking an EXISTING door still falls
     // through to the normal select/edit logic below.
-    if (s.ui.tool === 'walls' && s.ui.wallKind === 'door' && s.walls[id]?.kind !== 'door') return;
+    if (s.ui.tool === 'walls' && (s.ui.wallKind === 'door' || s.ui.wallKind === 'window') && s.walls[id]?.kind !== s.ui.wallKind) return;
     // While drawing a wall chain, a click must place/close a vertex — never
     // select the wall (otherwise you can't snap the loop shut on the start).
     if (this.wallChain) return;
@@ -1215,7 +1332,7 @@ export class VttRenderer {
       // Walls tool = edit (select → move/resize handles). Select tool = play:
       // toggle open/closed without changing the current selection.
       if (s.ui.tool === 'walls') { A.selectWall(id); return; }
-      A.updateWall(id, { open: !wall.open });
+      A.toggleDoor(id); // optimistic + RPC (persists for players) + echo-guarded
       return;
     }
     if (s.session.role === 'dm') A.selectWall(id);
@@ -1228,7 +1345,7 @@ export class VttRenderer {
     // Door mode: on a NON-door wall, let the click fall through to the stage so
     // a NEW door is placed instead of grabbing the endpoint handle. An existing
     // door's handles stay grabbable so placed doors remain editable.
-    if (t === 'walls' && s0.ui.wallKind === 'door' && s0.walls[id]?.kind !== 'door') return;
+    if (t === 'walls' && (s0.ui.wallKind === 'door' || s0.ui.wallKind === 'window') && s0.walls[id]?.kind !== s0.ui.wallKind) return;
     e.stopPropagation?.();
     A.selectWall(id);
     const s = getState();
@@ -1274,13 +1391,17 @@ export class VttRenderer {
       const sp = new Sprite();
       sp.anchor.set(0.5);
       sp.tint = on ? 0x000000 : 0xffffff;
-      loadIcon('/Assets/map/lightswitch.svg').then((tex) => {
+      // DM-chosen glyph for this switch (torch/lantern/candle), else the switch.
+      loadIcon(lt.icon || '/Assets/map/lightswitch.svg').then((tex) => {
         if (!tex || sp.destroyed) return;
         sp.texture = tex;
         sp.width = sp.height = size;
       });
       node.addChild(sp);
       node.on('pointerdown', (e) => { e.stopPropagation?.(); A.toggleLight(lt.id); });
+      // Hover: grow slightly so players see the switch is clickable.
+      node.on('pointerover', () => node.scale.set(1.18));
+      node.on('pointerout', () => node.scale.set(1));
       c.addChild(node);
     }
   }
@@ -1333,6 +1454,13 @@ export class VttRenderer {
       m.addChild(new Graphics().circle(0, 0, 12)
         .fill({ color: lt.color || '#ffd9a0', alpha: 0.5 })
         .stroke({ width: sel ? 3 : 2, color: sel ? '#6c8cff' : '#ffffff', alpha: 0.9 }));
+      if (lt.icon) {
+        const ic = new Sprite();
+        ic.anchor.set(0.5);
+        ic.tint = 0x000000;
+        loadIcon(lt.icon).then((tex) => { if (tex && !ic.destroyed) { ic.texture = tex; ic.width = ic.height = 16; } });
+        m.addChild(ic);
+      }
       m.on('pointerdown', (e) => this.onLightDown(lt.id, e));
       this.lightMarkers.addChild(m);
     }
@@ -1405,6 +1533,31 @@ export class VttRenderer {
     return 30;
   }
 
+  // Climb speed (ft) of a token: statblock speed.climb, else the bound
+  // character's computed climb speed. 0 = no climb speed (RAW: climbing costs
+  // double movement). Cached per character object like tokenSpeedFt.
+  tokenClimbSpeedFt(token) {
+    if (token.statblock) {
+      const sp = token.statblock.speed;
+      if (sp && typeof sp.climb === 'number') return sp.climb;
+      if (sp && sp.climb === true) return typeof sp.walk === 'number' ? sp.walk : 30;
+      return 0;
+    }
+    if (token.characterId != null) {
+      const ch = getState().ui.characters?.[token.characterId]?.data;
+      if (ch) {
+        if (!this._climbCache) this._climbCache = new Map();
+        const cached = this._climbCache.get(token.characterId);
+        if (cached && cached.ref === ch) return cached.climb;
+        let climb = 0;
+        try { const c = computeCharacter(ch); const v = c.speed?.climb; climb = typeof v === 'number' ? v : 0; } catch { /* keep 0 */ }
+        this._climbCache.set(token.characterId, { ref: ch, climb });
+        return climb;
+      }
+    }
+    return 0;
+  }
+
   // Is movement between two adjacent cells blocked by a movement-blocking wall?
   // (Role-agnostic — used by the reachable-cells preview, not the drag clamp.)
   cellBlockedBetween(aCol, aRow, bCol, bRow, map, level, base) {
@@ -1425,11 +1578,17 @@ export class VttRenderer {
   reachableCells(token, map, level, base, budgetFt) {
     const grid = map.grid;
     const start = pointToCell(token.x, token.y, grid);
+    // Only DIFFICULT terrain doubles the cell cost (walking on top of a plateau
+    // is normal ground). Climbing is charged at the EDGE between two heights —
+    // RAW: +1 ft per ft climbed (halved away by a climb speed); DM-marked open
+    // edges (ladders/stairs) cross free. See climbStepFt.
     const costly = new Set();
     for (const tr of (map.terrain || [])) {
       if (!Array.isArray(tr.cells) || (tr.level || base) !== level) continue;
-      if (tr.kind === 'difficult' || tr.kind === 'climb') for (const cc of tr.cells) costly.add(cc);
+      if (tr.kind === 'difficult') for (const cc of tr.cells) costly.add(cc);
     }
+    const cm = climbMapFor(map, level, base);
+    const climbMul = this.tokenClimbSpeedFt(token) > 0 ? 1 : 2;
     const enterCost = (col, row) => (costly.has(`${col},${row}`) ? 10 : 5);
     const dist = new Map();
     const best = new Map();
@@ -1451,7 +1610,7 @@ export class VttRenderer {
           // No corner-cutting through a wall: a diagonal needs an open orthogonal side.
           if (diagonal && this.cellBlockedBetween(cur.col, cur.row, cur.col + dc, cur.row, map, level, base)
             && this.cellBlockedBetween(cur.col, cur.row, cur.col, cur.row + dr, map, level, base)) continue;
-          let step = enterCost(ncol, nrow);
+          let step = enterCost(ncol, nrow) + climbStepFt(cur.col, cur.row, ncol, nrow, cm, climbMul);
           let npar = cur.par;
           if (diagonal) { if (cur.par === 1) step += 5; npar = cur.par ^ 1; }
           const ncost = cur.cost + step;
@@ -1485,7 +1644,10 @@ export class VttRenderer {
     if (!isDM && !this.canControl(token)) return;
     const speed = this.tokenSpeedFt(token);
     if (!(speed > 0)) return;
-    const reach = this.reachableCells(token, map, level, base, speed * 2);
+    // Normal speed by default; the extended (×2) Dash overlay only when the
+    // controller has the Dash preview active (DashToggle pill / hover).
+    const budget = s.ui.showDash ? speed * 2 : speed;
+    const reach = this.reachableCells(token, map, level, base, budget);
     const sz = map.grid.size;
     for (const [key, cost] of reach) {
       const [col, row] = key.split(',').map(Number);
@@ -1495,29 +1657,97 @@ export class VttRenderer {
     }
   }
 
-  // Approximate movement cost (ft) along the ruler, doubling cells of difficult
-  // terrain. Returns null if there's no difficult terrain on the path.
-  rulerMoveFt(ruler, map, level, base) {
-    if (!ruler) return null;
-    const diff = new Set();
-    for (const tr of (map.terrain || [])) {
-      if (tr.kind !== 'difficult' || !Array.isArray(tr.cells) || (tr.level || base) !== level) continue;
-      for (const c of tr.cells) diff.add(c);
+  // Movement cost (ft) along the ruler — pure impl lives in lib/wallGeometry.
+  // opts.climbMul: 1 when the mover has a climb speed, else 2 (RAW climbing).
+  rulerMoveFt(ruler, map, level, base, opts) {
+    return rulerMoveFt(ruler, map, level, base, opts);
+  }
+
+  // Darkvision range (ft) of a token: from its bound character's race/subrace
+  // (`species.darkvision`), else parsed from a 5etools statblock ("darkvision
+  // 60 ft."). Cheap — no computeCharacter needed.
+  tokenDarkvisionFt(t) {
+    if (!t) return 0;
+    if (t.characterId != null) {
+      const ch = getState().ui.characters?.[t.characterId]?.data;
+      if (ch) return +(ch.species?.darkvision || 0) || 0;
     }
-    if (!diff.size) return null;
-    const { from, to } = ruler;
-    const sz = map.grid.size || 70;
-    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / (sz * 0.25)));
-    const cells = new Set();
-    for (let i = 0; i <= steps; i++) {
-      const x = from.x + (to.x - from.x) * (i / steps);
-      const y = from.y + (to.y - from.y) * (i / steps);
-      const c = pointToCell(x, y, map.grid);
-      cells.add(`${c.col},${c.row}`);
+    const sb = t.statblock;
+    if (sb?.senses) {
+      const arr = Array.isArray(sb.senses) ? sb.senses : [sb.senses];
+      for (const sv of arr) { const m = /darkvision\s+(\d+)/i.exec(String(sv)); if (m) return +m[1]; }
     }
-    let d = 0;
-    for (const c of cells) if (diff.has(c)) d++;
-    return (cells.size - d) * 5 + d * 10;
+    return 0;
+  }
+
+  // Interior polygons of roofed wall-loops (for "enclosed rooms always dark").
+  // Every wall kind counts as an enclosing edge (a door/window closes a room
+  // too). A face is skipped if any of its edges is flagged `noRoof` (open sky).
+  // Cached on a wall-geometry signature so it only recomputes when walls change.
+  enclosedRoomPolys(walls, mapId, level) {
+    // Keyed off the store's walls version (bumped on every wall op) — cheaper
+    // than hashing wall geometry per reconcile. `walls` is pre-filtered to the
+    // DISPLAYED map+level by the caller, so both belong in the key.
+    const sig = `${mapId}|${level || ''}|${versions.walls}`;
+    if (this._roomCache && this._roomCache.sig === sig) return this._roomCache.polys;
+    const polys = planarFaces(walls)
+      .filter((f) => f.area2 > 1 && !f.face.some((he) => he.wall.noRoof))
+      .map((f) => f.pts);
+    this._roomCache = { sig, polys };
+    return polys;
+  }
+
+  // Ambient daylight (the map's sun/sky) leaking in through WINDOWS when
+  // interiors are dark: a soft neutral source per window, reach set by the
+  // outdoor baseline (bright → bright+dim spill, dim → dim spill, dark → none).
+  // A milky window drops the spill one step. The source is offset onto the ROOM
+  // side of the window (found via the dark room polys) so the wall itself can't
+  // swallow it. With a directional sun (worldShadowStrength > 0), only windows
+  // the sunlight actually travels INTO get the spill, scaled by incidence —
+  // sun-facing windows glow, shadow-side windows stay dark. Doors are NOT light
+  // sources — an open door is just a gap, a glow around it would read as a lamp.
+  ambientOpeningSources(walls, baseline, gridSz, rooms = [], sun = null) {
+    const step = baseline === 'bright' ? 2 : baseline === 'dim' ? 1 : 0;
+    if (step <= 0) return [];
+    const cellFt = 5; // one grid cell ≈ 5 ft
+    const OFF = 12; // px onto the room side (> nudgeOffWalls reach, so it stays put)
+    // Sun direction always gates the windows while ambient light is on (the
+    // slider chooses which side of a building the light comes from); the shadow
+    // STRENGTH only controls the world-shadow overlay, not this.
+    const sunD = sun
+      ? { x: Math.cos(((sun.dir ?? 135) * Math.PI) / 180), y: Math.sin(((sun.dir ?? 135) * Math.PI) / 180) }
+      : null;
+    const out = [];
+    for (const w of walls) {
+      if (w.kind !== 'window') continue;
+      // Milky (frosted) closed window dims the incoming light one step.
+      const s = w.milky && !w.open ? step - 1 : step;
+      if (s <= 0) continue;
+      const mx = (w.a.x + w.b.x) / 2; const my = (w.a.y + w.b.y) / 2;
+      // Which side of the window is the room interior?
+      const dx = w.b.x - w.a.x; const dy = w.b.y - w.a.y; const len = Math.hypot(dx, dy) || 1;
+      let nx = -dy / len; let ny = dx / len; // one of the two normals
+      const inA = pointInAnyPolygon(mx + nx * (OFF + 2), my + ny * (OFF + 2), rooms);
+      const inB = pointInAnyPolygon(mx - nx * (OFF + 2), my - ny * (OFF + 2), rooms);
+      let side = null;
+      if (inA && !inB) side = { x: nx, y: ny };
+      else if (inB && !inA) side = { x: -nx, y: -ny };
+      // Directional sun: light only enters if it travels INTO the room; scale by
+      // incidence so grazing windows spill less than sun-facing ones.
+      let mul = 1;
+      if (sunD && side) {
+        const t = sunD.x * side.x + sunD.y * side.y;
+        if (t <= 0.05) continue; // window on the shadow side of the building
+        mul = 0.4 + 0.6 * t;
+      }
+      const brightFt = (s >= 2 ? cellFt : 0) * mul;
+      const dimFt = (s >= 2 ? 4 : 3) * cellFt * mul;
+      out.push({ id: 'amb_' + w.id,
+        x: mx + (side ? side.x * OFF : 0), y: my + (side ? side.y * OFF : 0),
+        brightFt, dimFt, color: '#e8edf5', enabled: true });
+    }
+    void gridSz;
+    return out;
   }
 
   // Snap a wall vertex to grid, or to a nearby existing wall endpoint / the
@@ -1580,6 +1810,12 @@ export class VttRenderer {
 
   // ---- WASD: move the selected token one cell ----
   moveSelectedByCell(dCol, dRow) {
+    // Throttle to ~the glide duration: a held key auto-repeats at ~30 Hz, and
+    // each step is a synced move + full reconcile — firing 30×/s saturated the
+    // loop and made movement lag / snap back. One step per ~130 ms stays smooth.
+    const now = performance.now();
+    if (now - (this._lastWasd || 0) < 95) return;
+    this._lastWasd = now;
     const s = getState();
     const id = s.ui.selectedTokenId;
     if (!id || s.ui.tool !== 'select') return;
@@ -1596,7 +1832,15 @@ export class VttRenderer {
     const fromX = node ? node.root.position.x : token.x;
     const fromY = node ? node.root.position.y : token.y;
     A.moveToken(id, to.x, to.y);
-    this._tween = { id, fromX, fromY, toX: to.x, toY: to.y, start: performance.now(), dur: 130 };
+    // Point the ease-target at the destination NOW. The token is excluded from
+    // tokens.update while it glides, so `_tx/_ty` would otherwise stay on the OLD
+    // cell — when the glide ends, tickTokens would ease it BACK there until the
+    // next reconcile (the "snap to target, jump back, then settle" the user saw).
+    if (node) { node._tx = to.x; node._ty = to.y; }
+    // Glide a touch shorter than the step throttle so the token REACHES each cell
+    // before the next step — otherwise it perpetually trails the input ("hängt
+    // hinterher").
+    this._tween = { id, fromX, fromY, toX: to.x, toY: to.y, start: performance.now(), dur: 90 };
     this.checkTransition(id);
   }
 
@@ -1695,7 +1939,7 @@ export class VttRenderer {
       const base = map.levels?.[0]?.id || null;
       const level = this.displayedLevel(s, map, base);
       const ftRaw = fiveEDistanceFt(this.drag.startX, this.drag.startY, x, y, map.grid.size);
-      const moveFt = this.rulerMoveFt({ from: { x: this.drag.startX, y: this.drag.startY }, to: { x, y } }, map, level, base);
+      const moveFt = this.rulerMoveFt({ from: { x: this.drag.startX, y: this.drag.startY }, to: { x, y } }, map, level, base, { climbMul: this.tokenClimbSpeedFt(token) > 0 ? 1 : 2 });
       let txt = `${ftRaw} ft`;
       if (moveFt != null && Math.round(moveFt) > ftRaw) txt += ` · ${Math.round(moveFt)} ft Bew.`;
       this.dragLabel.text = txt;
@@ -1878,121 +2122,10 @@ function buildZoneFromDrag(ui, from, to, grid) {
 }
 const round5 = (v) => Math.max(5, Math.round(v / 5) * 5);
 
-// 5e grid distance with the "alternating diagonal" variant (DMG): the 1st
-// diagonal step costs 5 ft, the 2nd 10 ft, the 3rd 5 ft, … Straights are 5 ft.
-// feet = (straights + diagonals)*5 + floor(diagonals/2)*5.
-function fiveEDistanceFt(ax, ay, bx, by, gridSize) {
-  const dc = Math.abs(Math.round((bx - ax) / gridSize));
-  const dr = Math.abs(Math.round((by - ay) / gridSize));
-  const diag = Math.min(dc, dr);
-  const straight = Math.abs(dc - dr);
-  return (straight + diag) * 5 + Math.floor(diag / 2) * 5;
-}
-
-// Multiply an #rrggbb colour's channels by `factor` (<1 darkens) → 0xRRGGBB.
-function darkenColor(hex, factor) {
-  const s = String(hex).replace('#', '');
-  if (s.length < 6) return 0x888888;
-  const r = Math.round(parseInt(s.slice(0, 2), 16) * factor);
-  const g = Math.round(parseInt(s.slice(2, 4), 16) * factor);
-  const b = Math.round(parseInt(s.slice(4, 6), 16) * factor);
-  return (r << 16) | (g << 8) | b;
-}
-
-// Walls that are part of a closed loop = NON-bridge edges of the wall graph
-// (vertices keyed by rounded coords). Such walls enclose an area (a "roofed"
-// room); bridge walls (fences/open polylines) don't. Tarjan bridge finding.
-function loopWallIds(walls) {
-  const key = (p) => `${Math.round(p.x)},${Math.round(p.y)}`;
-  const adj = new Map();
-  for (const w of walls) {
-    const ka = key(w.a); const kb = key(w.b);
-    if (!adj.has(ka)) adj.set(ka, []);
-    if (!adj.has(kb)) adj.set(kb, []);
-    adj.get(ka).push({ to: kb, id: w.id });
-    adj.get(kb).push({ to: ka, id: w.id });
-  }
-  const disc = new Map(); const low = new Map(); const bridges = new Set();
-  let t = 0;
-  const stack = [];
-  for (const start of adj.keys()) {
-    if (disc.has(start)) continue;
-    stack.push({ u: start, peid: null, i: 0 });
-    while (stack.length) {
-      const fr = stack[stack.length - 1];
-      if (fr.i === 0) { disc.set(fr.u, t); low.set(fr.u, t); t++; }
-      const edges = adj.get(fr.u) || [];
-      if (fr.i < edges.length) {
-        const e = edges[fr.i]; fr.i++;
-        if (e.id === fr.peid) continue;
-        if (!disc.has(e.to)) { fr.child = e.to; fr.cid = e.id; stack.push({ u: e.to, peid: e.id, i: 0 }); }
-        else { low.set(fr.u, Math.min(low.get(fr.u), disc.get(e.to))); }
-      } else {
-        stack.pop();
-        if (stack.length) {
-          const par = stack[stack.length - 1];
-          low.set(par.u, Math.min(low.get(par.u), low.get(fr.u)));
-          if (low.get(fr.u) > disc.get(par.u)) bridges.add(fr.peid);
-        }
-      }
-    }
-  }
-  const loop = new Set();
-  for (const w of walls) if (!bridges.has(w.id)) loop.add(w.id);
-  return loop;
-}
-
-// For each `seeThrough` wall, the centroid of its connected component (walls
-// linked by shared endpoints). Used for one-sided occlusion: a see-through wall
-// only blocks observers on the same side as this centroid (the loop interior),
-// so from outside you look past the near wall into the loop.
-function seeThroughCentroids(walls) {
-  const st = walls.filter((w) => w.seeThrough);
-  if (!st.length) return new Map();
-  const key = (p) => `${Math.round(p.x)},${Math.round(p.y)}`;
-  // union-find over wall ids via shared vertices
-  const parent = new Map();
-  const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
-  const union = (a, b) => { parent.set(find(a), find(b)); };
-  for (const w of st) parent.set(w.id, w.id);
-  const byVert = new Map();
-  for (const w of st) for (const k of [key(w.a), key(w.b)]) {
-    if (byVert.has(k)) union(byVert.get(k), w.id); else byVert.set(k, w.id);
-  }
-  // accumulate centroid per component
-  const acc = new Map(); // root -> {sx,sy,n}
-  for (const w of st) {
-    const r = find(w.id);
-    const a = acc.get(r) || { sx: 0, sy: 0, n: 0 };
-    a.sx += w.a.x + w.b.x; a.sy += w.a.y + w.b.y; a.n += 2;
-    acc.set(r, a);
-  }
-  const out = new Map();
-  for (const w of st) {
-    const a = acc.get(find(w.id));
-    out.set(w.id, { x: a.sx / a.n, y: a.sy / a.n });
-  }
-  return out;
-}
-
-// Are points p and q on the same side of the line through segment a→b?
-function sameSideOfSeg(p, q, a, b) {
-  const cross = (pt) => (b.x - a.x) * (pt.y - a.y) - (b.y - a.y) * (pt.x - a.x);
-  return cross(p) * cross(q) > 0;
-}
-
-// Climb-terrain height (ft) at a map point on a level (0 if none).
-function terrainHeightAt(map, level, x, y) {
-  const cell = pointToCell(x, y, map.grid);
-  const k = `${cell.col},${cell.row}`;
-  let h = 0;
-  for (const tr of (map.terrain || [])) {
-    if (tr.kind !== 'climb' || !Array.isArray(tr.cells)) continue;
-    if ((tr.level || level) !== level) continue;
-    if (tr.cells.includes(k)) h = Math.max(h, tr.ft || 0);
-  }
-  return h;
-}
+// (fiveEDistanceFt, rulerMoveFt, darkenColor & friends now live in
+// lib/wallGeometry.js — pure, unit-tested, imported at the top of this file.)
+const filterObj = (obj, pred) => { const o = {}; for (const k in obj) if (pred(obj[k])) o[k] = obj[k]; return o; };
+const toObj = (arr) => { const o = {}; for (const e of arr) o[e.id] = e; return o; };
 
 // Snap a point to the nearest grid-line intersection.
 function snapPointToGrid(p, grid) {
@@ -2003,34 +2136,6 @@ function snapPointToGrid(p, grid) {
   };
 }
 
-// Closest point on segment a→b to p.
-function projectOnSeg(p, a, b) {
-  const vx = b.x - a.x, vy = b.y - a.y;
-  const len2 = vx * vx + vy * vy;
-  const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2)) : 0;
-  return { x: a.x + t * vx, y: a.y + t * vy };
-}
-
-// Shortest distance from a point to a line segment a→b (px).
-function distPointToSeg(p, a, b) {
-  const vx = b.x - a.x, vy = b.y - a.y;
-  const wx = p.x - a.x, wy = p.y - a.y;
-  const len2 = vx * vx + vy * vy;
-  const t = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
-  const cx = a.x + t * vx, cy = a.y + t * vy;
-  return Math.hypot(p.x - cx, p.y - cy);
-}
-
-// Signed distance of (dx,dy) along the perpendicular of a direction (deg).
-function perpDistance(dx, dy, dirDeg) {
-  const d = ((dirDeg || 0) * Math.PI) / 180;
-  return dx * -Math.sin(d) + dy * Math.cos(d);
-}
-
-const filterObj = (obj, pred) => { const o = {}; for (const k in obj) if (pred(obj[k])) o[k] = obj[k]; return o; };
-const toObj = (arr) => { const o = {}; for (const e of arr) o[e.id] = e; return o; };
-
-// Shortest distance from point p to segment a→b.
 function distToSegment(p, a, b) {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len2 = dx * dx + dy * dy || 1;

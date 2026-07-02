@@ -1,6 +1,11 @@
+mod relay;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let mut builder = tauri::Builder::default();
+  let mut builder = tauri::Builder::default()
+    // Embedded VTT relay: hosted by the GM's app, auto-started on session start.
+    .manage(relay::RelayState::default())
+    .invoke_handler(tauri::generate_handler![relay::start_relay, relay::stop_relay, relay::list_local_ips]);
 
   // Setup (log plugin nur im Debug)
   builder = builder.setup(|app| {

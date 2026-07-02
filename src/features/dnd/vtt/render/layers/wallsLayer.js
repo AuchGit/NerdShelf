@@ -7,6 +7,9 @@ import { WALL_TYPES, DOOR_ICONS } from '../../lib/constants';
 import { loadIcon } from '../textures';
 
 const WINDOW_ICON = '/Assets/map/window.svg';
+// Default on-screen width (in grid cells) of a door/window icon; per-wall
+// `widthCells` overrides it (narrow arrow-slit … wide gate).
+const DEFAULT_OPENING_CELLS = 0.7;
 
 export class WallsLayer {
   constructor() {
@@ -50,15 +53,32 @@ export class WallsLayer {
     root.cursor = 'pointer';
     root.hitArea = new SegmentHit(w.a, w.b, 14);
     root.on('pointerdown', (e) => this.onWallPointerDown?.(w.id, e));
+    // Hover feedback so players discover clickable doors/windows: brighten the
+    // icon + a soft glow line. Plain walls (DM editing) skip the glow.
+    root.on('pointerover', () => {
+      const cur = this.nodes.get(w.id);
+      if (!cur) return;
+      cur._hover = true;
+      cur.icon.alpha = 1;
+      if (cur._wall && (cur._wall.kind === 'door' || cur._wall.kind === 'window')) drawHoverGlow(cur.hover, cur._wall);
+    });
+    root.on('pointerout', () => {
+      const cur = this.nodes.get(w.id);
+      if (!cur) return;
+      cur._hover = false;
+      cur.icon.alpha = 0.75;
+      cur.hover.clear();
+    });
     const line = new Graphics();
+    const hover = new Graphics(); // hover glow under the icon (doors/windows)
     const leaf = new Graphics(); // drawn door fallback, cleared once the SVG loads
     const icon = new Sprite(); icon.anchor.set(0.5); icon.visible = false; icon.alpha = 0.75; // single centered door icon
     const hA = makeHandle(); const hB = makeHandle();
     hA.on('pointerdown', (e) => { e.stopPropagation(); this.onWallHandle?.(w.id, 'a', e); });
     hB.on('pointerdown', (e) => { e.stopPropagation(); this.onWallHandle?.(w.id, 'b', e); });
-    root.addChild(line, leaf, icon, hA, hB);
+    root.addChild(hover, line, leaf, icon, hA, hB);
     this.container.addChild(root);
-    const node = { root, line, leaf, icon, hA, hB, iconKey: null };
+    const node = { root, line, hover, leaf, icon, hA, hB, iconKey: null };
     this.nodes.set(w.id, node);
     return node;
   }
@@ -69,6 +89,8 @@ export class WallsLayer {
     const isWindow = w.kind === 'window';
     const open = (isDoor || isWindow) && w.open;
     const col = def.color;
+    node._wall = w; // latest wall data for the hover handlers
+    if (node._hover && (isDoor || isWindow)) drawHoverGlow(node.hover, w); else node.hover.clear();
 
     // refresh hit segment to current endpoints
     node.root.hitArea.set(w.a, w.b);
@@ -88,7 +110,7 @@ export class WallsLayer {
         loadIcon(isWindow ? WINDOW_ICON : DOOR_ICONS[key]).then((tex) => {
           if (!tex || node.icon.destroyed || node.iconKey !== key) return;
           node.icon.texture = tex;
-          node.icon.scale.set((gridSize * 0.7) / Math.max(tex.width, tex.height));
+          node.icon.scale.set((gridSize * (w.widthCells || DEFAULT_OPENING_CELLS)) / Math.max(tex.width, tex.height));
           node.leaf.clear();
         });
       }
@@ -102,9 +124,16 @@ export class WallsLayer {
       node.icon.visible = true;
       node.icon.position.set((w.a.x + w.b.x) / 2, (w.a.y + w.b.y) / 2);
       node.icon.rotation = Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x);
+      // Display width (in cells) of the door/window icon — per-wall override so
+      // a narrow arrow-slit or a wide gate reads at the right size. Re-applied
+      // every frame so a WallEditor change takes effect live.
+      if (haveTex) node.icon.scale.set((gridSize * (w.widthCells || DEFAULT_OPENING_CELLS)) / Math.max(node.icon.texture.width, node.icon.texture.height));
       // Drawn fallback only for doors (windows just show the SVG / nothing).
       if (!haveTex && isDoor) drawDoorLeaf(node.leaf, w.a, w.b, open, col);
       else if (!haveTex && isWindow) drawWindowFallback(node.leaf, w.a, w.b, open, col);
+      // Frosted-glass cue for a CLOSED milky window (dims light by a step) —
+      // shown in both the SVG and fallback cases so the DM can tell them apart.
+      if (isWindow && w.milky && !open) drawFrost(node.leaf, w.a, w.b);
     } else {
       node.icon.visible = false;
       node.leaf.clear();
@@ -172,6 +201,33 @@ function drawWindowFallback(g, a, b, open, col) {
   ]).fill({ color: col, alpha: open ? 0.25 : 0.6 }).stroke({ width: 1.5, color: 0x06283a, alpha: 0.6 });
   const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
   g.moveTo(mx + px * h, my + py * h).lineTo(mx - px * h, my - py * h).stroke({ width: 1.5, color: 0x06283a, alpha: 0.6 });
+}
+
+// Frosted overlay for a milky (closed) window: a soft white translucent bar
+// with a couple of diagonal frost ticks across the opening.
+function drawFrost(g, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const px = -uy, py = ux;
+  const h = Math.max(4, len * 0.16);
+  g.poly([
+    a.x + px * h, a.y + py * h, b.x + px * h, b.y + py * h,
+    b.x - px * h, b.y - py * h, a.x - px * h, a.y - py * h,
+  ]).fill({ color: 0xffffff, alpha: 0.32 });
+  for (const t of [0.3, 0.55, 0.8]) {
+    const cx = a.x + dx * t, cy = a.y + dy * t;
+    g.moveTo(cx - ux * h * 0.5 + px * h * 0.7, cy - uy * h * 0.5 + py * h * 0.7)
+      .lineTo(cx + ux * h * 0.5 - px * h * 0.7, cy + uy * h * 0.5 - py * h * 0.7)
+      .stroke({ width: 1, color: 0xffffff, alpha: 0.6 });
+  }
+}
+
+// Hover glow for a clickable door/window: a soft wide line along the opening.
+function drawHoverGlow(g, w) {
+  g.clear();
+  g.moveTo(w.a.x, w.a.y).lineTo(w.b.x, w.b.y).stroke({ width: 14, color: 0xffffff, alpha: 0.18, cap: 'round' });
+  g.moveTo(w.a.x, w.a.y).lineTo(w.b.x, w.b.y).stroke({ width: 6, color: 0xffe9b0, alpha: 0.35, cap: 'round' });
 }
 
 function makeHandle() {

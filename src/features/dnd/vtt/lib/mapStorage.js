@@ -34,6 +34,35 @@ export async function uploadMapToRelay(relayWsUrl, name, file) {
   return url;
 }
 
+function isTauri() {
+  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+}
+
+// Desktop only: write the UNTOUCHED original into the relay's maps dir at upload
+// time — independent of whether the relay is running. Then whenever the GM hosts
+// a direct connection it's served full-res at /map/<name>, regardless of the
+// session's relay IP/port (the URL is built from the live relay address at render
+// time). Returns the relative name (the key) to store on the map, or null.
+export async function saveMapOriginalLocal(name, file) {
+  if (!isTauri()) return null;
+  try {
+    const { appLocalDataDir, join } = await import('@tauri-apps/api/path');
+    const { writeFile, mkdir } = await import('@tauri-apps/plugin-fs');
+    const dir = await join(await appLocalDataDir(), 'vtt', 'campaigns');
+    try { await mkdir(dir, { recursive: true }); } catch { /* exists */ }
+    const path = await join(dir, name);
+    await writeFile(path, new Uint8Array(await file.arrayBuffer()));
+    return name;
+  } catch (e) { console.warn('[vtt] save original failed', e?.message || e); return null; }
+}
+
+// Build the live full-res GET URL for a stored original, from the GM's CURRENT
+// relay address. null if not on a direct connection or no original was saved.
+export function relayFullUrl(relayWsUrl, name) {
+  const base = relayHttpBase(relayWsUrl);
+  return base && name ? `${base}/map/${encodeURIComponent(name)}` : null;
+}
+
 // Upload a journal/handout image (kept in its original format) to the same
 // bucket under a /handouts/ prefix. Returns the public URL + storage path.
 export async function uploadHandoutImage(campaignId, file) {

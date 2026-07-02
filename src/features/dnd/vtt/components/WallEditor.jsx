@@ -46,10 +46,26 @@ export default function WallEditor() {
       )}
 
       {wall.kind === 'window' && (
-        <label style={S.check} title="Fenster lassen Sicht & Licht immer durch; offen ist rein optisch (invertiertes Symbol).">
-          <input type="checkbox" checked={!!wall.open} onChange={(e) => apply({ open: e.target.checked })} />
-          Fenster offen (Symbol invertiert)
-        </label>
+        <>
+          <label style={S.check} title="Fenster lassen Sicht & Licht immer durch; offen ist rein optisch (invertiertes Symbol).">
+            <input type="checkbox" checked={!!wall.open} onChange={(e) => apply({ open: e.target.checked })} />
+            Fenster offen (Symbol invertiert)
+          </label>
+          <label style={S.check} title="Milchglas: helles Licht wird beim Durchscheinen eine Stufe gedämpft (hell → dim dahinter); Dämmerlicht bleibt. Bei offenem Fenster ohne Wirkung.">
+            <input type="checkbox" checked={!!wall.milky} onChange={(e) => apply({ milky: e.target.checked })} />
+            Milchglas (dämpft Licht)
+          </label>
+        </>
+      )}
+
+      {(wall.kind === 'door' || wall.kind === 'window') && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', marginBottom: 4 }}>
+            Anzeigebreite ({Math.round((wall.widthCells ?? 0.7) * 100)}% Feld)
+          </div>
+          <input type="range" min="0.2" max="2" step="0.1" value={wall.widthCells ?? 0.7}
+            onChange={(e) => apply({ widthCells: +e.target.value })} style={{ width: '100%' }} />
+        </div>
       )}
 
       {wall.kind === 'cover' && (

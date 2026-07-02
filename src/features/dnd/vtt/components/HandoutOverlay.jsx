@@ -2,8 +2,20 @@
 // resizable, with the image fit inside. Used both for the DM's "shown to all"
 // handout (synced) and for a player viewing a journal entry locally.
 import { useEffect, useRef, useState } from 'react';
+import { renderMarkdown } from '../lib/miniMarkdown';
+import { sanitizeHtml, ensureHandoutStyles } from '../lib/sanitizeHtml';
+import { relayFullUrl } from '../lib/mapStorage';
+import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
+
+// Rich-text handouts store sanitized HTML; legacy/imported ones may be markdown
+// or plain text — render those through the markdown converter.
+const bodyHtml = (body) => (/<[a-z][\s\S]*>/i.test(body || '') ? sanitizeHtml(body) : renderMarkdown(body));
+// Live full-res URL for a direct connection (else the legacy baked one / null).
+const handoutFullSrc = (e) => (getConnectionMode() === 'relay' && getRelayUrl()
+  ? (relayFullUrl(getRelayUrl(), e.imageFullName) || e.imageUrlFull) : e.imageUrlFull) || null;
 
 export default function HandoutOverlay({ entry, onClose, footer, initial }) {
+  useEffect(() => { ensureHandoutStyles(); }, []);
   const [box, setBox] = useState(() => ({
     x: initial?.x ?? Math.max(40, (window.innerWidth - 520) / 2),
     y: initial?.y ?? Math.max(40, (window.innerHeight - 460) / 2),
@@ -33,12 +45,12 @@ export default function HandoutOverlay({ entry, onClose, footer, initial }) {
       </div>
       <div style={S.body}>
         {entry.imageUrl && (
-          // Prefer the full-res relay original; fall back to the Supabase image
-          // if the relay is unreachable (GM offline / file lost).
-          <img src={entry.imageUrlFull || entry.imageUrl} alt={entry.title || ''} style={S.img} draggable={false}
-            onError={(ev) => { if (entry.imageUrlFull && ev.target.src !== entry.imageUrl) ev.target.src = entry.imageUrl; }} />
+          // On a direct connection prefer the full-res relay original (URL built
+          // live from the relay address); fall back to Supabase if unreachable.
+          <img src={handoutFullSrc(entry) || entry.imageUrl} alt={entry.title || ''} style={S.img} draggable={false}
+            onError={(ev) => { if (ev.target.src !== entry.imageUrl) ev.target.src = entry.imageUrl; }} />
         )}
-        {entry.body && <div style={S.text}>{entry.body}</div>}
+        {entry.body && <div style={S.text} className="vtt-md" dangerouslySetInnerHTML={{ __html: bodyHtml(entry.body) }} />}
       </div>
       {footer && <div style={S.footer}>{footer}</div>}
       <div style={S.resize} onMouseDown={onResizeDown} title="Größe ziehen" />

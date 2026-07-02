@@ -59,6 +59,14 @@ export class Viewport {
       (sh - mapHeight * scale) / 2,
     );
   }
+
+  /** Center the view on a map-space point without changing the zoom. */
+  centerOn(x, y) {
+    const sw = this.app.renderer.width;
+    const sh = this.app.renderer.height;
+    const s = this.world.scale.x;
+    this.world.position.set(sw / 2 - x * s, sh / 2 - y * s);
+  }
 }
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

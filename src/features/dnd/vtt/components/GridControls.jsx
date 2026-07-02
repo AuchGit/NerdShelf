@@ -1,5 +1,6 @@
 // DM grid + fog controls for the active map. All edits go through setGrid /
 // updateMap and sync to every client.
+import { useState } from 'react';
 import { setGrid, resetFog, setFogMode, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
 import { useVtt } from '../state/useVtt';
 import { GRID_STYLES, FOG_MODES } from '../lib/constants';
@@ -41,20 +42,22 @@ export default function GridControls({ map }) {
         <input type="range" min="20" max="200" value={Math.min(200, g.size)} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
       </Row>
 
-      {/* Exact calibration for printed/DPI battlemaps: type the cell size in px
-          (the map's grid pitch) OR how many cells span the width — either pins
-          the grid to the map's own squares. Offset (below) aligns the origin. */}
-      <Row label="Genau kalibrieren (DPI-Karten)">
+      {/* Exact calibration for standard battlemaps ("44x32 @ 72dpi"): type the
+          cell pitch in px OR the column/row count — committed on Enter/blur (a
+          per-keystroke commit clamped "72" to "82" mid-typing and made these
+          values impossible to enter). Offset (below) aligns the origin. */}
+      <Row label="Genau kalibrieren (z. B. 44×32 · 72 dpi)">
         <div style={{ display: 'flex', gap: 6 }}>
-          <label style={S.numLbl}>px/Feld
-            <input type="number" min="8" max="1000" value={Math.round(g.size)}
-              onChange={(e) => onSize(Math.max(8, +e.target.value || g.size))} style={S.numIn} />
-          </label>
-          <label style={S.numLbl}>Felder breit
-            <input type="number" min="1" max="500" value={Math.max(1, Math.round(map.width / g.size))}
-              onChange={(e) => { const n = Math.max(1, +e.target.value || 1); onSize(map.width / n); }} style={S.numIn} />
-          </label>
+          <CommitNum label="px/Feld" value={Math.round(g.size)} min={8} max={1000}
+            onCommit={(v) => onSize(v)} />
+          <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
+            onCommit={(n) => onSize(map.width / n)} />
+          <CommitNum label="Felder hoch" value={Math.max(1, Math.round(map.height / g.size))} min={1} max={500}
+            onCommit={(n) => onSize(map.height / n)} />
         </div>
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '3px 0 0' }}>
+          Eingabe mit Enter bestätigen. „72 dpi" = 72 px/Feld (Standard-Battlemap).
+        </p>
       </Row>
 
       <label style={S.check}>
@@ -140,6 +143,14 @@ export default function GridControls({ map }) {
           <option value="dark">Dunkel — nur Lichter erhellen</option>
         </select>
       </Row>
+      <label style={S.check} title="Geschlossene Wand-Loops (auch mit Tür/Fenster) sind innen immer dunkel, egal wie hell es draußen ist. Fenster & offene Türen lassen etwas vom Grundlicht hineinscheinen.">
+        <input
+          type="checkbox"
+          checked={!!map.enclosedDark}
+          onChange={(e) => updateMap(map.id, { enclosedDark: e.target.checked })}
+        />
+        Geschlossene Räume immer dunkel (Licht fällt durch Fenster/Türen)
+      </label>
       <Row label={`Dunkelflächen${darkCount ? ` (${darkCount})` : ''}`}>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
@@ -152,7 +163,55 @@ export default function GridControls({ map }) {
         </div>
         <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>Mit dem Pinsel malen (wie Fog); wird nur dort hell, wo ein Licht hinreicht. Pinsel/Radierer im Licht-Tool unten.</p>
       </Row>
+
+      {(map.lightBaseline || 'bright') !== 'dark' && (
+        <Row label={`Sonnenrichtung (${Math.round(((map.worldShadowDir ?? 135) + 180) % 360)}° — von wo das Licht kommt)`}>
+          <input type="range" min="0" max="360" step="5" value={((map.worldShadowDir ?? 135) + 180) % 360}
+            onChange={(e) => updateMap(map.id, { worldShadowDir: (+e.target.value + 180) % 360 })} style={{ width: '100%' }} />
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>Bestimmt, durch welche Fenster das Gebietslicht hereinscheint („Räume dunkel") und wohin der Welt-Schatten fällt.</p>
+        </Row>
+      )}
+      {(map.lightBaseline || 'bright') !== 'dark' && (
+        <label style={S.check} title="Wände werfen einen map-weiten Schatten in Sonnenrichtung — automatisch genau eine Lichtstufe dunkler als das Umgebungslicht (hell → dämmrig, dämmrig → dunkel). Platzierte Lichter erhellen den Schatten normal.">
+          <input
+            type="checkbox"
+            checked={(map.worldShadowStrength ?? 0) > 0}
+            onChange={(e) => updateMap(map.id, { worldShadowStrength: e.target.checked ? 1 : 0 })}
+          />
+          Welt-Schatten (eine Stufe dunkler als Umgebungslicht)
+        </label>
+      )}
     </>
+  );
+}
+
+// Number input that keeps a local DRAFT while typing and only commits a
+// clamped value on Enter/blur — so multi-digit values ("72") can actually be
+// typed without the min-clamp rewriting them mid-keystroke.
+function CommitNum({ label, value, min, max, onCommit }) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  // Follow external changes while not editing (render-time state adjustment —
+  // the React-sanctioned alternative to a setState-in-effect).
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    if (!focused) setDraft(String(value));
+  }
+  const commit = () => {
+    const n = parseFloat(draft);
+    if (Number.isFinite(n)) onCommit(Math.max(min, Math.min(max, n)));
+    else setDraft(String(value));
+  };
+  return (
+    <label style={S.numLbl}>{label}
+      <input type="number" min={min} max={max} value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => { setFocused(false); commit(); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') { commit(); e.target.blur(); } }}
+        style={S.numIn} />
+    </label>
   );
 }
 

@@ -19,8 +19,16 @@ const EPS = 0.0001;
  */
 export function visibilityPolygon(origin, walls, bounds) {
   // Bounds become four segments so the polygon is always closed by the map edge.
+  // Each wall is EXTENDED ~1.5px at both ends so the ±EPS corner rays can't slip
+  // through the hairline gap where two walls meet — that gap is what let light
+  // (and sight) leak through a wall a token/light sits on.
+  const EXT = 1.5;
   const segs = [
-    ...walls.map((w) => ({ ax: w.a.x, ay: w.a.y, bx: w.b.x, by: w.b.y })),
+    ...walls.map((w) => {
+      const dx = w.b.x - w.a.x, dy = w.b.y - w.a.y; const len = Math.hypot(dx, dy) || 1;
+      const ex = (dx / len) * EXT, ey = (dy / len) * EXT;
+      return { ax: w.a.x - ex, ay: w.a.y - ey, bx: w.b.x + ex, by: w.b.y + ey };
+    }),
     seg(bounds.minX, bounds.minY, bounds.maxX, bounds.minY),
     seg(bounds.maxX, bounds.minY, bounds.maxX, bounds.maxY),
     seg(bounds.maxX, bounds.maxY, bounds.minX, bounds.maxY),
@@ -62,6 +70,32 @@ function raySegment(ox, oy, dx, dy, s) {
   const t1 = (sdx * (oy - s.ay) - sdy * (ox - s.ax)) / denom; // along ray (≥0)
   if (t1 < 0 || t2 < 0 || t2 > 1) return null;
   return { x: ox + dx * t1, y: oy + dy * t1, t: t1 };
+}
+
+// Move a sample point a few px off any wall it sits on (a wall sconce placed ON
+// the wall), toward the side it's already on, so the shadow caster blocks that
+// wall instead of leaking light/sight through it. No-op away from walls.
+export function nudgeOffWalls(x, y, walls) {
+  const NUDGE = 9;
+  let nx = x; let ny = y;
+  for (const w of walls) {
+    const ax = w.a.x; const ay = w.a.y; const bx = w.b.x; const by = w.b.y;
+    const dx = bx - ax; const dy = by - ay;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((nx - ax) * dx + (ny - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cxp = ax + t * dx; const cyp = ay + t * dy;
+    const dist = Math.hypot(nx - cxp, ny - cyp);
+    if (dist < NUDGE) {
+      const px = -dy; const py = dx; const plen = Math.hypot(px, py) || 1;
+      const ux = px / plen; const uy = py / plen;
+      const side = (nx - cxp) * ux + (ny - cyp) * uy; // signed dist along the normal
+      const sgn = side >= 0 ? 1 : -1;
+      nx += ux * sgn * (NUDGE - dist + 0.5);
+      ny += uy * sgn * (NUDGE - dist + 0.5);
+    }
+  }
+  return { x: nx, y: ny };
 }
 
 // Is a point inside a polygon (ray-cast even-odd)?

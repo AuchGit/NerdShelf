@@ -3,7 +3,7 @@
 // Permissions: the token owner or the DM.
 import { useEffect, useRef, useState } from 'react';
 import { useVtt, useIsDM, useSession } from '../state/useVtt';
-import { toggleCondition, applyHpDelta, updateToken, removeToken, cycleTokenLight, selectToken, setHoverToken } from '../state/actions';
+import { toggleCondition, applyHpDelta, updateToken, removeToken, selectToken, setHoverToken } from '../state/actions';
 import { CONDITIONS, LIGHT_PRESETS, DEFAULT_LIGHT, DISPOSITIONS } from '../lib/constants';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
 import { uploadHandoutImage } from '../lib/mapStorage';
@@ -173,11 +173,17 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
           )}
           <div style={S.section}>
             <div style={S.label}>Licht{token.light && !token.light.preset ? ` (${token.light.dimFt} ft)` : ''}</div>
-            <button style={S.sheet} onClick={() => cycleTokenLight(tokenId, token)}>
-              <Icon src="/Assets/vtt/light.svg" emoji="🔦" size={14} /> {token.light?.preset ? (LIGHT_PRESETS[token.light.preset]?.label || token.light.preset) : (token.light ? `${token.light.dimFt} ft` : 'Aus')}
-            </button>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <button style={{ ...S.lightBtn, ...(!token.light ? S.lightOn : null) }} onClick={() => updateToken(tokenId, { light: null })}>Aus</button>
+              {Object.entries(LIGHT_PRESETS).map(([key, p]) => (
+                <button key={key} style={{ ...S.lightBtn, ...(token.light?.preset === key ? S.lightOn : null) }}
+                  onClick={() => updateToken(tokenId, { light: { preset: key, ...p } })} title={`${p.brightFt}/${p.dimFt} ft`}>
+                  <Icon src={p.icon} emoji="🔦" size={14} /> {p.label}
+                </button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              <input type="number" min="0" placeholder="ft" value={lightFt}
+              <input type="number" min="0" placeholder="eigene ft" value={lightFt}
                 onChange={(e) => setLightFt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') applyLightFt(); }} style={S.hpInput} />
               <button style={S.apply} onClick={applyLightFt} title="Eigene Reichweite setzen">↵</button>
             </div>
@@ -314,6 +320,8 @@ const S = {
   label: { fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', marginBottom: 6 },
   hpInput: { flex: 1, padding: '6px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' },
   apply: { padding: '0 12px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 },
+  lightBtn: { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
+  lightOn: { border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)', color: 'var(--color-accent)' },
   condGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 },
   cond: { aspectRatio: '1', display: 'grid', placeItems: 'center', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
   size: { flex: 1, padding: '5px 0', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },

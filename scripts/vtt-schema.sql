@@ -33,6 +33,7 @@ create table if not exists public.vtt_campaign_state (
 alter table public.vtt_campaign_state add column if not exists journal jsonb not null default '[]'::jsonb;
 alter table public.vtt_campaign_state add column if not exists presented_handout text;
 alter table public.vtt_campaign_state add column if not exists paused boolean not null default false;
+alter table public.vtt_campaign_state add column if not exists relay_url text;  -- GM-hosted direct-connection (relay) ws:// URL, announced to players
 
 create table if not exists public.vtt_maps (
   id            text primary key,
@@ -68,12 +69,16 @@ alter table public.vtt_maps add column if not exists memory_strength real not nu
 alter table public.vtt_maps add column if not exists light_contrast real not null default 0.5;
 alter table public.vtt_maps add column if not exists light_blur real not null default 0;
 alter table public.vtt_maps add column if not exists bloody_tokens boolean not null default false;
+alter table public.vtt_maps add column if not exists enclosed_dark boolean not null default false;  -- roofed wall-loops always dark; windows/open doors leak the outdoor baseline inside
+alter table public.vtt_maps add column if not exists world_shadow_dir real;        -- directional "sun" shadow angle in degrees (default 135)
+alter table public.vtt_maps add column if not exists world_shadow_strength real;    -- 0 = off; >0 = walls cast a map-wide directional shadow
 -- On-token turn markers + badge sizing (DM-set, synced to the table):
 alter table public.vtt_maps add column if not exists turn_marker_scope text not null default 'all';   -- 'all' | 'players'
 alter table public.vtt_maps add column if not exists turn_marker_view  text not null default 'all';   -- 'all' | 'dm'
 alter table public.vtt_maps add column if not exists turn_marker_style text not null default 'ring';  -- 'ring' | 'chevron' | 'glow'
 alter table public.vtt_maps add column if not exists token_badge_scale real not null default 1;       -- scales conditions/HP/AC/elev badges
-alter table public.vtt_maps add column if not exists image_url_full text;  -- full-res original served by the relay (P2P); imageUrl (Supabase) is the fallback
+alter table public.vtt_maps add column if not exists image_url_full text;  -- legacy baked relay URL for the full-res original
+alter table public.vtt_maps add column if not exists image_full_name text;  -- relative key of the full-res original in the GM's relay maps dir (URL built live from the current relay address)
 
 create table if not exists public.vtt_tokens (
   id            text primary key,
@@ -145,6 +150,8 @@ alter table public.vtt_walls add column if not exists see_out_ft int;
 alter table public.vtt_walls add column if not exists height_ft int;
 alter table public.vtt_walls add column if not exists no_roof boolean not null default false;
 alter table public.vtt_walls add column if not exists see_through boolean not null default false;
+alter table public.vtt_walls add column if not exists milky boolean not null default false;
+alter table public.vtt_walls add column if not exists width_cells real;  -- door/window icon display width in cells (null = default 0.7)
 
 create table if not exists public.vtt_transitions (
   id           text primary key,
@@ -174,6 +181,7 @@ create table if not exists public.vtt_lights (
 create index if not exists vtt_lights_map on public.vtt_lights(map_id);
 alter table public.vtt_lights add column if not exists height_ft int;
 alter table public.vtt_lights add column if not exists player_switch boolean not null default false;
+alter table public.vtt_lights add column if not exists icon text;  -- which SVG shows on the light/switch (torch/lantern/candle path); null = default switch glyph
 
 create table if not exists public.vtt_fog (
   id           text primary key,

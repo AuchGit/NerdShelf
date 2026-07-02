@@ -93,7 +93,7 @@ export default function ToolSettings({ map }) {
             <>
               <div style={S.sep} />
               {Object.entries(LIGHT_PRESETS).map(([id, p]) => (
-                <button key={id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft`} onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color })}>{p.label}</button>
+                <button key={id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft`} onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, preset: id, icon: p.icon })}>{p.label}</button>
               ))}
               <span style={S.muted}>Hell {(ui.lightDefaults || {}).brightFt ?? 20}ft</span>
               <input type="range" min="0" max="120" step="5" value={(ui.lightDefaults || {}).brightFt ?? 20} onChange={(e) => setLightDefaults({ brightFt: +e.target.value })} style={{ width: 90 }} />
@@ -128,6 +128,10 @@ export default function ToolSettings({ map }) {
               <input type="range" min="0" max="1" step="0.05" value={map.lightContrast ?? 0.5} onChange={(e) => updateMap(map.id, { lightContrast: +e.target.value })} style={{ width: 80 }} title="Kontrast zwischen Lichtstufen" />
               <span style={S.muted}>Weichheit</span>
               <input type="range" min="0" max="12" step="1" value={map.lightBlur ?? 0} onChange={(e) => updateMap(map.id, { lightBlur: +e.target.value })} style={{ width: 80 }} title="Weichheit der Übergänge (Blur)" />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title="Geschlossene Wand-Loops innen immer dunkel; Fenster/offene Türen lassen Grundlicht hinein.">
+                <input type="checkbox" checked={!!map.enclosedDark} onChange={(e) => updateMap(map.id, { enclosedDark: e.target.checked })} />
+                <span style={S.muted}>Räume dunkel</span>
+              </label>
             </>
           )}
           <span style={S.hint}>Licht erhellt nur dort, wo Dunkelheit ist (Grundlicht „Dunkel/Dämmrig" oder gemalte Dunkelflächen).</span>

@@ -9,7 +9,7 @@ import { useVtt, useIsDM } from '../state/useVtt';
 import { addMap, setActiveMap, setViewedMap, setMapPlayerVisible, addWalls, addLights, removeMap, updateMap } from '../state/actions';
 import { importMapImage } from '../lib/mapImage';
 import { parseUvtt } from '../lib/uvtt';
-import { uploadMapImage, uploadMapToRelay } from '../lib/mapStorage';
+import { uploadMapImage, uploadMapToRelay, saveMapOriginalLocal } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
 
 export default function MapManager() {
@@ -31,18 +31,20 @@ export default function MapManager() {
     try {
       const { blob, hash, width, height, bytes } = await importMapImage(file);
       const { imagePath, imageUrl } = await uploadMapImage(campaignId, blob, hash);
-      // In relay mode, ALSO push the full-res ORIGINAL to the GM's relay so
-      // players fetch it uncompressed (P2P); Supabase stays the fallback.
-      let imageUrlFull = null;
-      if (getConnectionMode() === 'relay' && getRelayUrl()) {
-        try {
-          const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-          imageUrlFull = await uploadMapToRelay(getRelayUrl(), `${hash}.${ext}`, file);
-        } catch (e3) { console.warn('[vtt] relay map upload failed, using Supabase only', e3?.message); }
+      // ALWAYS keep the UNTOUCHED original in the relay's local maps dir (desktop)
+      // so a direct connection later serves it full-res — no matter that the relay
+      // wasn't running yet at upload time. The serve URL is built live from the
+      // current relay address at render time (see VttRenderer).
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const imageFullName = await saveMapOriginalLocal(`${hash}.${ext}`, file);
+      // If we're already hosting, also PUT it now so an in-progress session gets
+      // it immediately (otherwise it's there for the next host start).
+      if (imageFullName && getConnectionMode() === 'relay' && getRelayUrl()) {
+        try { await uploadMapToRelay(getRelayUrl(), imageFullName, file); } catch (e3) { console.warn('[vtt] relay map PUT failed', e3?.message); }
       }
-      const id = addMap({ name: file.name.replace(/\.[^.]+$/, ''), imageUrl, imageUrlFull, imagePath, width, height });
+      const id = addMap({ name: file.name.replace(/\.[^.]+$/, ''), imageUrl, imageFullName, imagePath, width, height });
       setActiveMap(id);
-      console.log(`[vtt] map uploaded: ${width}×${height}, ${(bytes / 1024).toFixed(0)} KB${imageUrlFull ? ' (+ full-res via relay)' : ''}`);
+      console.log(`[vtt] map uploaded: ${width}×${height}, ${(bytes / 1024).toFixed(0)} KB${imageFullName ? ' (+ full-res original kept for direct connection)' : ''}`);
     } catch (e2) {
       setErr(e2.message);
     } finally {

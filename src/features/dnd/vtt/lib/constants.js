@@ -125,7 +125,27 @@ export const DISPOSITIONS = [
 // Quick presets for "luminous tokens" (a torch-bearer, a lantern, …). `null`
 // turns a token's light off. Keyed list keeps the cycle order data-driven.
 export const LIGHT_PRESETS = {
-  torch:   { label: 'Fackel',   brightFt: 20, dimFt: 40, color: '#ffb866' },
-  lantern: { label: 'Laterne',  brightFt: 30, dimFt: 60, color: '#ffd9a0' },
-  candle:  { label: 'Kerze',    brightFt: 5,  dimFt: 10, color: '#ffe0b0' },
+  torch:   { label: 'Fackel',   brightFt: 20, dimFt: 40, color: '#ffb866', icon: '/Assets/map/torch.svg' },
+  lantern: { label: 'Laterne',  brightFt: 30, dimFt: 60, color: '#ffd9a0', icon: '/Assets/map/lantern.svg' },
+  candle:  { label: 'Kerze',    brightFt: 5,  dimFt: 10, color: '#ffe0b0', icon: '/Assets/map/candle.svg' },
+};
+
+// Distinct, stable per-player colours (derived from the user id — no storage),
+// used to tint the ring of NPC tokens a player owns/controls.
+export const PLAYER_RING_COLORS = ['#4aa3ff', '#4ade80', '#e0af68', '#c678dd', '#ff6b6b', '#3fb56b', '#56b6c2', '#ff9533', '#d291ff', '#f7768e'];
+export function playerColor(userId) {
+  if (!userId) return '#8a8f98';
+  const s = String(userId);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return PLAYER_RING_COLORS[h % PLAYER_RING_COLORS.length];
+}
+
+// Icon choices for a light / light switch (DM-pickable). `''` = the default
+// light-switch glyph. Keys map to /Assets/map/*.svg.
+export const LIGHT_ICONS = {
+  '': { label: 'Schalter', src: '/Assets/map/lightswitch.svg' },
+  torch: { label: 'Fackel', src: '/Assets/map/torch.svg' },
+  lantern: { label: 'Laterne', src: '/Assets/map/lantern.svg' },
+  candle: { label: 'Kerze', src: '/Assets/map/candle.svg' },
 };

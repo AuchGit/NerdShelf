@@ -49,12 +49,12 @@ export default function TurnNotice() {
   if (!show) return null;
   const isTurn = mode === 'turn';
   const accent = isTurn ? '#43d17a' : '#ffd24a';
-  const name = tokens[isTurn ? activeTokenId : nextTokenId]?.name || 'Your character';
+  const name = tokens[isTurn ? activeTokenId : nextTokenId]?.name || 'Dein Charakter';
   return (
     <div style={S.wrap}>
       <div style={{ ...S.badge, border: `3px solid ${accent}`, boxShadow: `0 0 60px -8px ${accent}` }}>
-        <div style={{ ...S.title, color: accent }}>{isTurn ? 'Your turn' : 'Next turn'}</div>
-        <div style={S.sub}>{name} — round {init.round}. {isTurn ? 'Click anywhere to continue.' : 'Get ready — you’re up next.'}</div>
+        <div style={{ ...S.title, color: accent }}>{isTurn ? 'Du bist dran!' : 'Gleich bist du dran'}</div>
+        <div style={S.sub}>{name} — Runde {init.round}. {isTurn ? 'Klicke irgendwohin, um fortzufahren.' : 'Mach dich bereit — du bist als Nächstes dran.'}</div>
       </div>
     </div>
   );
@@ -62,7 +62,7 @@ export default function TurnNotice() {
 
 const S = {
   wrap: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 80 },
-  badge: { pointerEvents: 'none', textAlign: 'center', padding: '30px 64px', borderRadius: 20, background: 'rgba(15,17,21,0.92)' },
+  badge: { pointerEvents: 'none', textAlign: 'center', padding: '30px 64px', borderRadius: 20, background: 'color-mix(in srgb, var(--color-bg-elevated) 92%, transparent)' },
   title: { fontSize: 56, fontWeight: 900, letterSpacing: 1, lineHeight: 1 },
   sub: { marginTop: 12, fontSize: 18, color: 'var(--color-text-muted)' },
 };

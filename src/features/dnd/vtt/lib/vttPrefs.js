@@ -42,6 +42,18 @@ export function getUiScale() { const v = parseFloat(read(SCALE_KEY, '1')); retur
 export function setUiScale(v) { write(SCALE_KEY, v); }
 export function useUiScale() { return usePref(getUiScale); }
 
+// ── token badge size (personal; multiplies the DM's map-wide badge scale) ──
+const BADGE_KEY = 'nerdshelf:vttTokenBadgeScale';
+export function getTokenBadgeScale() { const v = parseFloat(read(BADGE_KEY, '1')); return Number.isFinite(v) && v > 0 ? Math.min(2.5, Math.max(0.4, v)) : 1; }
+export function setTokenBadgeScale(v) { write(BADGE_KEY, v); }
+export function useTokenBadgeScale() { return usePref(getTokenBadgeScale); }
+
+// ── AC badge size (personal; on top of the general token-badge size) ──
+const AC_KEY = 'nerdshelf:vttAcBadgeScale';
+export function getAcBadgeScale() { const v = parseFloat(read(AC_KEY, '1')); return Number.isFinite(v) && v > 0 ? Math.min(2.5, Math.max(0.4, v)) : 1; }
+export function setAcBadgeScale(v) { write(AC_KEY, v); }
+export function useAcBadgeScale() { return usePref(getAcBadgeScale); }
+
 // ── memory style ──
 const MEM_KEY = 'nerdshelf:vttMemoryStyle';
 export function getMemoryStyle() { return read(MEM_KEY, 'grayscale') === 'darkened' ? 'darkened' : 'grayscale'; }
@@ -91,5 +103,11 @@ const T_CLIMB = 'nerdshelf:vttClimbHeightStyle';
 export function getClimbHeightStyle() { const v = read(T_CLIMB, 'normal'); return ['loud', 'normal', 'minimal', 'off'].includes(v) ? v : 'normal'; }
 export function setClimbHeightStyle(v) { write(T_CLIMB, v); }
 export function useClimbHeightStyle() { return usePref(getClimbHeightStyle); }
+
+// ── difficult-terrain prominence: 'loud' | 'normal' | 'minimal' | 'off' ──
+const T_DIFF = 'nerdshelf:vttDifficultStyle';
+export function getDifficultStyle() { const v = read(T_DIFF, 'normal'); return ['loud', 'normal', 'minimal', 'off'].includes(v) ? v : 'normal'; }
+export function setDifficultStyle(v) { write(T_DIFF, v); }
+export function useDifficultStyle() { return usePref(getDifficultStyle); }
 
 export const VTT_PREFS_EVENT = EVENT;

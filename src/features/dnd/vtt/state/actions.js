@@ -2,6 +2,7 @@
 // (sync) or applyLocal() (local-only UI). Keeping them here means components
 // never hand-write op objects and the op vocabulary stays in one place.
 import { apply, applyLocal, getState } from './store';
+import { toast } from '../lib/toast';
 import { DEFAULT_GRID, PING_TTL_MS, DEFAULT_LIGHT, LIGHT_PRESETS, DISPOSITIONS } from '../lib/constants';
 import { patchCombat } from '../sync/characterBinding';
 import { snapToGrid } from '../lib/geometry';
@@ -175,6 +176,24 @@ export function addWall(wall) {
   return w.id;
 }
 export const updateWall = (id, patch) => apply({ type: 'wall/update', id, patch });
+// Toggle a door/window open/closed. Optimistic + broadcast for instant feedback;
+// a non-GM also calls the security-definer RPC so it PERSISTS (the wall table is
+// GM-only under RLS — without this the DB echo reverts the door, "springs back").
+export function toggleDoor(id) {
+  const w = getState().walls[id];
+  if (!w) return;
+  apply({ type: 'wall/update', id, patch: { open: !w.open } });
+  // RPC only when the direct table write can NOT land (a real non-GM player).
+  // A GM in player VIEW still writes directly — calling the toggle-RPC on top
+  // would flip the fresh value straight back ("Tür geht sofort wieder zu").
+  const sess = getState().session;
+  if (sess.role !== 'dm' && !sess.realGM && w.kind === 'door') {
+    import('../../../../core/supabase/client')
+      .then(({ supabase }) => supabase.rpc('vtt_toggle_door', { p_wall: id }))
+      .then((res) => res?.error && toast('Tür-Status evtl. nicht gespeichert', 'warning'))
+      .catch(() => toast('Tür-Status evtl. nicht gespeichert', 'warning'));
+  }
+}
 export const removeWall = (id) => apply({ type: 'wall/remove', id });
 // Batch insert (e.g. UVTT import) — one op, one reconcile.
 export function addWalls(mapId, wallDefs) {
@@ -236,10 +255,14 @@ export function toggleLight(id) {
   if (!lt) return;
   const enabled = !(lt.enabled !== false);
   apply({ type: 'light/update', id, patch: { enabled } });
-  if (getState().session.role !== 'dm') {
+  // Same double-toggle guard as toggleDoor: a real GM's direct write already
+  // persisted; the toggle-RPC would flip it right back.
+  const sessL = getState().session;
+  if (sessL.role !== 'dm' && !sessL.realGM) {
     import('../../../../core/supabase/client')
       .then(({ supabase }) => supabase.rpc('vtt_toggle_light', { p_light: id }))
-      .catch(() => { /* live broadcast already applied; persistence best-effort */ });
+      .then((res) => res?.error && toast('Licht-Status evtl. nicht gespeichert', 'warning'))
+      .catch(() => toast('Licht-Status evtl. nicht gespeichert', 'warning'));
   }
 }
 // Default parameters for newly placed lights (set in the light tool settings).
@@ -464,9 +487,11 @@ export function startCombat(tokenIds, tokensById, opts = {}) {
 export const endCombat = () => setInitiative({ order: [], activeIndex: 0, round: 1, active: false });
 
 // ---- pings ----
-export function ping(mapId, x, y, color = '#ffe066') {
+// `focus: true` (DM only, Ctrl+Alt-Klick) pans every player's camera to the
+// ping so the whole table looks at the same spot.
+export function ping(mapId, x, y, color = '#ffe066', focus = false) {
   const id = uid('ping_');
-  apply({ type: 'ping/add', ping: { id, mapId, x, y, color, at: Date.now() } });
+  apply({ type: 'ping/add', ping: { id, mapId, x, y, color, at: Date.now(), focus: !!focus } });
   setTimeout(() => apply({ type: 'ping/expire', id }), PING_TTL_MS);
 }
 
@@ -481,6 +506,9 @@ export const setHoverToken = (hoverTokenId) => applyLocal({ type: 'ui/set', ui: 
 // Token ids whose context menu is open — while any is open, an empty map click
 // won't deselect (so the menu's token stays the focus). Local-only.
 export const setContextTokens = (contextTokenIds) => applyLocal({ type: 'ui/set', ui: { contextTokenIds } });
+// Dash preview: when on, the active combatant's movement overlay extends to ×2
+// speed (amber). Local-only per viewer (each player toggles their own preview).
+export const setShowDash = (v) => applyLocal({ type: 'ui/set', ui: { showDash: !!v } });
 // One exclusive selection across tokens / zones / walls. Token selection also
 // supports a multi-set (selectedTokenIds) for marquee / shift-click → combat.
 export const selectToken = (selectedTokenId) =>

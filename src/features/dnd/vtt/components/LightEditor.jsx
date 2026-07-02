@@ -4,6 +4,7 @@
 import { Panel } from '../../../../shared/ui';
 import { useVtt } from '../state/useVtt';
 import { updateLight, removeLight, selectLight } from '../state/actions';
+import { LIGHT_ICONS } from '../lib/constants';
 
 export default function LightEditor() {
   const id = useVtt((s) => s.ui.selectedLightId);
@@ -36,6 +37,19 @@ export default function LightEditor() {
         <input type="checkbox" checked={!!light.playerSwitch} onChange={(e) => set({ playerSwitch: e.target.checked })} />
         Spieler dürfen schalten (Lichtschalter)
       </label>
+      <Row label="Symbol (auf Schalter / Marker)">
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {Object.entries(LIGHT_ICONS).map(([key, ic]) => {
+            const active = (light.icon || '') === ic.src || (key === '' && !light.icon);
+            return (
+              <button key={key} title={ic.label} onClick={() => set({ icon: key === '' ? null : ic.src })}
+                style={{ ...S.iconBtn, ...(active ? S.iconActive : null) }}>
+                <img src={ic.src} alt={ic.label} style={{ width: 18, height: 18, objectFit: 'contain' }} />
+              </button>
+            );
+          })}
+        </div>
+      </Row>
       <button style={S.remove} onClick={() => { removeLight(id); selectLight(null); }}>Licht entfernen</button>
     </Panel>
   );
@@ -52,4 +66,6 @@ function Row({ label, children }) {
 
 const S = {
   remove: { width: '100%', marginTop: 4, padding: '6px', background: 'transparent', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
+  iconBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
+  iconActive: { border: '1px solid var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)' },
 };

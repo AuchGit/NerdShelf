@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.0.5"
+version = "1.0.6"
 description = "A Tauri App"
 authors = ["you"]
 license = ""
@@ -32,3 +32,12 @@ tauri-plugin-opener = "2"
 # CORS-free image fetch (5e.tools token art lacks ACAO headers, so the webview
 # can't use it as a WebGL texture directly — we fetch the bytes via Rust).
 tauri-plugin-http = "2"
+
+# Embedded VTT relay: a WebSocket fan-out hub + HTTP map-file server hosted by
+# the GM's app itself (auto-started on session start) — so direct/P2P sessions
+# need no separate `node scripts/vtt-relay.mjs`.
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["cors"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "fs", "io-util"] }
+futures-util = "0.3"
+if-addrs = "0.13"  # enumerate local network interfaces (DM picks which IPs to share over)

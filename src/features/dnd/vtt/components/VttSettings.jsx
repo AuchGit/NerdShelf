@@ -1,17 +1,19 @@
 // VTT "overall settings" — personal, per-device display prefs (localStorage via
 // vttPrefs). Opened from the gear in the VTT top bar. Not shared game state.
 import {
-  useUiScale, setUiScale, useMemoryStyle, setMemoryStyle,
+  useUiScale, setUiScale, useTokenBadgeScale, setTokenBadgeScale, useAcBadgeScale, setAcBadgeScale, useMemoryStyle, setMemoryStyle,
   useMemoryBrightness, setMemoryBrightness,
   useShowLightSwitches, setShowLightSwitches,
   useTerrainOpacity, setTerrainOpacity, useTerrainPattern, setTerrainPattern,
-  useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle,
+  useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle, useDifficultStyle, setDifficultStyle,
   useInitiativeRollEnabled, setInitiativeRollEnabled,
   useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
 } from '../lib/vttPrefs';
 
 export default function VttSettings({ onClose }) {
   const uiScale = useUiScale();
+  const badgeScale = useTokenBadgeScale();
+  const acScale = useAcBadgeScale();
   const memoryStyle = useMemoryStyle();
   const memoryBrightness = useMemoryBrightness();
   const showSwitches = useShowLightSwitches();
@@ -19,6 +21,7 @@ export default function VttSettings({ onClose }) {
   const tPattern = useTerrainPattern();
   const tColor = useTerrainColor();
   const climb = useClimbHeightStyle();
+  const difficult = useDifficultStyle();
   const initRoll = useInitiativeRollEnabled();
   const connMode = useConnectionMode();
   const relayUrl = useRelayUrl();
@@ -33,6 +36,12 @@ export default function VttSettings({ onClose }) {
         <div style={S.body}>
           <Row label={`UI-Größe (${Math.round(uiScale * 100)}%)`}>
             <input type="range" min="0.7" max="1.6" step="0.05" value={uiScale} onChange={(e) => setUiScale(+e.target.value)} style={{ width: '100%' }} />
+          </Row>
+          <Row label={`Token-Badge-Größe (${Math.round(badgeScale * 100)}%) — Conditions/HP/AC-Badges für mich`}>
+            <input type="range" min="0.4" max="2.5" step="0.1" value={badgeScale} onChange={(e) => setTokenBadgeScale(+e.target.value)} style={{ width: '100%' }} />
+          </Row>
+          <Row label={`AC-Badge-Größe (${Math.round(acScale * 100)}%) — zusätzlich nur für die AC-Badge`}>
+            <input type="range" min="0.4" max="2.5" step="0.1" value={acScale} onChange={(e) => setAcBadgeScale(+e.target.value)} style={{ width: '100%' }} />
           </Row>
 
           <div style={S.section}>Erkundeter Bereich (erinnert, nicht sichtbar)</div>
@@ -73,6 +82,13 @@ export default function VttSettings({ onClose }) {
             <div style={S.seg}>
               {[['loud', 'Sehr deutlich'], ['normal', 'Normal'], ['minimal', 'Minimal'], ['off', 'Aus']].map(([v, l]) => (
                 <button key={v} onClick={() => setClimbHeightStyle(v)} style={{ ...S.segBtn, ...(climb === v ? S.segOn : null) }}>{l}</button>
+              ))}
+            </div>
+          </Row>
+          <Row label="Schwieriges Gelände anzeigen">
+            <div style={S.seg}>
+              {[['loud', 'Sehr deutlich'], ['normal', 'Normal'], ['minimal', 'Minimal'], ['off', 'Aus']].map(([v, l]) => (
+                <button key={v} onClick={() => setDifficultStyle(v)} style={{ ...S.segBtn, ...(difficult === v ? S.segOn : null) }}>{l}</button>
               ))}
             </div>
           </Row>

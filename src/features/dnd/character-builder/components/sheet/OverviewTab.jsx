@@ -4261,7 +4261,7 @@ function resolveFavorite(favKey, character, extras = {}) {
   return null
 }
 
-function FavoritesSection({ character, computed, applyCharacter, swapHeroCol, heroColSwapped }) {
+export function FavoritesSection({ character, computed, applyCharacter, swapHeroCol, heroColSwapped }) {
   const favs = getFavorites(character)
 
   // Lazy data fetches — only when there's at least one favorite of

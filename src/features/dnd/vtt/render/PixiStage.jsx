@@ -21,9 +21,12 @@ export default function PixiStage({ onContextMenu, onTransitionPrompt, onTokenAc
     // StrictMode double-invokes this effect, so the cleanup waits on `ready`.
     const ready = (async () => {
       const a = new Application();
+      // Canvas clear colour from the active NerdShelf theme (read once at init;
+      // Pixi wants a concrete colour, not a CSS var).
+      const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-sunken').trim();
       await a.init({
         resizeTo: wrap,
-        background: '#0b0e14',
+        background: themeBg || '#0b0e14',
         antialias: true,
         autoDensity: true,
         resolution: window.devicePixelRatio || 1,

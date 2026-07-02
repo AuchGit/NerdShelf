@@ -51,6 +51,12 @@
       ]
     },
     {
+      "identifier": "fs:allow-write-file",
+      "allow": [
+        { "path": "$APPLOCALDATA/**" }
+      ]
+    },
+    {
       "identifier": "fs:allow-mkdir",
       "allow": [
         { "path": "$HOME/**" },

@@ -14,6 +14,8 @@
 // (see scripts/vtt-schema.sql). Maps store an `image_path` in Storage; clients
 // get a public URL.
 
+import { toast } from '../lib/toast';
+
 const BUCKET = 'vtt-maps';
 const MOVE_DEBOUNCE_MS = 250;
 const LOCAL_ONLY = (t) => !t || t.startsWith('ui/') || t === '__reqState' || t === '__snapshot' || t === 'session/set' || t === 'ruler/set' || t.startsWith('ping/');
@@ -54,7 +56,19 @@ export class SupabaseAdapter {
       this.channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `campaign_id=eq.${cid}` },
         (e) => { const op = this.rowEventToOp(table, e); if (op) this.handler?.(op); });
     }
-    this.channel.subscribe();
+    // The first fetchSnapshot() can race an unready session/auth/RLS on VTT entry
+    // and come back empty (blank map + tokens until a manual F5). Once the
+    // realtime channel is actually LIVE, re-fetch ONCE to converge — the DB is the
+    // source of truth at load, and hydrate replaces state idempotently.
+    this._converged = false;
+    this.channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED' && !this._converged) {
+        this._converged = true;
+        this.fetchSnapshot()
+          .then((s) => this.handler?.({ type: '__snapshot', snapshot: s }))
+          .catch(() => { /* backstop + next op will still converge */ });
+      }
+    });
   }
 
   send(op) {
@@ -63,7 +77,11 @@ export class SupabaseAdapter {
     this.channel?.send({ type: 'broadcast', event: 'op', payload: { senderId: this.senderId, op } });
     // 3) durable write (token drags debounced)
     if (op.type === 'token/move') this.debouncedMove(op);
-    else this.persist(op).catch((err) => console.warn('[vtt] persist failed', op.type, err?.message));
+    else {
+      this.persist(op)
+        .then((res) => { if (res?.error) { console.warn('[vtt] persist error', op.type, res.error.message); toast(`Änderung nicht gespeichert (${op.type}) — ${res.error.message}`); } })
+        .catch((err) => { console.warn('[vtt] persist failed', op.type, err?.message); toast(`Änderung nicht gespeichert (${op.type})`); });
+    }
   }
 
   debouncedMove(op) {
@@ -125,6 +143,11 @@ export class SupabaseAdapter {
       eq('vtt_maps'), eq('vtt_tokens'), eq('vtt_zones'), eq('vtt_walls'), eq('vtt_transitions'), eq('vtt_lights'), eq('vtt_fog'),
       sb.from('vtt_campaign_state').select('*').eq('campaign_id', cid).maybeSingle(),
     ]);
+    const errs = [maps, tokens, zones, walls, transitions, lights, fog, meta].filter((r) => r.error);
+    if (errs.length) {
+      console.warn('[vtt] snapshot load errors:', errs.map((r) => r.error.message).join('; '));
+      toast('Kampagnen-Daten unvollständig geladen — wird automatisch erneut versucht', 'warning');
+    }
     return {
       maps: keyBy((maps.data || []).map((r) => this.rowToMap(r))),
       tokens: keyBy((tokens.data || []).map(rowToToken)),
@@ -138,6 +161,7 @@ export class SupabaseAdapter {
       journal: meta.data?.journal || [],
       presentedHandout: meta.data?.presented_handout || null,
       paused: !!meta.data?.paused,
+      announcedRelayUrl: meta.data?.relay_url || null,
     };
   }
 
@@ -160,6 +184,7 @@ export class SupabaseAdapter {
         if (row.journal) this.handler?.({ type: 'journal/set', journal: row.journal });
         this.handler?.({ type: 'handout/present', id: row.presented_handout || null });
         this.handler?.({ type: 'session/pause', paused: !!row.paused });
+        this.handler?.({ type: 'relay/announce', url: row.relay_url || null });
         return row.initiative ? { type: 'initiative/set', initiative: row.initiative } : null;
       default: return null;
     }
@@ -173,6 +198,9 @@ export class SupabaseAdapter {
       lightingEnabled: r.lighting_enabled !== false,
       lightStyle: r.light_style || 'modern',
       lightBaseline: r.light_baseline || 'bright',
+      enclosedDark: r.enclosed_dark === true,
+      worldShadowDir: r.world_shadow_dir ?? 135,
+      worldShadowStrength: r.world_shadow_strength ?? 0,
       darkness: r.darkness || [],
       terrain: r.terrain || [],
       memoryStyle: r.memory_style || 'darkened',
@@ -185,6 +213,7 @@ export class SupabaseAdapter {
       turnMarkerStyle: r.turn_marker_style || 'ring',
       tokenBadgeScale: r.token_badge_scale ?? 1,
       imageUrlFull: r.image_url_full || null,
+      imageFullName: r.image_full_name || null,
     };
   }
 
@@ -199,11 +228,11 @@ function mapToRow(m, cid) {
   return { id: m.id, campaign_id: cid, name: m.name, image_path: m.imagePath || null,
     width: m.width, height: m.height, grid: m.grid, fog_mode: m.fogMode || 'none',
     levels: m.levels || [], player_visible: !!m.playerVisible, lighting_enabled: m.lightingEnabled !== false, light_style: m.lightStyle || 'modern',
-    light_baseline: m.lightBaseline || 'bright', darkness: m.darkness || [], terrain: m.terrain || [],
+    light_baseline: m.lightBaseline || 'bright', enclosed_dark: m.enclosedDark === true, world_shadow_dir: m.worldShadowDir ?? 135, world_shadow_strength: m.worldShadowStrength ?? 0, darkness: m.darkness || [], terrain: m.terrain || [],
     memory_style: m.memoryStyle || 'darkened', memory_strength: m.memoryStrength ?? 0.55,
     light_contrast: m.lightContrast ?? 0.5, light_blur: m.lightBlur ?? 0, bloody_tokens: m.bloodyTokens === true,
     turn_marker_scope: m.turnMarkerScope || 'all', turn_marker_view: m.turnMarkerView || 'all', turn_marker_style: m.turnMarkerStyle || 'ring', token_badge_scale: m.tokenBadgeScale ?? 1,
-    image_url_full: m.imageUrlFull || null };
+    image_url_full: m.imageUrlFull || null, image_full_name: m.imageFullName || null };
 }
 function mapPatchToRow(p) {
   const r = {};
@@ -214,6 +243,9 @@ function mapPatchToRow(p) {
   if ('lightingEnabled' in p) r.lighting_enabled = p.lightingEnabled;
   if ('lightStyle' in p) r.light_style = p.lightStyle;
   if ('lightBaseline' in p) r.light_baseline = p.lightBaseline;
+  if ('enclosedDark' in p) r.enclosed_dark = p.enclosedDark;
+  if ('worldShadowDir' in p) r.world_shadow_dir = p.worldShadowDir;
+  if ('worldShadowStrength' in p) r.world_shadow_strength = p.worldShadowStrength;
   if ('darkness' in p) r.darkness = p.darkness;
   if ('terrain' in p) r.terrain = p.terrain;
   if ('memoryStyle' in p) r.memory_style = p.memoryStyle;
@@ -226,6 +258,7 @@ function mapPatchToRow(p) {
   if ('turnMarkerStyle' in p) r.turn_marker_style = p.turnMarkerStyle;
   if ('tokenBadgeScale' in p) r.token_badge_scale = p.tokenBadgeScale;
   if ('imageUrlFull' in p) r.image_url_full = p.imageUrlFull;
+  if ('imageFullName' in p) r.image_full_name = p.imageFullName;
   if ('grid' in p) r.grid = p.grid;
   if ('imagePath' in p) r.image_path = p.imagePath;
   return r;
@@ -251,10 +284,10 @@ function zonePatchToRow(p) {
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function wallToRow(w, cid) {
-  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough };
+  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough, milky: !!w.milky, width_cells: w.widthCells ?? null };
 }
 function wallPatchToRow(p) {
-  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through' };
+  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells' };
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function transitionToRow(t, cid) {
@@ -266,7 +299,7 @@ function transitionPatchToRow(p) {
 }
 function lightToRow(l, cid) {
   return { id: l.id, campaign_id: cid, map_id: l.mapId, level: l.level || null,
-    x: l.x, y: l.y, bright_ft: l.brightFt, dim_ft: l.dimFt, color: l.color, enabled: l.enabled !== false, height_ft: l.heightFt ?? null, player_switch: !!l.playerSwitch };
+    x: l.x, y: l.y, bright_ft: l.brightFt, dim_ft: l.dimFt, color: l.color, enabled: l.enabled !== false, height_ft: l.heightFt ?? null, player_switch: !!l.playerSwitch, icon: l.icon || null };
 }
 function lightPatchToRow(p) {
   const map = { mapId: 'map_id', brightFt: 'bright_ft', dimFt: 'dim_ft', heightFt: 'height_ft', playerSwitch: 'player_switch' };
@@ -284,14 +317,14 @@ function rowToZone(r) {
     x: r.x, y: r.y, params: r.params || {}, color: r.color, opacity: r.opacity, losWalls: r.los_walls !== false };
 }
 function rowToWall(r) {
-  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true };
+  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, widthCells: r.width_cells ?? null };
 }
 function rowToTransition(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [] };
 }
 function rowToLight(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, x: r.x, y: r.y,
-    brightFt: r.bright_ft, dimFt: r.dim_ft, color: r.color, enabled: r.enabled !== false, heightFt: r.height_ft ?? null, playerSwitch: r.player_switch === true };
+    brightFt: r.bright_ft, dimFt: r.dim_ft, color: r.color, enabled: r.enabled !== false, heightFt: r.height_ft ?? null, playerSwitch: r.player_switch === true, icon: r.icon || null };
 }
 
 function keyBy(arr) { const o = {}; for (const e of arr) o[e.id] = e; return o; }
