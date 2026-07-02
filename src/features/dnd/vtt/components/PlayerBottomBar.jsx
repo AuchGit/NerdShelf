@@ -171,7 +171,7 @@ export default function PlayerBottomBar() {
     if (id === 'actions') return <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
     if (id === 'specials') return <Specials />;
     if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} addOne={addQuickItem} toggleEquip={toggleEquipItem} />;
-    if (id === 'favorites') return <FavoritesSection character={character} computed={computed} applyCharacter={applyCharacter} />;
+    if (id === 'favorites') return <FavoritesSection character={character} computed={computed} applyCharacter={applyCharacter} columns={4} />;
     return null;
   };
   // Which toggle buttons to offer (Items only when there are quick items).
@@ -274,7 +274,7 @@ export default function PlayerBottomBar() {
 
       {/* Action economy + panel toggles (Actions / Features-Maneuvers / Items).
           Each opens as a bar that stacks upward; toggling moves it to the top. */}
-      <Group label="Bereiche">
+      <Group label="Bereiche" grow>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <CombatEconomy value={status.economy || {}} character={character} onChange={(next) => updateCharacter('status.economy', next)} />
           {panelButtons.map((id) => (
@@ -290,9 +290,9 @@ export default function PlayerBottomBar() {
   );
 }
 
-function Group({ label, children }) {
+function Group({ label, children, grow }) {
   return (
-    <div style={S.group}>
+    <div style={grow ? { ...S.group, flex: '1 1 280px', minWidth: 0 } : S.group}>
       <div style={S.groupLbl}>{label}</div>
       {children}
     </div>
@@ -350,14 +350,14 @@ const S = {
   // taller (drag the handle) when wrapping needs more room.
   row: { flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', alignContent: 'center', flexWrap: 'wrap', gap: '6px 18px', padding: '4px 16px 8px', overflowX: 'hidden', overflowY: 'auto' },
   group: { display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 },
-  groupLbl: { fontSize: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 },
+  groupLbl: { fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 },
   hpTrack: { height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginTop: 2 },
   hpFill: { height: '100%', transition: 'width 150ms' },
   dmgGroup: { display: 'flex', alignItems: 'center', height: 30, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--color-surface)' },
   dmgBtn: { width: 28, height: '100%', border: 'none', background: 'transparent', color: 'var(--color-danger)', fontSize: 18, fontWeight: 800, cursor: 'pointer' },
   healBtn: { width: 28, height: '100%', border: 'none', background: 'transparent', color: 'var(--accent-green,#4ade80)', fontSize: 18, fontWeight: 800, cursor: 'pointer' },
   dmgInput: { width: 44, height: '100%', border: 'none', borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text)', textAlign: 'center', fontWeight: 700, outline: 'none' },
-  pipLbl: { fontSize: 9, color: 'var(--color-text-muted)', marginBottom: 2, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  pipLbl: { fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   acBadge: { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 'var(--radius-md)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', cursor: 'pointer' },
   acInsp: { border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 18%, transparent)', boxShadow: '0 0 10px -2px var(--color-warning,#e0af68)' },
   qa: { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 4px 2px 8px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', cursor: 'default', maxWidth: 150, flexShrink: 0 },
@@ -374,8 +374,8 @@ const S = {
   panelTitle: { fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
   panelClose: { cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 13, padding: '0 2px' },
   panelScroll: { overflowY: 'auto', padding: '6px 10px 10px' },
-  inspOn: { flexShrink: 0, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 20%, transparent)', color: 'var(--color-warning,#e0af68)', fontWeight: 700, cursor: 'pointer' },
+  inspOn: { flexShrink: 0, padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 20%, transparent)', color: 'var(--color-warning,#e0af68)', fontWeight: 700, cursor: 'pointer', fontSize: 'var(--fs-md)' },
   inspOff: { flexShrink: 0, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 700, cursor: 'pointer' },
-  rest: { flexShrink: 0, padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontWeight: 800, cursor: 'pointer' },
+  rest: { flexShrink: 0, padding: '7px 13px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontWeight: 800, cursor: 'pointer', fontSize: 'var(--fs-md)' },
   restLong: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: '1px solid var(--color-accent)' },
 };

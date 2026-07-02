@@ -520,9 +520,11 @@ export class VttRenderer {
         }
       }
       this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, (map.tokenBadgeScale ?? 1) * getTokenBadgeScale(), bloodHp, getAcBadgeScale());
-      // DM-only local cursor light (personal pref; players never see it).
-      this.cursorGlow.visible = isDM && getDmCursorLight();
-      if (this.cursorGlow.visible) { const gs = map.grid.size * 4.2; this.cursorGlow.width = gs; this.cursorGlow.height = gs; }
+      // DM-only local cursor light — armed via pref, SHOWN only while Alt is
+      // held (players never see it either way).
+      this._glowArmed = isDM && getDmCursorLight();
+      this.cursorGlow.visible = this._glowArmed && this.keys.alt;
+      if (this._glowArmed) { const gs = map.grid.size * 4.2; this.cursorGlow.width = gs; this.cursorGlow.height = gs; }
       this.updateMovementPreview(s, map, level, base, isDM);
       this.drawTargeting(levelTokens, map.grid);
       this.transitions.update(s.transitions, map.id, level, map.grid, isDM, s.ui.selectedTransitionId, seenTransIds);
@@ -902,7 +904,7 @@ export class VttRenderer {
     const onKey = (down) => (e) => {
       if (e.key === 'Shift') this.keys.shift = down;
       if (e.code === 'Space') this.keys.space = down;
-      if (e.key === 'Alt') this.keys.alt = down;
+      if (e.key === 'Alt') { this.keys.alt = down; this.cursorGlow.visible = !!(this._glowArmed && down); if (down) e.preventDefault(); }
       if (e.key === 'Control') this.keys.ctrl = down;
     };
     const kd = onKey(true), ku = onKey(false);
@@ -1121,7 +1123,7 @@ export class VttRenderer {
       return;
     }
     const pos = this.mapPos(e);
-    if (this.cursorGlow.visible) this.cursorGlow.position.set(pos.x, pos.y);
+    if (this._glowArmed) { this.cursorGlow.position.set(pos.x, pos.y); this.cursorGlow.visible = this.keys.alt; }
     this.drawFogBrush(pos); // brush cursor preview (no-op unless fog tool)
     this.drawDarkBrushHover(pos); // brush cursor preview (no-op unless dark tool)
     if (this.lightDrag) { A.updateLight(this.lightDrag.id, { x: pos.x + this.lightDrag.offX, y: pos.y + this.lightDrag.offY }); return; }

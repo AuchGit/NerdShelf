@@ -193,7 +193,9 @@ export default function Specials() {
 }
 
 const S = {
-  wrap: { display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 2px 6px' },
+  // 4 Kategorien nebeneinander (gleiche Spaltenbreiten wie Aktionen/Pinned) —
+  // spart Höhe; weitere Kategorien fließen in die nächste Zeile.
+  wrap: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'start', padding: '2px 2px 6px' },
   empty: { color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 },
   group: { display: 'flex', flexDirection: 'column', gap: 3 },
   groupHead: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-text-muted)', padding: '2px 4px' },

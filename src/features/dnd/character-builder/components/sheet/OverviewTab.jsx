@@ -4261,7 +4261,7 @@ function resolveFavorite(favKey, character, extras = {}) {
   return null
 }
 
-export function FavoritesSection({ character, computed, applyCharacter, swapHeroCol, heroColSwapped }) {
+export function FavoritesSection({ character, computed, applyCharacter, swapHeroCol, heroColSwapped, columns }) {
   const favs = getFavorites(character)
 
   // Lazy data fetches — only when there's at least one favorite of
@@ -4315,7 +4315,7 @@ export function FavoritesSection({ character, computed, applyCharacter, swapHero
           Markiere Feats, Items, Spells, Class Features oder Species-Traits mit dem ☆-Knopf, um sie hier zur Hand zu haben.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: columns ? `repeat(${columns}, minmax(0, 1fr))` : 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
           {favs.map(key => (
             <FavoriteCard
               key={key}
