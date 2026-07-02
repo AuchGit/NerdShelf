@@ -54,6 +54,12 @@ export function getAcBadgeScale() { const v = parseFloat(read(AC_KEY, '1')); ret
 export function setAcBadgeScale(v) { write(AC_KEY, v); }
 export function useAcBadgeScale() { return usePref(getAcBadgeScale); }
 
+// ── 3D dice in the tray (personal; falls back to CSS dice when WebGL fails) ──
+const D3_KEY = 'nerdshelf:vttDice3d';
+export function getDice3d() { return read(D3_KEY, '1') !== '0'; }
+export function setDice3d(on) { write(D3_KEY, on ? null : '0'); } // default on → store only the opt-out
+export function useDice3d() { return usePref(getDice3d); }
+
 // ── memory style ──
 const MEM_KEY = 'nerdshelf:vttMemoryStyle';
 export function getMemoryStyle() { return read(MEM_KEY, 'grayscale') === 'darkened' ? 'darkened' : 'grayscale'; }

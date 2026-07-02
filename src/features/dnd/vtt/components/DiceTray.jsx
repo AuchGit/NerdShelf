@@ -1,8 +1,12 @@
 // Dice tray — a draggable bottom-right widget (position persists). Roll single
 // dice (buttons) or a full formula (e.g. 2d6+4, 1d4+2d6+5) typed or built up.
-// Dice drop from above and tumble (faked 3D via CSS rotate3d) before settling;
-// the result is mathematically random, the animation only visualises it.
+// By default real 3D dice (three.js, lazy chunk) tumble and settle in the tray;
+// the CSS dice remain as the fallback (WebGL failure / 3D off / >12 dice).
+// Either way the result is mathematically random — the animation only
+// visualises it.
 import { useEffect, useRef, useState } from 'react';
+import Dice3D from './Dice3D';
+import { useDice3d, setDice3d } from '../lib/vttPrefs';
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const POS_KEY = 'nerdshelf:vttDicePos';
@@ -61,6 +65,8 @@ export default function DiceTray() {
   const dice = roll.dice;
   const total = roll.total;
   const [formula, setFormula] = useState('');
+  const want3d = useDice3d();
+  const [webglBroken, setWebglBroken] = useState(false); // Dice3D meldet Fallback
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -103,6 +109,9 @@ export default function DiceTray() {
       <div style={S.head} onMouseDown={onTitleDown} title="Ziehen zum Verschieben">
         <span style={{ fontWeight: 700 }}>🎲 Würfel</span>
         <div style={{ display: 'flex', gap: 6 }}>
+          <button style={{ ...S.smallBtn, ...(want3d && !webglBroken ? S.toggleOn : null) }}
+            onClick={() => setDice3d(!want3d)} onMouseDown={(e) => e.stopPropagation()}
+            title={want3d ? '3D-Würfel an — Klick schaltet auf klassische Anzeige' : 'Klassische Anzeige — Klick schaltet 3D-Würfel an'}>3D</button>
           {dice.length > 0 && <button style={S.smallBtn} onClick={clear} onMouseDown={(e) => e.stopPropagation()}>Leeren</button>}
           <button style={S.smallBtn} onClick={() => setOpen(false)} onMouseDown={(e) => e.stopPropagation()}>×</button>
         </div>
@@ -120,7 +129,10 @@ export default function DiceTray() {
       <div style={S.tray}>
         {dice.length === 0
           ? <span style={S.hint}>Würfel wählen oder Formel eingeben…</span>
-          : dice.map((d) => <Die key={d.id} sides={d.sides} result={d.result} />)}
+          : (want3d && !webglBroken && dice.length <= 12)
+            // key = roll identity → every roll remounts the scene for a fresh throw
+            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))} onFallback={() => setWebglBroken(true)} />
+            : dice.map((d) => <Die key={d.id} sides={d.sides} result={d.result} />)}
       </div>
       {(total != null || dice.length > 1) && (
         <div style={S.total}>{total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}</div>
@@ -153,6 +165,7 @@ const S = {
   wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 250, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--color-border)', cursor: 'move', userSelect: 'none' },
   smallBtn: { background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '1px 7px' },
+  toggleOn: { borderColor: 'var(--color-accent)', color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' },
   picker: { display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 8px 4px' },
   dieBtn: { flex: '1 0 28%', padding: '5px 0', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: 'var(--fs-sm)' },
   formulaRow: { display: 'flex', gap: 4, padding: '4px 8px 8px' },
