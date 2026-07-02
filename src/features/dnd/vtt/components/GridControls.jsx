@@ -47,16 +47,24 @@ export default function GridControls({ map }) {
           per-keystroke commit clamped "72" to "82" mid-typing and made these
           values impossible to enter). Offset (below) aligns the origin. */}
       <Row label="Genau kalibrieren (z. B. 44×32 · 72 dpi)">
-        <div style={{ display: 'flex', gap: 6 }}>
-          <CommitNum label="px/Feld" value={Math.round(g.size)} min={8} max={1000}
-            onCommit={(v) => onSize(v)} />
-          <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
-            onCommit={(n) => onSize(map.width / n)} />
-          <CommitNum label="Felder hoch" value={Math.max(1, Math.round(map.height / g.size))} min={1} max={500}
-            onCommit={(n) => onSize(map.height / n)} />
-        </div>
+        {/* dpi always refers to the ORIGINAL image. If the import downscaled the
+            map, convert via origWidth (stored in the grid) so typing the
+            original's dpi still lands exactly on the compressed map. */}
+        {(() => {
+          const origScale = g.origWidth ? map.width / g.origWidth : 1;
+          return (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <CommitNum label="px/Feld (dpi)" value={Math.round(g.size / origScale)} min={8} max={1000}
+                onCommit={(v) => onSize(v * origScale)} />
+              <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
+                onCommit={(n) => onSize(map.width / n)} />
+              <CommitNum label="Felder hoch" value={Math.max(1, Math.round(map.height / g.size))} min={1} max={500}
+                onCommit={(n) => onSize(map.height / n)} />
+            </div>
+          );
+        })()}
         <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '3px 0 0' }}>
-          Eingabe mit Enter bestätigen. „72 dpi" = 72 px/Feld (Standard-Battlemap).
+          Eingabe mit Enter bestätigen. „72 dpi" = 72 px/Feld, bezogen auf die Originaldatei{g.origWidth && Math.round(map.width / g.origWidth * 100) !== 100 ? ' (wird automatisch auf die komprimierte Map umgerechnet)' : ''}.
         </p>
       </Row>
 

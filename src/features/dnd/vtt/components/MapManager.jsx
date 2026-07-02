@@ -29,7 +29,7 @@ export default function MapManager() {
     if (!file) return;
     setBusy(true); setErr(null);
     try {
-      const { blob, hash, width, height, bytes } = await importMapImage(file);
+      const { blob, hash, width, height, origWidth, origHeight, bytes } = await importMapImage(file);
       const { imagePath, imageUrl } = await uploadMapImage(campaignId, blob, hash);
       // ALWAYS keep the UNTOUCHED original in the relay's local maps dir (desktop)
       // so a direct connection later serves it full-res — no matter that the relay
@@ -42,7 +42,10 @@ export default function MapManager() {
       if (imageFullName && getConnectionMode() === 'relay' && getRelayUrl()) {
         try { await uploadMapToRelay(getRelayUrl(), imageFullName, file); } catch (e3) { console.warn('[vtt] relay map PUT failed', e3?.message); }
       }
-      const id = addMap({ name: file.name.replace(/\.[^.]+$/, ''), imageUrl, imageFullName, imagePath, width, height });
+      // origWidth/origHeight travel inside the grid jsonb (no schema change):
+      // the calibration UI needs them so "72 dpi" typed from the ORIGINAL's
+      // resolution converts onto the compressed map correctly.
+      const id = addMap({ name: file.name.replace(/\.[^.]+$/, ''), imageUrl, imageFullName, imagePath, width, height, grid: { origWidth, origHeight } });
       setActiveMap(id);
       console.log(`[vtt] map uploaded: ${width}×${height}, ${(bytes / 1024).toFixed(0)} KB${imageFullName ? ' (+ full-res original kept for direct connection)' : ''}`);
     } catch (e2) {

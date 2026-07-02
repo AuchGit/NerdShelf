@@ -12,13 +12,14 @@ const uid = (p = '') => p + Math.random().toString(36).slice(2, 10);
 export const setSession = (session) => applyLocal({ type: 'session/set', session });
 
 // ---- maps ----
-export function addMap({ name, imageUrl, imageUrlFull, imagePath, width, height, grid }) {
+export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath, width, height, grid }) {
   const baseLevel = { id: uid('lvl_'), name: 'Ebene 1' };
   const map = {
     id: uid('map_'),
     name: name || 'Neue Map',
     imageUrl,
-    imageUrlFull: imageUrlFull || null, // full-res original served by the relay (P2P)
+    imageUrlFull: imageUrlFull || null, // legacy baked relay URL
+    imageFullName: imageFullName || null, // relative key of the full-res original (relay serves it live)
     imagePath: imagePath || null,
     width,
     height,

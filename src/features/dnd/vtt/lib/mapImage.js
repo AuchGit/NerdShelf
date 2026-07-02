@@ -53,7 +53,7 @@ export async function importMapImage(file, { maxDim = 12288, quality = 0.95 } = 
   const hash = await sha256(blob);
   const objectUrl = URL.createObjectURL(blob);
 
-  return { blob, objectUrl, width, height, hash, bytes: blob.size };
+  return { blob, objectUrl, width, height, origWidth: img.naturalWidth, origHeight: img.naturalHeight, hash, bytes: blob.size };
 }
 
 function loadImage(src) {

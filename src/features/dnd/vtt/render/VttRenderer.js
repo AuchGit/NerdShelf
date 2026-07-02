@@ -237,6 +237,10 @@ export class VttRenderer {
       }
     }
     this.bg.visible = !!map;
+    // The background sprite must render at MAP coordinates regardless of the
+    // texture's native pixels — the full-res relay original is larger than the
+    // stored map size and would otherwise misalign grid/tokens/walls.
+    if (map && this.bg.texture && this.bg.texture !== Texture.EMPTY) { this.bg.width = map.width; this.bg.height = map.height; }
 
     if (map) {
       const isDM = s.session.role === 'dm';
