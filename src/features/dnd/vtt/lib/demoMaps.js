@@ -46,6 +46,14 @@ export async function uploadSharedMap(name) {
   return row.id;
 }
 
+// Delete an own shared map (RLS restricts deletion to created_by = auth.uid(),
+// so only the uploader succeeds — the UI additionally only shows the button to
+// them). Throws on error.
+export async function deleteSharedMap(id) {
+  const { error } = await supabase.from('vtt_demo_maps').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // Create a fresh copy of a shared map in the current campaign (new ids).
 export function loadDemoIntoCampaign(demo) {
   const snap = demo.snapshot || {};

@@ -2,11 +2,13 @@
 // as a shared map under a unique name, and LOAD any shared map as a fresh copy
 // into their own campaign. No admin role required.
 import { useEffect, useState } from 'react';
-import { useIsDM } from '../state/useVtt';
-import { listDemoMaps, loadDemoIntoCampaign, uploadSharedMap } from '../lib/demoMaps';
+import { useIsDM, useVtt } from '../state/useVtt';
+import { listDemoMaps, loadDemoIntoCampaign, uploadSharedMap, deleteSharedMap } from '../lib/demoMaps';
+import { toast } from '../lib/toast';
 
 export default function SharedMapsPanel() {
   const isDM = useIsDM();
+  const userId = useVtt((s) => s.session.userId);
   const [maps, setMaps] = useState([]);
   const [busy, setBusy] = useState(false);
   const refresh = () => listDemoMaps().then(setMaps);
@@ -35,6 +37,14 @@ export default function SharedMapsPanel() {
           <div key={d.id} style={S.row}>
             <span style={S.name} title={d.name}>{d.name}</span>
             <button style={S.btn} onClick={() => loadDemoIntoCampaign(d)} title="Als Kopie in diese Campaign laden">Load</button>
+            {d.created_by === userId && (
+              <button style={S.del} title="Eigene Shared Map aus dem Share löschen"
+                onClick={async () => {
+                  if (!window.confirm(`Shared Map „${d.name}" für alle aus dem Share entfernen?`)) return;
+                  try { await deleteSharedMap(d.id); await refresh(); toast('Shared Map gelöscht.', 'success'); }
+                  catch (e) { toast('Löschen fehlgeschlagen: ' + (e?.message || e)); }
+                }}>✕</button>
+            )}
           </div>
         ))}
       {isDM && <button style={S.publish} disabled={busy} onClick={upload} title="Aktive Map unter eindeutigem Namen teilen">{busy ? '…' : '⬆ Upload map'}</button>}
@@ -49,5 +59,6 @@ const S = {
   row: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)' },
   name: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   btn: { padding: '2px 8px', fontSize: 11, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' },
+  del: { padding: '2px 7px', fontSize: 11, background: 'transparent', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 4, cursor: 'pointer' },
   publish: { marginTop: 4, padding: '6px', fontSize: 'var(--fs-sm)', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 },
 };
