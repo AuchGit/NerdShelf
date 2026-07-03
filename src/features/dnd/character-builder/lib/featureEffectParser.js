@@ -265,6 +265,8 @@ function detectTrigger(stripped) {
   if (/\bwhen\s+(?:another\s+)?creature\s+damages\s+you\b/i.test(stripped)) return 'When Damaged'
   if (/\bwhen\s+you\s+take\s+damage\b/i.test(stripped)) return 'When Damaged'
   if (/\bwhen\s+a\s+creature\s+misses\s+you\b/i.test(stripped)) return 'When Missed'
+  if (/\bwhen\s+you\s+(?:are|get)\s+hit\s+by\s+an?\s+attack\b/i.test(stripped)) return 'When Hit'
+  if (/\b(?:when|if)\s+you\s+fail\s+a\s+saving\s+throw\b/i.test(stripped)) return 'On Failed Save'
   if (/\bwhen\s+you\s+hit\s+(?:a\s+)?(?:creature|target)/i.test(stripped)) return 'On Hit'
   if (/\bif\s+you\s+hit\s+(?:a\s+)?(?:creature|target)/i.test(stripped)) return 'On Hit'
   if (/\bif\s+you\s+surprise\s+a\s+creature\s+and\s+hit\b/i.test(stripped)) return 'On Hit (Surprise)'
@@ -500,8 +502,18 @@ export function parseFeatureEffect(feature, character, profBonus = 0, opts = {})
 
   const pills = []
 
+  // Extra-Attack-artige Features: statt des nichtssagenden "On Your Turn"-
+  // Triggers die Angriffszahl als Pill (wie bei den Angriffs-Aktionen).
+  // Zahl direkt aus dem Text ("attack twice/three times … instead of once").
+  const extraAtk = /\battack\s+(twice|three\s+times|four\s+times|\d+\s+times)\b[^.]*\binstead\s+of\s+once\b/i.exec(stripped)
+  if (extraAtk) {
+    const word = extraAtk[1].toLowerCase().replace(/\s+/g, ' ')
+    const n = { twice: 2, 'three times': 3, 'four times': 4 }[word] || parseInt(word, 10) || 2
+    pills.push({ kind: 'uses', label: `${n}× Angriff`, title: `${n} Angriffe pro Attack-Action` })
+  }
+
   // Trigger
-  const trigger = detectTrigger(stripped)
+  const trigger = extraAtk ? null : detectTrigger(stripped)
   if (trigger) pills.push({ kind: 'trigger', label: trigger, title: trigger })
 
   // Cost (Superiority Die / Ki / Sorcery Point)

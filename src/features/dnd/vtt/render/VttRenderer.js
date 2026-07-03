@@ -440,6 +440,7 @@ export class VttRenderer {
       // sight-reset / map change in updateMemoryVision).
       if (!this._seenWalls) this._seenWalls = new Set();
       if (!this._seenTransitions) this._seenTransitions = new Set();
+      if (!this._seenLights) this._seenLights = new Set(); // Lichtschalter wie Türen: erst nach Sicht-Kontakt
       let seenDoorIds = null; let seenTransIds = null;
       if (playerDynamic) {
         const polys = visiblePolys || [];
@@ -462,6 +463,10 @@ export class VttRenderer {
           if (tr.mapId !== map.id || (tr.level || base) !== level) continue;
           const c = cellCenter(tr.col, tr.row, map.grid);
           if (pointInAnyPolygon(c.x, c.y, polys)) this._seenTransitions.add(tr.id);
+        }
+        for (const lt of Object.values(s.lights)) {
+          if (lt.mapId !== map.id || (lt.level || base) !== level || !lt.playerSwitch) continue;
+          if (pointInAnyPolygon(lt.x, lt.y, polys)) this._seenLights.add(lt.id);
         }
         seenDoorIds = this._seenWalls; seenTransIds = this._seenTransitions;
       }
@@ -610,9 +615,10 @@ export class VttRenderer {
       this.bgGray.addChild(this._exploredSprite); // mask lives under the masked sprite
       this._exploredFor = map.id;
       this.tokenMemory = {};
-      // Forget explored doors/transitions too (sight-reset or new map).
+      // Forget explored doors/transitions/light switches too (sight-reset or new map).
       this._seenWalls?.clear();
       this._seenTransitions?.clear();
+      this._seenLights?.clear();
     }
 
     // accumulate current vision into the explored texture (never cleared)
@@ -1424,8 +1430,13 @@ export class VttRenderer {
     // Personal display choice: a player can hide the on-map light switches.
     if (s.session.role !== 'dm' && !getShowLightSwitches()) return;
     const size = (map.grid.size || 70) * 0.38;
+    // Wie Türen: bei dynamischem Fog sehen Spieler einen Schalter erst,
+    // nachdem seine Position einmal wirklich in ihrer Sicht lag.
+    const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
+    const gateUnseen = s.session.role !== 'dm' && fogMode === 'dynamic';
     for (const lt of Object.values(s.lights)) {
       if (lt.mapId !== map.id || (lt.level || base) !== level || !lt.playerSwitch) continue;
+      if (gateUnseen && !this._seenLights?.has(lt.id)) continue;
       const on = lt.enabled !== false;
       const node = new Container();
       node.position.set(lt.x, lt.y);

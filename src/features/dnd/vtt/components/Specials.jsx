@@ -8,6 +8,7 @@ import { useVtt } from '../state/useVtt';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { parseFeatureEffect } from '../../character-builder/lib/featureEffectParser';
 import { loadOptionalFeatureList, loadFeatList, loadClassData } from '../../character-builder/lib/dataLoader';
+import { isVariantEnabled } from '../../character-builder/lib/optionalFeatureVariants';
 
 // Strip 5etools {@tag text|extra} markup down to readable text.
 const clean = (s) => String(s).replace(/\{@\w+\s+([^}|]*)[^}]*\}/g, '$1');
@@ -30,8 +31,30 @@ const hasActionVerb = (t) => /\bas\s+an?\s+(?:bonus\s+)?action\b|\bas\s+a\s+reac
 // Usable-on-a-trigger phrasing ("when you hit / when you use / you can expend …").
 const looksUsable = (t) => /when(ever)? you\s+(hit|use|make|take|deal|reduce|cast|miss|are|score|roll)|when an?\b|when a creature|immediately after|as part of (?:the|a|your)|you can expend|once (?:per|on each)/i.test(t || '');
 
-const PILL_KINDS = ['trigger', 'damage', 'damage-bonus', 'save', 'heal'];
-const PILL_COLOR = { trigger: '#e0af68', damage: '#ff6b6b', 'damage-bonus': '#ff6b6b', save: '#9ab3d6', heal: '#4ade80' };
+// Alle Pill-Arten des Parsers bekommen hier eine Farbe — was keine hat,
+// wird nicht angezeigt. Deutlich breiter als früher, damit z.B. AC-/Save-
+// Boni (Arcane Deflection) und Angriffszahl (Extra Attack) sichtbar sind.
+const PILL_COLOR = {
+  trigger: '#e0af68', damage: '#ff6b6b', 'damage-bonus': '#ff6b6b', save: '#9ab3d6',
+  heal: '#4ade80', cost: '#c792ea', uses: '#c792ea', ac: '#9ab3d6', attack: '#e0af68',
+  utility: '#7dcfff', advantage: '#4ade80', resist: '#38bdf8', reroll: '#7dcfff',
+  crit: '#ff9e64', speed: '#7dcfff',
+};
+
+// Rein passive, bereits woanders angerechnete Effekte gehören NICHT in die
+// Specials: Skill-/Check-/Initiative-Boni stecken in den Skills bzw. der
+// Initiative, Options-Grants ("you learn two Metamagic options") tauchen als
+// eigene Picks auf, Concentration-Advantage ist ein Dauerzustand. Text-
+// Patterns statt Namenslisten; greift nur wenn KEIN aktiver Rider
+// (Schaden/Kosten) am Feature hängt.
+const PASSIVE_PATTERNS = [
+  /\byou gain proficiency in\b/i,
+  /\bgain a bonus to (?:the|that|this) check\b/i,
+  /\badd your proficiency(?: bonus)? to (?:the|that|your) (?:roll|check|initiative)\b/i,
+  /\byou learn (?:one|two|three|\d+)[^.]{0,60}\boptions? of your choice\b/i,
+  /\badvantage on [^.]{0,60}\bsaving throws?\b[^.]{0,40}\bconcentration\b/i,
+  /\bperform the somatic components?\b/i,
+];
 
 export default function Specials() {
   const myId = useVtt((s) => s.ui.myCharacterId);
@@ -82,26 +105,36 @@ export default function Specials() {
     try { return computeCharacter(character); } catch { return null; }
   }, [character]);
 
-  const groups = useMemo(() => {
+  const items = useMemo(() => {
     if (!character) return [];
     const profBonus = computed?.proficiencyBonus ?? computed?.profBonus ?? 2;
-    const bySrc = new Map();
+    const out = [];
     const seen = new Set();
+    const classIds = new Set((character.classes || []).map((c) => c.classId));
     const add = (src, name, entries) => {
       if (!name || !Array.isArray(entries)) return;
-      const key = `${src}|${name}`;
+      // Dedup nur über den Namen — gleiche Features aus mehreren Quellen
+      // (Klasse + __activeFeatures) erscheinen im flachen Grid nur einmal.
+      const key = String(name).toLowerCase();
       if (seen.has(key)) return;
       const text = flatten(entries);
       if (hasActionVerb(text)) return; // belongs in Actions
       let pills;
-      try { pills = parseFeatureEffect({ name, entries }, character, profBonus, { classDataMap: character.__classDataMap })?.pills || []; } catch { pills = []; }
-      const usable = pills.some((p) => p.kind === 'trigger' || p.kind === 'damage' || p.kind === 'damage-bonus');
+      try {
+        // classId + geladene Class-Daten mitgeben → Pill-Werte skalieren mit
+        // dem Level (Sneak-Attack-Spalte: 1d6 → 2d6 → …). Im VTT gibt es kein
+        // __classDataMap vom Sheet, wir haben aber classMap selbst geladen.
+        const feature = classIds.has(src) ? { name, entries, classId: src } : { name, entries };
+        pills = parseFeatureEffect(feature, character, profBonus, { classDataMap: classMap || character.__classDataMap })?.pills || [];
+      } catch { pills = []; }
+      const active = pills.some((p) => p.kind === 'damage' || p.kind === 'damage-bonus' || p.kind === 'cost');
+      // Passiv-Filter: bereits angerechnete Boni/Grants raus — außer es hängt
+      // ein aktiver Rider dran.
+      if (!active && PASSIVE_PATTERNS.some((re) => re.test(text))) return;
+      const usable = active || pills.some((p) => p.kind === 'trigger' || p.kind === 'uses');
       if (!usable && !looksUsable(text)) return;
       seen.add(key);
-      const shown = pills.filter((p) => PILL_KINDS.includes(p.kind));
-      const item = { name, text, pills: shown };
-      if (!bySrc.has(src)) bySrc.set(src, []);
-      bySrc.get(src).push(item);
+      out.push({ name, text, pills: pills.filter((p) => PILL_COLOR[p.kind]) });
     };
     // 1) Optional-feature picks — maneuvers, invocations, metamagic, … (text from
     //    the catalogue). Only the usable ones survive the filter above.
@@ -144,7 +177,11 @@ export default function Specials() {
       if (!cd) continue;
       const lvl = cls.level || 1;
       for (const f of (cd.features || [])) {
-        if ((f.level || 1) <= lvl) add(cls.classId, f.name, f.entries);
+        if ((f.level || 1) > lvl) continue;
+        // TCE-Optional-Variants (Favored Foe & Co.) sind opt-in — nur zeigen
+        // wenn der Spieler sie wirklich aktiviert hat.
+        if (f.isClassFeatureVariant && !isVariantEnabled(character, cls.classId, f.name)) continue;
+        add(cls.classId, f.name, f.entries);
       }
       const subId = cls.subclassId;
       if (subId) {
@@ -157,7 +194,11 @@ export default function Specials() {
             ? Object.entries(sub.featuresPerLevel).flatMap(([l, fs]) => (fs || []).map((f) => ({ ...f, level: parseInt(l, 10) || 1 })))
             : []),
         ] : [];
-        for (const f of subFeatures) if ((f.level || 1) <= lvl) add(cls.classId, f.name, f.entries);
+        for (const f of subFeatures) {
+          if ((f.level || 1) > lvl) continue;
+          if (f.isClassFeatureVariant && !isVariantEnabled(character, cls.classId, f.name)) continue;
+          add(cls.classId, f.name, f.entries);
+        }
       }
     }
     // 3) Feats (e.g. Dreadful Strikes "when you hit …"). character.feats store a
@@ -167,52 +208,41 @@ export default function Specials() {
     for (const f of (character.feats || [])) { const nm = f.name || f.featId; add('Talente', nm, featEntries(nm, f.entries)); }
     for (const f of (character.custom?.feats || [])) add('Talente', f.name, featEntries(f.name, f.entries));
 
-    return [...bySrc.entries()].map(([src, items]) => ({ src, items }));
+    return out;
   }, [character, computed, optMap, featMap, classMap]);
 
   if (!character) return <div style={S.empty}>Kein Charakter geladen.</div>;
-  const total = groups.reduce((n, g) => n + g.items.length, 0);
-  if (!total) return <div style={S.empty}>Keine Specials. Manöver, Sneak Attack, Smites und andere „when you hit / when you use"-Effekte erscheinen hier — sobald dein Charakter welche hat.</div>;
+  if (!items.length) return <div style={S.empty}>Keine Specials. Manöver, Sneak Attack, Smites und andere „when you hit / when you use"-Effekte erscheinen hier — sobald dein Charakter welche hat.</div>;
 
+  // Ein flaches Grid ohne Kategorie-Überschriften — nutzt die volle Breite,
+  // egal wie viele Einträge eine "Kategorie" gehabt hätte.
   return (
-    <div style={S.wrap}>
-      {groups.map((g) => (
-        <div key={g.src} style={S.group}>
-          <div style={S.groupHead}>{g.src}</div>
-          <div style={S.groupGrid}>
-          {g.items.map((it) => {
-            const id = `${g.src}|${it.name}`;
-            const isOpen = !!open[id];
-            return (
-              <div key={id} style={S.item}>
-                <button style={S.itemHead} onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))}>
-                  <span style={S.caret}>{isOpen ? '▾' : '▸'}</span>
-                  <span style={S.name}>{it.name}</span>
-                  <span style={{ flex: 1 }} />
-                  {it.pills.map((p, i) => (
-                    <span key={i} style={{ ...S.pill, borderColor: PILL_COLOR[p.kind], color: PILL_COLOR[p.kind] }} title={p.title || p.label}>{p.label}</span>
-                  ))}
-                </button>
-                {isOpen && it.text && <div style={S.body}>{it.text}</div>}
-              </div>
-            );
-          })}
+    <div style={S.grid}>
+      {items.map((it) => {
+        const isOpen = !!open[it.name];
+        return (
+          <div key={it.name} style={S.item}>
+            <button style={S.itemHead} onClick={() => setOpen((o) => ({ ...o, [it.name]: !o[it.name] }))}>
+              <span style={S.caret}>{isOpen ? '▾' : '▸'}</span>
+              <span style={S.name}>{it.name}</span>
+              <span style={{ flex: 1 }} />
+              {it.pills.map((p, i) => (
+                <span key={i} style={{ ...S.pill, borderColor: PILL_COLOR[p.kind], color: PILL_COLOR[p.kind] }} title={p.title || p.label}>{p.label}</span>
+              ))}
+            </button>
+            {isOpen && it.text && <div style={S.body}>{it.text}</div>}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 const S = {
-  // Kategorien UNTEREINANDER (Fighter, dann Fey Wanderer, …); die Einträge
-  // jeder Kategorie fließen 4-spaltig von links nach rechts — spart Höhe,
-  // ohne die Kategorien zu vermischen.
-  wrap: { display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 2px 6px' },
-  groupGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, alignItems: 'start' },
+  // Flaches Grid ohne Kategorien: füllt die volle Breite, Einträge fließen
+  // von links nach rechts.
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(215px, 1fr))', gap: 6, alignItems: 'start', padding: '2px 2px 6px' },
   empty: { color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 },
-  group: { display: 'flex', flexDirection: 'column', gap: 3 },
-  groupHead: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-text-muted)', padding: '2px 4px' },
   item: { border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', overflow: 'hidden' },
   itemHead: { display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '5px 8px', background: 'transparent', border: 'none', color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' },
   caret: { color: 'var(--color-text-muted)', fontSize: 10, width: 10 },
