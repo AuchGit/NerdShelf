@@ -26,6 +26,9 @@ export default defineConfig(async ({ mode }) => {
         injectRegister: 'auto',
         includeAssets: ['favicon.svg', 'icons/*.png'],
         workbox: {
+          // Der Haupt-Chunk ist mit dem VTT >2 MiB (Workbox-Default-Limit)
+          // gewachsen — ohne höheres Limit bricht der PWA-Build ab.
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,svg,png,ico,json,woff2}'],
           // Don't precache the bulky JSON datasets in /public/data — let them
           // be runtime-cached on first access instead.
