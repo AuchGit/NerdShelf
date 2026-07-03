@@ -33,6 +33,11 @@ export class LightLayer {
     this._rtKey = null;
     this._zoom = 1;      // aktuelle Viewport-Skalierung (für zoom-stabilen Blur)
     this._blurBase = 0;  // konfigurierter Blur in WELT-Pixeln
+    // Per-Licht-Sichtbarkeitspolygon-Cache: beim Bewegen EINES leuchtenden
+    // Tokens müssen nicht alle anderen Lichter ihre (teuren) Polygone neu
+    // rechnen — nur das bewegte misst neu. Invalidiert über wallsRev.
+    this._polyCache = new Map();
+    this._polyCacheRev = null;
   }
 
   // Pixi-BlurFilter arbeitet in SCREEN-Pixeln: beim Rauszoomen frisst ein
@@ -59,7 +64,7 @@ export class LightLayer {
 
   // opts: { renderer, sources, grid, walls, bounds, style, baseline, darkness, contrast, blur }
   update(opts) {
-    const { renderer, sources = [], grid, walls = [], brightWalls = walls, shadowWalls = walls, bounds, style = 'modern', baseline = 'bright', darkness = [], darkPolys = [], worldShadow = null, darkvision = [], contrast = 0.5, blur = 0, rev = null } = opts || {};
+    const { renderer, sources = [], grid, walls = [], brightWalls = walls, shadowWalls = walls, bounds, style = 'modern', baseline = 'bright', darkness = [], darkPolys = [], worldShadow = null, darkvision = [], contrast = 0.5, blur = 0, rev = null, wallsRev = null } = opts || {};
     if (!renderer || !grid || !bounds) { this.sprite.visible = false; return; }
 
     // Blur softens the whole composited lighting (safe: post-process on the
@@ -155,6 +160,7 @@ export class LightLayer {
       };
       this._rtKey = key;
       this._baseSig = null; // fresh blank RTs → force a coverage rebuild
+      this._shadowSig = null;
       this.sprite.texture = this._rts.main;
     }
     this.sprite.position.set(ox, oy);
@@ -166,6 +172,13 @@ export class LightLayer {
     const coverageChanged = baseSig !== this._baseSig;
     if (coverageChanged) {
     this._baseSig = baseSig;
+
+    // Polygon-Cache nur solange die Wände unverändert sind (wallsRev
+    // deckt Wände + Map + Level ab). Ohne wallsRev: kein Caching.
+    if (wallsRev == null || this._polyCacheRev !== wallsRev) {
+      this._polyCache.clear();
+      this._polyCacheRev = wallsRev;
+    }
 
     // ── 1. Flat-union coverage textures (opaque white reach per light) ──
     // White unions (covB/covD) drive the darkness erase; coloured unions
@@ -190,14 +203,26 @@ export class LightLayer {
       // shadow caster can't tell which side it's on → light leaks through. Nudge
       // the sample point a few px off any wall it's touching (toward the side it's
       // already on) so the wall blocks properly.
-      const origin = nudgeOffWalls(s.x, s.y, lightWallsForSrc);
       // Dim reach is clipped to `walls`; bright reach to `brightWalls` (which
       // adds milky/frosted windows). So a milky window passes DIM light but stops
       // the BRIGHT band — light beyond it is dimmed by one step.
-      const poly = visibilityPolygon(origin, lightWallsForSrc, bounds);
-      const brightPoly = brightWalls === walls
-        ? poly
-        : visibilityPolygon(origin, brightWalls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt)), bounds);
+      // Polygone gecacht pro Licht+Position (wallsRev-gültig): nur das
+      // BEWEGTE Licht rechnet neu, statische Lichter treffen den Cache.
+      const pcKey = `${s.id}|${Math.round(s.x)}|${Math.round(s.y)}|${lh}`;
+      let pc = wallsRev != null ? this._polyCache.get(pcKey) : null;
+      if (!pc) {
+        const origin = nudgeOffWalls(s.x, s.y, lightWallsForSrc);
+        const poly = visibilityPolygon(origin, lightWallsForSrc, bounds);
+        const brightPoly = brightWalls === walls
+          ? poly
+          : visibilityPolygon(origin, brightWalls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt)), bounds);
+        pc = { poly, brightPoly };
+        if (wallsRev != null) {
+          this._polyCache.set(pcKey, pc);
+          if (this._polyCache.size > 256) this._polyCache.delete(this._polyCache.keys().next().value);
+        }
+      }
+      const { poly, brightPoly } = pc;
       const mkMaskFrom = (p) => {
         if (p.length < 3) return null;
         return new Graphics().poly(p.flatMap((q) => [q.x - ox, q.y - oy])).fill(0xffffff);
@@ -220,7 +245,10 @@ export class LightLayer {
 
     // World-shadow coverage: each light-blocking wall sweeps a shadow quad in the
     // sun-away direction (a wall parallel to the sun naturally casts a sliver).
-    if (wantShadow) {
+    // Hängt NUR an Wänden + Sonnenrichtung — nicht bei jedem Licht-/Token-
+    // Move neu rendern (eigene Signatur statt coverageChanged).
+    const shadowSig = wantShadow ? `${wallsRev ?? 'x'}|${Math.round(worldShadow.dir ?? 135)}|${w}x${h}` : 'off';
+    if (wantShadow && shadowSig !== this._shadowSig) {
       const ang = ((worldShadow.dir ?? 135) * Math.PI) / 180;
       const dx = Math.cos(ang); const dy = Math.sin(ang);
       const L = Math.hypot(w, h) * 1.5;
@@ -233,6 +261,7 @@ export class LightLayer {
       }
       renderer.render({ container: sc, target: covShadow, clear: true });
       sc.destroy({ children: true });
+      this._shadowSig = shadowSig;
     }
     } // end coverageChanged
 

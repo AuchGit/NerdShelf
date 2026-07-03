@@ -404,6 +404,9 @@ export class VttRenderer {
         // Cheap recompute gate: bumped by every wall/light/map change (incl.
         // luminous-token moves) — replaces hashing all walls+lights per frame.
         rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}`,
+        // Wand-stabile Revision: Polygon-Cache + Welt-Schatten-RT müssen nur
+        // bei Wand-/Map-Änderungen invalidieren, nicht bei jedem Licht-Move.
+        wallsRev: `${versions.walls}|${versions.maps}|${map.id}|${level}`,
         sources: ambientSources.length ? lightSources.concat(ambientSources) : lightSources,
         grid: map.grid,
         walls: lightWalls,
