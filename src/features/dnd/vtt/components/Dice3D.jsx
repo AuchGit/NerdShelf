@@ -204,12 +204,22 @@ export default function Dice3D({ dice, onFallback }) {
     const host = hostRef.current;
     if (!host || !dice.length) return undefined;
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('3D-Import-Timeout')), 8000));
+    // Sofortiger WebGL-Probe-Check VOR den schweren Imports: wenn die
+    // WebView kein WebGL2 hergibt (Grafiktreiber/HW-Beschleunigung aus),
+    // fallen wir ohne 8s-Wartezeit sichtbar begründet zurück.
+    try {
+      const probe = document.createElement('canvas');
+      const gl = probe.getContext('webgl2') || probe.getContext('webgl');
+      if (!gl) { onFallback?.('WebGL nicht verfügbar (Grafiktreiber / Hardware-Beschleunigung?)'); return undefined; }
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch (e) { onFallback?.('WebGL-Check fehlgeschlagen: ' + (e?.message || e)); return undefined; }
+
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('3D-Module laden nicht (Timeout nach 8s — Dev-Server neu starten?)')), 8000));
     Promise.race([Promise.all([import('three'), import('cannon-es')]), timeout]).then(([THREE, CANNON]) => {
       if (disposed || !hostRef.current) return;
       try {
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      } catch (e) { console.error('[vtt] WebGL für 3D-Würfel nicht verfügbar', e); onFallback?.(); return; }
+      } catch (e) { console.error('[vtt] WebGL für 3D-Würfel nicht verfügbar', e); onFallback?.('WebGL-Kontext fehlgeschlagen: ' + (e?.message || e)); return; }
       try {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(W, H);
@@ -348,9 +358,9 @@ export default function Dice3D({ dice, onFallback }) {
         // Jede Init-Panne (Geometrie/Physik/Material) fällt sichtbar geloggt auf
         // die klassischen Würfel zurück statt stumm nichts zu zeigen.
         console.error('[vtt] 3D-Würfel-Init fehlgeschlagen', e);
-        onFallback?.();
+        onFallback?.('3D-Init fehlgeschlagen: ' + (e?.message || e));
       }
-    }).catch((e) => { console.error('[vtt] 3D-Würfel laden fehlgeschlagen', e); if (!disposed) onFallback?.(); });
+    }).catch((e) => { console.error('[vtt] 3D-Würfel laden fehlgeschlagen', e); if (!disposed) onFallback?.(e?.message || String(e)); });
 
     return () => {
       disposed = true;

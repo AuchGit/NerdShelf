@@ -31,6 +31,30 @@ export class LightLayer {
     this.container.addChild(this.sprite);
     this._rts = null;  // { main, covB, covD }
     this._rtKey = null;
+    this._zoom = 1;      // aktuelle Viewport-Skalierung (für zoom-stabilen Blur)
+    this._blurBase = 0;  // konfigurierter Blur in WELT-Pixeln
+  }
+
+  // Pixi-BlurFilter arbeitet in SCREEN-Pixeln: beim Rauszoomen frisst ein
+  // fixer Blur ganze Schatten-/Dunkelflächen auf (sie wirken kleiner als sie
+  // sind). Wir skalieren die Stärke mit dem Zoom, damit der Blur in
+  // Welt-Einheiten konstant bleibt. Der Renderer ruft setZoom bei jedem
+  // Zoom-Schritt + Reconcile auf.
+  setZoom(z) {
+    if (!(z > 0) || z === this._zoom) return;
+    this._zoom = z;
+    this._applyBlur();
+  }
+
+  _applyBlur() {
+    const eff = this._blurBase * this._zoom;
+    if (eff > 0.05) {
+      if (!this._blur) this._blur = new BlurFilter({ strength: eff });
+      else this._blur.strength = eff;
+      if (!this.sprite.filters?.length) this.sprite.filters = [this._blur];
+    } else if (this.sprite.filters?.length) {
+      this.sprite.filters = [];
+    }
   }
 
   // opts: { renderer, sources, grid, walls, bounds, style, baseline, darkness, contrast, blur }
@@ -39,14 +63,9 @@ export class LightLayer {
     if (!renderer || !grid || !bounds) { this.sprite.visible = false; return; }
 
     // Blur softens the whole composited lighting (safe: post-process on the
-    // display sprite, not on a mask). Cached so we don't recreate per frame.
-    if (blur > 0) {
-      if (!this._blur) this._blur = new BlurFilter({ strength: blur });
-      else this._blur.strength = blur;
-      this.sprite.filters = [this._blur];
-    } else if (this.sprite.filters?.length) {
-      this.sprite.filters = [];
-    }
+    // display sprite, not on a mask). Stärke zoom-skaliert (siehe setZoom).
+    this._blurBase = blur;
+    this._applyBlur();
 
     const w = Math.max(1, Math.round(bounds.maxX - bounds.minX));
     const h = Math.max(1, Math.round(bounds.maxY - bounds.minY));
@@ -122,7 +141,9 @@ export class LightLayer {
     if (this._rtKey !== key) {
       if (this._rts) for (const rt of Object.values(this._rts)) rt.destroy(true);
       this._rts = {
-        main: RenderTexture.create({ width: w, height: h }),
+        // main wird stark minifiziert angezeigt (weit rausgezoomt) — Mipmaps
+        // verhindern, dass dünne Schattenstreifen beim Rauszoomen wegaliassen.
+        main: RenderTexture.create({ width: w, height: h, autoGenerateMipmaps: true }),
         covB: RenderTexture.create({ width: w, height: h }),
         covD: RenderTexture.create({ width: w, height: h }),
         covShadow: RenderTexture.create({ width: w, height: h }),

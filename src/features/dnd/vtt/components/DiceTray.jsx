@@ -66,7 +66,9 @@ export default function DiceTray() {
   const total = roll.total;
   const [formula, setFormula] = useState('');
   const want3d = useDice3d();
-  const [webglBroken, setWebglBroken] = useState(false); // Dice3D meldet Fallback
+  // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
+  // damit "3D geht nicht" diagnostizierbar ist statt still 2D zu zeigen.
+  const [webglBroken, setWebglBroken] = useState(null);
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -137,9 +139,15 @@ export default function DiceTray() {
           ? <span style={S.hint}>Würfel wählen oder Formel eingeben…</span>
           : (want3d && !webglBroken && dice.length <= 12)
             // key = roll identity → every roll remounts the scene for a fresh throw
-            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))} onFallback={() => setWebglBroken(true)} />
+            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))} onFallback={(reason) => setWebglBroken(reason || 'unbekannt')} />
             : dice.map((d) => <Die key={d.id} sides={d.sides} result={d.result} />)}
       </div>
+      {want3d && webglBroken && (
+        <div style={S.fallbackNote}>
+          ⚠ 3D-Fallback: {webglBroken}{' '}
+          <button style={{ ...S.smallBtn, marginLeft: 4 }} onClick={() => setWebglBroken(null)}>Nochmal versuchen</button>
+        </div>
+      )}
       {(total != null || dice.length > 1) && (
         <div style={S.total}>{total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}</div>
       )}
@@ -183,4 +191,5 @@ const S = {
   dieFace: { fontSize: 18, fontWeight: 800, lineHeight: 1 },
   dieLabel: { position: 'absolute', bottom: 1, right: 3, fontSize: 7, color: 'var(--color-text-muted)' },
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
+  fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
 };

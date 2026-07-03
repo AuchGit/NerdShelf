@@ -398,6 +398,7 @@ export class VttRenderer {
         darkPolys = this.enclosedRoomPolys(mapWalls, map.id, level);
         ambientSources = this.ambientOpeningSources(mapWalls, baseline, map.grid.size, darkPolys, { dir: map.worldShadowDir ?? 135, strength: map.worldShadowStrength ?? 0 });
       }
+      this.lights.setZoom?.(this.viewport.scale); // programmatische Zooms (Fit etc.)
       this.lights.update({
         renderer: this.app.renderer,
         // Cheap recompute gate: bumped by every wall/light/map change (incl.
@@ -896,6 +897,9 @@ export class VttRenderer {
       if (!e.ctrlKey && this.adjustSelectionWheel(dir, e.shiftKey)) return;
       const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
       this.viewport.zoomAt(e.offsetX, e.offsetY, factor);
+      // Licht-Blur ist screen-space — beim Zoomen sofort nachziehen, sonst
+      // frisst er beim Rauszoomen die Schatten-/Dunkelflächen auf.
+      this.lights?.setZoom?.(this.viewport.scale);
     };
     const onCtx = (e) => e.preventDefault(); // suppress native menu; we use our own
     canvas.addEventListener('wheel', onWheel, { passive: false });
