@@ -29,8 +29,11 @@ export class LightLayer {
     this.container.eventMode = 'none';
     this.sprite = new Sprite(Texture.EMPTY);
     this.container.addChild(this.sprite);
-    this._rts = null;  // { main, covB, covD }
+    this._rts = null;     // Voll-Auflösung (Ruhezustand — verlustfrei)
     this._rtKey = null;
+    this._rtsLow = null;  // Interaktions-Auflösung (nur WÄHREND Bewegung sichtbar)
+    this._rtLowKey = null;
+    this._finalTimer = 0; // geplanter Voll-Auflösungs-Compose nach der Bewegung
     this._zoom = 1;      // aktuelle Viewport-Skalierung (für zoom-stabilen Blur)
     this._blurBase = 0;  // konfigurierter Blur in WELT-Pixeln
     // Per-Licht-Sichtbarkeitspolygon-Cache: beim Bewegen EINES leuchtenden
@@ -38,6 +41,26 @@ export class LightLayer {
     // rechnen — nur das bewegte misst neu. Invalidiert über wallsRev.
     this._polyCache = new Map();
     this._polyCacheRev = null;
+  }
+
+  // RT-Satz (voll oder low-res) lazy anlegen/beschaffen. Jeder Satz trägt
+  // seine eigenen Coverage-Signaturen (__covSig/__shadowSig), damit der
+  // Wechsel lo↔hi die jeweils richtigen Texturen neu aufbaut.
+  _getRtSet(w, h, res, low) {
+    const slot = low ? '_rtsLow' : '_rts';
+    const keySlot = low ? '_rtLowKey' : '_rtKey';
+    const key = `${w}x${h}@${res.toFixed(2)}`;
+    if (this[keySlot] !== key) {
+      if (this[slot]) for (const rt of Object.values(this[slot])) rt?.destroy?.(true);
+      const mk = () => RenderTexture.create({ width: w, height: h, resolution: res });
+      this[slot] = {
+        main: mk(), covB: mk(), covD: mk(), covShadow: mk(),
+        covCB: mk(), covCD: mk(), covDV: mk(), covDVD: mk(), dark: mk(),
+        __covSig: null, __shadowSig: null,
+      };
+      this[keySlot] = key;
+    }
+    return this[slot];
   }
 
   // Pixi-BlurFilter arbeitet in SCREEN-Pixeln: beim Rauszoomen frisst ein
@@ -139,52 +162,35 @@ export class LightLayer {
       wantShadow ? [Math.round(worldShadow.dir ?? 135), Math.round(shadowA * 100)] : 0,
     ]);
     const dvSig = JSON.stringify(darkvision.map((d) => [Math.round(d.x), Math.round(d.y), Math.round(d.radiusPx)]));
-    const sig = `${baseSig}|${dvSig}`;
-    if (sig === this._sig) return;
-    // Drag-Throttle: beim kontinuierlichen Ziehen eines leuchtenden Tokens
-    // wird höchstens alle ~80ms wirklich recomposed; der letzte Stand landet
-    // garantiert über das Trailing-Update (kein hängender Zwischenzustand).
+    // Zwei Qualitätsstufen — Snappiness OHNE Qualitätsverlust: Folge-Composes
+    // innerhalb von 200ms (Token-Drag/WASD mit Licht) rendern SOFORT in einen
+    // Low-Res-Satz (in Bewegung nicht unterscheidbar, 4-16× weniger GPU-Fill,
+    // keine übersprungenen Frames → das Licht klebt am Token). Sobald Ruhe
+    // ist, läuft ein nachgeplanter Final-Compose in voller Auflösung.
+    const resLow = Math.max(0.35, Math.min(1, 2600 / Math.max(w, h)));
     const nowTs = performance.now();
-    if (nowTs - (this._lastCompose || 0) < 80) {
-      this._pendingOpts = opts;
-      if (!this._trail) {
-        this._trail = setTimeout(() => {
-          this._trail = null;
-          const o = this._pendingOpts; this._pendingOpts = null;
-          if (o) { try { this.update(o); } catch { /* Renderer evtl. schon weg */ } }
-        }, 90);
-      }
-      return;
-    }
+    const wantLow = !opts.__final && resLow < 0.95 && (nowTs - (this._lastCompose || 0) < 200);
+    const sig = `${baseSig}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
+    if (sig === this._sig) return;
     this._sig = sig;
-
-    // (re)create the textures when the map size changes. Auflösung bei großen
-    // Maps gedeckelt: Lighting ist weich — halbe Pixel sehen identisch aus,
-    // sparen aber massiv GPU-Fill-Rate (jede Licht-Bewegung = mehrere
-    // map-große Render-Passes). Koordinaten bleiben logisch (Pixi skaliert).
-    const res = Math.max(0.35, Math.min(1, 2600 / Math.max(w, h)));
-    const key = `${w}x${h}@${res.toFixed(2)}`;
-    if (this._rtKey !== key) {
-      if (this._rts) for (const rt of Object.values(this._rts)) rt.destroy(true);
-      const mk = () => RenderTexture.create({ width: w, height: h, resolution: res });
-      this._rts = {
-        main: mk(), covB: mk(), covD: mk(), covShadow: mk(),
-        covCB: mk(), covCD: mk(), covDV: mk(), covDVD: mk(), dark: mk(),
-      };
-      this._rtKey = key;
-      this._baseSig = null; // fresh blank RTs → force a coverage rebuild
-      this._shadowSig = null;
-      this.sprite.texture = this._rts.main;
+    clearTimeout(this._finalTimer);
+    if (wantLow) {
+      this._finalTimer = setTimeout(() => {
+        try { this.update({ ...opts, __final: true }); } catch { /* Renderer evtl. schon weg */ }
+      }, 220);
     }
+
+    const rts = this._getRtSet(w, h, wantLow ? resLow : 1, wantLow);
+    if (this.sprite.texture !== rts.main) this.sprite.texture = rts.main;
     this.sprite.position.set(ox, oy);
-    const { main, covB, covD, covShadow, covCB, covCD, covDV, covDVD } = this._rts;
+    const { main, covB, covD, covShadow, covCB, covCD, covDV, covDVD } = rts;
 
     // Only the CPU-heavy coverage (visibility polys + light/shadow RTs) is gated
-    // on baseSig; when just darkvision moved we keep the cached RTs and skip
-    // straight to the cheap recomposite below.
-    const coverageChanged = baseSig !== this._baseSig;
+    // on the set's own __covSig; when just darkvision moved we keep the cached
+    // coverage and skip straight to the cheap recomposite below.
+    const coverageChanged = baseSig !== rts.__covSig;
     if (coverageChanged) {
-    this._baseSig = baseSig;
+    rts.__covSig = baseSig;
 
     // Polygon-Cache nur solange die Wände unverändert sind (wallsRev
     // deckt Wände + Map + Level ab). Ohne wallsRev: kein Caching.
@@ -243,14 +249,15 @@ export class LightLayer {
       const col = s.color || WARM;
       if (brightPx > 0) cbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly)));
       if (dimPx > 0) cdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly)));
-      // Colour unions, only for the bands that actually differ from the baseline.
-      if (BL < 2 && brightPx > 0) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
-      if (BL < 1 && dimPx > 0) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
+      // Colour unions — IMMER aufgebaut: farbiges Licht bleibt auch auf
+      // hellen Maps leicht sichtbar (die Stamp-Stärke unten skaliert per BL).
+      if (brightPx > 0) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
+      if (dimPx > 0) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
     }
     renderer.render({ container: cbContainer, target: covB, clear: true });
     renderer.render({ container: cdContainer, target: covD, clear: true });
-    if (BL < 2) renderer.render({ container: ccbContainer, target: covCB, clear: true });
-    if (BL < 1) renderer.render({ container: ccdContainer, target: covCD, clear: true });
+    renderer.render({ container: ccbContainer, target: covCB, clear: true });
+    renderer.render({ container: ccdContainer, target: covCD, clear: true });
     cbContainer.destroy({ children: true });
     cdContainer.destroy({ children: true });
     ccbContainer.destroy({ children: true });
@@ -261,7 +268,7 @@ export class LightLayer {
     // Hängt NUR an Wänden + Sonnenrichtung — nicht bei jedem Licht-/Token-
     // Move neu rendern (eigene Signatur statt coverageChanged).
     const shadowSig = wantShadow ? `${wallsRev ?? 'x'}|${Math.round(worldShadow.dir ?? 135)}|${w}x${h}` : 'off';
-    if (wantShadow && shadowSig !== this._shadowSig) {
+    if (wantShadow && shadowSig !== rts.__shadowSig) {
       const ang = ((worldShadow.dir ?? 135) * Math.PI) / 180;
       const dx = Math.cos(ang); const dy = Math.sin(ang);
       const L = Math.hypot(w, h) * 1.5;
@@ -274,7 +281,7 @@ export class LightLayer {
       }
       renderer.render({ container: sc, target: covShadow, clear: true });
       sc.destroy({ children: true });
-      this._shadowSig = shadowSig;
+      rts.__shadowSig = shadowSig;
     }
     } // end coverageChanged
 
@@ -334,7 +341,7 @@ export class LightLayer {
     dark.addChild(stamp(covD, 'erase', liftToDim));
     dark.addChild(stamp(covB, 'erase', 1));
     if (wantDV) dark.addChild(stamp(covDV, 'erase', liftToDim));
-    renderer.render({ container: dark, target: this._rts.dark, clear: true });
+    renderer.render({ container: dark, target: rts.dark, clear: true });
     dark.destroy({ children: true });
 
     const scene = new Container();
@@ -357,20 +364,21 @@ export class LightLayer {
       if (wantDV && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
     // deep-dark layer (already carved by the lights) composites on top
-    scene.addChild(stamp(this._rts.dark, 'normal', 1));
+    scene.addChild(stamp(rts.dark, 'normal', 1));
     // world-dark marking inside darkvision: cool desaturating wash where the
     // viewer sees only thanks to darkvision (Schleichen!). Deutlich sichtbar,
     // damit Spieler sofort erkennen "hier ist es eigentlich dunkel".
     if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
     // Coloured glow: stamp the merged colour unions ONCE (overlaps already merged
-    // in the RT, so no brighter lens/rims where lights overlap). Gated by the
-    // baseline level so a bright light on a bright map (or dim on dim) adds
-    // nothing — it doesn't differ from the ambient.
+    // in the RT, so no brighter lens/rims where lights overlap). Auf Baselines,
+    // die das Band eigentlich nicht anheben, bleibt der Farbton mit halber
+    // Stärke LEICHT sichtbar — farbiges Licht soll auch auf hellen Maps lesbar
+    // sein, nur eben dezent.
     {
       const dimA = style === 'classic' ? 0.10 : 0.14;
       const brightA = style === 'classic' ? 0.16 : 0.22;
-      if (BL < 1) scene.addChild(stamp(covCD, 'add', dimA));
-      if (BL < 2) scene.addChild(stamp(covCB, 'add', brightA));
+      scene.addChild(stamp(covCD, 'add', BL < 1 ? dimA : dimA * 0.5));
+      scene.addChild(stamp(covCB, 'add', BL < 2 ? brightA : brightA * 0.5));
     }
     renderer.render({ container: scene, target: main, clear: true });
     scene.destroy({ children: true });

@@ -861,7 +861,7 @@ export default function OverviewTab({
 // from their inventory the mastery applies to. The 5.5e rule lets you
 // swap one pick per long rest — that constraint is enforced socially,
 // not by the sheet, so toggles are always live.
-function WeaponMasteryPicker({ character, computed, updateCharacter }) {
+export function WeaponMasteryPicker({ character, computed, updateCharacter }) {
   const wm = computed?.weaponMastery
   // Load the full 5.5e weapon catalog so the picker can offer every
   // weapon with a mastery, not just the ones the player happens to be

@@ -30,7 +30,14 @@ import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, lo
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
 // Wall blocking, accounting for doors: an open door blocks neither.
-const wallBlocksLight = (w) => !(w.kind === 'door' && w.open) && (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksLight;
+// Fenster: OFFEN lässt Licht frei durch; GESCHLOSSEN blockt es — außer das
+// Fenster ist milchig (Licht eine Stufe gedimmt) oder farbig (Buntglas,
+// getöntes Licht). Beides handhabt der Licht-Compositor über brightWalls.
+const wallBlocksLight = (w) => {
+  if (w.kind === 'door') return !w.open;
+  if (w.kind === 'window') return !w.open && !w.milky && !w.color;
+  return (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksLight;
+};
 const wallBlocksMovement = (w) => !(w.kind === 'door' && w.open) && (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksMovement;
 // Sight ≠ light: a "shadow" wall blocks light but you can still SEE past it, so
 // player vision uses this (not the light-blocking set).
@@ -110,12 +117,12 @@ export class VttRenderer {
     this.moveLayer.eventMode = 'none';
     this.liveGroup.addChild(this.bg, this.grid.container, this.zones.container, this.terrain.container, this.moveLayer, this.lights.container, this.auras, this.transitions.container, this.tokens.container, this.currentMaskGfx);
 
-    // DM cursor light: a warm additive glow that follows the mouse so the DM
-    // can peek into dark corners. LOCAL only (never synced — players never see
-    // it) — it lives purely in this client's scene graph.
-    this.cursorGlow = new Sprite(makeCursorGlowTexture());
+    // DM-„Mauslicht" (Alt): KEIN additiver Lichtschein mehr — ein weicher
+    // Kreis, in dem die Licht-/Dunkel-Überlagerung lokal ausgeblendet wird,
+    // d.h. die Map erscheint dort in voller Helligkeit (inverse Maske auf dem
+    // Licht-Compositor). Rein lokal, Spieler sehen nichts davon.
+    this.cursorGlow = new Sprite(makeCursorRevealTexture());
     this.cursorGlow.anchor.set(0.5);
-    this.cursorGlow.blendMode = 'add';
     this.cursorGlow.eventMode = 'none';
     this.cursorGlow.visible = false;
     this.liveGroup.addChild(this.cursorGlow);
@@ -284,7 +291,9 @@ export class VttRenderer {
       const lightWalls = mapWalls.filter((w) => wallBlocksLight(w)); // cast shadows
       // Milky/frosted CLOSED windows pass dim light but block the bright band, so
       // light beyond them is dimmed one step. They block bright only, not dim.
-      const milkyWindows = mapWalls.filter((w) => w.kind === 'window' && w.milky && !w.open);
+      // Geschlossene milchige ODER farbige Fenster: Licht passiert, aber nur
+      // die Dim-Stufe (Buntglas tönt zusätzlich die Fenster-Lichtquelle).
+      const milkyWindows = mapWalls.filter((w) => w.kind === 'window' && (w.milky || w.color) && !w.open);
       const sightWalls = mapWalls.filter((w) => wallBlocksSight(w)); // block vision
       const observers = this.fogObservers(s, map, level, base);
 
@@ -529,10 +538,10 @@ export class VttRenderer {
         }
       }
       this.tokens.update(levelTokens, map.grid, selectedTokenSet, this.drag?.id || this._tween?.id, invisibleHidden, isDM, myId, map.bloodyTokens === true, elevations, markers, (map.tokenBadgeScale ?? 1) * getTokenBadgeScale(), bloodHp, getAcBadgeScale());
-      // DM-only local cursor light — armed via pref, SHOWN only while Alt is
+      // DM-only local cursor reveal — armed via pref, SHOWN only while Alt is
       // held (players never see it either way).
       this._glowArmed = isDM && getDmCursorLight();
-      this.cursorGlow.visible = this._glowArmed && this.keys.alt;
+      this._setReveal(this._glowArmed && this.keys.alt);
       if (this._glowArmed) { const gs = map.grid.size * 4.2; this.cursorGlow.width = gs; this.cursorGlow.height = gs; }
       this.updateMovementPreview(s, map, level, base, isDM);
       this.drawTargeting(levelTokens, map.grid);
@@ -917,7 +926,7 @@ export class VttRenderer {
     const onKey = (down) => (e) => {
       if (e.key === 'Shift') this.keys.shift = down;
       if (e.code === 'Space') this.keys.space = down;
-      if (e.key === 'Alt') { this.keys.alt = down; this.cursorGlow.visible = !!(this._glowArmed && down); if (down) e.preventDefault(); }
+      if (e.key === 'Alt') { this.keys.alt = down; this._setReveal(!!(this._glowArmed && down)); if (down) e.preventDefault(); }
       if (e.key === 'Control') this.keys.ctrl = down;
     };
     const kd = onKey(true), ku = onKey(false);
@@ -1139,7 +1148,7 @@ export class VttRenderer {
       return;
     }
     const pos = this.mapPos(e);
-    if (this._glowArmed) { this.cursorGlow.position.set(pos.x, pos.y); this.cursorGlow.visible = this.keys.alt; }
+    if (this._glowArmed) { this.cursorGlow.position.set(pos.x, pos.y); this._setReveal(this.keys.alt); }
     this.drawFogBrush(pos); // brush cursor preview (no-op unless fog tool)
     this.drawDarkBrushHover(pos); // brush cursor preview (no-op unless dark tool)
     if (this.lightDrag) { A.updateLight(this.lightDrag.id, { x: pos.x + this.lightDrag.offX, y: pos.y + this.lightDrag.offY }); return; }
@@ -1423,42 +1432,81 @@ export class VttRenderer {
   // Player-switchable lights show a clickable light-switch icon on the map
   // (everyone). Black when the light is ON, white when OFF — same SVG, tinted —
   // with a soft contrasting halo so it reads on the bright lit ground.
+  // INKREMENTELL: bestehende Nodes werden aktualisiert statt neu gebaut —
+  // ein Toggle wechselt nur Tint/Halo (synchron, kein Icon-Neuladen, kein
+  // Flackern), Position folgt Licht-Drags live.
   drawLightSwitches(map, level, base) {
     const c = this.lightSwitches;
-    c.removeChildren().forEach((x) => x.destroy({ children: true }));
     const s = getState();
-    // Personal display choice: a player can hide the on-map light switches.
-    if (s.session.role !== 'dm' && !getShowLightSwitches()) return;
+    if (!this._switchNodes) this._switchNodes = new Map();
     const size = (map.grid.size || 70) * 0.38;
-    // Wie Türen: bei dynamischem Fog sehen Spieler einen Schalter erst,
-    // nachdem seine Position einmal wirklich in ihrer Sicht lag.
     const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
     const gateUnseen = s.session.role !== 'dm' && fogMode === 'dynamic';
-    for (const lt of Object.values(s.lights)) {
-      if (lt.mapId !== map.id || (lt.level || base) !== level || !lt.playerSwitch) continue;
-      if (gateUnseen && !this._seenLights?.has(lt.id)) continue;
-      const on = lt.enabled !== false;
-      const node = new Container();
-      node.position.set(lt.x, lt.y);
-      node.eventMode = 'static';
-      node.cursor = 'pointer';
-      node.addChild(new Graphics().circle(0, 0, size * 0.62).fill({ color: on ? 0xffffff : 0x000000, alpha: 0.35 }));
-      const sp = new Sprite();
-      sp.anchor.set(0.5);
-      sp.tint = on ? 0x000000 : 0xffffff;
-      // DM-chosen glyph for this switch (torch/lantern/candle), else the switch.
-      loadIcon(lt.icon || '/Assets/map/lightswitch.svg').then((tex) => {
-        if (!tex || sp.destroyed) return;
-        sp.texture = tex;
-        sp.width = sp.height = size;
-      });
-      node.addChild(sp);
-      node.on('pointerdown', (e) => { e.stopPropagation?.(); A.toggleLight(lt.id); });
-      // Hover: grow slightly so players see the switch is clickable.
-      node.on('pointerover', () => node.scale.set(1.18));
-      node.on('pointerout', () => node.scale.set(1));
-      c.addChild(node);
+    const show = !(s.session.role !== 'dm' && !getShowLightSwitches());
+    const wanted = new Map();
+    if (show) {
+      for (const lt of Object.values(s.lights)) {
+        if (lt.mapId !== map.id || (lt.level || base) !== level || !lt.playerSwitch) continue;
+        // Wie Türen: bei dynamischem Fog erst sichtbar, nachdem die Position
+        // einmal wirklich in der Sicht lag.
+        if (gateUnseen && !this._seenLights?.has(lt.id)) continue;
+        wanted.set(lt.id, lt);
+      }
     }
+    for (const [id, e] of this._switchNodes) {
+      if (!wanted.has(id)) { e.node.destroy({ children: true }); this._switchNodes.delete(id); }
+    }
+    for (const [id, lt] of wanted) {
+      const on = lt.enabled !== false;
+      let e = this._switchNodes.get(id);
+      if (!e) {
+        const node = new Container();
+        node.eventMode = 'static';
+        node.cursor = 'pointer';
+        const halo = new Graphics();
+        const sp = new Sprite();
+        sp.anchor.set(0.5);
+        node.addChild(halo, sp);
+        node.on('pointerdown', (ev) => { ev.stopPropagation?.(); node.scale.set(0.9); A.toggleLight(id); });
+        node.on('pointerup', () => node.scale.set(1.18));
+        node.on('pointerupoutside', () => node.scale.set(1));
+        node.on('pointerover', () => node.scale.set(1.18));
+        node.on('pointerout', () => node.scale.set(1));
+        c.addChild(node);
+        e = { node, sp, halo, icon: null, on: null, size: 0 };
+        this._switchNodes.set(id, e);
+      }
+      e.node.position.set(lt.x, lt.y);
+      const iconUrl = lt.icon || '/Assets/map/lightswitch.svg';
+      if (e.icon !== iconUrl || e.size !== size) {
+        e.icon = iconUrl; e.size = size;
+        loadIcon(iconUrl).then((tex) => {
+          if (!tex || e.sp.destroyed) return;
+          e.sp.texture = tex;
+          e.sp.width = e.sp.height = e.size;
+        });
+      }
+      if (e.on !== on || e.haloSize !== size) {
+        e.on = on; e.haloSize = size;
+        e.sp.tint = on ? 0x000000 : 0xffffff;
+        e.halo.clear().circle(0, 0, size * 0.62).fill({ color: on ? 0xffffff : 0x000000, alpha: 0.35 });
+      }
+    }
+  }
+
+  // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-
+  // Compositor — innerhalb des weichen Kreises verschwindet die Dunkel-/
+  // Licht-Überlagerung, die Map erscheint dort in voller Helligkeit. Kein
+  // Recompose nötig; die Maske folgt dem Cursor pro Frame (billig).
+  _setReveal(on) {
+    on = !!on;
+    if (this._revealOn === on) return;
+    this._revealOn = on;
+    this.cursorGlow.visible = on;
+    const lc = this.lights?.container;
+    if (!lc) return;
+    if (on && typeof lc.setMask === 'function') lc.setMask({ mask: this.cursorGlow, inverse: true });
+    else lc.mask = null;
   }
 
   // Colored ft range circles attached to tokens (everyone sees them).
@@ -1775,8 +1823,11 @@ export class VttRenderer {
     const out = [];
     for (const w of walls) {
       if (w.kind !== 'window') continue;
-      // Milky (frosted) closed window dims the incoming light one step.
-      const s = w.milky && !w.open ? step - 1 : step;
+      // Geschlossenes KLARES Fenster lässt kein Licht mehr durch (Fensterladen-
+      // Semantik) — nur offen, milchig oder farbig (Buntglas) spillt.
+      if (!w.open && !w.milky && !w.color) continue;
+      // Milchig/farbig geschlossen dimmt das einfallende Licht eine Stufe.
+      const s = !w.open && (w.milky || w.color) ? step - 1 : step;
       if (s <= 0) continue;
       const mx = (w.a.x + w.b.x) / 2; const my = (w.a.y + w.b.y) / 2;
       // Which side of the window is the room interior?
@@ -1799,7 +1850,8 @@ export class VttRenderer {
       const dimFt = (s >= 2 ? 4 : 3) * cellFt * mul;
       out.push({ id: 'amb_' + w.id,
         x: mx + (side ? side.x * OFF : 0), y: my + (side ? side.y * OFF : 0),
-        brightFt, dimFt, color: '#e8edf5', enabled: true });
+        // Buntglas: das durchfallende Licht trägt die Fensterfarbe.
+        brightFt, dimFt, color: (!w.open && w.color) ? w.color : '#e8edf5', enabled: true });
     }
     void gridSz;
     return out;
@@ -2179,14 +2231,16 @@ const round5 = (v) => Math.max(5, Math.round(v / 5) * 5);
 
 // (fiveEDistanceFt, rulerMoveFt, darkenColor & friends now live in
 // lib/wallGeometry.js — pure, unit-tested, imported at the top of this file.)
-// Warm radial glow texture for the DM cursor light (drawn once).
-function makeCursorGlowTexture() {
+// Weiche Kreis-Maske für den Alt-„Vollhelligkeits-Kreis" des DM: Mitte voll
+// deckend (Licht-Überlagerung dort komplett ausgeblendet → Map voll hell),
+// weicher Rand. Als INVERSE Maske auf den Licht-Compositor gelegt.
+function makeCursorRevealTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(128, 128, 8, 128, 128, 126);
-  g.addColorStop(0, 'rgba(255,224,170,0.85)');
-  g.addColorStop(0.45, 'rgba(255,214,150,0.38)');
-  g.addColorStop(1, 'rgba(255,210,140,0)');
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.62, 'rgba(255,255,255,0.92)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
   return Texture.from(c);
 }

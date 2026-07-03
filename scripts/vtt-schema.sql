@@ -152,6 +152,7 @@ alter table public.vtt_walls add column if not exists no_roof boolean not null d
 alter table public.vtt_walls add column if not exists see_through boolean not null default false;
 alter table public.vtt_walls add column if not exists milky boolean not null default false;
 alter table public.vtt_walls add column if not exists width_cells real;  -- door/window icon display width in cells (null = default 0.7)
+alter table public.vtt_walls add column if not exists color text;  -- Buntglas-Fensterfarbe (null = klares Glas: geschlossen blockt Licht)
 
 create table if not exists public.vtt_transitions (
   id           text primary key,

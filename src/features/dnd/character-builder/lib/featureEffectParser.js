@@ -356,6 +356,11 @@ function findRerollPill(stripped) {
     if (/\breroll\s+the\s+die\b/i.test(stripped) && /\b1\s+or\s+2\b/i.test(stripped)) {
       return { label: 'Reroll 1-2', title: 'Reroll any 1s and 2s on damage dice (keep new roll)' }
     }
+    // "roll the weapon's damage dice twice and use either roll" — Savage
+    // Attacker & Co.: Schadenswürfel doppelt würfeln, besseres Ergebnis.
+    if (/\broll\s+(?:the\s+)?(?:weapon'?s\s+)?damage\s+dice\s+twice\b[^.]*\buse\s+either\b/i.test(stripped)) {
+      return { label: 'Reroll Dmg', title: 'Roll the damage dice twice, use either roll' }
+    }
     return null
   }
   return { label: 'Reroll 1-2', title: 'Reroll low damage dice' }

@@ -189,10 +189,22 @@ export function addWall(wall) {
   return w.id;
 }
 export const updateWall = (id, patch) => apply({ type: 'wall/update', id, patch });
+// Klick-Spam-Schutz für Tür-/Licht-Toggles: der ERSTE Klick wirkt sofort
+// (optimistisch, lokal), Folgeklicks im Cooldown-Fenster werden geschluckt —
+// verhindert Op-/RPC-Stürme durch Doppel-/Schnellklicks, ohne die Snappiness
+// des ersten Klicks zu kosten.
+const _toggleAt = new Map();
+function toggleCooled(key, ms = 250) {
+  const now = Date.now();
+  if (now - (_toggleAt.get(key) || 0) < ms) return false;
+  _toggleAt.set(key, now);
+  return true;
+}
 // Toggle a door/window open/closed. Optimistic + broadcast for instant feedback;
 // a non-GM also calls the security-definer RPC so it PERSISTS (the wall table is
 // GM-only under RLS — without this the DB echo reverts the door, "springs back").
 export function toggleDoor(id) {
+  if (!toggleCooled(`d:${id}`)) return;
   const w = getState().walls[id];
   if (!w) return;
   apply({ type: 'wall/update', id, patch: { open: !w.open } });
@@ -264,6 +276,7 @@ export const updateLight = (id, patch) => apply({ type: 'light/update', id, patc
 // (instant for everyone); a non-GM also calls the security-definer RPC so the
 // change persists (the normal light table write is GM-only under RLS).
 export function toggleLight(id) {
+  if (!toggleCooled(`l:${id}`)) return;
   const lt = getState().lights[id];
   if (!lt) return;
   const enabled = !(lt.enabled !== false);

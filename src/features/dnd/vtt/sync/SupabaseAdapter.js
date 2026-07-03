@@ -284,7 +284,7 @@ function zonePatchToRow(p) {
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function wallToRow(w, cid) {
-  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough, milky: !!w.milky, width_cells: w.widthCells ?? null };
+  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough, milky: !!w.milky, color: w.color || null, width_cells: w.widthCells ?? null };
 }
 function wallPatchToRow(p) {
   const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells' };
@@ -317,7 +317,7 @@ function rowToZone(r) {
     x: r.x, y: r.y, params: r.params || {}, color: r.color, opacity: r.opacity, losWalls: r.los_walls !== false };
 }
 function rowToWall(r) {
-  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, widthCells: r.width_cells ?? null };
+  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null };
 }
 function rowToTransition(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [] };

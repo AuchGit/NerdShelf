@@ -2,13 +2,22 @@
 // (incl. containers), each row expandable for details, with equip/attune,
 // quantity ± and a ★ quick-access (favorite) toggle. Edits go through the owner
 // full-character save. Full management (add from DB, splitting) stays on the sheet.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useVtt } from '../state/useVtt';
 import { applyOwnCharacter } from '../sync/characterBinding';
 import { favoriteKey, isFavorite, toggleFavorite } from '../../character-builder/lib/favorites';
 import { isContainerItem, itemTypeMeta } from '../../character-builder/lib/sheetUtils';
+import { computeCharacter } from '../../character-builder/lib/rulesEngine';
+import { loadClassData } from '../../character-builder/lib/dataLoader';
+import { WeaponMasteryPicker } from '../../character-builder/components/sheet/OverviewTab';
 import CurrencyDots from './CurrencyDots';
 import { Pinnable } from './tooltip/Tooltips';
+
+function setPath(obj, path, value) {
+  const keys = path.split('.'); let o = obj;
+  for (let i = 0; i < keys.length - 1; i++) { if (o[keys[i]] == null || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+  o[keys[keys.length - 1]] = value;
+}
 
 const CAT_ORDER = ['Waffen', 'Rüstung', 'Tränke', 'Schriftrollen', 'Magisch', 'Behälter', 'Sonstiges'];
 
@@ -40,6 +49,30 @@ export default function InventorySidebar() {
   const [open, setOpen] = useState({}); // expanded item details by key
   const character = myId != null ? chars[myId]?.data : null;
 
+  // Class-Daten für Weapon Mastery (die Slot-Anzahl kommt aus der
+  // "Weapon Mastery"-Tabellenspalte — ohne classDataMap wäre sie 0 und
+  // der Picker unsichtbar). Keyed auf die Klassen-Signatur.
+  const classSig = (character?.classes || []).map((c) => `${c.classId}:${c.level || 1}`).join(',');
+  const [classMap, setClassMap] = useState(null);
+  useEffect(() => {
+    const ids = [...new Set((character?.classes || []).map((c) => c.classId).filter(Boolean))];
+    if (!ids.length) { setClassMap(null); return undefined; }
+    let cancelled = false;
+    const edition = character?.meta?.edition || '5e';
+    Promise.all(ids.map((id) => loadClassData(edition, id).catch(() => null))).then((loaded) => {
+      if (cancelled) return;
+      const m = {};
+      ids.forEach((id, i) => { if (loaded[i]) m[id] = loaded[i]; });
+      setClassMap(m);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classSig, character?.meta?.edition]);
+  const computed = useMemo(() => {
+    if (!character) return null;
+    try { return computeCharacter(character, classMap || {}); } catch { return null; }
+  }, [character, classMap]);
+
   const groups = useMemo(() => {
     const inv = (character?.inventory?.items || []).map((i, ix) => ({ ...i, _s: 'inventory', _ix: ix }));
     const cus = (character?.custom?.items || []).map((i, ix) => ({ ...i, _s: 'custom', _ix: ix }));
@@ -70,6 +103,12 @@ export default function InventorySidebar() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <CurrencyDots currency={character.inventory?.currency} onChange={setCoin} />
+      {/* 5.5e Weapon Mastery: gleiche Picker-Komponente wie auf dem Sheet —
+          Picks landen via Owner-Write in classes[i].weaponMasteries. */}
+      {computed?.weaponMastery?.perClass?.length > 0 && (
+        <WeaponMasteryPicker character={character} computed={computed}
+          updateCharacter={(path, value) => apply((d) => setPath(d, path, value))} />
+      )}
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Item suchen…" style={S.search} />
 
       {CAT_ORDER.filter((c) => groups[c]?.length).map((cat) => {

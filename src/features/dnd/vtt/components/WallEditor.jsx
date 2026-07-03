@@ -47,14 +47,24 @@ export default function WallEditor() {
 
       {wall.kind === 'window' && (
         <>
-          <label style={S.check} title="Fenster lassen Sicht & Licht immer durch; offen ist rein optisch (invertiertes Symbol).">
+          <label style={S.check} title="Nur ein OFFENES Fenster lässt Licht ungehindert durch. Geschlossen blockt es Licht — außer es ist milchig (gedimmt) oder farbig (getönt). Sicht geht immer durch.">
             <input type="checkbox" checked={!!wall.open} onChange={(e) => apply({ open: e.target.checked })} />
-            Fenster offen (Symbol invertiert)
+            Fenster offen (lässt Licht durch)
           </label>
-          <label style={S.check} title="Milchglas: helles Licht wird beim Durchscheinen eine Stufe gedämpft (hell → dim dahinter); Dämmerlicht bleibt. Bei offenem Fenster ohne Wirkung.">
+          <label style={S.check} title="Milchglas: Licht passiert das geschlossene Fenster, aber eine Stufe gedämpft (hell → dim dahinter).">
             <input type="checkbox" checked={!!wall.milky} onChange={(e) => apply({ milky: e.target.checked })} />
             Milchglas (dämpft Licht)
           </label>
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}
+            title="Buntglas: Licht passiert das geschlossene Fenster gedimmt und in dieser Farbe getönt. Ohne Farbe = klares Glas (geschlossen blockt Licht).">
+            <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>Glasfarbe</span>
+            <input type="color" value={wall.color || '#88ccff'} onChange={(e) => apply({ color: e.target.value })}
+              style={{ width: 34, height: 24, padding: 0, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer' }} />
+            {wall.color
+              ? <button style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                  onClick={() => apply({ color: null })}>Klar (transparent)</button>
+              : <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>klar</span>}
+          </div>
         </>
       )}
 

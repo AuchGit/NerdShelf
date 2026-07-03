@@ -54,6 +54,10 @@ const PASSIVE_PATTERNS = [
   /\byou learn (?:one|two|three|\d+)[^.]{0,60}\boptions? of your choice\b/i,
   /\badvantage on [^.]{0,60}\bsaving throws?\b[^.]{0,40}\bconcentration\b/i,
   /\bperform the somatic components?\b/i,
+  // Mastery-/Property-Grants ("use the weapon mastery properties of three
+  // kinds of weapons of your choice") — die Auswahl passiert im eigenen
+  // Picker, nicht in den Specials.
+  /\bpropert(?:y|ies) of (?:one|two|three|four|\d+) kinds? of\b[^.]{0,80}\bweapons?\b/i,
 ];
 
 export default function Specials() {
@@ -222,10 +226,9 @@ export default function Specials() {
         const isOpen = !!open[it.name];
         return (
           <div key={it.name} style={S.item}>
-            <button style={S.itemHead} onClick={() => setOpen((o) => ({ ...o, [it.name]: !o[it.name] }))}>
+            <button style={S.itemHead} title={it.name} onClick={() => setOpen((o) => ({ ...o, [it.name]: !o[it.name] }))}>
               <span style={S.caret}>{isOpen ? '▾' : '▸'}</span>
               <span style={S.name}>{it.name}</span>
-              <span style={{ flex: 1 }} />
               {it.pills.map((p, i) => (
                 <span key={i} style={{ ...S.pill, borderColor: PILL_COLOR[p.kind], color: PILL_COLOR[p.kind] }} title={p.title || p.label}>{p.label}</span>
               ))}
@@ -245,8 +248,10 @@ const S = {
   empty: { color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 },
   item: { border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', overflow: 'hidden' },
   itemHead: { display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '5px 8px', background: 'transparent', border: 'none', color: 'var(--color-text)', cursor: 'pointer', textAlign: 'left' },
-  caret: { color: 'var(--color-text-muted)', fontSize: 10, width: 10 },
-  name: { fontWeight: 600, fontSize: 'var(--fs-sm)' },
-  pill: { fontSize: 9, fontWeight: 700, border: '1px solid', borderRadius: 999, padding: '1px 6px', whiteSpace: 'nowrap' },
+  caret: { color: 'var(--color-text-muted)', fontSize: 10, width: 10, flexShrink: 0 },
+  // Einzeilig: lange Namen werden mit … abgekürzt (voller Name im Tooltip),
+  // die Pills bleiben rechts sichtbar.
+  name: { fontWeight: 600, fontSize: 'var(--fs-sm)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' },
+  pill: { fontSize: 9, fontWeight: 700, border: '1px solid', borderRadius: 999, padding: '1px 6px', whiteSpace: 'nowrap', flexShrink: 0 },
   body: { fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'pre-wrap', padding: '0 10px 8px', lineHeight: 1.4 },
 };

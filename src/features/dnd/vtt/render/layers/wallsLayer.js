@@ -134,6 +134,8 @@ export class WallsLayer {
       // Frosted-glass cue for a CLOSED milky window (dims light by a step) —
       // shown in both the SVG and fallback cases so the DM can tell them apart.
       if (isWindow && w.milky && !open) drawFrost(node.leaf, w.a, w.b);
+      // Buntglas: geschlossenes farbiges Fenster zeigt eine getönte Scheibe.
+      if (isWindow && w.color && !open) drawFrost(node.leaf, w.a, w.b, w.color);
     } else {
       node.icon.visible = false;
       node.leaf.clear();
@@ -205,7 +207,7 @@ function drawWindowFallback(g, a, b, open, col) {
 
 // Frosted overlay for a milky (closed) window: a soft white translucent bar
 // with a couple of diagonal frost ticks across the opening.
-function drawFrost(g, a, b) {
+function drawFrost(g, a, b, tint = null) {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len, uy = dy / len;
@@ -214,7 +216,7 @@ function drawFrost(g, a, b) {
   g.poly([
     a.x + px * h, a.y + py * h, b.x + px * h, b.y + py * h,
     b.x - px * h, b.y - py * h, a.x - px * h, a.y - py * h,
-  ]).fill({ color: 0xffffff, alpha: 0.32 });
+  ]).fill({ color: tint || 0xffffff, alpha: tint ? 0.45 : 0.32 });
   for (const t of [0.3, 0.55, 0.8]) {
     const cx = a.x + dx * t, cy = a.y + dy * t;
     g.moveTo(cx - ux * h * 0.5 + px * h * 0.7, cy - uy * h * 0.5 + py * h * 0.7)
