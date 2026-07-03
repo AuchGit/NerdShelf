@@ -338,19 +338,25 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
       }
 
       // ── visible playback of the recorded throw ──
-      const t0 = performance.now();
+      // t0 = Timestamp des ERSTEN Ticks (nicht performance.now() bei der
+      // Registrierung): rAF-Timestamps können in der WebView davor liegen,
+      // ft wurde dann negativ → frames[-1] = undefined → Crash im ersten
+      // Frame (genau der "keine Animation"-Bug).
+      let t0 = null;
       const qa = new THREE.Quaternion(); const qb = new THREE.Quaternion();
       const tick = (now) => {
         if (disposed) return;
         try {
-        const ft = ((now - t0) / 1000) * 60;
+        if (t0 == null) t0 = now;
+        const ft = Math.max(0, ((now - t0) / 1000) * 60);
         let done = true;
         for (const b of bodies) {
           const last = b.frames.length - 1;
-          const i0 = Math.min(last, Math.floor(ft));
+          const i0 = Math.max(0, Math.min(last, Math.floor(ft)));
           const i1 = Math.min(last, i0 + 1);
           if (i1 < last) done = false;
           const a = b.frames[i0]; const c = b.frames[i1];
+          if (!a || !c) continue;
           const t = Math.min(1, ft - i0);
           b.mesh.position.set(a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t);
           qa.set(a[3], a[4], a[5], a[6]); qb.set(c[3], c[4], c[5], c[6]);
