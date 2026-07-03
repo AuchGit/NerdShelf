@@ -194,13 +194,17 @@ function labelsFor(sides, faceCount, result, upFace) {
   return labels;
 }
 
-export default function Dice3D({ dice, onFallback }) {
+export default function Dice3D({ dice, onFallback, onStatus }) {
   const hostRef = useRef(null);
   const [chips, setChips] = useState([]); // d4 result chips only
 
   useEffect(() => {
     let disposed = false;
     let renderer; let raf = 0;
+    // Sichtbare Diagnose: `started` = erster Frame wirklich gerendert. Bleibt
+    // das aus, meldet der Watchdog sichtbar WO es hängt (statt still nichts).
+    let started = false;
+    let watchdog = 0;
     const host = hostRef.current;
     if (!host || !dice.length) return undefined;
 
@@ -214,9 +218,17 @@ export default function Dice3D({ dice, onFallback }) {
       gl.getExtension('WEBGL_lose_context')?.loseContext();
     } catch (e) { onFallback?.('WebGL-Check fehlgeschlagen: ' + (e?.message || e)); return undefined; }
 
+    onStatus?.('Lade 3D-Module…');
+    watchdog = setTimeout(() => {
+      if (disposed || started) return;
+      console.error('[vtt] 3D-Watchdog: kein Frame nach 12s');
+      onStatus?.(null);
+      onFallback?.('3D startet nicht (Watchdog 12s) — Stufe: siehe Statuszeile davor');
+    }, 12000);
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('3D-Module laden nicht (Timeout nach 8s — Dev-Server neu starten?)')), 8000));
     Promise.race([Promise.all([import('three'), import('cannon-es')]), timeout]).then(([THREE, CANNON]) => {
       if (disposed || !hostRef.current) return;
+      onStatus?.('Initialisiere Szene…');
       try {
         renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
       } catch (e) { console.error('[vtt] WebGL für 3D-Würfel nicht verfügbar', e); onFallback?.('WebGL-Kontext fehlgeschlagen: ' + (e?.message || e)); return; }
@@ -330,6 +342,7 @@ export default function Dice3D({ dice, onFallback }) {
       const qa = new THREE.Quaternion(); const qb = new THREE.Quaternion();
       const tick = (now) => {
         if (disposed) return;
+        try {
         const ft = ((now - t0) / 1000) * 60;
         let done = true;
         for (const b of bodies) {
@@ -350,8 +363,21 @@ export default function Dice3D({ dice, onFallback }) {
           b.shadow.material.opacity = 0.3 * sc;
         }
         renderer.render(scene, camera);
+        if (!started) {
+          // Erster Frame ist raus → Watchdog aus; kurze Bestätigung anzeigen,
+          // damit "rendert, aber unsichtbar" von "rendert nie" unterscheidbar ist.
+          started = true;
+          clearTimeout(watchdog);
+          onStatus?.('3D läuft…');
+          setTimeout(() => { if (!disposed) onStatus?.(null); }, 1500);
+        }
         if (!done) raf = requestAnimationFrame(tick);
         else if (d4Chips.length) setChips(d4Chips);
+        } catch (e) {
+          console.error('[vtt] 3D-Playback-Fehler', e);
+          onStatus?.(null);
+          onFallback?.('3D-Playback-Fehler: ' + (e?.message || e));
+        }
       };
       raf = requestAnimationFrame(tick);
       } catch (e) {
@@ -364,6 +390,8 @@ export default function Dice3D({ dice, onFallback }) {
 
     return () => {
       disposed = true;
+      clearTimeout(watchdog);
+      onStatus?.(null);
       cancelAnimationFrame(raf);
       if (renderer) {
         renderer.dispose();

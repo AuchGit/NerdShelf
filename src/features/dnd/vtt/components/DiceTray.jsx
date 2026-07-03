@@ -69,6 +69,9 @@ export default function DiceTray() {
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
   // damit "3D geht nicht" diagnostizierbar ist statt still 2D zu zeigen.
   const [webglBroken, setWebglBroken] = useState(null);
+  // Live-Statuszeile der 3D-Pipeline (Lade Module / Init / läuft) — zeigt
+  // beim Hängen sichtbar WO es hängt.
+  const [d3status, setD3status] = useState(null);
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -139,16 +142,23 @@ export default function DiceTray() {
           ? <span style={S.hint}>Würfel wählen oder Formel eingeben…</span>
           : (want3d && !webglBroken && dice.length <= 12)
             // key = roll identity → every roll remounts the scene for a fresh throw
-            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))} onFallback={(reason) => setWebglBroken(reason || 'unbekannt')} />
+            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))}
+                onStatus={setD3status}
+                onFallback={(reason) => { setD3status(null); setWebglBroken(reason || 'unbekannt'); }} />
             : dice.map((d) => <Die key={d.id} sides={d.sides} result={d.result} />)}
       </div>
+      {want3d && !webglBroken && d3status && (
+        <div style={S.statusNote}>{d3status}</div>
+      )}
       {want3d && webglBroken && (
         <div style={S.fallbackNote}>
           ⚠ 3D-Fallback: {webglBroken}{' '}
           <button style={{ ...S.smallBtn, marginLeft: 4 }} onClick={() => setWebglBroken(null)}>Nochmal versuchen</button>
         </div>
       )}
-      {(total != null || dice.length > 1) && (
+      {/* Bei 3D immer auch als Text — das Ergebnis darf nie an einer
+          klemmenden Animation hängen. */}
+      {(total != null || dice.length > 1 || (dice.length > 0 && want3d && !webglBroken)) && (
         <div style={S.total}>{total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}</div>
       )}
     </div>
@@ -192,4 +202,5 @@ const S = {
   dieLabel: { position: 'absolute', bottom: 1, right: 3, fontSize: 7, color: 'var(--color-text-muted)' },
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
   fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
+  statusNote: { padding: '0 10px 6px', fontSize: 10, color: 'var(--color-text-muted)' },
 };

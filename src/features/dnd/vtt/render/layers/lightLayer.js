@@ -52,7 +52,9 @@ export class LightLayer {
   }
 
   _applyBlur() {
-    const eff = this._blurBase * this._zoom;
+    // Nur beim RAUSzoomen herunterskalieren (fixer Screen-Blur frisst dort
+    // Dunkelflächen); beim Reinzoomen bleibt die Stärke wie früher konstant.
+    const eff = this._blurBase * Math.min(1, this._zoom);
     if (eff > 0.05) {
       if (!this._blur) this._blur = new BlurFilter({ strength: eff });
       else this._blur.strength = eff;
@@ -139,24 +141,35 @@ export class LightLayer {
     const dvSig = JSON.stringify(darkvision.map((d) => [Math.round(d.x), Math.round(d.y), Math.round(d.radiusPx)]));
     const sig = `${baseSig}|${dvSig}`;
     if (sig === this._sig) return;
+    // Drag-Throttle: beim kontinuierlichen Ziehen eines leuchtenden Tokens
+    // wird höchstens alle ~80ms wirklich recomposed; der letzte Stand landet
+    // garantiert über das Trailing-Update (kein hängender Zwischenzustand).
+    const nowTs = performance.now();
+    if (nowTs - (this._lastCompose || 0) < 80) {
+      this._pendingOpts = opts;
+      if (!this._trail) {
+        this._trail = setTimeout(() => {
+          this._trail = null;
+          const o = this._pendingOpts; this._pendingOpts = null;
+          if (o) { try { this.update(o); } catch { /* Renderer evtl. schon weg */ } }
+        }, 90);
+      }
+      return;
+    }
     this._sig = sig;
 
-    // (re)create the three textures when the map size changes.
-    const key = `${w}x${h}`;
+    // (re)create the textures when the map size changes. Auflösung bei großen
+    // Maps gedeckelt: Lighting ist weich — halbe Pixel sehen identisch aus,
+    // sparen aber massiv GPU-Fill-Rate (jede Licht-Bewegung = mehrere
+    // map-große Render-Passes). Koordinaten bleiben logisch (Pixi skaliert).
+    const res = Math.max(0.35, Math.min(1, 2600 / Math.max(w, h)));
+    const key = `${w}x${h}@${res.toFixed(2)}`;
     if (this._rtKey !== key) {
       if (this._rts) for (const rt of Object.values(this._rts)) rt.destroy(true);
+      const mk = () => RenderTexture.create({ width: w, height: h, resolution: res });
       this._rts = {
-        // main wird stark minifiziert angezeigt (weit rausgezoomt) — Mipmaps
-        // verhindern, dass dünne Schattenstreifen beim Rauszoomen wegaliassen.
-        main: RenderTexture.create({ width: w, height: h, autoGenerateMipmaps: true }),
-        covB: RenderTexture.create({ width: w, height: h }),
-        covD: RenderTexture.create({ width: w, height: h }),
-        covShadow: RenderTexture.create({ width: w, height: h }),
-        covCB: RenderTexture.create({ width: w, height: h }),
-        covCD: RenderTexture.create({ width: w, height: h }),
-        covDV: RenderTexture.create({ width: w, height: h }),
-        covDVD: RenderTexture.create({ width: w, height: h }),
-        dark: RenderTexture.create({ width: w, height: h }),
+        main: mk(), covB: mk(), covD: mk(), covShadow: mk(),
+        covCB: mk(), covCD: mk(), covDV: mk(), covDVD: mk(), dark: mk(),
       };
       this._rtKey = key;
       this._baseSig = null; // fresh blank RTs → force a coverage rebuild
@@ -361,6 +374,7 @@ export class LightLayer {
     }
     renderer.render({ container: scene, target: main, clear: true });
     scene.destroy({ children: true });
+    this._lastCompose = performance.now();
   }
 }
 
