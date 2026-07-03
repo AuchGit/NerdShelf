@@ -22,7 +22,21 @@ const STATE_FILE = process.env.STATE_FILE || join(dirname(fileURLToPath(import.m
 // Full-resolution map originals live here (no Supabase, no compression). The
 // app PUTs originals when uploading in relay mode, and players GET them. Drop
 // files here manually too — they're served at /map/<filename>.
-const MAPS_DIR = process.env.MAPS_DIR || join(dirname(fileURLToPath(import.meta.url)), '..', 'vtt', 'campaigns');
+// Default = das Verzeichnis, in das die Desktop-App ihre Originale speichert
+// (saveMapOriginalLocal → appLocalDataDir/vtt/campaigns) — so serviert das
+// manuelle Node-Relay dieselben Dateien wie das eingebettete App-Relay.
+// Fallback (kein App-Ordner vorhanden): <repo>/vtt/campaigns wie bisher.
+function defaultMapsDir() {
+  if (process.env.MAPS_DIR) return process.env.MAPS_DIR;
+  const appDir = process.platform === 'win32'
+    ? (process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'io.github.auchgit.nerdshelf', 'vtt', 'campaigns'))
+    : process.platform === 'darwin'
+      ? (process.env.HOME && join(process.env.HOME, 'Library', 'Application Support', 'io.github.auchgit.nerdshelf', 'vtt', 'campaigns'))
+      : (process.env.HOME && join(process.env.HOME, '.local', 'share', 'io.github.auchgit.nerdshelf', 'vtt', 'campaigns'));
+  try { if (appDir && statSync(appDir).isDirectory()) return appDir; } catch { /* App-Ordner existiert nicht */ }
+  return join(dirname(fileURLToPath(import.meta.url)), '..', 'vtt', 'campaigns');
+}
+const MAPS_DIR = defaultMapsDir();
 try { mkdirSync(MAPS_DIR, { recursive: true }); } catch { /* ignore */ }
 const MIME = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif', webm: 'video/webm', mp4: 'video/mp4' };
 const safeName = (n) => basename(String(n)).replace(/[^\w.\-]/g, '_');
