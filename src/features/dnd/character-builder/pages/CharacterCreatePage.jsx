@@ -6,8 +6,8 @@ import { newShareToken } from '../../../../shared/tokens'
 import { createEmptyCharacter } from '../lib/characterModel'
 import { useLanguage } from '../lib/i18n'
 import { getSpellcastingInfo, isSpellcaster } from '../lib/spellcastingRules'
-import { loadClassData } from '../lib/dataLoader'
-import { parseClassFeatureOptionChoices } from '../lib/optionBlockResolver'
+import { loadClassData, loadFeatList } from '../lib/dataLoader'
+import { parseClassFeatureOptionChoices, buildNameSourceMap } from '../lib/optionBlockResolver'
 import HeaderButtons from '../components/ui/HeaderButtons'
 import './CharacterCreatePage.css'
 import StepIndicator        from '../components/wizard/StepIndicator'
@@ -185,10 +185,16 @@ export default function CharacterCreatePage({ session }) {
     const edition = character.meta?.edition || '5e'
     if (!cls?.classId) { setClassOptionDescs([]); return }
     let cancelled = false
-    loadClassData(edition, cls.classId).then(cd => {
+    // Feat-Liste mitziehen: 2024-Klassen kodieren Fighting Style / Epic
+    // Boon als Feat-Kategorie — ohne featMap sähe der Skip-/Done-Check
+    // diese Picks nicht (Step würde übersprungen, Fighter L1 5.5e).
+    Promise.all([
+      loadClassData(edition, cls.classId),
+      loadFeatList(edition).catch(() => []),
+    ]).then(([cd, featList]) => {
       if (cancelled) return
       if (!cd) { setClassOptionDescs([]); return }
-      const all = parseClassFeatureOptionChoices(cls, cd, { edition }) || []
+      const all = parseClassFeatureOptionChoices(cls, cd, { edition, featMap: buildNameSourceMap(featList) }) || []
       // refOptionalfeature-only Blöcke (5e Fighting Style → Archery/…)
       // werden vom Legacy-Pfad behandelt. Hier filtern wir sie raus,
       // damit der Skip-/Done-Check sich nicht doppelt zählt.

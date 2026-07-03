@@ -3,14 +3,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
 import { supabase } from '../lib/supabase'
 import { getTotalLevel } from '../lib/characterModel'
-import { computeAbilityScores } from '../lib/rulesEngine'
+import { computeAbilityScores, computeProficiencies } from '../lib/rulesEngine'
 import { parseTags } from '../lib/tagParser'
+import { formatSkillName, STANDARD_LANGUAGES, STANDARD_TOOLS } from '../lib/sheetUtils'
 import {
   loadClassList, loadClassData, loadSpellList, loadClassSpellNames,
   loadFeatList, loadOptionalFeatureList,
 } from '../lib/dataLoader'
-import { parseFeatChoices } from '../lib/choiceParser'
-import { parseClassFeatureOptionChoices } from '../lib/optionBlockResolver'
+import { parseFeatChoices, parseFeatureChoices } from '../lib/choiceParser'
+import { parseClassFeatureOptionChoices, buildNameSourceMap } from '../lib/optionBlockResolver'
 import { getSpellListClass, getSpellcastingInfo } from '../lib/spellcastingRules'
 import {
   computeLevelUpInfo, applyLevelUp, undoLastLevelUp,
@@ -41,7 +42,7 @@ const STEPS = [
 // damit Subclass-interne Option-Blocks ab dem Subclass-Level auch
 // auftauchen. refOptionalfeature-only Blöcke gehen über den Legacy
 // OptFeatPicker-Pfad, nicht über uns.
-function computeNewOptionBlockDescs(draft, info) {
+function computeNewOptionBlockDescs(draft, info, featMap = null) {
   if (!info || !draft?.classData) return []
   const synthEntry = {
     classId: info.classId,
@@ -50,8 +51,12 @@ function computeNewOptionBlockDescs(draft, info) {
       || (info.classId && info.subclassId)
       || null,
   }
+  // featMap: 2024-Klassen kodieren Fighting Style / Epic Boon als
+  // Feat-Kategorie — ohne Feat-Daten kann der Resolver diese Blöcke
+  // nicht synthetisieren und der Pick würde erst nachträglich im
+  // Features-Tab auftauchen statt direkt beim Level-Up.
   const all = parseClassFeatureOptionChoices(
-    synthEntry, draft.classData, { edition: draft.edition || info.edition || '5e' },
+    synthEntry, draft.classData, { edition: draft.edition || info.edition || '5e', featMap },
   ) || []
   // Nur Descriptors deren Feature genau auf nextLevel kommt — alle
   // vorherigen Level wurden bei früheren Level-Ups schon abgehandelt.
@@ -64,7 +69,58 @@ function computeNewOptionBlockDescs(draft, info) {
   })
 }
 
-function getActiveSteps(info, draft) {
+// Neue Features (Klasse + gewählte Subclass) auf GENAU dem neuen Level,
+// mit Entries — Futter für parseFeatureChoices ("your choice"-Picks aus
+// dem Feature-Text: Expertise, Skill, Sprache, Tool, Saving Throw).
+// Diese Picks waren bisher nur nachträglich im Features-Tab des Sheets
+// lösbar; jetzt tauchen sie direkt beim Level-Up auf. Der Features-Tab
+// bleibt als Backstop für Altbestände.
+function newFeaturesWithEntries(draft, info) {
+  if (!draft?.classData || !info) return []
+  const lvl = info.nextLevel
+  const out = []
+  for (const f of (draft.classData.features || [])) {
+    if (f?.name && (f.level || 1) === lvl && !f.isClassFeatureVariant) out.push(f)
+  }
+  const subId = draft.subclassId || info.subclassId || null
+  if (subId) {
+    const cleanSub = String(subId).split(/__|\|/)[0].trim()
+    const sub = (draft.classData.subclasses || []).find(s =>
+      s.id === subId || s.name === subId
+      || s.id === cleanSub || s.name === cleanSub || s.shortName === cleanSub)
+    if (sub) {
+      for (const f of (Array.isArray(sub.features) ? sub.features : [])) {
+        if (f && typeof f === 'object' && f.name && (f.level || 1) === lvl) out.push(f)
+      }
+      if (sub.featuresPerLevel) {
+        for (const [l, fs] of Object.entries(sub.featuresPerLevel)) {
+          if ((parseInt(l, 10) || 1) !== lvl) continue
+          for (const f of (fs || [])) {
+            if (f && typeof f === 'object' && f.name) out.push({ ...f, level: lvl })
+          }
+        }
+      }
+    }
+  }
+  return out
+}
+
+function computeNewFeatureTextChoices(draft, info) {
+  const seen = new Set()
+  const out = []
+  for (const f of newFeaturesWithEntries(draft, info)) {
+    let choices = []
+    try { choices = parseFeatureChoices({ ...f, level: f.level ?? info.nextLevel }) } catch { /* fail-soft */ }
+    for (const ch of choices) {
+      if (seen.has(ch.id)) continue
+      seen.add(ch.id)
+      out.push({ feature: f, choice: ch })
+    }
+  }
+  return out
+}
+
+function getActiveSteps(info, draft, featMap = null) {
   if (!info) return [STEPS[0]]
   const a = [STEPS[0], STEPS[1]]
   if (info.needsSubclass) a.push(STEPS[2])
@@ -79,13 +135,17 @@ function getActiveSteps(info, draft) {
   // Generic feature-option blocks new at this level (Druid Primal
   // Order, future class-feature option picks). Computed against the
   // upcoming level so descriptors fresh for this level-up appear.
-  const newOptionBlockDescs = computeNewOptionBlockDescs(draft, info)
+  const newOptionBlockDescs = computeNewOptionBlockDescs(draft, info, featMap)
+  // "Your choice"-Picks aus dem Feature-Text (Expertise, Skill, Sprache,
+  // Tool, Saving Throw) — direkt beim Level-Up statt nachträglich im
+  // Features-Tab.
+  const hasFeatureTextChoices = computeNewFeatureTextChoices(draft, info).length > 0
   // Optional Class Feature Variants (TCE) auf diesem Level — Step
   // ohnehin nötig damit der Spieler sie aktivieren kann.
   const hasNewVariants = !!(draft.classData?.features?.some(f =>
     f?.isClassFeatureVariant && (f.level || 1) === info.nextLevel
   ))
-  if (ofGains.length > 0 || hasClassFeatureChoices || newOptionBlockDescs.length > 0 || hasNewVariants) a.push(STEPS[4])
+  if (ofGains.length > 0 || hasClassFeatureChoices || newOptionBlockDescs.length > 0 || hasNewVariants || hasFeatureTextChoices) a.push(STEPS[4])
   // Spells: check effective casting (class or subclass)
   const castAb = draft.existingSpellAbility || draft.subclassSpellAbility || info.spellcastingAbility
   const effProg = draft.existingCasterProg || draft.subclassCasterProg || info.casterProgression
@@ -146,7 +206,11 @@ export default function LevelUpPage({ session }) {
   })
 
   const edition = char?.meta?.edition || '5e'
-  const activeSteps = useMemo(() => getActiveSteps(info, draft), [info, draft])
+  // Feat-Lookup für den Option-Block-Resolver (2024 Fighting Style /
+  // Epic Boon = Feat-Kategorien) — gleiche Doppel-Key-Konvention wie
+  // optionalFeatureMap.
+  const featMap = useMemo(() => buildNameSourceMap(feats), [feats])
+  const activeSteps = useMemo(() => getActiveSteps(info, draft, featMap), [info, draft, featMap])
   const currentStep = activeSteps[stepIdx] || STEPS[0]
 
   useEffect(() => { loadData() }, [id])
@@ -176,7 +240,7 @@ export default function LevelUpPage({ session }) {
       subclassId: existSubId, subclassSpellAbility:null, subclassCasterProg:null,
       existingSpellAbility: existSpellAb, existingCasterProg: existCasterProg,
       asiMode:'asi', asiPicks:{}, featEntry:null, featAB:{}, featCh:{},
-      optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{},
+      optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{}, featureTextPicks:{},
       cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
       preparedSpellPool:null, preparedCantripPool:null,
       // 5.5e prepared-caster pick — MUSS initialisiert sein, sonst
@@ -280,6 +344,9 @@ export default function LevelUpPage({ session }) {
       // wertet es aus.
       newChoices: draft.featureOptionPicks && Object.keys(draft.featureOptionPicks).length > 0
         ? { ...draft.featureOptionPicks } : {},
+      // "Your choice"-Feature-Text-Picks (Expertise/Skill/Sprache/Tool)
+      // → cls.featureChoices, gleiche Storage wie der Features-Tab.
+      featureTextChoices: draft.featureTextPicks || {},
     })
     // 5.5e prepared casters: append the level-up's new prepared spell
     // picks to character.status.preparedSpells[classId]. The Prepare
@@ -704,9 +771,11 @@ function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
   const showFavoredTerrain = featureNames.some(f => f.includes('natural explorer'))
   const cfc = draft.classFeatureChoices || {}
 
-  // Generische Feature-Option-Picks (Druid Primal Order, …) — neu
-  // auf diesem Level, datadriven aus den Class-/Subclass-Features.
-  const newOptionBlockDescs = useMemo(() => computeNewOptionBlockDescs(draft, info), [draft, info])
+  // Generische Feature-Option-Picks (Druid Primal Order, 2024 Fighting
+  // Style / Epic Boon, …) — neu auf diesem Level, datadriven aus den
+  // Class-/Subclass-Features + Feat-Kategorien.
+  const stepFeatMap = useMemo(() => buildNameSourceMap(feats), [feats])
+  const newOptionBlockDescs = useMemo(() => computeNewOptionBlockDescs(draft, info, stepFeatMap), [draft, info, stepFeatMap])
   const optionPicks = draft.featureOptionPicks || {}
   const toggleOptionPick = (desc, valueKey) => {
     const stored = optionPicks[desc.id]
@@ -723,9 +792,100 @@ function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
     setDraft(d => ({ ...d, featureOptionPicks: { ...(d.featureOptionPicks || {}), [desc.id]: value } }))
   }
 
+  // ── "Your choice"-Picks aus dem Feature-Text ──
+  // Expertise / Skill / Sprache / Tool / Saving Throw, die
+  // parseFeatureChoices aus den neuen Features dieses Levels zieht.
+  // Gespeichert wie der Features-Tab-Backstop: cls.featureChoices[id].
+  const newTextChoices = useMemo(() => computeNewFeatureTextChoices(draft, info), [draft, info])
+  const textPicks = draft.featureTextPicks || {}
+  // Eligibility aus den AKTUELLEN Proficiencies des Charakters —
+  // Expertise nur auf proficient (noch nicht Expertise), Sprachen/Tools
+  // die man schon hat sind raus (RAW).
+  const profState = useMemo(() => {
+    try {
+      const profs = computeProficiencies(char) || {}
+      const skillMap = profs.skills || {}
+      return {
+        eligibleExpertise: Object.entries(skillMap).filter(([, v]) => v === 'proficient').map(([k]) => k),
+        languages: new Set((profs.languages || []).map(l => String(l).toLowerCase())),
+        tools: new Set(Object.keys(profs.tools || {}).map(k => String(k).toLowerCase())),
+      }
+    } catch { return { eligibleExpertise: [], languages: new Set(), tools: new Set() } }
+  }, [char])
+  const toggleTextPick = (choice, val) => setDraft(d => {
+    const cur = d.featureTextPicks?.[choice.id]?.value
+    // Array- vs. Skalar-Storage exakt wie der Features-Tab-Backstop,
+    // damit dessen "erledigt"-Check die Level-Up-Picks wiedererkennt.
+    const isMulti = choice.type === 'expertise' || choice.type === 'languageProficiency' || choice.type === 'toolProficiency'
+    let value
+    if (!isMulti) {
+      value = cur === val ? null : val
+    } else {
+      const arr = Array.isArray(cur) ? cur : []
+      value = arr.includes(val) ? arr.filter(v => v !== val)
+        : (arr.length < choice.count ? [...arr, val] : arr)
+    }
+    return { ...d, featureTextPicks: { ...(d.featureTextPicks || {}), [choice.id]: { id: choice.id, type: choice.type, value } } }
+  })
+  // Optionen je Choice-Type (Expertise/Sprachen/Tools sind dynamisch,
+  // Skill/Save kommen als statische Options aus dem Parser).
+  const textChoiceOptions = (choice) => {
+    if (choice.type === 'expertise') return profState.eligibleExpertise.map(s => ({ value: s, label: formatSkillName(s) }))
+    if (choice.type === 'languageProficiency') {
+      const curArr = Array.isArray(textPicks[choice.id]?.value) ? textPicks[choice.id].value : []
+      return STANDARD_LANGUAGES
+        .filter(l => curArr.includes(l) || !profState.languages.has(l.toLowerCase()))
+        .map(l => ({ value: l, label: l }))
+    }
+    if (choice.type === 'toolProficiency') {
+      const curArr = Array.isArray(textPicks[choice.id]?.value) ? textPicks[choice.id].value : []
+      return STANDARD_TOOLS
+        .filter(t => curArr.includes(t) || !profState.tools.has(t.toLowerCase()))
+        .map(t => ({ value: t, label: t }))
+    }
+    return choice.options || []
+  }
+
   return (
     <div style={{maxWidth:860,margin:'0 auto'}}>
       <h2 style={S.secTitle}>Class Features wählen</h2>
+
+      {/* ── Feature-Text-Picks (Expertise / Skill / Sprache / Tool …) ── */}
+      {newTextChoices.map(({ feature, choice }) => {
+        const cur = textPicks[choice.id]?.value
+        const curArr = Array.isArray(cur) ? cur : (cur != null ? [cur] : [])
+        const done = curArr.length >= choice.count
+        const opts = textChoiceOptions(choice)
+        return (
+          <div key={choice.id} style={S.card}>
+            <div style={S.cardTitle}>
+              {feature.name} (L{feature.level ?? info.nextLevel})
+              {done
+                ? <span style={{ color: 'var(--accent-green)', marginLeft: 8, fontSize: 12 }}>✓ {curArr.length}/{choice.count}</span>
+                : <span style={{ color: 'var(--accent)', marginLeft: 8, fontSize: 12 }}>{curArr.length}/{choice.count} — wählen</span>}
+            </div>
+            <div style={{ color:'var(--text-muted)', fontSize:12, marginBottom:10 }}>{choice.label}</div>
+            {opts.length === 0 ? (
+              <div style={{ color:'var(--text-dim)', fontSize:12, fontStyle:'italic' }}>
+                Keine wählbaren Optionen gefunden — du kannst das später im Features-Tab des Sheets nachholen.
+              </div>
+            ) : (
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {opts.map(o => {
+                  const isSel = curArr.includes(o.value)
+                  return (
+                    <button key={o.value} onClick={() => toggleTextPick(choice, o.value)}
+                      style={{padding:'6px 14px',borderRadius:6,border:isSel?'1px solid #e2b96f':'1px solid #2a4a6a',
+                        background:isSel?'var(--bg-highlight)':'var(--bg-card)',color:isSel?'var(--accent)':'var(--text-muted)',cursor:'pointer',fontSize:12}}>
+                      {o.label} {isSel && '✓'}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {/* ── Optional Class Feature Variants (TCE) auf dieser Stufe ── */}
       {newVariantsAtThisLevel.length > 0 && (

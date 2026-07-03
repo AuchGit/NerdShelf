@@ -10,28 +10,7 @@ import { getColorMarker, setColorMarker, colorStripeStyle } from '../../lib/card
 import { getCustomNote, setCustomNote } from '../../lib/customNotes'
 import { DEFAULT_PILL_COLORS } from '../../lib/pillColors'
 import { S } from './sheetStyles'
-import { formatToolName, formatSkillName } from '../../lib/sheetUtils'
-
-// Standard-Sprachen für den language-Picker (PHB common + exotic).
-// User kann diese als Spielerwahl picken — der Picker erlaubt auch
-// freie Eingabe via einer "+ Eigene" Option ist nice-to-have, aber
-// für den Standard-Fall reichen die 16.
-const STANDARD_LANGUAGES = [
-  'Common', 'Dwarvish', 'Elvish', 'Giant', 'Gnomish', 'Goblin',
-  'Halfling', 'Orc', 'Abyssal', 'Celestial', 'Draconic', 'Deep Speech',
-  'Infernal', 'Primordial', 'Sylvan', 'Undercommon',
-]
-// Standard-Tools für tool-proficiency choice (subset für UI; user
-// kann via Background/Class auch andere bekommen — der Picker zeigt
-// hier nur die häufig wählbaren).
-const STANDARD_TOOLS = [
-  "thieves' tools", "disguise kit", "forgery kit", "herbalism kit",
-  "smith's tools", "tinker's tools", "cartographer's tools",
-  "cook's utensils", "alchemist's supplies", "calligrapher's supplies",
-  "carpenter's tools", "leatherworker's tools", "mason's tools",
-  "navigator's tools", "painter's supplies", "poisoner's kit",
-  "potter's tools", "weaver's tools", "woodcarver's tools",
-]
+import { formatToolName, formatSkillName, STANDARD_LANGUAGES, STANDARD_TOOLS } from '../../lib/sheetUtils'
 import { parseFeatureChoices } from '../../lib/choiceParser'
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'

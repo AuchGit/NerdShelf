@@ -4,8 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel, getModifier } from '../lib/characterModel'
-import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList } from '../lib/dataLoader'
-import { findOptionBlocks, optionValueKey } from '../lib/optionBlockResolver'
+import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList, loadFeatList } from '../lib/dataLoader'
+import { findOptionBlocks, optionValueKey, buildNameSourceMap } from '../lib/optionBlockResolver'
 import { isVariantEnabled } from '../lib/optionalFeatureVariants'
 // foundryExport is huge (~3000 lines of stat-block / item / spell
 // converters) and only runs when the user clicks "Foundry Export".
@@ -186,6 +186,11 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
   // Features genutzt um refOptionalfeature-Picks (Fighting Style etc.)
   // auf konkrete Entries aufzulösen.
   const optionalFeatureMapRef = useRef(null)
+  // Feat-Lookup für den Option-Block-Resolver: 2024-Klassen kodieren
+  // Fighting Style / Epic Boon als Feat-Kategorie ({@filter …|feats|
+  // category=FS}) — ohne Feat-Daten resolven gespeicherte ft:-Picks
+  // nicht und der Bonus (z.B. Defense +1 AC) ginge verloren.
+  const featMapRef = useRef(null)
   const [loading, setLoading] = useState(true)
   // Active-Tab pro Charakter persistiert (localStorage keyed by id).
   // Beim Sheet-Neustart soll der User auf dem Tab landen den er
@@ -342,6 +347,9 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
     } catch { /* ignore */ }
     optionalFeatureMapRef.current = optionalFeatureMap
+    try {
+      featMapRef.current = buildNameSourceMap(await loadFeatList(edition))
+    } catch { /* fail-soft wie optionalFeatureMap */ }
     // Backfill the spellcasting fields onto cls entries that were
     // saved before loadClassList consistently forwarded them. Without
     // this, multiclass Rangers / Paladins / Wizards / etc. created
@@ -599,6 +607,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       const resolverOpts = {
         classDataMap: { [cls.classId]: cd },
         optionalFeatureMap: optionalFeatureMapRef.current,
+        featMap: featMapRef.current,
       }
 
       const collectFromBlocks = (feature, ownerKey, isSubclass) => {

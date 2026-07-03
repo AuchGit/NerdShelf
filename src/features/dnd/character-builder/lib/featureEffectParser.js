@@ -275,7 +275,12 @@ function detectTrigger(stripped) {
   if (/\bwhen\s+a\s+creature\s+(?:hits\s+you|attacks\s+you)/i.test(stripped)) return 'When Hit'
   if (/\bwhen\s+you\s+(?:are\s+)?targeted\b/i.test(stripped)) return 'When Targeted'
   if (/\bwhen\s+you\s+(?:take\s+the\s+)?attack\s+action\b/i.test(stripped)) return 'On Attack Action'
-  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+(?:moves|attacks)/i.test(stripped)) return 'When Seen'
+  // "creature you can see …" — das Label muss sagen WAS die Kreatur tut,
+  // nicht dass man sie sieht ("When Seen" war irreführend, z.B. Brace).
+  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+moves\s+into\s+(?:the\s+)?reach\b/i.test(stripped)) return 'Enters Reach'
+  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+moves\b/i.test(stripped)) return 'On Move'
+  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+attacks\s+a\s+target\s+other\s+than\s+you\b/i.test(stripped)) return 'Ally Attacked'
+  if (/\bwhen\s+a\s+creature\s+(?:that\s+)?you\s+can\s+see\s+attacks\b/i.test(stripped)) return 'When Attacked'
   if (/\bas\s+a\s+bonus\s+action\s+on\s+your\s+turn\b/i.test(stripped)) return 'BA · Your Turn'
   if (/\bas\s+a\s+bonus\s+action\b/i.test(stripped)) return 'Bonus Action'
   if (/\bas\s+a\s+reaction\b/i.test(stripped)) return 'Reaction'

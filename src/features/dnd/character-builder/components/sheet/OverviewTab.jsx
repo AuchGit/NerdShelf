@@ -2252,13 +2252,13 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                         shownPinSlots.length === 0 ? <div style={caeEmpty}>—</div> : shownPinSlots.map((ps) => (
                           <div key={ps} style={{ marginBottom: 8 }}>
                             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: META[ps].color, marginBottom: 3 }}>{META[ps].label}</div>
-                            <CombatActionsCategorisedList rows={pinnedByEconomy[ps]} {...listBundle} hidePinnedCategory />
+                            <CombatActionsCategorisedList rows={pinnedByEconomy[ps]} {...listBundle} hidePinnedCategory orderKey={'actions:pinned:' + ps} />
                           </div>
                         ))
                       ) : colRows.length === 0 ? (
                         <div style={caeEmpty}>—</div>
                       ) : (
-                        <CombatActionsCategorisedList rows={colRows} {...listBundle} />
+                        <CombatActionsCategorisedList rows={colRows} {...listBundle} orderKey={'actions:' + slot} />
                       )}
                     </div>
                   );
@@ -2692,6 +2692,7 @@ function CombatActionsCategorisedList({
   castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges, applyRowSideEffects,
   character, applyCharacter,
   hidePinnedCategory = false,
+  orderKey = 'actions', // Spalten-Modus: eigener Key pro Spalte → Sortierung pro Kategorie-Spalte
 }) {
   // Pill-Farben sind lokal-state, also Hook hier separat aufrufen
   // statt durch Props zu reichen — vermeidet eine Prop-Drilling-
@@ -2836,12 +2837,12 @@ function CombatActionsCategorisedList({
   // attacks/cantrips → spells by level); der Spieler kann via ▲▼-
   // Buttons jeden Eintrag verschieben und mit ↻ alles auf Default
   // zurücksetzen.
-  const savedOrder = getSavedOrder(character, 'actions')
+  const savedOrder = getSavedOrder(character, orderKey)
   const orderedCats = applySavedOrder(cats, savedOrder, c => c.id)
   const currentKeys = orderedCats.map(c => c.id)
   const isCustomized = Array.isArray(savedOrder) && savedOrder.length > 0
-  const moveCat = (id, dir) => moveCategory(applyCharacter, 'actions', currentKeys, id, dir)
-  const resetOrder = () => resetCategoryOrder(applyCharacter, 'actions')
+  const moveCat = (id, dir) => moveCategory(applyCharacter, orderKey, currentKeys, id, dir)
+  const resetOrder = () => resetCategoryOrder(applyCharacter, orderKey)
 
   return (
     <div style={caeList}>
@@ -4929,6 +4930,24 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
     }).catch(() => { if (!cancelled) setOptFeatMap(new Map()) })
     return () => { cancelled = true }
   }, [edition])
+  // Feat-Katalog dazu: 2024-Picks (Fighting Style / Epic Boon) sind
+  // FEATS ('ft:Name|Source' in character.choices), deren Gruppen-Label
+  // aus feat.category kommt (FS / EB).
+  const [pickFeatMap, setPickFeatMap] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    import('../../lib/dataLoader').then(m => m.loadFeatList(edition)).then(list => {
+      if (cancelled) return
+      const m = new Map()
+      for (const f of (list || [])) {
+        if (!f?.name) continue
+        const nameKey = String(f.name).toLowerCase()
+        if (!m.has(nameKey)) m.set(nameKey, f)
+      }
+      setPickFeatMap(m)
+    }).catch(() => { if (!cancelled) setPickFeatMap(new Map()) })
+    return () => { cancelled = true }
+  }, [edition])
 
   // ── Pro Klasse die Optional-Features einsammeln (Maneuvers etc.).
   //    Drei Datenpfade werden gemerged:
@@ -4997,18 +5016,28 @@ function FeaturesAndPreparedSpellsColumn({ character, computed, applyCharacter, 
       const level = parseInt(segs[4], 10) || 1
       const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
       for (const v of values) {
-        if (!v || !v.startsWith('of:')) continue
-        // 'of:Archery|PHB'
-        const [name, src] = v.slice(3).split('|')
-        const trimmedName = (name || '').trim()
-        if (!trimmedName) continue
-        const lookup = optFeatMap?.get(trimmedName.toLowerCase()) || null
-        const ft = lookup?.featureType?.[0] || ''
-        pushPick(classId, level, trimmedName, src || lookup?.source, ft)
+        if (!v) continue
+        if (v.startsWith('of:')) {
+          // 'of:Archery|PHB'
+          const [name, src] = v.slice(3).split('|')
+          const trimmedName = (name || '').trim()
+          if (!trimmedName) continue
+          const lookup = optFeatMap?.get(trimmedName.toLowerCase()) || null
+          const ft = lookup?.featureType?.[0] || ''
+          pushPick(classId, level, trimmedName, src || lookup?.source, ft)
+        } else if (v.startsWith('ft:')) {
+          // 'ft:Defense|XPHB' — 2024 Fighting Style / Epic Boon (Feat-Pick
+          // aus dem Option-Block-Resolver); Gruppen-Label via feat.category.
+          const [name, src] = v.slice(3).split('|')
+          const trimmedName = (name || '').trim()
+          if (!trimmedName) continue
+          const lookup = pickFeatMap?.get(trimmedName.toLowerCase()) || null
+          pushPick(classId, level, trimmedName, src || lookup?.source, lookup?.category || '')
+        }
       }
     }
     return out
-  }, [character.classes, character.choices, optFeatMap])
+  }, [character.classes, character.choices, optFeatMap, pickFeatMap])
 
   // Klassen die ihren eigenen Tab bekommen — alles mit Caster-Status
   // ODER mit picked Optional-Features. Reihenfolge entspricht der

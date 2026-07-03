@@ -392,6 +392,7 @@ export function applyLevelUp(character, {
   optionalFeatures = [], optFeatureSpells = {},
   classFeatureChoices = {},
   preparedSpellPool = null, newChoices = {},
+  featureTextChoices = {},
 }) {
   const snapshot = createSnapshot(character)
   const next = structuredClone(character)
@@ -460,6 +461,23 @@ export function applyLevelUp(character, {
       if (cleaned.favoredTerrain) {
         cls.favoredTerrains = [...(cls.favoredTerrains || []), cleaned.favoredTerrain]
       }
+    }
+  }
+  // "Your choice"-Feature-Text-Picks (Expertise / Skill / Sprache / Tool /
+  // Saving Throw aus parseFeatureChoices). Gleiche Storage wie der
+  // Features-Tab-Backstop (cls.featureChoices[choice.id] = {id,type,value}),
+  // damit computeProficiencies sie sofort anwendet und der Tab die Wahl
+  // als erledigt erkennt. levelChoices zusätzlich für Historie/Undo.
+  if (featureTextChoices && Object.keys(featureTextChoices).length > 0) {
+    const cleaned = {}
+    for (const [k, v] of Object.entries(featureTextChoices)) {
+      if (!v || v.value == null) continue
+      if (Array.isArray(v.value) && v.value.length === 0) continue
+      cleaned[k] = v
+    }
+    if (Object.keys(cleaned).length > 0) {
+      cls.featureChoices = { ...(cls.featureChoices || {}), ...cleaned }
+      cls.levelChoices[level].featureTextChoices = cleaned
     }
   }
   // Prepared caster: store full preparable spell pool for Foundry export

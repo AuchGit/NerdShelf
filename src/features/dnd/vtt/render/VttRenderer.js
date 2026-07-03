@@ -915,6 +915,9 @@ export class VttRenderer {
     const onAction = (e) => {
       const tag = (e.target?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      // contentEditable-Flächen (Handout-/Journal-RichTextEditor) sind
+      // Tippen, kein Map-Shortcut — sonst frisst WASD die Buchstaben.
+      if (e.target?.isContentEditable) return;
       // Ctrl/Cmd+Z = undo the last change (anywhere on the map).
       // Ctrl+Z = undo; Ctrl+Y / Ctrl+Shift+Z = redo.
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }

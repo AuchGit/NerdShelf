@@ -264,7 +264,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
         const minW = s.width || 290;
         const w = Math.max(minW, widths[s.id] || minW);
         return (
-        <aside key={s.id} style={{ ...panelStyle, width: w }}>
+        <aside key={s.id} style={{ ...panelStyle, width: w, ...(myInspired ? S.panelInsp : null) }}>
           <div style={side === 'left' ? S.resizeRight : S.resizeLeft} onMouseDown={startPanelResize(s.id, side, minW)} title="Breite ziehen" />
           <div style={S.panelHead}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
@@ -551,6 +551,8 @@ const S = {
   panelsRight: { position: 'absolute', top: TOPBAR_H, bottom: 0, right: RAIL_W, zIndex: 20, display: 'flex', flexDirection: 'row-reverse', pointerEvents: 'none' },
   panel: { position: 'relative', pointerEvents: 'auto', width: 290, height: '100%', boxSizing: 'border-box', borderRight: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-bg-elevated) 94%, transparent)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   panelRight: { position: 'relative', pointerEvents: 'auto', width: 290, height: '100%', boxSizing: 'border-box', borderLeft: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-bg-elevated) 94%, transparent)', backdropFilter: 'blur(3px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  // Inspiration vergoldet auch offene Sidebars (Bar + Bottom-Panels machen es genauso).
+  panelInsp: { borderColor: 'var(--color-warning,#e0af68)', boxShadow: 'inset 0 0 0 1px var(--color-warning,#e0af68), 0 0 18px -4px var(--color-warning,#e0af68)' },
   resizeRight: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 6, cursor: 'ew-resize', zIndex: 2 },
   resizeLeft: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 6, cursor: 'ew-resize', zIndex: 2 },
   panelHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 },

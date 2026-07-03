@@ -296,8 +296,9 @@ export class LightLayer {
     // deep-dark layer (already carved by the lights) composites on top
     scene.addChild(stamp(this._rts.dark, 'normal', 1));
     // world-dark marking inside darkvision: cool desaturating wash where the
-    // viewer sees only thanks to darkvision (Schleichen!).
-    if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.22, 0x3d4a63));
+    // viewer sees only thanks to darkvision (Schleichen!). Deutlich sichtbar,
+    // damit Spieler sofort erkennen "hier ist es eigentlich dunkel".
+    if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
     // Coloured glow: stamp the merged colour unions ONCE (overlaps already merged
     // in the RT, so no brighter lens/rims where lights overlap). Gated by the
     // baseline level so a bright light on a bright map (or dim on dim) adds

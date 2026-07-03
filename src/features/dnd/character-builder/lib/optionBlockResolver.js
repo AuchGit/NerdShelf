@@ -190,6 +190,44 @@ export function resolveRef(refNode, opts = {}) {
   }
 }
 
+// Name-Lookup-Map nach der Konvention die alle Resolver-Caller nutzen:
+// jeder Eintrag unter `name` UND `name|SOURCE` (lowercase name, upper
+// source). Für optionalFeatureMap wie featMap gleichermaßen.
+export function buildNameSourceMap(list) {
+  const m = new Map()
+  for (const f of (list || [])) {
+    if (!f?.name) continue
+    const lower = String(f.name).toLowerCase()
+    const src = String(f.source || '').toUpperCase()
+    m.set(lower, f)
+    if (src) m.set(`${lower}|${src}`, f)
+  }
+  return m
+}
+
+// Alle Feats einer Kategorie aus opts.featMap (Map ODER Object) als
+// resolved-ref-Objekte. Die 2024-Regeln kodieren Fighting Styles und
+// Epic Boons als Feat-KATEGORIEN (category 'FS' / 'EB' in feats.json),
+// nicht mehr als optionalfeatures — der Klassentext verweist nur noch
+// per {@filter …|feats|category=XX} darauf. Dedup über name|source,
+// weil featMap jeden Feat unter zwei Keys führt (name und name|SOURCE).
+function featCategoryOptions(opts, cat) {
+  const map = opts?.featMap
+  if (!map) return []
+  const values = map instanceof Map ? [...map.values()] : Object.values(map)
+  const seen = new Set()
+  const out = []
+  for (const f of values) {
+    if (!f?.name) continue
+    if (String(f.category || '').toUpperCase() !== cat) continue
+    const key = `${String(f.name).toLowerCase()}|${String(f.source || '').toUpperCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ kind: 'feat', name: f.name, source: String(f.source || '').toUpperCase(), entry: f, entries: f.entries || [] })
+  }
+  return out
+}
+
 // ── Public: walk a feature's entries for option-blocks ─────────────
 // Returns an array of { count, options: [resolvedRef, ...], path }
 // describing every options-block found, deep-walked.
@@ -198,13 +236,36 @@ export function resolveRef(refNode, opts = {}) {
 // generate stable choice IDs.
 export function findOptionBlocks(featureEntries, opts = {}) {
   const out = []
+  // 2024-Pattern (XPHB): "You gain a {@filter Fighting Style feat|feats|
+  // category=FS} of your choice." — kein options-Block, die Auswahl ist
+  // eine Feat-Kategorie. Wir sammeln alle referenzierten Kategorien plus
+  // lose refFeat-Alternativen im selben Feature ("Instead of choosing
+  // one of those feats, you can choose the option below." → Blessed
+  // Warrior / Druidic Warrior) und synthetisieren daraus einen Block.
+  const featCats = new Set()
+  const looseRefs = []
   const walk = (node, path) => {
     if (!node) return
+    if (typeof node === 'string') {
+      for (const m of node.matchAll(/\{@filter [^}]*?\|feats\|([^}]*)\}/g)) {
+        const cat = /(?:^|\|)category=([^|}]+)/.exec(m[1])
+        if (cat) featCats.add(cat[1].trim().toUpperCase())
+      }
+      return
+    }
     if (Array.isArray(node)) {
       node.forEach((c, i) => walk(c, [...path, i]))
       return
     }
     if (typeof node !== 'object') return
+    if (node.type === 'refFeat' || node.type === 'refOptionalfeature') {
+      // Loser Ref außerhalb eines options-Blocks — nur relevant wenn im
+      // selben Feature auch ein Feat-Kategorie-Filter steht (sonst no-op,
+      // exakt das bisherige Verhalten).
+      const r = resolveRef(node, opts)
+      if (r) looseRefs.push(r)
+      return
+    }
     if (node.type === 'options' && Array.isArray(node.entries)) {
       const options = []
       for (const child of node.entries) {
@@ -240,6 +301,20 @@ export function findOptionBlocks(featureEntries, opts = {}) {
     if (Array.isArray(node.items))   walk(node.items,   [...path, 'items'])
   }
   walk(featureEntries, [])
+  // Synthese der Feat-Kategorie-Blöcke — NACH den echten options-Blöcken,
+  // damit deren blockIdx (→ Choice-IDs 'bN') stabil bleiben. Ohne featMap
+  // in opts können wir die Kategorie nicht aufzählen → kein Block (Caller
+  // ohne Feat-Daten verhalten sich wie bisher). Fighter L1 nennt die
+  // FS-Kategorie zweimal (Wahl + Retraining-Satz) — das Set dedupt.
+  for (const cat of featCats) {
+    const options = featCategoryOptions(opts, cat)
+    if (options.length === 0) continue
+    for (const r of looseRefs) {
+      const k = optionValueKey(r)
+      if (k && !options.some(o => optionValueKey(o) === k)) options.push(r)
+    }
+    out.push({ count: 1, options, path: ['featcat', cat], _grantAll: false })
+  }
   return out
 }
 

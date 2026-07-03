@@ -121,7 +121,17 @@ export default function Specials() {
       if (segs.length < 7) continue;
       const classId = segs[2];
       const vals = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-      for (const v of vals) { if (v && v.startsWith('of:')) pushPick(classId, (v.slice(3).split('|')[0] || '').trim()); }
+      for (const v of vals) {
+        if (!v) continue;
+        if (v.startsWith('of:')) pushPick(classId, (v.slice(3).split('|')[0] || '').trim());
+        // 2024: Fighting Style / Epic Boon sind Feat-Picks ('ft:Name|Source')
+        // — der Text kommt aus dem Feat-Katalog statt aus optionalfeatures.
+        else if (v.startsWith('ft:')) {
+          const nm = (v.slice(3).split('|')[0] || '').trim();
+          const lk = featMap?.get(nm.toLowerCase());
+          if (lk) add(classId, nm, lk.entries);
+        }
+      }
     }
     // 2) Granted class/subclass features + racial traits that are usable riders.
     for (const f of (character.__activeFeatures || [])) add(f.classId || 'Features', f.name, f.entries);

@@ -423,3 +423,21 @@ export function isSingletonItem(item) {
   if (isContainerItem(item)) return true
   return false
 }
+
+// Standard-Sprachen für language-Proficiency-Picker (PHB common + exotic).
+// Kanonische Liste, geteilt von FeaturesTab (Backstop-Picker) und
+// LevelUpPage (Pick direkt beim Leveln).
+export const STANDARD_LANGUAGES = [
+  'Common', 'Dwarvish', 'Elvish', 'Giant', 'Gnomish', 'Goblin',
+  'Halfling', 'Orc', 'Abyssal', 'Celestial', 'Draconic', 'Deep Speech',
+  'Infernal', 'Primordial', 'Sylvan', 'Undercommon',
+]
+// Standard-Tools für tool-proficiency choice (häufig wählbare Auswahl).
+export const STANDARD_TOOLS = [
+  "thieves' tools", "disguise kit", "forgery kit", "herbalism kit",
+  "smith's tools", "tinker's tools", "cartographer's tools",
+  "cook's utensils", "alchemist's supplies", "calligrapher's supplies",
+  "carpenter's tools", "leatherworker's tools", "mason's tools",
+  "navigator's tools", "painter's supplies", "poisoner's kit",
+  "potter's tools", "weaver's tools", "woodcarver's tools",
+]

@@ -202,7 +202,7 @@ export default function PlayerBottomBar() {
         <div style={S.panelStack}>
           {/* Reverse so the LAST-opened panel sits on top, first-opened at the bottom. */}
           {[...openPanels].reverse().map((id) => (
-            <div key={id} style={S.panel}>
+            <div key={id} style={inspiration ? { ...S.panel, ...S.panelInsp } : S.panel}>
               <div style={S.panelHead} onMouseDown={(e) => startPanelResize(id, e)} title="Höhe ziehen">
                 <span style={S.panelTitle}>{PANEL_LABELS[id]}</span>
                 <span style={{ flex: 1 }} />
@@ -291,14 +291,14 @@ export default function PlayerBottomBar() {
       <Group label="Bereiche" grow>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <CombatEconomy value={status.economy || {}} character={character} onChange={(next) => updateCharacter('status.economy', next)} />
+          {/* Die Panel-Buttons strecken sich über den Rest der Bar — kein toter
+              Platz rechts, große Klickflächen. */}
           {panelButtons.map((id) => (
-            <button key={id} style={openPanels.includes(id) ? S.inspOn : S.rest}
+            <button key={id} style={{ ...(openPanels.includes(id) ? S.inspOn : S.rest), flex: '1 1 110px', textAlign: 'center', minWidth: 0, whiteSpace: 'nowrap' }}
               onClick={() => togglePanel(id)} title={PANEL_LABELS[id]}>{PANEL_LABELS[id]}</button>
           ))}
         </div>
       </Group>
-
-      <div style={{ flex: 1 }} />
       </div>
     </div>
   );
@@ -318,7 +318,7 @@ function Group({ label, children, grow }) {
 function ItemsPanel({ items, consume, addOne, toggleEquip }) {
   if (!items.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', padding: 8 }}>Keine Quick-Access-Items. Markiere Items im Charakterbogen als Quick-Access.</div>;
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 8 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8, padding: 8 }}>
       {items.map((it) => (
         <Pinnable key={it.id || it.name} title={it.name} render={() => <div style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{itemDetail(it) || '—'}</div>}>
           <div style={{ ...S.qa, ...(it.equipped ? S.qaEquipped : null) }}>
@@ -374,8 +374,8 @@ const S = {
   pipLbl: { fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   acBadge: { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 'var(--radius-md)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', cursor: 'pointer' },
   acInsp: { border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 18%, transparent)', boxShadow: '0 0 10px -2px var(--color-warning,#e0af68)' },
-  qa: { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 4px 2px 8px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', cursor: 'default', maxWidth: 150, flexShrink: 0 },
-  qaName: { fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  qa: { display: 'flex', alignItems: 'center', gap: 4, padding: '4px 4px 4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', cursor: 'default', width: '100%', minWidth: 0, boxSizing: 'border-box' },
+  qaName: { fontSize: 12, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   qaQty: { fontSize: 10, fontWeight: 700, color: 'var(--color-accent)', minWidth: 12, textAlign: 'center' },
   qaUse: { width: 18, height: 18, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: 800, lineHeight: 1, padding: 0 },
   qaEquip: { height: 18, padding: '0 5px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 700, fontSize: 9, lineHeight: 1 },
@@ -384,6 +384,8 @@ const S = {
   // Stacked panels above the bar (column: first child = top = last-opened).
   panelStack: { position: 'absolute', bottom: '100%', left: 0, right: 0, display: 'flex', flexDirection: 'column' },
   panel: { display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 97%, transparent)', border: '1px solid var(--color-border)', borderBottom: 'none', borderRadius: '12px 12px 0 0', boxShadow: '0 -6px 24px #0008', overflow: 'hidden' },
+  // Inspiration vergoldet ALLE offenen Flächen, nicht nur die Bar selbst.
+  panelInsp: { borderColor: 'var(--color-warning,#e0af68)', boxShadow: '0 -6px 24px #0008, 0 0 0 1px var(--color-warning,#e0af68), 0 0 18px -2px var(--color-warning,#e0af68)' },
   panelHead: { display: 'flex', alignItems: 'center', gap: 8, height: 24, flexShrink: 0, padding: '0 10px', cursor: 'ns-resize', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' },
   panelTitle: { fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
   panelClose: { cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 13, padding: '0 2px' },

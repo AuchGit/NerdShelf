@@ -152,6 +152,10 @@ export function getVersionCoveredKeys(versions) {
 // Feat feature-type codes → human labels
 export const FEATURE_TYPE_LABEL = {
   'MM':   { label:'Metamagic',             emoji:'✦' },
+  // 2024: Fighting Styles / Epic Boons sind Feat-KATEGORIEN (feats.json
+  // `category`), keine optionalfeatures mehr — gleiche Labels.
+  'FS':   { label:'Fighting Style',        emoji:'⚔' },
+  'EB':   { label:'Epic Boon',             emoji:'✦' },
   'FS:F': { label:'Fighting Style',        emoji:'⚔' },
   'FS:R': { label:'Fighting Style',        emoji:'⚔' },
   'FS:P': { label:'Fighting Style',        emoji:'⚔' },

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLanguage } from '../../../lib/i18n'
 import { setChoiceValue } from '../../../lib/choiceParser'
-import { loadClassData, loadOptionalFeatureList } from '../../../lib/dataLoader'
-import { parseClassFeatureOptionChoices } from '../../../lib/optionBlockResolver'
+import { loadClassData, loadOptionalFeatureList, loadFeatList } from '../../../lib/dataLoader'
+import { parseClassFeatureOptionChoices, buildNameSourceMap } from '../../../lib/optionBlockResolver'
 import { listAvailableVariants, setVariantEnabled } from '../../../lib/optionalFeatureVariants'
 import HoverDetailTooltip from '../../ui/HoverDetailTooltip'
 import EntryRenderer from '../../ui/EntryRenderer'
@@ -224,6 +224,18 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     return () => { cancelled = true }
   }, [edition])
 
+  // Feat-Map — 2024-Klassen (XPHB) kodieren Fighting Style / Epic Boon
+  // als Feat-Kategorie ({@filter …|feats|category=FS}); ohne Feat-Daten
+  // kann der Resolver diese Picks nicht aufzählen.
+  const [featMap, setFeatMap] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    loadFeatList(edition).then(list => {
+      if (!cancelled) setFeatMap(buildNameSourceMap(list))
+    }).catch(() => { if (!cancelled) setFeatMap(new Map()) })
+    return () => { cancelled = true }
+  }, [edition])
+
   // Alle Feature-Option-Descriptors — refClassFeature, refSubclass
   // Feature UND refOptionalfeature werden alle generisch behandelt.
   // Damit verschwindet die hardcoded FIGHTING_STYLES / BATTLE_MASTER_
@@ -234,6 +246,7 @@ export default function Step4bProficiencies({ character, updateCharacter }) {
     return parseClassFeatureOptionChoices(cls, classData, {
       edition,
       optionalFeatureMap,
+      featMap,
     }) || []
   })()
 
