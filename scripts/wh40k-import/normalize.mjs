@@ -690,16 +690,55 @@ function parseModelCount(desc) {
   return m ? parseInt(m[1], 10) : null;
 }
 function parseModelMin(text) {
-  const m = String(text || '').match(/(\d+)\s*[-–]\s*\d+/);
-  if (m) return parseInt(m[1], 10);
-  const m2 = String(text || '').match(/(\d+)\s*model/i);
-  return m2 ? parseInt(m2[1], 10) : null;
+  return parseCompositionRange(text).min;
 }
 function parseModelMax(text) {
-  const m = String(text || '').match(/\d+\s*[-–]\s*(\d+)/);
-  if (m) return parseInt(m[1], 10);
-  const m2 = String(text || '').match(/(\d+)\s*model/i);
-  return m2 ? parseInt(m2[1], 10) : null;
+  return parseCompositionRange(text).max;
+}
+
+/**
+ * Total model-count range of a composition text. Sums every model group
+ * ("1 Sergeant; 4-9 Intercessors" → 5–10) instead of only reading the
+ * first dash range. Alternative configurations ("…; OR; …" and
+ * "One of the following:; …") contribute min/max across alternatives.
+ * "This unit can contain a maximum of N models." caps the max.
+ */
+function parseCompositionRange(text) {
+  let t = String(text || '').trim();
+  if (!t) return { min: null, max: null };
+
+  let cap = null;
+  t = t.replace(/this unit can contain a maximum of (\d+) models?\.?/i, (_, n) => {
+    cap = parseInt(n, 10);
+    return '';
+  });
+
+  // Alternative whole-unit configurations.
+  let alternatives;
+  const oneOf = /^one of the following:\s*;?\s*/i.exec(t);
+  if (oneOf) alternatives = t.slice(oneOf[0].length).split(/;\s*/);
+  else alternatives = t.split(/;\s*OR\s*;?\s*/i);
+
+  let min = null, max = null;
+  for (const alt of alternatives) {
+    let aMin = 0, aMax = 0, found = false;
+    // Model groups within one configuration: "1 X", "4-9 Y", "0-1 Z".
+    const re = /(\d+)(?:\s*[-–]\s*(\d+))?\s+(?=[A-Za-z])/g;
+    for (const seg of alt.split(/;\s*/)) {
+      let m;
+      while ((m = re.exec(seg)) !== null) {
+        aMin += parseInt(m[1], 10);
+        aMax += m[2] != null ? parseInt(m[2], 10) : parseInt(m[1], 10);
+        found = true;
+      }
+      re.lastIndex = 0;
+    }
+    if (!found) continue;
+    min = min == null ? aMin : Math.min(min, aMin);
+    max = max == null ? aMax : Math.max(max, aMax);
+  }
+  if (cap != null && max != null) max = Math.min(max, cap);
+  return { min, max };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
