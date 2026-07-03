@@ -97,6 +97,15 @@ export function parseItemPhrase(phrase) {
   return items.filter(i => i.name);
 }
 
+/**
+ * Human-readable single-line text of datasheet HTML — keeps `•` markers
+ * between list items so choice lists stay readable (unlike a bare
+ * tag-strip, which glues "1 bolt pistol1 combi-weapon" together).
+ */
+export function htmlToText(raw) {
+  return htmlToLines(raw).join(' ');
+}
+
 /* ─────────────────── default loadout ─────────────────── */
 
 /**
@@ -137,13 +146,12 @@ export function parseLoadout(raw) {
     const subject = found[i].subject;
     let scope = 'named';
     let count = 1;
-    if (/^(every|each|all)\b(?!\s+other)/i.test(subject) && /\bmodels?\b/i.test(subject) && !/\b[A-Z][a-z]+\s+models?\b/.test(subject)) {
-      scope = 'all';
-    } else if (/^this\s+model\b/i.test(subject)) {
+    const em = /^(?:every|each|all)\s+(.*)$/i.exec(subject);
+    if (/^this\s+model\b/i.test(subject) || (em && /^models?$/i.test(em[1].trim()))) {
       scope = 'all';
     } else if (/^this\s+unit\b/i.test(subject)) {
       scope = 'unit';
-    } else if (/^(every|each|all)\b/i.test(subject)) {
+    } else if (em) {
       // "Every Boss Nob…", "Every other model…" → named subset of unknown
       // size; count = null marks "the rest of the unit".
       scope = 'named';
@@ -201,7 +209,7 @@ export function parseWargearOption(raw) {
     { re: /^(\d+)\s*/,                                  val: (x) => parseInt(x[1], 10) },
     { re: /^(one|two|three|four)\b\s*/i,                val: (x) => wordToNum(x[1]) },
     { re: /^(an?)\b\s*/i,                               val: () => 1 },
-    { re: /^(this model(?:'s)?|this unit(?:'s)?|the )\s*/i, val: () => 1 },
+    { re: /^(this model(?:'s)?|this unit(?:'s)?|it(?:s)?\b|the )\s*/i, val: () => 1 },
   ];
   for (const p of countPatterns) {
     const cm = p.re.exec(rest);
@@ -247,7 +255,7 @@ export function parseWargearOption(raw) {
     kind = 'replace';
     removes = ownedItems(m[1]);
     tail = rest.slice(m[0].length);
-  } else if ((m = /^(.*?)\bcan(?:\s+each)?\s+be\s+equipped\s+with:?\s+/i.exec(rest))) {
+  } else if ((m = /^(.*?)\bcan(?:\s+each)?\s+be\s+equipped\s+with:?\s*/i.exec(rest))) {
     kind = 'add';
     tail = rest.slice(m[0].length);
   } else if ((m = /^(.*?)\bcan(?:\s+each)?\s+(?:take|have)\s+/i.exec(rest))) {
@@ -255,6 +263,14 @@ export function parseWargearOption(raw) {
     tail = rest.slice(m[0].length);
   } else {
     return null;
+  }
+
+  // "…equipped with:" directly followed by a bullet list (no "one of the
+  // following" phrasing) — the bullets ARE the choice list.
+  if (!tail && bullets.length > 0) {
+    const choices = bullets.map(p => ({ items: parseItemPhrase(p) })).filter(c => c.items.length > 0);
+    if (choices.length === 0) return null;
+    return { kind, removes, choices, max, note: '' };
   }
 
   // ── Object: choice list ─────────────────────────────────

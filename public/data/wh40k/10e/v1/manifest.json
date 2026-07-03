@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "edition": "10e",
   "version": "v1",
-  "generatedAt": "2026-05-15T15:02:02.085Z",
+  "generatedAt": "2026-07-02T16:22:09.995Z",
   "counts": {
     "factions": 26,
     "units": 1710,
@@ -19,15 +19,15 @@
   },
   "sources": {
     "bsdata": {
-      "commit": "b9932fb"
+      "commit": "52914f2"
     },
     "wahapedia": {
-      "fetchedAt": "2026-05-15T15:02:01.355Z"
+      "fetchedAt": "2026-07-02T16:22:09.068Z"
     }
   },
   "fileHashes": {
     "factions.json": "c6b93e04cd4a3f0d93797027f884f9634252868535b169ee8559db862cda4fc4",
-    "units.json": "b5c4052a5f0fa2eac69925131850c0665e6c5a6fa4f28fb907092dfc1f65622b",
+    "units.json": "89607a7068f09dad89db178679ff1cdd6a7c13e13ddb82f133119dc08318e2e2",
     "detachments.json": "84a8973af04b87835115d6e29c683ae08bf4b044d29f62cdbcabe8b205448c0f",
     "abilities.json": "1bbf02defc3fea6f7674370fcb07e7597500ec932717fc34e3f013d772b2c52d",
     "stratagems.json": "563e66cfdc7153624230dce4ebddea4bdd21f3171fa55317e98f787bf3f8bda8",
@@ -37,7 +37,7 @@
     "model-profiles.json": "8d04cd8bb4307bdc914b7fc39c369dcd4ccf40c27fe50098f98bf0b2c0a1c856",
     "army-rules.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
     "unit-compositions.json": "df02c9d239daddb965b77ec19eccc5949017b9fd4bfbc8e1feb52b6c5230bb0c",
-    "wargear-options.json": "3008754624438e882b8291ffeea504691c3a4aff2a36e6705d5f12a79d8f6c3a",
+    "wargear-options.json": "db77e5ef386cb20db2704860db7197826fb664527c834aea4c89be1cf8251e83",
     "aliases.json": "30e5caa7757dc7e89020fa4ee6708e3262facc1bdac8c5481a9f1a3c0b2e6513"
   }
 }

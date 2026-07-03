@@ -17,6 +17,11 @@ import { stripHtml } from './parsers/util.mjs';
 import {
   canonicalFactionName, canonicalKeyword, canonicalWeaponName,
 } from './canonicalize.mjs';
+// Shared datasheet-prose grammar (also used by the runtime app) — parses
+// default loadouts and wargear options into machine-usable structures.
+import {
+  parseLoadout, parseWargearOption, htmlToText,
+} from '../../src/features/wh40k/services/wargearGrammar.js';
 
 /* ═══════════════════════════════════════════════════════════════════════
    BSData normalizer
@@ -362,16 +367,27 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
       }))
       .filter(p => p.cost > 0);
 
-    // Wargear options (free-text only — Wahapedia doesn't structure these)
+    // Wargear options. `text` keeps bullet markers so choice lists stay
+    // readable; `structured` is the parsed grammar (null when the sentence
+    // is conditional prose the grammar doesn't cover — the UI falls back
+    // to showing the text).
     const wgIds = (parsed.optionsByDsId.get(ds.id) || []).map((opt, i) => {
       const id = wargearOptionId(uId, i);
       out.wargearOptions.push({
         id, unitId: uId,
-        text: stripHtml(opt.description || ''),
-        structured: null,
+        text: htmlToText(opt.description || ''),
+        structured: parseWargearOption(opt.description || '') || null,
       });
       return id;
     });
+
+    // Default equipment ("Every model is equipped with: …"). Both the
+    // display text and the parsed per-group breakdown are stored so the
+    // runtime can resolve effective loadouts without re-parsing prose.
+    const loadoutRaw = ds.loadout || '';
+    const loadout = loadoutRaw
+      ? { text: htmlToText(loadoutRaw), groups: parseLoadout(loadoutRaw) }
+      : undefined;
 
     out.units.push({
       id: uId,
@@ -386,6 +402,7 @@ export function normalizeWahapedia(parsed, factionAlignmentMap = {}) {
       abilityIds: unitAbilities.map(a => a.id),
       compositionId: compId,
       wargearOptionIds: wgIds,
+      loadout,
       transportCapacity: parseInt(String(ds.transport || '').replace(/[^0-9]/g, ''), 10) || undefined,
       source: { primary: 'wahapedia', sourceIds: { wahapedia: ds.id } },
     });

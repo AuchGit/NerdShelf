@@ -236,6 +236,7 @@ const UNIT_RULES = {
   abilityIds:      'merge-array',
   compositionId:   'first',
   wargearOptionIds:'merge-array',
+  loadout:         'first',           // only Wahapedia ships default equipment
   transportCapacity: 'max',
   damagedProfileIds: 'merge-array',
   canLead:           'merge-array',
