@@ -1382,16 +1382,18 @@ export class VttRenderer {
     const nowT = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     if (this._lastWallTap && this._lastWallTap.id === id && nowT - this._lastWallTap.t < 350) {
       this._lastWallTap = null;
-      A.selectWalls(this.connectedWallIds(id));
-      return;
+      // Editier-Selektion (ganze Wand-Kette) ist DM-only — Spieler konnten
+      // sich per Schnell-Doppelklick sonst die Endpunkt-Handles holen.
+      if (s.session.role === 'dm') { A.selectWalls(this.connectedWallIds(id)); return; }
+    } else {
+      this._lastWallTap = { id, t: nowT };
     }
-    this._lastWallTap = { id, t: nowT };
     const wall = s.walls[id];
     if (wall?.kind === 'door' || wall?.kind === 'window') {
       // Walls tool = edit (select → move/resize handles). Select tool = play:
       // toggle open/closed without changing the current selection.
-      if (s.ui.tool === 'walls') { A.selectWall(id); return; }
-      A.toggleDoor(id); // optimistic + RPC (persists for players) + echo-guarded
+      if (s.ui.tool === 'walls' && s.session.role === 'dm') { A.selectWall(id); return; }
+      A.toggleDoor(id); // optimistic + RPC (persists for players) + echo-guarded + cooldown
       return;
     }
     if (s.session.role === 'dm') A.selectWall(id);
@@ -1399,6 +1401,7 @@ export class VttRenderer {
 
   onWallHandleStart(id, end, e) {
     const s0 = getState();
+    if (s0.session.role !== 'dm') return; // Wand-Editing ist DM-only
     const t = s0.ui.tool;
     if (t !== 'select' && t !== 'walls') return;
     // Door mode: on a NON-door wall, let the click fall through to the stage so

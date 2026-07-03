@@ -167,18 +167,25 @@ export class LightLayer {
     // Low-Res-Satz (in Bewegung nicht unterscheidbar, 4-16× weniger GPU-Fill,
     // keine übersprungenen Frames → das Licht klebt am Token). Sobald Ruhe
     // ist, läuft ein nachgeplanter Final-Compose in voller Auflösung.
-    const resLow = Math.max(0.35, Math.min(1, 2600 / Math.max(w, h)));
+    // Interaktions-Auflösung: immer höchstens die Hälfte der vollen — auch
+    // kleine Maps profitieren, sonst liefe ein lokaler Drag (Compose pro
+    // Mousemove!) komplett ungebremst in voller Auflösung.
+    const resLow = Math.max(0.35, Math.min(0.5, 2600 / Math.max(w, h)));
     const nowTs = performance.now();
-    const wantLow = !opts.__final && resLow < 0.95 && (nowTs - (this._lastCompose || 0) < 200);
+    const wantLow = !opts.__final && (nowTs - (this._lastCompose || 0) < 200);
     const sig = `${baseSig}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
     if (sig === this._sig) return;
-    this._sig = sig;
     clearTimeout(this._finalTimer);
     if (wantLow) {
       this._finalTimer = setTimeout(() => {
         try { this.update({ ...opts, __final: true }); } catch { /* Renderer evtl. schon weg */ }
-      }, 220);
+      }, 200);
+      // 30fps-Deckel für Interaktions-Composes (lokale Drags feuern pro
+      // Mousemove) — Zwischenstände dürfen ausfallen, der Final-Pass oben
+      // fängt den Endstand garantiert.
+      if (nowTs - (this._lastCompose || 0) < 33) return;
     }
+    this._sig = sig;
 
     const rts = this._getRtSet(w, h, wantLow ? resLow : 1, wantLow);
     if (this.sprite.texture !== rts.main) this.sprite.texture = rts.main;
@@ -249,10 +256,13 @@ export class LightLayer {
       const col = s.color || WARM;
       if (brightPx > 0) cbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly)));
       if (dimPx > 0) cdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly)));
-      // Colour unions — IMMER aufgebaut: farbiges Licht bleibt auch auf
-      // hellen Maps leicht sichtbar (die Stamp-Stärke unten skaliert per BL).
-      if (brightPx > 0) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
-      if (dimPx > 0) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
+      // Colour unions. Auf Baselines, die das Band nicht anheben (z.B. helle
+      // Map), kommen NUR Lichter mit expliziter Custom-Farbe rein — der
+      // Standard-Warmton würde dort sonst als orangene Flächen über schon
+      // erkundeten Bereichen auftauchen.
+      const custom = !!s.color;
+      if (brightPx > 0 && (BL < 2 || custom)) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
+      if (dimPx > 0 && (BL < 1 || custom)) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
     }
     renderer.render({ container: cbContainer, target: covB, clear: true });
     renderer.render({ container: cdContainer, target: covD, clear: true });

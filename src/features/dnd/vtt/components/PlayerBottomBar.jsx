@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVtt } from '../state/useVtt';
 import { patchCombat, applyOwnCharacter } from '../sync/characterBinding';
-import { computeCharacter } from '../../character-builder/lib/rulesEngine';
+import { useVttComputed } from '../lib/computedCharacter';
 import { computeSpellSlots } from '../../character-builder/lib/sheetUtils';
 import { CombatEconomy, CombatActionsExplorer, FavoritesSection } from '../../character-builder/components/sheet/OverviewTab';
 import { Pinnable } from './tooltip/Tooltips';
@@ -69,10 +69,10 @@ export default function PlayerBottomBar() {
   const togglePanel = (id) => setOpenPanels((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   const ch = myId != null ? chars[myId] : null;
   const character = ch?.data || null;
-  const computed = useMemo(() => {
-    if (!character) return null;
-    try { return computeCharacter(character); } catch { return null; }
-  }, [character]);
+  // Voll hydratisiert (Klassendaten + aktive Features) — sonst fehlen
+  // Feature-Tabellen-Ressourcen wie Superiority/Energy Dice und
+  // tabellenskalierte Zähler in der Ressourcen-Leiste.
+  const computed = useVttComputed(character);
 
   const slots = useMemo(() => (character ? computeSpellSlots(character) : null), [character]);
   if (!character || !computed) return null;
