@@ -24,7 +24,8 @@
       "allow": [
         { "url": "https://5e.tools/**" },
         { "url": "https://2014.5e.tools/**" },
-        { "url": "https://*.5e.tools/**" }
+        { "url": "https://*.5e.tools/**" },
+        { "url": "https://raw.githubusercontent.com/**" }
       ]
     },
     {

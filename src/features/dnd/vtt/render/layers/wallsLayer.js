@@ -38,7 +38,10 @@ export class WallsLayer {
       const physical = w.kind === 'door' || w.kind === 'window';
       const physicalVisible = physical && (isDM || !seenDoorIds || seenDoorIds.has(w.id));
       node.root.visible = physicalVisible || showWalls;
-      this.draw(node, w, selSet.has(w.id), gridSize);
+      // Editier-Selektion (Endpunkt-Handles, dicke Linie) ist strikt DM-only —
+      // Spieler sehen bei Türen/Fenstern IMMER nur das SVG, egal welcher
+      // Selektions-Zustand lokal noch herumliegt.
+      this.draw(node, w, isDM && selSet.has(w.id), gridSize);
     }
     for (const [id, node] of this.nodes) {
       if (!seen.has(id)) { node.root.destroy({ children: true }); this.nodes.delete(id); }

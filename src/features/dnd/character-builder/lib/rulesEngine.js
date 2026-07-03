@@ -1517,7 +1517,79 @@ export function computeResources(character, modifiers, profBonus, totalLevel, cl
     resources.push(r)
   }
 
+  // Prosa-Pools: nicht alle Pool-Features tragen eine Tabelle — die
+  // Battle-Master-Superiority-Dice (2014 UND 2024) stehen nur als Prosa
+  // da, Feats wie Metamagic Adept granten Pools ("You gain 2 sorcery
+  // points … added to any sorcery points you have"). Additive Grants
+  // erhöhen einen bestehenden gleichnamigen Pool, alles andere dedupt
+  // über den Namen (kein Doppel mit Templates/Tabellen).
+  for (const r of synthesizeFeatureProseResources(character, totalLevel)) {
+    const key = String(r.name).toLowerCase()
+    const existing = resources.find(x => String(x.name).toLowerCase() === key)
+    if (existing) {
+      if (r.additive) existing.max += r.max
+      continue
+    }
+    if (existingIds.has(r.id)) continue
+    existingIds.add(r.id)
+    resources.push(r)
+  }
+
   return resources
+}
+
+// ── Prosa-Resource-Synthesizer ─────────────────────────────────
+// Für Pool-Features OHNE Tabelle: "You have four Superiority Dice, which
+// are d8s … You gain an additional Superiority Die at Fighter levels 7 …
+// and 15 … A Superiority Die is expended when you use it. You regain all
+// … when you finish a Short or Long Rest." Wir parsen genau diese Form:
+//   • "you have <N> <name> (dice|points|charges)" → Basis-Pool
+//   • "gain an additional/another … at … level(s) X … Y" → +1 je
+//     erreichter Schwelle
+//   • "which are d8s" → Würfelgröße (Anzeige)
+//   • Recharge aus short/long-rest-Phrasen
+// Kein Featurename-Hardcode; greift nur wenn das Feature auch von
+// "expend"-Mechanik spricht (sonst wäre "you have four …" zu breit).
+function synthesizeFeatureProseResources(character, totalLevel = 1) {
+  // Klassen-/Subclass-Features (__activeFeatures) UND Feats mit Pool-Grants
+  // (__featFeatures — separates transient-Feld, damit Feat-Texte NICHT in
+  // die Feature-Bonus-Aggregation laufen und Boni doppelt zählen).
+  const features = [
+    ...(character?.__activeFeatures || []),
+    ...(character?.__featFeatures || []),
+  ]
+  if (features.length === 0) return []
+  const levelByClass = {}
+  for (const cls of (character.classes || [])) levelByClass[cls.classId] = cls.level
+  const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 }
+  const out = []
+  for (const f of features) {
+    if (!Array.isArray(f.entries)) continue
+    // Feats haben keine Klasse — Level-Schwellen zählen gegen den Gesamtlevel.
+    const classLevel = f.classId ? (levelByClass[f.classId] || 0) : (totalLevel || 1)
+    if (classLevel < 1) continue
+    const low = stripTraitTags(flattenTraitForResources(f.entries)).toLowerCase()
+    if (!/\b(expend|expended|spend|spent)\b/.test(low)) continue
+    const base = low.match(/\byou (?:have|gain) (one|two|three|four|five|six|seven|eight|\d+)\s+([a-z][a-z' -]{2,40}?)\s+(dice|points?|charges?)\b/)
+    if (!base) continue
+    let max = NUM[base[1]] ?? parseInt(base[1], 10)
+    if (!Number.isFinite(max) || max <= 0) continue
+    // "+1 pro erreichter Level-Schwelle" aus dem Zusatz-Satz (Zahlen im
+    // Satz sind die Schwellen; Wort-Zahlen wie "(five dice)" stören nicht).
+    const add = low.match(/gain (?:an?|one|another)\s+(?:additional\s+)?[^.]{0,80}?\b(?:die|dice|point|points|charge|charges)\b[^.]*?\blevels?\b[^.]*/)
+    if (add) for (const n of (add[0].match(/\d+/g) || [])) { if (parseInt(n, 10) <= classLevel) max += 1 }
+    const die = (low.match(/\bwhich are (d\d+)s?\b/) || low.match(/\bis a (d\d+)\b/) || [])[1] || undefined
+    const recharge = /short(?:\s+or\s+long)?\s+rest|finish\s+a\s+short\s+rest/.test(low) ? 'short_rest' : 'long_rest'
+    const rawName = base[2].trim()
+    const unit = base[3]
+    const name = `${rawName} ${unit}`.replace(/\b[a-z]/g, (c) => c.toUpperCase())
+    // "… added to any <name> you have from another source" (Metamagic
+    // Adept) → additiver Grant: erhöht den bestehenden Pool statt einen
+    // zweiten zu erzeugen.
+    const additive = /\badded to any\b/.test(low)
+    out.push({ id: `prose-${slugForResource(f.classId || 'feat')}-${slugForResource(rawName)}`, name, max, current: 0, recharge, die, source: f.classId || 'Feat', additive })
+  }
+  return out
 }
 
 // ── Class/Subclass-Feature-Tabellen-Synthesizer ─────────────────

@@ -12,8 +12,24 @@
 // auf dem Sheet, rein datengetrieben.
 import { useEffect, useMemo, useState } from 'react';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
-import { loadClassData } from '../../character-builder/lib/dataLoader';
+import { loadClassData, loadFeatList } from '../../character-builder/lib/dataLoader';
 import { isVariantEnabled } from '../../character-builder/lib/optionalFeatureVariants';
+
+// Feats mit Entries aus dem Katalog — als SEPARATES transient-Feld
+// (__featFeatures), damit Feat-Texte nur in den Prosa-Resource-
+// Synthesizer laufen (Metamagic Adept +2 Sorcery Points) und NICHT in
+// die Feature-Bonus-Aggregation (sonst würden Feat-Boni doppelt zählen).
+export function collectFeatFeatures(character, featMap) {
+  if (!featMap) return [];
+  const out = [];
+  const push = (nm, inline) => {
+    const entries = Array.isArray(inline) ? inline : featMap.get(String(nm || '').toLowerCase())?.entries;
+    if (nm && Array.isArray(entries)) out.push({ classId: null, name: nm, level: 1, entries });
+  };
+  for (const ft of (character?.feats || [])) push(ft.name || ft.featId, ft.entries);
+  for (const ft of (character?.custom?.feats || [])) push(ft.name, ft.entries);
+  return out;
+}
 
 export function collectVttActiveFeatures(character, classMap) {
   const out = [];
@@ -48,16 +64,20 @@ export function useVttComputed(character) {
   const classSig = (character?.classes || [])
     .map((c) => `${c.classId}:${c.subclassId || ''}:${c.level || 1}`).join(',');
   const edition = character?.meta?.edition || '5e';
-  const [classMap, setClassMap] = useState(null);
+  const [data, setData] = useState(null); // { classMap, featMap }
   useEffect(() => {
     const ids = [...new Set((character?.classes || []).map((c) => c.classId).filter(Boolean))];
-    if (!ids.length) { setClassMap(null); return undefined; }
     let cancelled = false;
-    Promise.all(ids.map((id) => loadClassData(edition, id).catch(() => null))).then((loaded) => {
+    Promise.all([
+      Promise.all(ids.map((id) => loadClassData(edition, id).catch(() => null))),
+      loadFeatList(edition).catch(() => []),
+    ]).then(([loaded, featList]) => {
       if (cancelled) return;
-      const m = {};
-      ids.forEach((id, i) => { if (loaded[i]) m[id] = loaded[i]; });
-      setClassMap(m);
+      const classMap = {};
+      ids.forEach((id, i) => { if (loaded[i]) classMap[id] = loaded[i]; });
+      const featMap = new Map();
+      for (const f of (featList || [])) if (f?.name) featMap.set(String(f.name).toLowerCase(), f);
+      setData({ classMap, featMap });
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,13 +85,15 @@ export function useVttComputed(character) {
   return useMemo(() => {
     if (!character) return null;
     try {
+      const classMap = data?.classMap || null;
       const feats = classMap ? collectVttActiveFeatures(character, classMap) : [];
       const hydrated = {
         ...character,
         __activeFeatures: feats.length ? feats : (character.__activeFeatures || []),
+        __featFeatures: collectFeatFeatures(character, data?.featMap),
         __classDataMap: classMap || character.__classDataMap,
       };
       return computeCharacter(hydrated, classMap || {});
     } catch { return null; }
-  }, [character, classMap]);
+  }, [character, data]);
 }

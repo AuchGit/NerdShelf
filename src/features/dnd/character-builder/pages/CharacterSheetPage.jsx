@@ -394,10 +394,23 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       // featureEffectParser (für Sneak-Attack-/Bardic-Die-/Martial-
       // Arts-Skalierung über classTableLookup) den Map ohne extra
       // Prop-Drilling findet. queueSave strippt das vor dem Persist.
+      // Feats mit Katalog-Entries als SEPARATES transient-Feld — nur der
+      // Prosa-Resource-Synthesizer liest es (Metamagic Adept +2 Sorcery
+      // Points), NICHT die Feature-Bonus-Aggregation (kein Doppelzählen).
+      const featFeatures = []
+      if (featMapRef.current) {
+        const pushFeat = (nm, inline) => {
+          const entries = Array.isArray(inline) ? inline : featMapRef.current.get(String(nm || '').toLowerCase())?.entries
+          if (nm && Array.isArray(entries)) featFeatures.push({ classId: null, name: nm, level: 1, entries })
+        }
+        for (const ft of (charData.feats || [])) pushFeat(ft.name || ft.featId, ft.entries)
+        for (const ft of (charData.custom?.feats || [])) pushFeat(ft.name, ft.entries)
+      }
       setCharacter(prev => prev ? ({
         ...prev,
         species: { ...(prev.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
+        __featFeatures: featFeatures,
         __grantedSpells: grantedSpells,
         __classDataMap: map,
       }) : prev)
@@ -405,6 +418,7 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
         ...charData,
         species: { ...(charData.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures,
+        __featFeatures: featFeatures,
         __grantedSpells: grantedSpells,
         __classDataMap: map,
       }
@@ -1158,6 +1172,10 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
       }
       if (stripped.__activeFeatures) {
         delete stripped.__activeFeatures
+        touched = true
+      }
+      if (stripped.__featFeatures) {
+        delete stripped.__featFeatures
         touched = true
       }
       if (stripped.__grantedSpells) {

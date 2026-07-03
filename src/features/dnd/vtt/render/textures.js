@@ -85,10 +85,14 @@ export function loadTexture(url) {
     // not 5e.tools. Try the known alternatives in turn. Keys off the stored URL
     // pattern, so it also rescues tokens imported before this existed.
     if (!tex) {
-      for (const fb of tokenFallbacks(url)) {
+      const fbs = tokenFallbacks(url);
+      for (const fb of fbs) {
         tex = await fetchTexture(fb);
         if (tex) break;
       }
+      // Sichtbare Diagnose statt stiller Disc: welcher Token-Load scheitert
+      // mit welchen probierten URLs (einmal pro URL dank Cache-Eviction).
+      if (!tex && fbs.length) console.warn('[vtt] Token-Bild nicht ladbar:', url, '· Fallbacks:', fbs.join(' , '));
     }
     return tex;
   })();
@@ -123,6 +127,7 @@ function tokenFallbacks(url) {
   if (!m) return [];
   const src = m[1]; const name = m[2]; // name is already URL-encoded
   return [
+    `https://5e.tools/img/bestiary/tokens/${src}/${name}.png`, // älteres Token-Format
     `https://5e.tools/img/bestiary/${src}/${name}.webp`, // official full art
     `${HB}/${src}/token/${name}.png`,                    // homebrew token
     `${HB}/${src}/token/${name}.webp`,

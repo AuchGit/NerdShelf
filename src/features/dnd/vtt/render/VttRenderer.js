@@ -380,6 +380,12 @@ export class VttRenderer {
       // Light sources on this level: standalone lights + "luminous tokens"
       // (a token with a .light, positioned at the token). Glow + wall shadows.
       // The DM can switch dynamic light off per map (map.lightingEnabled).
+      // Bewegtes Licht folgt der GERENDERTEN Token-Position (Drag/Glide) —
+      // sonst springt der Schein aufs Zielfeld, während das Token gleitet.
+      // liveLightKey fließt in die Licht-Revision ein, damit der Compositor
+      // die Zwischenpositionen auch wirklich sieht (rev basiert sonst nur
+      // auf Store-Versionen).
+      let liveLightKey = '';
       const lightSources = map.lightingEnabled === false ? [] : [
         ...Object.values(s.lights).filter((l) => l.mapId === map.id && onLevel(l)),
         ...Object.values(levelTokens)
@@ -388,9 +394,14 @@ export class VttRenderer {
             // Light radius is measured from the token's edge (its space), not
             // its center — add the token's half-footprint in feet.
             const halfFt = ((t.sizeCells || 1) * 5) / 2;
+            const live = (this.drag?.id === t.id || this._tween?.id === t.id)
+              ? this.tokens.nodes.get(t.id)?.root?.position : null;
+            const lx = live ? live.x : t.x;
+            const ly = live ? live.y : t.y;
+            if (live) liveLightKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
             // A luminous token's light sits at the token's elevation (climb
             // terrain) so it shines over lower walls when the token is raised.
-            return { id: 'tl_' + t.id, x: t.x, y: t.y, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, t.x, t.y) };
+            return { id: 'tl_' + t.id, x: lx, y: ly, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, lx, ly) };
           }),
       ];
       // Baseline darkness + placed darkness regions only apply while dynamic
@@ -412,7 +423,7 @@ export class VttRenderer {
         renderer: this.app.renderer,
         // Cheap recompute gate: bumped by every wall/light/map change (incl.
         // luminous-token moves) — replaces hashing all walls+lights per frame.
-        rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}`,
+        rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}|${liveLightKey}`,
         // Wand-stabile Revision: Polygon-Cache + Welt-Schatten-RT müssen nur
         // bei Wand-/Map-Änderungen invalidieren, nicht bei jedem Licht-Move.
         wallsRev: `${versions.walls}|${versions.maps}|${map.id}|${level}`,
@@ -1962,9 +1973,15 @@ export class VttRenderer {
     const node = this.tokens.nodes.get(tw.id);
     if (!node) { this._tween = null; return; }
     let p = (now - tw.start) / tw.dur;
-    if (p >= 1) { node.root.position.set(tw.toX, tw.toY); this._tween = null; return; }
-    p = 1 - (1 - p) * (1 - p);
-    node.root.position.set(tw.fromX + (tw.toX - tw.fromX) * p, tw.fromY + (tw.toY - tw.fromY) * p);
+    const done = p >= 1;
+    if (done) { node.root.position.set(tw.toX, tw.toY); this._tween = null; }
+    else {
+      p = 1 - (1 - p) * (1 - p);
+      node.root.position.set(tw.fromX + (tw.toX - tw.fromX) * p, tw.fromY + (tw.toY - tw.fromY) * p);
+    }
+    // Leuchtende Tokens: Licht folgt dem Glide (Low-Res-Composes, 30fps-
+    // gedeckelt im Compositor — der Final-Pass kommt nach der Bewegung).
+    if (getState().tokens[tw.id]?.light) this.scheduleReconcile();
   }
 
   // ---- token drag ----
@@ -2062,6 +2079,9 @@ export class VttRenderer {
       this._lastBroadcast = now;
       A.moveToken(this.drag.id, x, y);
     }
+    // Leuchtendes Token: Licht folgt dem Cursor (Low-Res + 30fps-Deckel im
+    // Compositor; Final-Pass in voll nach dem Loslassen).
+    if (token.light) this.scheduleReconcile();
   }
 
   onDragEnd() {
