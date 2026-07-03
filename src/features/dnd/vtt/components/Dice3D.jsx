@@ -173,6 +173,9 @@ function numberTexture(THREE, label, color) {
   ctx.fillText(s, 64, 64);
   if (s === '6' || s === '9') ctx.fillRect(46, 94, 36, 6);
   const tex = new THREE.CanvasTexture(c);
+  // Ohne sRGB-Markierung interpretiert three die Canvas-Farben als linear
+  // → überbelichtet/ausgebrannt ("brennende" Würfel).
+  tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   texCache.set(key, tex);
   if (texCache.size > 300) texCache.delete(texCache.keys().next().value);
@@ -242,8 +245,8 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
       const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 50);
       camera.position.set(0, 6.6, 3.6); // steep-ish so the up faces read well
       camera.lookAt(0, 0, 0.1);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-      const keyL = new THREE.DirectionalLight(0xffffff, 1.5);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+      const keyL = new THREE.DirectionalLight(0xffffff, 1.15);
       keyL.position.set(-2, 7, 3);
       scene.add(keyL);
 
@@ -314,13 +317,40 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
       const shadowGeo = new THREE.CircleGeometry(0.5, 24);
       const d4Chips = [];
       for (const b of bodies) {
-        const fq = b.frames[b.frames.length - 1];
+        let fq = b.frames[b.frames.length - 1];
         const quat = new THREE.Quaternion(fq[3], fq[4], fq[5], fq[6]);
         let bestFace = 0; let bestDot = -2;
         b.faces.forEach((f, i) => {
           const dot = f.normal.clone().applyQuaternion(quat).dot(up);
           if (dot > bestDot) { bestDot = dot; bestFace = i; }
         });
+        // Schräg liegengeblieben (an Wand/Würfel angelehnt oder gekippt
+        // eingeschlafen)? → kurzer Kipp-Nachlauf ans Ende der Aufzeichnung:
+        // der Würfel kippt sichtbar flach (beste Fläche exakt nach oben,
+        // Grundhöhe auf dem Boden). d4 ausgenommen — der ruht mit Spitze
+        // nach oben, da ist "keine Fläche oben" der Normalzustand.
+        if (b.die.sides !== 4 && bestDot < 0.985) {
+          const worldN = b.faces[bestFace].normal.clone().applyQuaternion(quat);
+          const qFlat = new THREE.Quaternion().setFromUnitVectors(worldN, up).multiply(quat);
+          // Ruhehöhe der flachen Pose: tiefster Geometrie-Punkt auf den Boden.
+          const posAttr = b.geometry.getAttribute('position');
+          let minY = Infinity;
+          const v = new THREE.Vector3();
+          for (let k = 0; k < posAttr.count; k++) {
+            v.fromBufferAttribute(posAttr, k).applyQuaternion(qFlat);
+            if (v.y < minY) minY = v.y;
+          }
+          const yFlat = -minY + 0.005;
+          const qFrom = quat.clone();
+          const K = 22;
+          for (let k = 1; k <= K; k++) {
+            const t = k / K;
+            const e = 1 - (1 - t) * (1 - t); // ease-out
+            const q = qFrom.clone().slerp(qFlat, e);
+            b.frames.push([fq[0], fq[1] + (yFlat - fq[1]) * e, fq[2], q.x, q.y, q.z, q.w]);
+          }
+          fq = b.frames[b.frames.length - 1];
+        }
         const color = DIE_COLOR[b.die.sides] || '#8899ff';
         const labels = labelsFor(b.die.sides, b.faces.length, b.die.result, bestFace);
         b.mesh = new THREE.Mesh(b.geometry, labels.map((l) => new THREE.MeshStandardMaterial({
