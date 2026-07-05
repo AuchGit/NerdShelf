@@ -15,7 +15,9 @@ export default function TokenPanel() {
   const members = useVtt((s) => s.ui.campaignMembers || []);
 
   if (!map) return null;
-  const boundChars = new Set(tokens.map((t) => t.characterId).filter((x) => x != null).map(String));
+  // Pro MAP zählen: derselbe Spieler darf auf mehreren Maps gleichzeitig
+  // stehen — „unplatziert" heißt nur „auf DIESER Map noch nicht".
+  const boundChars = new Set(tokens.filter((t) => t.mapId === map.id).map((t) => t.characterId).filter((x) => x != null).map(String));
   const unplaced = members.filter((m) => !boundChars.has(String(m.characterId)));
 
   // Click-to-place: arm the token, the DM clicks the grid cell it spawns on.

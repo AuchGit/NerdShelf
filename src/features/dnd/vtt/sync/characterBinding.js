@@ -287,8 +287,14 @@ class CharacterBinding {
 
 // Character ids that already have a token in the store (any map).
 function boundCharIds() {
+  // Nur Tokens der AKTIVEN Map zählen — ein Spielertoken darf auf mehreren
+  // Maps gleichzeitig stehen (Overworld + Dungeon); die HP-Projektion
+  // aktualisiert ohnehin ALLE Tokens desselben Charakters.
+  const s = getState();
   return new Set(
-    Object.values(getState().tokens).map((t) => t.characterId).filter((x) => x != null).map(String),
+    Object.values(s.tokens)
+      .filter((t) => t.mapId === s.activeMapId)
+      .map((t) => t.characterId).filter((x) => x != null).map(String),
   );
 }
 

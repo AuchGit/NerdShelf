@@ -29,14 +29,24 @@ export default function MapManager() {
     if (!file) return;
     setBusy(true); setErr(null);
     try {
-      const { blob, hash, width, height, origWidth, origHeight, bytes } = await importMapImage(file);
-      const { imagePath, imageUrl } = await uploadMapImage(campaignId, blob, hash);
-      // ALWAYS keep the UNTOUCHED original in the relay's local maps dir (desktop)
-      // so a direct connection later serves it full-res — no matter that the relay
-      // wasn't running yet at upload time. The serve URL is built live from the
-      // current relay address at render time (see VttRenderer).
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-      const imageFullName = await saveMapOriginalLocal(`${hash}.${ext}`, file);
+      // Kompression (langsamster Schritt: WebP-Encode) und Original-Speichern
+      // laufen PARALLEL — der Original-Name hasht die Originaldatei selbst,
+      // damit er nicht auf das Kompressions-Ergebnis warten muss.
+      const [{ blob, hash, width, height, origWidth, origHeight, bytes }, imageFullName] = await Promise.all([
+        importMapImage(file),
+        (async () => {
+          const buf = await file.arrayBuffer();
+          const digest = await crypto.subtle.digest('SHA-256', buf);
+          const ohash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+          const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+          // ALWAYS keep the UNTOUCHED original in the relay's local maps dir
+          // (desktop) so a direct connection later serves it full-res.
+          return saveMapOriginalLocal(`${ohash}.${ext}`, file);
+        })(),
+      ]);
+      const { imagePath, imageUrl } = await uploadMapImage(campaignId, blob, hash).catch((e4) => {
+        throw new Error('Online-Upload fehlgeschlagen: ' + (e4?.message || e4));
+      });
       // If we're already hosting, also PUT it now so an in-progress session gets
       // it immediately (otherwise it's there for the next host start).
       if (imageFullName && getConnectionMode() === 'relay' && getRelayUrl()) {
@@ -104,7 +114,7 @@ export default function MapManager() {
       <input ref={uvttRef} type="file" accept=".uvtt,.dd2vtt,.df2vtt,application/json" hidden onChange={onPickUvtt} />
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" fullWidth disabled={busy} onClick={() => fileRef.current?.click()}>
-          {busy ? 'Importiere…' : '+ Bild-Map'}
+          {busy ? 'Importiere… (große Bilder brauchen einen Moment)' : '+ Bild-Map'}
         </Button>
         <Button size="sm" variant="secondary" fullWidth disabled={busy} onClick={() => uvttRef.current?.click()} title="Universal VTT (.uvtt/.dd2vtt) inkl. Wände & Türen">
           + UVTT

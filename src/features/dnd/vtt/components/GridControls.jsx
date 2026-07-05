@@ -35,11 +35,15 @@ export default function GridControls({ map }) {
   };
 
   const cells = `${Math.round(map.width / g.size)} × ${Math.round(map.height / g.size)} Felder`;
+  // Slider-Obergrenze an der Map-Größe orientieren: große (hochauflösende)
+  // Maps brauchen entsprechend große Zellen — ein fixes 200px-Maximum machte
+  // Grid-Vergrößern und „auf volle Felder snappen" dort unbenutzbar.
+  const sliderMax = Math.max(240, Math.round(Math.max(map.width, map.height) / 4));
 
   return (
     <>
       <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
-        <input type="range" min="20" max="200" value={Math.min(200, g.size)} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+        <input type="range" min="20" max={sliderMax} value={Math.min(sliderMax, Math.round(g.size))} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
       </Row>
 
       {/* Exact calibration for standard battlemaps ("44x32 @ 72dpi"): type the
@@ -54,7 +58,7 @@ export default function GridControls({ map }) {
           const origScale = g.origWidth ? map.width / g.origWidth : 1;
           return (
             <div style={{ display: 'flex', gap: 6 }}>
-              <CommitNum label="px/Feld (dpi)" value={Math.round(g.size / origScale)} min={8} max={1000}
+              <CommitNum label="px/Feld (dpi)" value={Math.round(g.size / origScale)} min={8} max={4000}
                 onCommit={(v) => onSize(v * origScale)} />
               <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
                 onCommit={(n) => onSize(map.width / n)} />
