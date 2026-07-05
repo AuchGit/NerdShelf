@@ -1011,11 +1011,20 @@ export class VttRenderer {
 
     // Click-to-place: an armed token (Bestiary/TokenPanel) spawns on the
     // clicked grid cell. Left click only; Esc cancels (see onAction).
-    if (s.ui.pendingTokenPlace && e.button === 0 && s.session.role === 'dm') {
-      const def = s.ui.pendingTokenPlace;
+    // Klick-zu-Platzieren: DM für alles; ein Spieler darf sein EIGENES
+    // Token platzieren (kind 'player' + eigene ownerId).
+    if (s.ui.pendingTokenPlace && e.button === 0
+      && (s.session.role === 'dm' || (s.ui.pendingTokenPlace.kind === 'player' && s.ui.pendingTokenPlace.ownerId === s.session.userId))) {
+      const { __queue, ...def } = s.ui.pendingTokenPlace;
       const spot = snapToGrid(pos.x, pos.y, map.grid, def.sizeCells || 1);
       A.addToken({ ...def, x: spot.x, y: spot.y });
-      A.cancelTokenPlacement();
+      // "+ Alle Spieler": die restlichen Tokens der Reihe nach platzieren.
+      if (__queue?.length) {
+        const [next, ...rest] = __queue;
+        A.armTokenPlacement(rest.length ? { ...next, __queue: rest } : next);
+      } else {
+        A.cancelTokenPlacement();
+      }
       return;
     }
 

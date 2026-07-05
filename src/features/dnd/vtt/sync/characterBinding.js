@@ -21,7 +21,9 @@
 // (local only); the one GM spawn uses apply (broadcast + persist).
 
 import { apply, applyLocal, getState, subscribe } from '../state/store';
-import { snapToGrid } from '../lib/geometry';
+// Laufzeit-Zyklus actions↔binding ist ok — beide Module definieren nur
+// Funktionen, der Aufruf passiert erst lange nach der Initialisierung.
+import { armTokenPlacement } from '../state/actions';
 import { listMembers, patchCombatState } from '../../character-builder/lib/campaigns';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
@@ -206,25 +208,33 @@ class CharacterBinding {
     }
   }
 
-  // GM: one token per member bound to their character, for members who don't
-  // have one yet. RLS makes this GM-only; players can't insert their own.
+  // GM: Klick-zu-Platzieren für ALLE unplatzierten Member — nacheinander,
+  // jedes Token wird auf das angeklickte Feld gesetzt (Queue im Placement).
   spawnMemberTokens() {
     const bound = boundCharIds();
+    const defs = [];
     for (const m of this.members) {
       if (m.character_id == null || bound.has(String(m.character_id))) continue;
-      this.spawnOne(m);
+      const def = this.memberTokenDef(m);
+      if (def) defs.push(def);
     }
+    if (!defs.length) return;
+    const [first, ...rest] = defs;
+    armTokenPlacement({ ...first, __queue: rest });
   }
 
   // GM: spawn one specific member's bound token (no-op if already present).
+  // Klick-zu-Platzieren wie bei NPC/Monster-Tokens.
   spawnMemberToken(characterId) {
     if (boundCharIds().has(String(characterId))) return null;
     const m = this.members.find((x) => String(x.character_id) === String(characterId));
-    return m ? this.spawnOne(m) : null;
+    const def = m ? this.memberTokenDef(m) : null;
+    if (def) armTokenPlacement(def);
+    return null;
   }
 
-  // Build + add a single member's token at map center.
-  spawnOne(m) {
+  // Token-Definition eines Members (ohne Position — die kommt vom Klick).
+  memberTokenDef(m) {
     const s = getState();
     const map = s.maps[s.activeMapId];
     if (!map || !m || m.character_id == null) return null;
@@ -233,26 +243,16 @@ class CharacterBinding {
     const card = this.cardByChar[cid] || {};
     const hpMax = ch?.data ? this.maxHp(cid, ch.data) : null;
     const hp = ch?.data?.status?.currentHp ?? hpMax;
-    const center = snapToGrid(map.width / 2, map.height / 2, map.grid, 1);
-    const id = 'tok_' + Math.random().toString(36).slice(2, 10);
-    apply({
-      type: 'token/add',
-      token: {
-        id,
-        mapId: map.id,
-        level: map.levels?.[0]?.id || null,
-        kind: 'player',
-        ownerId: m.user_id || null,
-        characterId: cid,
-        name: card.name || ch?.name || m.player_name || 'Spieler',
-        imageUrl: card.portrait || ch?.data?.appearance?.portrait || null,
-        color: '#42a5f5',
-        x: center.x, y: center.y,
-        sizeCells: 1,
-        hp, hpMax, conditions: ch?.data?.status?.conditions || [],
-      },
-    });
-    return id;
+    return {
+      kind: 'player',
+      ownerId: m.user_id || null,
+      characterId: cid,
+      name: card.name || ch?.name || m.player_name || 'Spieler',
+      imageUrl: card.portrait || ch?.data?.appearance?.portrait || null,
+      color: '#42a5f5',
+      sizeCells: 1,
+      hp, hpMax, conditions: ch?.data?.status?.conditions || [],
+    };
   }
 
   // Optimistic combat-state write (mirrors SessionPage.patchChar): apply to the
