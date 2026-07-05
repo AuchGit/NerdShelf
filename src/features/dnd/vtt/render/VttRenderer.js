@@ -429,7 +429,7 @@ export class VttRenderer {
         ambientSources = this.ambientOpeningSources(mapWalls, baseline, map.grid.size, darkPolys, { dir: map.worldShadowDir ?? 135, strength: map.worldShadowStrength ?? 0 });
       }
       this.lights.setZoom?.(this.viewport.scale); // programmatische Zooms (Fit etc.)
-      this.lights.update({
+      const lightOpts = {
         renderer: this.app.renderer,
         // Cheap recompute gate: bumped by every wall/light/map change (incl.
         // luminous-token moves) — replaces hashing all walls+lights per frame.
@@ -451,7 +451,18 @@ export class VttRenderer {
         darkvision: lightingOn ? darkvision : [],
         contrast: map.lightContrast ?? 0.5,
         blur: map.lightBlur ?? 0,
-      });
+      };
+      this.lights.update(lightOpts);
+      // Umgebung für den leichten Licht-only-Refresh (refreshLightsLive):
+      // beim Drag/Glide eines leuchtenden Tokens ändern sich NUR die
+      // Quellpositionen — alles andere (Wände, Ambients, Darkness, …)
+      // bleibt exakt der Stand dieses Reconciles.
+      this._lightEnv = {
+        mapId: map.id, level, base,
+        ambientSources,
+        opts: lightOpts,
+        revPrefix: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}|`,
+      };
 
       // Tool-gated visibility: walls / transitions only show to the DM while the
       // matching tool is active (doors are separate and always visible). Zones
@@ -1535,6 +1546,38 @@ export class VttRenderer {
     }
   }
 
+  // Leichter Licht-only-Refresh für Drag/Glide leuchtender Tokens: statt der
+  // kompletten Reconcile-Pipeline (Token-Diff, Wände, Terrain, Fog, Auren, …)
+  // wird NUR der Licht-Compositor mit den Parametern des letzten Reconciles
+  // und frischen Live-Positionen gefüttert. Volle Reconciles laufen weiter
+  // über die Ops (Broadcast/Store) — hier geht es nur um die Zwischenframes.
+  refreshLightsLive() {
+    const env = this._lightEnv;
+    if (!env) return;
+    const s = getState();
+    if (s.activeMapId !== env.mapId) return;
+    const map = s.maps[env.mapId];
+    if (!map || map.lightingEnabled === false) return;
+    const { level, base } = env;
+    let liveKey = '';
+    const sources = [
+      ...Object.values(s.lights).filter((l) => l.mapId === map.id && (l.level || base) === level),
+      ...Object.values(s.tokens)
+        .filter((t) => t.mapId === map.id && (t.level || base) === level && t.light)
+        .map((t) => {
+          const halfFt = ((t.sizeCells || 1) * 5) / 2;
+          const live = (this.drag?.id === t.id || this._tween?.id === t.id)
+            ? this.tokens.nodes.get(t.id)?.root?.position : null;
+          const lx = live ? live.x : t.x;
+          const ly = live ? live.y : t.y;
+          if (live) liveKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
+          return { id: 'tl_' + t.id, x: lx, y: ly, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, lx, ly) };
+        }),
+      ...env.ambientSources,
+    ];
+    this.lights.update({ ...env.opts, sources, rev: env.revPrefix + liveKey });
+  }
+
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-
   // Compositor — innerhalb des weichen Kreises verschwindet die Dunkel-/
   // Licht-Überlagerung, die Map erscheint dort in voller Helligkeit. Kein
@@ -2006,9 +2049,9 @@ export class VttRenderer {
       p = 1 - (1 - p) * (1 - p);
       node.root.position.set(tw.fromX + (tw.toX - tw.fromX) * p, tw.fromY + (tw.toY - tw.fromY) * p);
     }
-    // Leuchtende Tokens: Licht folgt dem Glide (Low-Res-Composes, 30fps-
-    // gedeckelt im Compositor — der Final-Pass kommt nach der Bewegung).
-    if (getState().tokens[tw.id]?.light) this.scheduleReconcile();
+    // Leuchtende Tokens: NUR der Licht-Compositor refresht pro Glide-Frame
+    // (Low-Res + 30fps-Deckel dort) — keine volle Reconcile-Pipeline mehr.
+    if (getState().tokens[tw.id]?.light) this.refreshLightsLive();
   }
 
   // ---- token drag ----
@@ -2106,9 +2149,9 @@ export class VttRenderer {
       this._lastBroadcast = now;
       A.moveToken(this.drag.id, x, y);
     }
-    // Leuchtendes Token: Licht folgt dem Cursor (Low-Res + 30fps-Deckel im
-    // Compositor; Final-Pass in voll nach dem Loslassen).
-    if (token.light) this.scheduleReconcile();
+    // Leuchtendes Token: NUR der Licht-Compositor refresht pro Drag-Frame
+    // (Low-Res + 30fps-Deckel dort) — keine volle Reconcile-Pipeline mehr.
+    if (token.light) this.refreshLightsLive();
   }
 
   onDragEnd() {
