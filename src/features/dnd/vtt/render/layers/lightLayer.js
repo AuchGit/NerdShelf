@@ -172,18 +172,19 @@ export class LightLayer {
     // Mousemove!) komplett ungebremst in voller Auflösung.
     const resLow = Math.max(0.35, Math.min(0.5, 2600 / Math.max(w, h)));
     const nowTs = performance.now();
-    const wantLow = !opts.__final && (nowTs - (this._lastCompose || 0) < 200);
+    // __live = Aufruf aus dem Licht-only-Drag/Glide-Pfad: IMMER low-res
+    // (auch der erste Frame — kein Voll-Auflösungs-Hitch beim Drag-Start).
+    const wantLow = !opts.__final && (opts.__live || nowTs - (this._lastCompose || 0) < 200);
     const sig = `${baseSig}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
     if (sig === this._sig) return;
     clearTimeout(this._finalTimer);
     if (wantLow) {
       this._finalTimer = setTimeout(() => {
-        try { this.update({ ...opts, __final: true }); } catch { /* Renderer evtl. schon weg */ }
+        try { this.update({ ...opts, __final: true, __live: false }); } catch { /* Renderer evtl. schon weg */ }
       }, 200);
-      // 30fps-Deckel für Interaktions-Composes (lokale Drags feuern pro
-      // Mousemove) — Zwischenstände dürfen ausfallen, der Final-Pass oben
-      // fängt den Endstand garantiert.
-      if (nowTs - (this._lastCompose || 0) < 33) return;
+      // ~60fps-Deckel für Interaktions-Composes; Zwischenstände dürfen
+      // ausfallen, der Final-Pass oben fängt den Endstand garantiert.
+      if (nowTs - (this._lastCompose || 0) < 15) return;
     }
     this._sig = sig;
 

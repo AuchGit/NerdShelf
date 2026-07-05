@@ -1552,6 +1552,17 @@ export class VttRenderer {
   // und frischen Live-Positionen gefüttert. Volle Reconciles laufen weiter
   // über die Ops (Broadcast/Store) — hier geht es nur um die Zwischenframes.
   refreshLightsLive() {
+    // rAF-Koaleszenz: Pointer-Events feuern mit bis zu 1000Hz (Gaming-Maus) —
+    // ohne Bündelung ersäuft der Main-Thread im Quellen-Neubau, und genau das
+    // fühlt sich als Lag an. Max. ein Refresh pro Frame.
+    if (this._lightLiveRaf) return;
+    this._lightLiveRaf = requestAnimationFrame(() => {
+      this._lightLiveRaf = 0;
+      this._refreshLightsLiveNow();
+    });
+  }
+
+  _refreshLightsLiveNow() {
     const env = this._lightEnv;
     if (!env) return;
     const s = getState();
@@ -1575,7 +1586,7 @@ export class VttRenderer {
         }),
       ...env.ambientSources,
     ];
-    this.lights.update({ ...env.opts, sources, rev: env.revPrefix + liveKey });
+    this.lights.update({ ...env.opts, sources, rev: env.revPrefix + liveKey, __live: true });
   }
 
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-

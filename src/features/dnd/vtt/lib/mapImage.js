@@ -24,12 +24,24 @@
  *           Raise per-import for an exceptionally detailed map.
  *   quality: WebP quality 0..1 (default 0.92 — visually near-lossless for maps)
  */
-export async function importMapImage(file, { maxDim = 12288, quality = 0.95 } = {}) {
+// Online-Kompressgröße: seit die Direktverbindung das UNANGETASTETE Original
+// in voller Auflösung serviert, muss die Online-Kopie nicht mehr riesig sein
+// — 8192px Kante ist online mehr als scharf genug und encodiert ~2.3× schneller
+// als die früheren 12288px (WebP-Encode ist DER langsame Schritt beim Import).
+export async function importMapImage(file, { maxDim = 8192, quality = 0.92 } = {}) {
   if (!file) throw new Error('Keine Datei ausgewählt.');
   // KEIN Byte-Limit: das Original wird lokal in voller Größe gespeichert
   // (Direktverbindung serviert es unkomprimiert), online geht ohnehin nur
   // die komprimierte WebP-Version raus. Die echte Grenze ist, was der
   // Browser dekodieren kann — scheitert das, kommt eine klare Meldung.
+
+  // Bevorzugt: kompletter Import (Decode + Skalieren + Encode + Hash) in
+  // einem WORKER mit OffscreenCanvas — die App bleibt währenddessen voll
+  // bedienbar. Fallback: Main-Thread-Pfad unten.
+  const viaWorker = await importInWorker(file, maxDim, quality).catch(() => null);
+  if (viaWorker) {
+    return { ...viaWorker, objectUrl: URL.createObjectURL(viaWorker.blob) };
+  }
 
   // Dekodieren: createImageBitmap ist deutlich schneller als der <img>-Umweg
   // und arbeitet direkt vom File-Blob; <img> bleibt als Fallback.
@@ -74,6 +86,27 @@ export async function importMapImage(file, { maxDim = 12288, quality = 0.95 } = 
   } finally {
     src.close?.(); // ImageBitmap-Speicher sofort freigeben
   }
+}
+
+// Worker-Import: gibt null bei Fehlern zurück (Caller fällt auf den
+// Main-Thread-Pfad zurück — z.B. wenn OffscreenCanvas/WebP dort fehlt).
+function importInWorker(file, maxDim, quality) {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let worker;
+    try {
+      worker = new Worker(new URL('./mapImageWorker.js', import.meta.url), { type: 'module' });
+    } catch { resolve(null); return; }
+    const done = (v) => { worker.terminate(); resolve(v); };
+    worker.onmessage = (e) => {
+      const d = e.data;
+      // Bei jedem Worker-Fehler auf den Main-Thread-Pfad zurückfallen —
+      // der liefert bei einem echten Dekodier-Problem die klare Meldung.
+      done(d?.ok && d.blob ? d : null);
+    };
+    worker.onerror = () => done(null);
+    worker.postMessage({ file, maxDim, quality });
+  });
 }
 
 function loadImage(src) {
