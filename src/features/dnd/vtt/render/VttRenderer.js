@@ -241,9 +241,19 @@ export class VttRenderer {
       this.bg.texture = Texture.EMPTY;
       if (bgPrimary) {
         const want = bgPrimary;
+        // Map-Koordinaten-Größe JETZT einfangen: das Texture (v.a. das große
+        // Relay-Original) kommt asynchron an und MUSS sofort auf die Map-Maße
+        // skaliert werden — sonst rendert es bis zum nächsten Reconcile in
+        // nativer Pixelgröße und alles Platzierte säße scheinbar falsch.
+        const sizeW = map.width; const sizeH = map.height;
         const tryLoad = (url, isFallback) => loadTexture(url).then((tex) => {
           if (this._bgUrl !== want) return;
-          if (tex) { this.bg.texture = tex; return; }
+          if (tex) {
+            this.bg.texture = tex;
+            this.bg.width = sizeW; this.bg.height = sizeH;
+            this.scheduleReconcile(); // Memory-Layer etc. übernehmen das Texture
+            return;
+          }
           if (!isFallback && bgFallback && bgFallback !== url) { tryLoad(bgFallback, true); return; } // relay original failed → Supabase
           if ((this._bgTries || 0) < 5) {
             this._bgTries = (this._bgTries || 0) + 1;
@@ -652,7 +662,12 @@ export class VttRenderer {
     // memory = the SAME view (map + grid), darkened/grayscaled, masked to
     // everything explored so far.
     this.bgGray.visible = true;
-    if (this.bg.texture && this.bg.texture !== Texture.EMPTY) this.bgGrayMap.texture = this.bg.texture;
+    if (this.bg.texture && this.bg.texture !== Texture.EMPTY) {
+      this.bgGrayMap.texture = this.bg.texture;
+      // Wie das Live-bg IMMER auf Map-Koordinaten skalieren — das Relay-
+      // Original ist größer als die gespeicherte Map-Größe.
+      this.bgGrayMap.width = map.width; this.bgGrayMap.height = map.height;
+    }
     this.drawGrayGrid(map);
     this.bgGray.mask = this._exploredSprite;
 
@@ -680,7 +695,10 @@ export class VttRenderer {
   // marker at its real position (the DM still sees everything).
   updateDmVision(map, polys, tokens) {
     this.bgGray.visible = true;
-    if (this.bg.texture && this.bg.texture !== Texture.EMPTY) this.bgGrayMap.texture = this.bg.texture;
+    if (this.bg.texture && this.bg.texture !== Texture.EMPTY) {
+      this.bgGrayMap.texture = this.bg.texture;
+      this.bgGrayMap.width = map.width; this.bgGrayMap.height = map.height;
+    }
     this.drawGrayGrid(map);
     this.bgGray.mask = null; // whole map is gray (DM sees all)
 
