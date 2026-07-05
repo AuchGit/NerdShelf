@@ -16,8 +16,6 @@
 // that's ~1500 maps; at 5 GB/mo egress with per-client caching, re-downloads
 // approach zero.
 
-const MAX_INPUT_BYTES = 60 * 1024 * 1024; // reject absurd uploads before canvas OOM
-
 /**
  * @param {File|Blob} file
  * @param {{ maxDim?: number, quality?: number }} [opts]
@@ -28,15 +26,18 @@ const MAX_INPUT_BYTES = 60 * 1024 * 1024; // reject absurd uploads before canvas
  */
 export async function importMapImage(file, { maxDim = 12288, quality = 0.95 } = {}) {
   if (!file) throw new Error('Keine Datei ausgewählt.');
-  if (file.size > MAX_INPUT_BYTES) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    throw new Error(`Bild ist zu groß (${mb} MB). Maximal ${MAX_INPUT_BYTES / 1024 / 1024} MB.`);
-  }
+  // KEIN Byte-Limit: das Original wird lokal in voller Größe gespeichert
+  // (Direktverbindung serviert es unkomprimiert), online geht ohnehin nur
+  // die komprimierte WebP-Version raus. Die echte Grenze ist, was der
+  // Browser dekodieren kann — scheitert das, kommt eine klare Meldung.
 
   const srcUrl = URL.createObjectURL(file);
   let img;
   try {
     img = await loadImage(srcUrl);
+  } catch {
+    const mb = (file.size / 1024 / 1024).toFixed(0);
+    throw new Error(`Bild (${mb} MB) konnte nicht dekodiert werden — vermutlich zu groß für den Browser. Bild etwas verkleinern und erneut importieren.`);
   } finally {
     URL.revokeObjectURL(srcUrl);
   }
