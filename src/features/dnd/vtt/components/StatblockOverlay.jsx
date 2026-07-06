@@ -155,7 +155,7 @@ function acText(ac) {
   if (Array.isArray(ac)) {
     const f = ac[0];
     if (typeof f === 'number') return String(f);
-    if (f?.ac) return `${f.ac}${f.from ? ` (${f.from.map(stripTags).join(', ')})` : ''}`;
+    if (f?.ac) return `${f.ac}${f.from ? ` (${f.from.map(resolveTags).join(', ')})` : ''}`;
   }
   return typeof ac === 'number' ? String(ac) : '—';
 }
@@ -172,13 +172,59 @@ function mod(score) { const m = Math.floor((score - 10) / 2); return (m >= 0 ? '
 function fmt(n) { const v = Number(n) || 0; return (v >= 0 ? '+' : '') + v; }
 
 // Flatten 5etools entries (strings + nested objects) to plain text, stripping
-// {@tag ...} markup down to its display text.
+// 5etools-Entries → lesbarer Text. Verschachtelte entries/items/Tabellen werden
+// eingesammelt; alle {@tag …}-Markups über resolveTags aufgelöst.
 function flattenEntries(entries) {
-  if (!Array.isArray(entries)) return '';
-  return entries.map((e) => (typeof e === 'string' ? stripTags(e) : flattenEntries(e.entries))).join(' ');
+  if (entries == null) return '';
+  if (typeof entries === 'string') return resolveTags(entries);
+  if (Array.isArray(entries)) return entries.map(flattenEntries).filter(Boolean).join(' ');
+  if (typeof entries === 'object') {
+    const parts = [];
+    if (entries.name && (entries.entries || entries.entry)) parts.push(`${entries.name}.`);
+    if (entries.entries) parts.push(flattenEntries(entries.entries));
+    else if (entries.entry) parts.push(flattenEntries(entries.entry));
+    if (entries.items) parts.push(entries.items.map(flattenEntries).filter(Boolean).join(' · '));
+    return parts.filter(Boolean).join(' ');
+  }
+  return '';
 }
-function stripTags(s) {
-  return String(s).replace(/\{@\w+ ([^}]*)\}/g, (_, inner) => String(inner).split('|')[0]);
+
+// Angriffs-Typ-Kürzel (2014 + 2024) → Klartext.
+const ATK_TYPE = {
+  mw: 'Melee Weapon Attack:', rw: 'Ranged Weapon Attack:', 'mw,rw': 'Melee or Ranged Weapon Attack:',
+  ms: 'Melee Spell Attack:', rs: 'Ranged Spell Attack:', 'ms,rs': 'Melee or Ranged Spell Attack:',
+  m: 'Melee Attack Roll:', r: 'Ranged Attack Roll:', 'm,r': 'Melee or Ranged Attack Roll:',
+};
+
+// Vollständige 5etools-Tag-Auflösung. Deckt die in Statblocks üblichen Tags ab;
+// alles Unbekannte fällt auf den ersten Segment-Text zurück (kein rohes {@…}).
+function resolveTags(str) {
+  let s = String(str);
+  // Zuerst Tags OHNE Argumente (fester Ersatztext).
+  s = s.replace(/\{@(h|hom|actSaveFail|actSaveSuccess|actSaveSuccessOrFail|actTrigger|actResponse)\}/g, (_, t) => ({
+    h: 'Treffer: ', hom: 'Treffer oder Fehlschlag: ',
+    actSaveFail: 'Misserfolg: ', actSaveSuccess: 'Erfolg: ', actSaveSuccessOrFail: 'Erfolg oder Misserfolg: ',
+    actTrigger: 'Auslöser: ', actResponse: 'Reaktion: ',
+  }[t] || ''));
+  // Dann Tags MIT Argumenten (Pipe-getrennt; erstes Segment = Anzeige).
+  s = s.replace(/\{@(\w+)(?:\s+([^}]*))?\}/g, (_, tag, args) => {
+    const a = args != null ? String(args).split('|') : [];
+    const first = a[0] != null ? a[0] : '';
+    switch (tag) {
+      case 'atk': case 'atkr': return ATK_TYPE[first.trim()] || first;
+      case 'hit': case 'h': return (first.startsWith('-') ? '' : '+') + first;
+      case 'dc': return `DC ${first}`;
+      case 'recharge': return first ? `(Aufladen ${first}${(+first > 1 && +first < 6) ? '–6' : ''})` : '(Aufladen 6)';
+      case 'actSave': return `${first.toUpperCase()}-Rettungswurf`;
+      case 'chance': return `${first}%`;
+      case 'damage': case 'dice': case 'scaledamage': case 'scaledice': case 'd20': case 'hitYourSpellAttack':
+        return first;
+      default: return first; // creature/spell/item/condition/skill/sense/variantrule/…
+    }
+  });
+  // "Emanation [Area of Effect]" & Co.: der 5etools-Klammer-Zusatz raus.
+  s = s.replace(/\s*\[Area of Effect\]/g, '');
+  return s;
 }
 
 const S = {
