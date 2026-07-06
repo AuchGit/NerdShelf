@@ -652,9 +652,12 @@ export class VttRenderer {
       }
 
       // auto-fit when a new map becomes active
-      if (this._fittedMapId !== map.id && map.width) {
+      // Auf Karten-/Stockwerks-Maße einpassen — Key enthält die Maße, damit ein
+      // Wechsel auf eine Bild-Ebene mit ANDERER Größe neu einpasst.
+      const fitKey = `${map.id}|${map.width}x${map.height}`;
+      if (this._fittedMapId !== fitKey && map.width) {
         this.viewport.fit(map.width, map.height);
-        this._fittedMapId = map.id;
+        this._fittedMapId = fitKey;
       }
     }
   }
