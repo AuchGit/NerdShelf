@@ -1186,10 +1186,16 @@ export class VttRenderer {
         A.selectTransition(id);
       }
     } else if (tool === 'select') {
-      // Click a terrain object's cell to select it (DM); else marquee tokens.
+      // Click a terrain object's cell OR a transition field (stairs/ladder/
+      // portal) to select it (DM); else marquee tokens.
       if (s.session.role === 'dm') {
         const cell = pointToCell(pos.x, pos.y, map.grid);
         const key = `${cell.col},${cell.row}`;
+        // Transition zuerst (Treppe/Leiter/Portal): auf ihrem Feld auswählbar,
+        // damit man den Editor auch mit dem Auswahl-Werkzeug öffnen kann.
+        const trHit = Object.values(s.transitions).find(
+          (t) => t.mapId === map.id && (t.level || (map.levels?.[0]?.id || null)) === level && t.col === cell.col && t.row === cell.row);
+        if (trHit) { A.selectTransition(trHit.id); return; }
         const hit = (map.terrain || []).find((t) => Array.isArray(t.cells) && (t.level || (map.levels?.[0]?.id || null)) === level && t.cells.includes(key));
         if (hit) { A.selectTerrain(hit.id); return; }
       }
