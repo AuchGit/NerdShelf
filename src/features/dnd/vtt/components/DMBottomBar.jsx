@@ -32,7 +32,9 @@ export default function DMBottomBar() {
   return (
     <div style={S.bar}>
       {toolActive ? (
-        <div style={{ ...S.row, paddingTop: 6 }}><ToolSettings map={activeMap} /></div>
+        // Werkzeug-Leiste: breit + umbrechend, damit alle Einstellungen
+        // geordnet reinpassen (kein horizontales Gescrolle).
+        <div style={{ display: 'flex', padding: '10px 16px' }}><ToolSettings map={activeMap} /></div>
       ) : selToken ? (
         <div style={{ ...S.row, padding: '12px 16px' }}><TokenDetail token={selToken} characters={characters} campaignId={campaignId} /></div>
       ) : (

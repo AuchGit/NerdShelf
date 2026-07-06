@@ -188,7 +188,7 @@ export default function ToolSettings({ map }) {
 const TOOL_LABEL = { zone: 'Zone', walls: 'Wände', fog: 'Fog', light: 'Licht', transition: 'Übergänge', terrain: 'Gelände', ruler: 'Messen', ping: 'Ping' };
 
 const S = {
-  wrap: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '4px 2px' },
+  wrap: { display: 'flex', alignItems: 'center', gap: '8px 10px', flexWrap: 'wrap', rowGap: 8, padding: '6px 2px', minWidth: 640, maxWidth: 1100 },
   toolName: { fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: 'var(--color-accent)' },
   btn: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
   active: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: '1px solid var(--color-accent)' },
