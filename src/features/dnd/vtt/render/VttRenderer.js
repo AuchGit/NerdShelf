@@ -41,7 +41,13 @@ const wallBlocksLight = (w) => {
 const wallBlocksMovement = (w) => !(w.kind === 'door' && w.open) && (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksMovement;
 // Sight ≠ light: a "shadow" wall blocks light but you can still SEE past it, so
 // player vision uses this (not the light-blocking set).
-const wallBlocksSight = (w) => !(w.kind === 'door' && w.open) && (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksSight;
+// Fenster: GESCHLOSSEN blockt die Sicht (trübe/dunkle Scheibe), OFFEN lässt sie
+// durch — analog zu Türen und intuitiv (zum Durchsehen Fenster öffnen).
+const wallBlocksSight = (w) => {
+  if (w.kind === 'door') return !w.open;
+  if (w.kind === 'window') return !w.open;
+  return (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksSight;
+};
 
 const DRAG_BROADCAST_MS = 50; // ~20 Hz peer updates while dragging (budget-aware)
 
