@@ -98,6 +98,22 @@ export default function DiceTray() {
   });
   const clear = () => setRoll({ dice: [], total: null });
 
+  // Externer Wurf: Statblock-Angriffe/Zauber/Rettungswürfe schicken
+  // `vtt:roll` mit einer Formel (z.B. "1d20+11" oder "4d10+5") + Label →
+  // Tray öffnet sich und würfelt sofort.
+  useEffect(() => {
+    const onRoll = (e) => {
+      const f = String(e.detail?.formula || '').trim();
+      const terms = parseFormula(f);
+      if (!terms) return;
+      setOpen(true);
+      setFormula(f);
+      setRoll(() => rollFormula(terms));
+    };
+    window.addEventListener('vtt:roll', onRoll);
+    return () => window.removeEventListener('vtt:roll', onRoll);
+  }, []);
+
   // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
   // animates instantly instead of waiting on the lazy import.
   useEffect(() => {

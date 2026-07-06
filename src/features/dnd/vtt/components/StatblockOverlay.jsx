@@ -72,6 +72,70 @@ export default function StatblockOverlay({ tokenId, index = 0, isGM, userId, onC
   );
 }
 
+// Rohtext einer Entry (Tags BLEIBEN erhalten) — für die Mechanik-Extraktion.
+function rawText(e) {
+  if (e == null) return '';
+  if (typeof e === 'string') return e;
+  if (Array.isArray(e)) return e.map(rawText).join(' ');
+  if (typeof e === 'object') {
+    const p = [];
+    if (e.entries) p.push(rawText(e.entries)); else if (e.entry) p.push(rawText(e.entry));
+    if (e.items) p.push(e.items.map(rawText).join(' '));
+    return p.join(' ');
+  }
+  return '';
+}
+// Aus dem Roh-Text einer Aktion die würfelbaren Werte ziehen: Angriffsbonus
+// ({@hit}/{@atk}), Schaden ({@damage/@dice} + Typ), Rettungswurf-DC ({@dc},
+// {@actSave}). Wird als klickbare Wurf-Badges gerendert.
+function actionRolls(e) {
+  // Name mitscannen: {@recharge}/N-per-day stehen oft im Namen (z.B. "Acid
+  // Breath {@recharge 5}").
+  const raw = `${rawText(e?.name || '')} ${rawText(e?.entries || e)}`;
+  const out = { atk: null, damages: [], dc: null, save: null, recharge: null, uses: null };
+  const hit = /\{@hit ([+-]?\d+)\}/.exec(raw) || /\{@atk[r]? [^}]*\}\s*([+-]?\d+)/.exec(raw);
+  if (hit) out.atk = (hit[1].startsWith('-') ? '' : '+') + hit[1];
+  const dc = /\{@dc (\d+)\}/.exec(raw); if (dc) out.dc = dc[1];
+  const sv = /\{@actSave (\w+)\}/i.exec(raw) || /\b(str|dex|con|int|wis|cha)\b\s+saving throw/i.exec(raw);
+  if (sv) out.save = sv[1].toUpperCase();
+  // "{@damage 4d10 + 5} Radiant damage" → {formula:"4d10+5", type:"Radiant"}
+  for (const m of raw.matchAll(/\{@(?:damage|dice) ([^}|]+)[^}]*\}\s*(?:\(?[^)]*\)?\s*)?(\w+)?\s*damage/gi)) {
+    const formula = m[1].replace(/\s+/g, '');
+    if (/\d*d\d+/.test(formula)) out.damages.push({ formula, type: m[2] || '' });
+  }
+  const rc = /\{@recharge ?(\d*)\}/.exec(raw); if (rc) out.recharge = rc[1] ? `Aufladen ${rc[1]}–6` : 'Aufladen 6';
+  const us = /(\d+)\/(day|short rest|long rest|turn)/i.exec(raw);
+  if (us) out.uses = `${us[1]}/${us[2].toLowerCase().replace('day', 'Tag').replace('short rest', 'Kurze Rast').replace('long rest', 'Lange Rast').replace('turn', 'Zug')}`;
+  return out;
+}
+const roll = (formula, label) => window.dispatchEvent(new CustomEvent('vtt:roll', { detail: { formula, label } }));
+
+// Eine Aktion/Reaktion/… mit würfelbaren Badges (Angriff/Schaden/Rettung) +
+// Beschreibungstext. Badges → klick würfelt in den Würfel-Tray.
+function ActionEntry({ e }) {
+  const r = actionRolls(e);
+  const hasBadges = r.atk || r.damages.length || r.dc || r.recharge || r.uses;
+  // Name auflösen (Tags) und den Aufladen-Zusatz raus (steht als Badge).
+  const name = resolveTags(String(e?.name || '')).replace(/\s*\(Aufladen[^)]*\)/i, '').replace(/\s*\(Recharge[^)]*\)/i, '').trim();
+  return (
+    <div style={S.entry}>
+      {name && <span style={S.entryName}>{name}. </span>}
+      {hasBadges && (
+        <span style={S.badges}>
+          {r.recharge && <span style={S.badgeGray}>{r.recharge}</span>}
+          {r.uses && <span style={S.badgeGray}>{r.uses}</span>}
+          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln" onClick={() => roll(`1d20${r.atk}`, `${e.name}: Angriff`)}>🎲 {r.atk}</button>}
+          {r.dc && <span style={S.badgeSave}>DC {r.dc}{r.save ? ` ${r.save}` : ''}</span>}
+          {r.damages.map((d, i) => (
+            <button key={i} style={S.badgeDmg} title="Schaden würfeln" onClick={() => roll(d.formula, `${e.name}: Schaden`)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
+          ))}
+        </span>
+      )}
+      <span style={S.entryText}>{flattenEntries(e?.entries || e)}</span>
+    </div>
+  );
+}
+
 // Kompakte Verteidigungs-/Sinne-Zeile: farbiges Chip-Label + Wert.
 function DefRow({ label, val, tone }) {
   if (!val) return null;
@@ -87,8 +151,11 @@ function DefRow({ label, val, tone }) {
 function NpcStatblock({ m }) {
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
   const type = typeof m.type === 'string' ? m.type : (m.type?.type || '');
-  const ac = acText(m.ac);
-  const hp = m.hp?.average != null ? `${m.hp.average}${m.hp.formula ? ` (${m.hp.formula})` : ''}` : '—';
+  // AC/HP getrennt in "große Zahl" + "kleiner Zusatz", damit die Kacheln auch
+  // bei langen Quellen ("+2 Studded Leather …") ordentlich aussehen.
+  const acN = acNum(m.ac); const acNote = acFrom(m.ac);
+  const hpN = m.hp?.average != null ? String(m.hp.average) : '—';
+  const hpNote = m.hp?.formula || '';
   const speed = speedText(m.speed);
   const lg = m._legendaryGroup || null;
   const sections = [
@@ -107,8 +174,8 @@ function NpcStatblock({ m }) {
       </div>
       {/* Kern-Kampfwerte als Kacheln (AC / HP / Speed) — schnell scannbar. */}
       <div style={S.statTiles}>
-        <div style={S.tile}><div style={S.tileLabel}>🛡 AC</div><div style={S.tileVal}>{ac}</div></div>
-        <div style={S.tile}><div style={S.tileLabel}>❤ HP</div><div style={S.tileVal}>{hp}</div></div>
+        <div style={S.tile}><div style={S.tileLabel}>🛡 AC</div><div style={S.tileVal}>{acN}</div>{acNote && <div style={S.tileNote}>{acNote}</div>}</div>
+        <div style={S.tile}><div style={S.tileLabel}>❤ HP</div><div style={S.tileVal}>{hpN}</div>{hpNote && <div style={S.tileNote}>{hpNote}</div>}</div>
         {speed && <div style={S.tile}><div style={S.tileLabel}>👟 Speed</div><div style={S.tileValSm}>{speed}</div></div>}
       </div>
       <div style={S.abilities}>
@@ -135,27 +202,32 @@ function NpcStatblock({ m }) {
         {m.languages?.length ? <DefRow label="Sprachen" val={m.languages.map(resolveTags).join(', ')} /> : null}
       </div>
       {/* Zauberwirken: Slots pro Grad + Zauberlisten (Klassen- + innate). */}
-      {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => (
-        <div key={`sc${si}`} style={S.section}>
-          <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
-          {spellcastingBlocks(sc).map((b, bi) => (
-            <div key={bi} style={S.entry}>
-              {b.label && <span style={{ fontWeight: 700 }}>{b.label}: </span>}{b.text}
+      {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => {
+        const scHdr = rawText(sc.headerEntries || []);
+        const scDc = /\{@dc (\d+)\}/.exec(scHdr)?.[1];
+        const scAtk = /\{@hit ([+-]?\d+)\}/.exec(scHdr)?.[1] || /([+-]?\d+) to hit with spell/i.exec(scHdr)?.[1];
+        const scAbi = (sc.ability || '').toUpperCase(); // WIS/INT/CHA
+        return (
+          <div key={`sc${si}`} style={S.section}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
+              <span style={S.badges}>
+                {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}DC {scDc}</span>}
+                {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+              </span>
             </div>
-          ))}
-        </div>
-      ))}
+            {spellcastingBlocks(sc).map((b, bi) => (
+              <div key={bi} style={b.label ? S.spellLine : S.entryText}>
+                {b.label && <span style={S.spellLevel}>{b.label}</span>}{b.text}
+              </div>
+            ))}
+          </div>
+        );
+      })}
       {sections.map(([title, arr]) => (arr?.length ? (
         <div key={title} style={S.section}>
           <div style={S.sectionTitle}>{title}</div>
-          {arr.map((e, i) => (
-            <div key={i} style={S.entry}>
-              {e?.name && <span style={{ fontWeight: 700, fontStyle: 'italic' }}>{e.name}. </span>}
-              {/* trait/action = {name,entries}; Lair/Regional-Einträge sind auch
-                  reine Strings oder Listen-Objekte → e selbst durchreichen. */}
-              {flattenEntries(e?.entries || e)}
-            </div>
-          ))}
+          {arr.map((e, i) => <ActionEntry key={i} e={e} />)}
         </div>
       ) : null))}
     </div>
@@ -210,13 +282,13 @@ function CharacterStub({ token, isGM, userId }) {
 }
 
 // ── helpers ──
-function acText(ac) {
-  if (Array.isArray(ac)) {
-    const f = ac[0];
-    if (typeof f === 'number') return String(f);
-    if (f?.ac) return `${f.ac}${f.from ? ` (${f.from.map(resolveTags).join(', ')})` : ''}`;
-  }
+function acNum(ac) {
+  if (Array.isArray(ac)) { const f = ac[0]; return String(typeof f === 'number' ? f : (f?.ac ?? '—')); }
   return typeof ac === 'number' ? String(ac) : '—';
+}
+function acFrom(ac) {
+  if (Array.isArray(ac)) { const f = ac[0]; if (f?.from?.length) return f.from.map(resolveTags).join(', '); }
+  return '';
 }
 function speedText(sp) {
   if (!sp) return '';
@@ -350,7 +422,7 @@ function resolveTags(str) {
 }
 
 const S = {
-  panel: { position: 'fixed', zIndex: 1000, width: 360, maxHeight: '80vh', overflowY: 'auto', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 40px #000b', padding: 12 },
+  panel: { position: 'fixed', zIndex: 1000, width: 390, maxHeight: '82vh', overflowY: 'auto', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 40px #000b', padding: 12 },
   head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--color-border)', userSelect: 'none' },
   close: { width: 26, height: 26, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 },
   body: { display: 'flex', flexDirection: 'column', gap: 8, fontSize: 'var(--fs-sm)' },
@@ -363,8 +435,9 @@ const S = {
   statTiles: { display: 'flex', gap: 6 },
   tile: { flex: 1, minWidth: 0, background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '5px 8px' },
   tileLabel: { fontSize: 9, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
-  tileVal: { fontSize: 16, fontWeight: 800, lineHeight: 1.15 },
-  tileValSm: { fontSize: 11, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  tileVal: { fontSize: 18, fontWeight: 800, lineHeight: 1.1 },
+  tileValSm: { fontSize: 11, fontWeight: 600, lineHeight: 1.3 },
+  tileNote: { fontSize: 9, color: 'var(--color-text-muted)', lineHeight: 1.25, marginTop: 1 },
   abilities: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 },
   ab: { background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '4px 0 3px', textAlign: 'center' },
   abName: { fontSize: 9, color: 'var(--color-text-muted)', fontWeight: 700 },
@@ -377,6 +450,16 @@ const S = {
   defVal: { color: 'var(--color-text)' },
   section: { borderTop: '1px solid var(--color-border)', paddingTop: 6 },
   sectionTitle: { fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--color-accent)', marginBottom: 5 },
-  entry: { fontSize: 11, lineHeight: 1.5, marginBottom: 6, color: 'var(--color-text)' },
+  entry: { fontSize: 11, lineHeight: 1.5, marginBottom: 7, color: 'var(--color-text)' },
+  entryName: { fontWeight: 800, color: 'var(--color-text)' },
+  entryText: { display: 'block', marginTop: 2, color: 'var(--color-text-muted)' },
+  // Würfelbare/Info-Badges einer Aktion.
+  badges: { display: 'inline-flex', flexWrap: 'wrap', gap: 4, verticalAlign: 'middle' },
+  badgeAtk: { fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 999, cursor: 'pointer', color: '#e0af68', background: 'color-mix(in srgb, #e0af68 16%, transparent)', border: '1px solid color-mix(in srgb, #e0af68 45%, transparent)' },
+  badgeDmg: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, cursor: 'pointer', color: '#ff6b6b', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', border: '1px solid color-mix(in srgb, #ff6b6b 45%, transparent)' },
+  badgeSave: { fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 999, color: '#9ab3d6', background: 'color-mix(in srgb, #9ab3d6 16%, transparent)', border: '1px solid color-mix(in srgb, #9ab3d6 45%, transparent)' },
+  badgeGray: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, color: 'var(--color-text-muted)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
+  spellLine: { fontSize: 11, lineHeight: 1.5, marginBottom: 3, color: 'var(--color-text)' },
+  spellLevel: { display: 'inline-block', minWidth: 92, fontWeight: 800, color: 'var(--color-accent)', marginRight: 4 },
   sheetBtn: { marginTop: 4, padding: '6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
 };
