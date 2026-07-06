@@ -282,6 +282,27 @@ export function buildFiveEUrl(edition, type) {
 // Per-Session-Cache (in-memory) damit wiederholte Imports denselben
 // Quellbuch nicht jedes Mal neu ziehen.
 const _liveCache = new Map()
+// Lair Actions / Regional Effects hängen NICHT am Monster selbst, sondern in
+// data/bestiary/legendarygroups.json (per `monster.legendaryGroup = {name,
+// source}` referenziert). Wir laden die Gruppe live vom 5etools-Mirror und
+// hängen sie als `_legendaryGroup` an, damit das Statblock-Overlay Lair
+// Actions + Regionale Effekte anzeigen kann. No-op ohne Referenz/Netz.
+export async function enrichLegendaryGroup(monster) {
+  const ref = monster?.legendaryGroup
+  if (!ref?.name || monster._legendaryGroup) return monster
+  try {
+    const data = await _liveFetchJson(`${DATA_MIRROR}/data/bestiary/legendarygroups.json`)
+    const groups = data?.legendaryGroup || []
+    const nl = String(ref.name).toLowerCase()
+    const sl = String(ref.source || '').toLowerCase()
+    const g = groups.find(x => String(x.name).toLowerCase() === nl
+      && (!sl || String(x.source || '').toLowerCase() === sl))
+      || groups.find(x => String(x.name).toLowerCase() === nl)
+    if (g) monster._legendaryGroup = g
+  } catch { /* offline → ohne Lair Actions */ }
+  return monster
+}
+
 async function _liveFetchJson(url) {
   if (_liveCache.has(url)) return _liveCache.get(url)
   try {

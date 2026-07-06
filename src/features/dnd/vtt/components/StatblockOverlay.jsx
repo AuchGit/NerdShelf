@@ -79,9 +79,13 @@ function NpcStatblock({ m }) {
   const ac = acText(m.ac);
   const hp = m.hp?.average != null ? `${m.hp.average}${m.hp.formula ? ` (${m.hp.formula})` : ''}` : '—';
   const speed = speedText(m.speed);
+  const lg = m._legendaryGroup || null;
   const sections = [
     ['Traits', m.trait], ['Actions', m.action], ['Bonus Actions', m.bonus],
-    ['Reactions', m.reaction], ['Legendary', m.legendary],
+    ['Reactions', m.reaction], ['Legendary', m.legendary], ['Mythic', m.mythic],
+    // Lair Actions / Regionale Effekte kommen aus der Legendary Group
+    // (per 5e.tools-Import nachgeladen).
+    ['Lair Actions', lg?.lairActions], ['Regional Effects', lg?.regionalEffects],
   ];
   return (
     <div style={S.body}>
@@ -106,8 +110,10 @@ function NpcStatblock({ m }) {
           <div style={S.sectionTitle}>{title}</div>
           {arr.map((e, i) => (
             <div key={i} style={S.entry}>
-              {e.name && <span style={{ fontWeight: 700, fontStyle: 'italic' }}>{e.name}. </span>}
-              {flattenEntries(e.entries)}
+              {e?.name && <span style={{ fontWeight: 700, fontStyle: 'italic' }}>{e.name}. </span>}
+              {/* trait/action = {name,entries}; Lair/Regional-Einträge sind auch
+                  reine Strings oder Listen-Objekte → e selbst durchreichen. */}
+              {flattenEntries(e?.entries || e)}
             </div>
           ))}
         </div>

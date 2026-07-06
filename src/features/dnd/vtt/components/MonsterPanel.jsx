@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useActiveMap } from '../state/useVtt';
 import { createTokenFromStatblock } from '../state/actions';
 import { loadCreatureList } from '../../character-builder/lib/dataLoader';
-import { parseFiveEUrl, lookupEntry, lookupEntryLive } from '../../character-builder/lib/fiveeImporter';
+import { parseFiveEUrl, lookupEntry, lookupEntryLive, enrichLegendaryGroup } from '../../character-builder/lib/fiveeImporter';
 
 export default function MonsterPanel({ edition = '5e' }) {
   const map = useActiveMap();
@@ -55,6 +55,7 @@ export default function MonsterPanel({ edition = '5e' }) {
         setImportMsg({ text: 'Kreatur nicht gefunden.', tone: 'err' });
         return;
       }
+      await enrichLegendaryGroup(res.entry); // Lair Actions / Regionale Effekte nachladen
       createTokenFromStatblock(res.entry);
       setImportMsg({ text: `✓ ${res.entry.name} gesetzt`, tone: 'ok' });
       setUrl('');
@@ -98,7 +99,7 @@ export default function MonsterPanel({ edition = '5e' }) {
             key={`${m.name}__${m.source}__${i}`}
             style={S.row}
             title={`${m.name} — auf die Map setzen`}
-            onClick={() => createTokenFromStatblock(m)}
+            onClick={async () => { await enrichLegendaryGroup(m); createTokenFromStatblock(m); }}
           >
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
             {m.cr != null && <span style={S.meta}>CR {String(m.cr?.cr ?? m.cr)}</span>}
