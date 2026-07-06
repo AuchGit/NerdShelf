@@ -10,6 +10,7 @@ import { addLevelDir, removeLevel, setActiveLevel, setTool, setTransitionTool } 
 import { TRANSITION_KINDS } from '../lib/constants';
 import { importMapImage } from '../lib/mapImage';
 import { uploadMapImage, saveMapOriginalLocal } from '../lib/mapStorage';
+import { persistMapDurable } from '../lib/persistMap';
 
 export default function LevelPanel() {
   const isDM = useIsDM();
@@ -44,6 +45,7 @@ export default function LevelPanel() {
         imageUrl, imagePath, imageFullName, width, height,
         grid: { ...map.grid, origWidth, origHeight },
       });
+      await persistMapDurable(map.id, campaignId); // Stockwerk garantiert speichern
     } catch (e2) {
       setErr(e2.message);
     } finally {

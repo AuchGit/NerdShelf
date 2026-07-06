@@ -11,17 +11,7 @@ import { importMapImage } from '../lib/mapImage';
 import { parseUvtt } from '../lib/uvtt';
 import { uploadMapImage, uploadMapToRelay, saveMapOriginalLocal } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
-import { getState } from '../state/store';
-import { saveMapRowDurable } from '../sync/SupabaseAdapter';
-import { supabase } from '../../../../core/supabase/client';
-
-// Map-Zeile nach dem Anlegen DURABEL nach Supabase schreiben (await + Retry) —
-// unabhängig vom Live-Transport, damit ein schnelles Schließen/Relay-Only die
-// Map nicht verliert. Liest die frisch angelegte Map aus dem Store.
-async function persistMapDurable(mapId, campaignId) {
-  const map = getState().maps[mapId];
-  if (map) await saveMapRowDurable(supabase, map, campaignId);
-}
+import { persistMapDurable } from '../lib/persistMap';
 
 export default function MapManager() {
   const isDM = useIsDM();
