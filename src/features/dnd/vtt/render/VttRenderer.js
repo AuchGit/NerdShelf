@@ -1082,6 +1082,10 @@ export class VttRenderer {
       // Circle brush: stamp a revealed disc on down + along the drag.
       this.placing = { kind: 'fog', last: null };
       this.stampFog(pos);
+    } else if ((tool === 'light' || tool === 'walls') && s.session.role === 'dm' && this.keys.shift) {
+      // Shift-Kasten: Wände bzw. Lichter im Rahmen mehrfach auswählen (Batch-
+      // Editing). Der Kasten-Typ richtet sich nach dem aktiven Werkzeug.
+      this.marquee = { from: pos, to: pos, add: true, kind: tool };
     } else if (tool === 'light' && s.session.role === 'dm') {
       const mode = s.ui.lightMode || 'light';
       const r = (map.grid.size || 70) * (s.ui.darkBrushCells || 2);
@@ -1102,7 +1106,7 @@ export class VttRenderer {
       // ON an existing wall passes through (the click bails in onWallDown), so you
       // can drop one straight into a wall. Shift = free placement.
       const kind = s.ui.wallKind;
-      const v = this.keys.shift ? pos : this.snapWallVertex(pos);
+      const v = this.keys.ctrl ? pos : this.snapWallVertex(pos); // Strg = frei (ohne Snap)
       if (!this.doorDraft) {
         this.doorDraft = { start: v, kind };
         this.walls.drawPreview(v, v, kind);
@@ -1117,10 +1121,10 @@ export class VttRenderer {
       // Chained walls: each click connects to the previous vertex so segments
       // share exact endpoints (no gaps). Right-click / Esc / Enter / dbl-click
       // ends the chain.
-      let v = this.keys.shift ? pos : this.snapWallVertex(pos);
+      let v = this.keys.ctrl ? pos : this.snapWallVertex(pos); // Strg = frei (ohne Snap)
       // Clicking the MIDDLE of an existing wall splits it there, creating a
-      // junction you can then connect to / drag (Shift = ignore, place freely).
-      if (!this.keys.shift) {
+      // junction you can then connect to / drag (Strg = ignore, place freely).
+      if (!this.keys.ctrl) {
         const sp = this.maybeSplitWall(pos, v, map, level);
         if (sp) { v = sp; this.flashAt(v.x, v.y); } // confirm the dock
         else if (this.snappedToExistingVertex(v)) this.flashAt(v.x, v.y);
@@ -1208,12 +1212,12 @@ export class VttRenderer {
     if (this.terrainMarquee) { this.terrainMarquee.to = pos; this.drawTerrainMarquee(); return; }
     if (this.marquee) { this.marquee.to = pos; this.drawMarquee(); return; }
     if (this.wallChain) {
-      const v = this.keys.shift ? pos : this.snapWallVertex(pos);
+      const v = this.keys.ctrl ? pos : this.snapWallVertex(pos);
       this.walls.drawPreview(this.wallChain.last, v, getState().ui.wallKind);
       return;
     }
     if (this.doorDraft) {
-      const v = this.keys.shift ? pos : this.snapWallVertex(pos);
+      const v = this.keys.ctrl ? pos : this.snapWallVertex(pos);
       this.walls.drawPreview(this.doorDraft.start, v, this.doorDraft.kind || 'door');
       return;
     }
@@ -1284,9 +1288,28 @@ export class VttRenderer {
 
   endMarquee() {
     const s = getState();
-    const { from, to, add } = this.marquee;
+    const { from, to, add, kind } = this.marquee;
     const x1 = Math.min(from.x, to.x), y1 = Math.min(from.y, to.y);
     const x2 = Math.max(from.x, to.x), y2 = Math.max(from.y, to.y);
+    // Werkzeug-Kasten: Wände bzw. Lichter im Rahmen mehrfach auswählen.
+    if (kind === 'walls' || kind === 'light') {
+      const map = s.maps[s.activeMapId];
+      const lvl = map?.levels?.[0]?.id || null;
+      const level = this.displayedLevel(s, map, lvl);
+      const inBox = (px, py) => px >= x1 && px <= x2 && py >= y1 && py <= y2;
+      if (kind === 'walls') {
+        const ids = Object.values(s.walls).filter((w) => w.mapId === s.activeMapId
+          && inBox((w.a.x + w.b.x) / 2, (w.a.y + w.b.y) / 2)).map((w) => w.id);
+        if (ids.length) A.selectWalls(add && s.ui.selectedWallIds?.length ? [...new Set([...s.ui.selectedWallIds, ...ids])] : ids);
+      } else {
+        const ids = Object.values(s.lights).filter((l) => l.mapId === s.activeMapId
+          && (l.level || lvl) === level && inBox(l.x, l.y)).map((l) => l.id);
+        if (ids.length) A.selectLights(add && s.ui.selectedLightIds?.length ? [...new Set([...s.ui.selectedLightIds, ...ids])] : ids);
+      }
+      this.marqueeGfx.clear();
+      this.marquee = null;
+      return;
+    }
     const inside = Object.values(s.tokens)
       .filter((t) => t.x >= x1 && t.x <= x2 && t.y >= y1 && t.y <= y2)
       .map((t) => t.id);
@@ -1435,6 +1458,14 @@ export class VttRenderer {
     // the walls tool is active, so you must be able to pick them there to edit).
     if (s.ui.tool !== 'select' && s.ui.tool !== 'walls') return;
     e.stopPropagation?.();
+    // Shift-Klick (DM): Wand zur Mehrfachauswahl hinzufügen/entfernen —
+    // danach im Editor alle gemeinsam ändern.
+    if (this.keys.shift && s.session.role === 'dm') {
+      const cur = s.ui.selectedWallIds?.length ? s.ui.selectedWallIds : (s.ui.selectedWallId ? [s.ui.selectedWallId] : []);
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      A.selectWalls(next);
+      return;
+    }
     // Double-click selects the WHOLE connected wall component (loop/chain) so
     // its light/sight settings can be edited in one go.
     const nowT = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -1653,7 +1684,7 @@ export class VttRenderer {
     this.lightMarkers.removeChildren().forEach((c) => c.destroy({ children: true }));
     for (const lt of Object.values(s.lights)) {
       if (lt.mapId !== map.id || (lt.level || base) !== level) continue;
-      const sel = s.ui.selectedLightId === lt.id;
+      const sel = s.ui.selectedLightId === lt.id || (s.ui.selectedLightIds || []).includes(lt.id);
       const m = new Container();
       m.position.set(lt.x, lt.y);
       m.eventMode = 'static';
@@ -1676,6 +1707,14 @@ export class VttRenderer {
   onLightDown(id, e) {
     if (e.button !== 0) return; // let middle/right pan
     e.stopPropagation?.();
+    const s = getState();
+    // Shift-Klick: Licht zur Mehrfachauswahl togglen (Batch-Editing im Editor).
+    if (this.keys.shift) {
+      const cur = s.ui.selectedLightIds?.length ? s.ui.selectedLightIds : (s.ui.selectedLightId ? [s.ui.selectedLightId] : []);
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+      A.selectLights(next);
+      return; // kein Drag beim Mehrfachauswählen
+    }
     A.selectLight(id);
     const lt = getState().lights[id];
     const pos = this.mapPos(e);

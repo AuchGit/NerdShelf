@@ -96,7 +96,7 @@ export class SupabaseAdapter {
   async persist(op) {
     const sb = this.sb, cid = this.campaignId;
     switch (op.type) {
-      case 'map/add':       return sb.from('vtt_maps').upsert(mapToRow(op.map, cid));
+      case 'map/add':       return upsertMapResilient(sb, mapToRow(op.map, cid)).then((r) => (r.ok ? {} : { error: r.error }));
       case 'map/update':    return sb.from('vtt_maps').update(mapPatchToRow(op.patch)).eq('id', op.id);
       case 'map/setGrid':   return sb.from('vtt_maps').update({ grid: op.grid }).eq('id', op.mapId);
       case 'map/remove':    return sb.from('vtt_maps').delete().eq('id', op.id); // FK cascade clears children
@@ -229,19 +229,38 @@ export class SupabaseAdapter {
 // verlor sie). Dieser Helfer schreibt die Map-Zeile DURABEL nach Supabase
 // (await + Retry), unabhängig vom Live-Transport. Beim nächsten Öffnen lädt
 // der Supabase-Snapshot die Map garantiert.
+// Fehlt in der Fehlermeldung eine Spalte (nicht migrierte DB), wird genau die
+// aus der Zeile entfernt und erneut versucht — so persistiert die Map auch
+// ohne die neuesten Migrations-Spalten (nur die betroffene Funktion, z.B. der
+// Full-Res-Original-Link, fehlt dann bis zur Migration).
+const MISSING_COL_RE = /Could not find the '([^']+)' column/i;
+export async function upsertMapResilient(supabase, row) {
+  const r = { ...row };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { error } = await supabase.from('vtt_maps').upsert(r);
+    if (!error) return { ok: true, dropped: Object.keys(row).filter((k) => !(k in r)) };
+    const m = MISSING_COL_RE.exec(error.message || '');
+    if (m && m[1] in r) { delete r[m[1]]; continue; } // Spalte weglassen, nochmal
+    return { ok: false, error };
+  }
+  return { ok: false, error: new Error('zu viele fehlende Spalten') };
+}
+
 export async function saveMapRowDurable(supabase, map, campaignId) {
   const row = mapToRow(map, campaignId);
   let lastErr = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { error } = await supabase.from('vtt_maps').upsert(row);
-      if (!error) { console.log('[vtt] Map durabel in Supabase gespeichert:', map.id, map.name); return true; }
-      lastErr = error;
-      console.warn(`[vtt] Map-Speichern Versuch ${attempt + 1} fehlgeschlagen:`, error.message);
-    } catch (e) { lastErr = e; console.warn(`[vtt] Map-Speichern Versuch ${attempt + 1} Exception:`, e?.message || e); }
+      const res = await upsertMapResilient(supabase, row);
+      if (res.ok) {
+        if (res.dropped?.length) toast(`Map gespeichert — Supabase-Migration fehlt (Spalten: ${res.dropped.join(', ')}). scripts/vtt-schema.sql ausführen für Voll-Auflösung/Direktverbindung.`, 'warning');
+        else console.log('[vtt] Map durabel in Supabase gespeichert:', map.id, map.name);
+        return true;
+      }
+      lastErr = res.error;
+    } catch (e) { lastErr = e; }
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }
-  // Sichtbar melden statt still verlieren — DAS ist der "2. Map weg"-Bug.
   toast(`Map „${map.name}" konnte nicht dauerhaft gespeichert werden: ${lastErr?.message || lastErr}`, 'error');
   return false;
 }

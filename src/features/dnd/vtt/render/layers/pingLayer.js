@@ -39,17 +39,19 @@ export class PingLayer {
       const ttl = ping.ttl || PING_TTL_MS;      // Dauer aus dem Ping (Sender-Einstellung)
       const life = Math.min(1, age / ttl);       // Gesamt-Ausblenden
       g.clear();
-      // Weiche Ripple: zwei phasenversetzte Wellen, die aufsteigen und sanft
-      // ausklingen (schlicht wie der Loop-Puls). Größe/Deutlichkeit skaliert.
+      // Weiche Ripple: zwei Wellen pulsieren über die GESAMTE Ping-Dauer
+      // (Wellenperiode = ttl/2), damit eine längere Dauer sichtbar länger
+      // pulst — nicht nur der Punkt länger stehen bleibt. Fade via life.
       const baseR = 46 * scale;
+      const period = Math.max(500, ttl / 2);
       for (const phase of [0, 0.5]) {
-        const tt = ((age / 900) + phase) % 1;
+        const tt = ((age / period) + phase) % 1;
         const r = baseR * (0.25 + tt * 0.85);
         const a = (1 - tt) * (1 - life) * 0.85;
         if (a <= 0.01) continue;
         g.circle(0, 0, r).stroke({ width: 3 * scale, color: ping.color, alpha: a });
       }
-      // Kleiner Kern markiert die exakte Stelle bis zum TTL-Ende.
+      // Kleiner Kern markiert die exakte Stelle bis zum Ende.
       g.circle(0, 0, 5 * scale).fill({ color: ping.color, alpha: (1 - life) * 0.85 });
     }
   }

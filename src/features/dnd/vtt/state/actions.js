@@ -464,7 +464,10 @@ export function confirmTargeting() {
 }
 export const cancelTargeting = () => applyLocal({ type: 'ui/set', ui: { targeting: null } });
 export const selectLight = (selectedLightId) =>
-  applyLocal({ type: 'ui/set', ui: { selectedLightId, selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedWallId: null } });
+  applyLocal({ type: 'ui/set', ui: { selectedLightId, selectedLightIds: selectedLightId ? [selectedLightId] : [], selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedWallId: null } });
+// Mehrfachauswahl von Lichtern (Shift-Kasten / Shift-Klick) für Batch-Editing.
+export const selectLights = (ids) =>
+  applyLocal({ type: 'ui/set', ui: { selectedLightIds: ids, selectedLightId: ids[ids.length - 1] || null, selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedWallId: null } });
 // Batch insert (e.g. UVTT import) — one op, one reconcile.
 export function addLights(mapId, lightDefs) {
   const level = creationLevel();

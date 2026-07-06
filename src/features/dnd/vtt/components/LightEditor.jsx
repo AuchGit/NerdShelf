@@ -8,14 +8,19 @@ import { LIGHT_ICONS } from '../lib/constants';
 
 export default function LightEditor() {
   const id = useVtt((s) => s.ui.selectedLightId);
+  const idsSel = useVtt((s) => s.ui.selectedLightIds || []);
   const light = useVtt((s) => (id ? s.lights[id] : null));
   if (!light) return null;
 
-  const set = (patch) => updateLight(id, patch);
+  // Mehrfachauswahl (Shift-Kasten / Shift-Klick): Änderungen gelten für ALLE
+  // ausgewählten Lichter auf einmal.
+  const ids = idsSel.length > 1 ? idsSel : [id];
+  const multi = ids.length > 1;
+  const set = (patch) => ids.forEach((lid) => updateLight(lid, patch));
   return (
     <Panel padding="sm">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontWeight: 600 }}>💡 Lichtquelle</span>
+        <span style={{ fontWeight: 600 }}>💡 {multi ? `${ids.length} Lichtquellen` : 'Lichtquelle'}</span>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
           <input type="checkbox" checked={light.enabled !== false} onChange={(e) => set({ enabled: e.target.checked })} /> an
         </label>
@@ -50,7 +55,7 @@ export default function LightEditor() {
           })}
         </div>
       </Row>
-      <button style={S.remove} onClick={() => { removeLight(id); selectLight(null); }}>Licht entfernen</button>
+      <button style={S.remove} onClick={() => { ids.forEach((lid) => removeLight(lid)); selectLight(null); }}>{multi ? `${ids.length} Lichter entfernen` : 'Licht entfernen'}</button>
     </Panel>
   );
 }
