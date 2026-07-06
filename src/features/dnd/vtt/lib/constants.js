@@ -99,8 +99,9 @@ export const DOOR_ICONS = {
 export const TRANSITION_ICONS = {
   stairs: '/Assets/map/stairs.svg',
   ladder: '/Assets/map/ladder.svg',
+  portal: '/Assets/map/portal.svg',
 };
-export const TRANSITION_KINDS = { stairs: 'Treppe', ladder: 'Leiter' };
+export const TRANSITION_KINDS = { stairs: 'Treppe', ladder: 'Leiter', portal: 'Portal' };
 
 export const FOG_MODES = {
   none:    'Kein Fog',

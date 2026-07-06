@@ -1,7 +1,7 @@
 // DM grid + fog controls for the active map. All edits go through setGrid /
 // updateMap and sync to every client.
 import { useState } from 'react';
-import { setGrid, resetFog, setFogMode, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
+import { setGrid, updateLevel, resetFog, setFogMode, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
 import { useVtt } from '../state/useVtt';
 import { GRID_STYLES, FOG_MODES } from '../lib/constants';
 import { fitGridToMap } from '../lib/geometry';
@@ -9,9 +9,18 @@ import { fitGridToMap } from '../lib/geometry';
 export default function GridControls({ map }) {
   const tool = useVtt((s) => s.ui.tool);
   const lightMode = useVtt((s) => s.ui.lightMode);
+  const activeLevel = useVtt((s) => s.ui.activeLevel);
   const darkCount = (map.darkness || []).length;
-  const g = map.grid;
-  const patch = (p) => setGrid(map.id, p);
+  // Ist die aktive Ebene ein Stockwerk mit EIGENER Karte, wird DEREN Grid
+  // eingestellt (sonst das Grid der Basiskarte). So hat jede Ebene ihr Grid.
+  const floorLvl = (map.levels || []).find((l) => l.id === activeLevel && l.imageUrl);
+  const g = floorLvl?.grid || map.grid;
+  const patch = (p) => {
+    if (floorLvl) updateLevel(map.id, floorLvl.id, { grid: { ...(floorLvl.grid || map.grid), ...p } });
+    else setGrid(map.id, p);
+  };
+  // Maße der aktuell bearbeiteten Fläche (Stockwerk-Bild kann eigene haben).
+  map = floorLvl ? { ...map, width: floorLvl.width || map.width, height: floorLvl.height || map.height, grid: g } : map;
   // Eingabe-Methode (lokal): Default abgeleitet — snap-Maps sind Slider-Maps.
   const [gridMode, setGridMode] = useState(g.snapMapToGrid ? 'slider' : 'slider');
   const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');

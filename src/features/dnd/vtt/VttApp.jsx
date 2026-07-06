@@ -29,6 +29,7 @@ import PlayerBottomBar from './components/PlayerBottomBar';
 import Icon from './components/Icon';
 import ZoneEditor from './components/ZoneEditor';
 import WallEditor from './components/WallEditor';
+import TransitionEditor from './components/TransitionEditor';
 import LightEditor from './components/LightEditor';
 import TerrainEditor from './components/TerrainEditor';
 import InitiativeBar from './components/InitiativeBar';
@@ -164,7 +165,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const [viewAsPlayer, setViewAsPlayer] = useState(false);
   const isDM = useIsDM();
   const activeMap = useActiveMap();
-  const hasContextEditor = useVtt((s) => !!(s.ui.selectedZoneId || s.ui.selectedWallId || s.ui.selectedLightId || s.ui.selectedTerrainId));
+  const hasContextEditor = useVtt((s) => !!(s.ui.selectedZoneId || s.ui.selectedWallId || s.ui.selectedLightId || s.ui.selectedTerrainId || s.ui.selectedTransitionId));
   const myCharacterId = useVtt((s) => s.ui.myCharacterId);
   // Inspiration marks the WHOLE UI (a gold ring/glow around the viewport), not
   // just the bottom bar, so you can't miss that you're holding it.
@@ -480,6 +481,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
           <WallEditor />
           <LightEditor />
           <TerrainEditor />
+          <TransitionEditor />
         </div>
       )}
 

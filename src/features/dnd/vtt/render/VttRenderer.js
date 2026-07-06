@@ -220,7 +220,24 @@ export class VttRenderer {
     // Players may browse a DM-exposed map; the DM always views the active map.
     const viewId = (s.session.role !== 'dm' && s.ui.viewedMapId && s.maps[s.ui.viewedMapId]?.playerVisible)
       ? s.ui.viewedMapId : s.activeMapId;
-    const map = viewId ? s.maps[viewId] : null;
+    const baseMap = viewId ? s.maps[viewId] : null;
+    // Ebenen/Stockwerke: eine Ebene kann ihr EIGENES Kartenbild + Grid tragen
+    // (Ebene 1 = Basiskarte). Ist die angezeigte Ebene eine "Bild-Ebene", wird
+    // für Hintergrund, Grid und Maße diese Ebene verwendet — Tokens/Wände/
+    // Lichter filtern ohnehin schon nach `level`, teilen sich also die Karte.
+    let map = baseMap;
+    if (baseMap) {
+      const base0 = baseMap.levels?.[0]?.id || null;
+      const dispLvl = this.displayedLevel(s, baseMap, base0);
+      const lvlObj = (baseMap.levels || []).find((l) => l.id === dispLvl);
+      if (lvlObj && lvlObj.imageUrl) {
+        map = { ...baseMap,
+          imageUrl: lvlObj.imageUrl, imageFullName: lvlObj.imageFullName || null,
+          imageUrlFull: lvlObj.imageUrlFull || null, imagePath: lvlObj.imagePath || null,
+          grid: lvlObj.grid || baseMap.grid,
+          width: lvlObj.width || baseMap.width, height: lvlObj.height || baseMap.height };
+      }
+    }
 
     // End an in-progress wall chain if the DM switched tools.
     if (this.wallChain && s.ui.tool !== 'walls') this.finishWallChain();
@@ -1155,22 +1172,15 @@ export class VttRenderer {
       this.terrainMarquee = { from: pos, to: pos, add: this.keys.shift };
       this.drawTerrainMarquee();
     } else if (tool === 'transition' && s.session.role === 'dm') {
-      // Click an existing field → select it. Click an empty cell on ANOTHER
-      // level while a field is selected → connect them (two-way). Else place a
-      // new field. Stairs/ladder fields move a token to a linked exit.
+      // Vorhandenes Feld anklicken → auswählen (Editor zum Benennen/Verbinden).
+      // Leeres Feld → neues Feld platzieren + auswählen. Das VERBINDEN passiert
+      // im Editor (oben) — auch mehrere Ziele, auch gleicher Layer (Portale).
       const cell = pointToCell(pos.x, pos.y, map.grid);
       const lvl = s.ui.activeLevel || map.levels?.[0]?.id;
-      const at = (l, c) => Object.values(s.transitions).find(
-        (t) => t.mapId === map.id && (t.level || lvl) === l && t.col === c.col && t.row === c.row);
-      const existing = at(lvl, cell);
-      const sel = s.ui.selectedTransitionId ? s.transitions[s.ui.selectedTransitionId] : null;
+      const existing = Object.values(s.transitions).find(
+        (t) => t.mapId === map.id && (t.level || lvl) === lvl && t.col === cell.col && t.row === cell.row);
       if (existing) {
         A.selectTransition(existing.id);
-      } else if (sel && sel.level !== lvl) {
-        // forward exit on the selected field → here; paired return field here
-        A.addTransitionExit(sel.id, { toLevel: lvl, col: cell.col, row: cell.row });
-        A.addTransition({ mapId: map.id, level: lvl, col: cell.col, row: cell.row, kind: sel.kind, exits: [{ toLevel: sel.level, col: sel.col, row: sel.row }] });
-        A.selectTransition(sel.id);
       } else {
         const id = A.addTransition({ mapId: map.id, level: lvl, col: cell.col, row: cell.row, kind: s.ui.transitionKind });
         A.selectTransition(id);

@@ -17,7 +17,7 @@ export const setSession = (session) => applyLocal({ type: 'session/set', session
 // SAME map/add op — a follow-up updateMap would race the INSERT over HTTP and
 // silently hit 0 rows (the "shared map lost its terrain" bug).
 export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath, width, height, grid, extra }) {
-  const baseLevel = { id: uid('lvl_'), name: 'Ebene 1' };
+  const baseLevel = { id: uid('lvl_'), name: 'Erdgeschoss', floor: 0 };
   const map = {
     id: uid('map_'),
     name: name || 'Neue Map',
@@ -39,13 +39,44 @@ export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath,
 // Active (DM-edited) level — client-local. The base level of a map.
 export const baseLevelId = (map) => map?.levels?.[0]?.id || null;
 export const setActiveLevel = (levelId) => applyLocal({ type: 'ui/set', ui: { activeLevel: levelId } });
-export function addLevel(mapId, name) {
+// Ebenen tragen einen ganzzahligen `floor` (0 = Standard/Erdgeschoss, negativ =
+// Keller, positiv = höhere Stockwerke). Die Basiskarte (levels[0]) ist floor 0.
+export function levelFloor(map, levelId) {
+  const l = (map?.levels || []).find((x) => x.id === levelId);
+  return l ? (l.floor ?? 0) : 0;
+}
+export function addLevel(mapId, name, extra) {
   const map = getState().maps[mapId];
   if (!map) return;
-  const lvl = { id: uid('lvl_'), name: name || `Ebene ${(map.levels?.length || 0) + 1}` };
+  const floors = (map.levels || []).map((l) => l.floor ?? 0);
+  const floor = extra && 'floor' in extra ? extra.floor : (floors.length ? Math.max(...floors) + 1 : 1);
+  const lvl = { id: uid('lvl_'), name: name || `Ebene ${floor}`, floor, ...(extra || {}) };
   updateMap(mapId, { levels: [...(map.levels || []), lvl] });
   setActiveLevel(lvl.id);
   return lvl.id;
+}
+// Neue Ebene über (dir=+1) oder unter (dir=-1) allen bisherigen anlegen.
+export function addLevelDir(mapId, dir, extra) {
+  const map = getState().maps[mapId];
+  if (!map) return;
+  const floors = (map.levels || []).map((l) => l.floor ?? 0);
+  const floor = dir >= 0 ? (floors.length ? Math.max(...floors) + 1 : 1) : (floors.length ? Math.min(...floors) - 1 : -1);
+  return addLevel(mapId, extra?.name || (floor < 0 ? `Keller ${-floor}` : `Ebene ${floor}`), { ...extra, floor });
+}
+// Eine Ebene bearbeiten (eigenes Kartenbild / Grid / Name). Merge in
+// map.levels; der Renderer nutzt Bild/Grid der angezeigten Ebene.
+export function updateLevel(mapId, levelId, patch) {
+  const map = getState().maps[mapId];
+  if (!map) return;
+  const levels = (map.levels || []).map((l) => (l.id === levelId ? { ...l, ...patch } : l));
+  updateMap(mapId, { levels });
+}
+export function removeLevel(mapId, levelId) {
+  const map = getState().maps[mapId];
+  if (!map || (map.levels || []).length <= 1) return; // Ebene 1 bleibt
+  const levels = (map.levels || []).filter((l) => l.id !== levelId);
+  updateMap(mapId, { levels });
+  setActiveLevel(levels[0]?.id || null);
 }
 // The level new entities are created on (the DM's active level, else map base).
 const creationLevel = () => {
@@ -233,8 +264,8 @@ export function addWalls(mapId, wallDefs) {
 // A transition field sits on one cell of a level and has 0+ `exits`, each an
 // {toLevel,col,row} you can come out at. A token entering picks an exit (auto
 // if one, prompt if several).
-export function addTransition({ mapId, level, col, row, kind, exits }) {
-  const t = { id: uid('tr_'), mapId, level, col, row, kind: kind || 'stairs', exits: exits || [] };
+export function addTransition({ mapId, level, col, row, kind, exits, name }) {
+  const t = { id: uid('tr_'), mapId, level, col, row, kind: kind || 'stairs', exits: exits || [], name: name || '' };
   apply({ type: 'transition/add', transition: t });
   return t.id;
 }
@@ -243,6 +274,22 @@ export function addTransitionExit(id, exit) {
   const t = getState().transitions[id];
   if (!t) return;
   updateTransition(id, { exits: [...(t.exits || []), exit] });
+}
+// Zwei Treppen/Leitern gegenseitig verbinden (Ein-/Ausgang hin & zurück) oder
+// die Verbindung wieder lösen. Exit = {toLevel, col, row} der Gegenseite.
+export function toggleTransitionLink(aId, bId) {
+  const s = getState();
+  const a = s.transitions[aId]; const b = s.transitions[bId];
+  if (!a || !b) return;
+  const hasExit = (t, o) => (t.exits || []).some((e) => e.toLevel === o.level && e.col === o.col && e.row === o.row);
+  const linked = hasExit(a, b) && hasExit(b, a);
+  if (linked) {
+    updateTransition(aId, { exits: (a.exits || []).filter((e) => !(e.toLevel === b.level && e.col === b.col && e.row === b.row)) });
+    updateTransition(bId, { exits: (b.exits || []).filter((e) => !(e.toLevel === a.level && e.col === a.col && e.row === a.row)) });
+  } else {
+    if (!hasExit(a, b)) updateTransition(aId, { exits: [...(a.exits || []), { toLevel: b.level, col: b.col, row: b.row }] });
+    if (!hasExit(b, a)) updateTransition(bId, { exits: [...(b.exits || []), { toLevel: a.level, col: a.col, row: a.row }] });
+  }
 }
 export const removeTransition = (id) => apply({ type: 'transition/remove', id });
 export const selectTransition = (selectedTransitionId) => applyLocal({ type: 'ui/set', ui: { selectedTransitionId } });

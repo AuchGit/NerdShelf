@@ -161,10 +161,12 @@ create table if not exists public.vtt_transitions (
   level        text,
   col          int not null,
   row          int not null,
-  kind         text not null default 'stairs', -- stairs | ladder
-  exits        jsonb not null default '[]'::jsonb -- [{toLevel,col,row}]
+  kind         text not null default 'stairs', -- stairs | ladder | portal
+  exits        jsonb not null default '[]'::jsonb, -- [{toLevel,col,row}]
+  name         text -- benennbare Treppe/Leiter/Portal (z. B. "Treppenhaus")
 );
 create index if not exists vtt_transitions_map on public.vtt_transitions(map_id);
+alter table public.vtt_transitions add column if not exists name text;
 
 create table if not exists public.vtt_lights (
   id           text primary key,

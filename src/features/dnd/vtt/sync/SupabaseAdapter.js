@@ -332,7 +332,7 @@ function wallPatchToRow(p) {
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function transitionToRow(t, cid) {
-  return { id: t.id, campaign_id: cid, map_id: t.mapId, level: t.level || null, col: t.col, row: t.row, kind: t.kind, exits: t.exits || [] };
+  return { id: t.id, campaign_id: cid, map_id: t.mapId, level: t.level || null, col: t.col, row: t.row, kind: t.kind, exits: t.exits || [], name: t.name || null };
 }
 function transitionPatchToRow(p) {
   const map = { mapId: 'map_id' };
@@ -361,7 +361,7 @@ function rowToWall(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null };
 }
 function rowToTransition(r) {
-  return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [] };
+  return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [], name: r.name || '' };
 }
 function rowToLight(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, x: r.x, y: r.y,
