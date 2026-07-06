@@ -307,7 +307,8 @@ begin
   select campaign_id, kind, open into v_campaign, v_kind, v_open
   from public.vtt_walls where id = p_wall;
   if v_campaign is null then raise exception 'WALL_NOT_FOUND'; end if;
-  if v_kind <> 'door' then raise exception 'NOT_A_DOOR'; end if;
+  -- Türen UND Fenster dürfen von Mitgliedern geöffnet/geschlossen werden.
+  if v_kind not in ('door', 'window') then raise exception 'NOT_A_DOOR'; end if;
   if not public.dnd_is_campaign_member(v_campaign) then raise exception 'NOT_AUTHORIZED'; end if;
   update public.vtt_walls set open = not coalesce(v_open,false) where id = p_wall;
   return not coalesce(v_open,false);

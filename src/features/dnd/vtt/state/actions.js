@@ -244,11 +244,13 @@ export function toggleDoor(id) {
   // A GM in player VIEW still writes directly — calling the toggle-RPC on top
   // would flip the fresh value straight back ("Tür geht sofort wieder zu").
   const sess = getState().session;
-  if (sess.role !== 'dm' && !sess.realGM && w.kind === 'door') {
+  // Spieler dürfen Türen UND Fenster öffnen/schließen (Fenster blockt zu die
+  // Sicht) — die security-definer-RPC persistiert es trotz GM-only-RLS.
+  if (sess.role !== 'dm' && !sess.realGM && (w.kind === 'door' || w.kind === 'window')) {
     import('../../../../core/supabase/client')
       .then(({ supabase }) => supabase.rpc('vtt_toggle_door', { p_wall: id }))
-      .then((res) => res?.error && toast('Tür-Status evtl. nicht gespeichert', 'warning'))
-      .catch(() => toast('Tür-Status evtl. nicht gespeichert', 'warning'));
+      .then((res) => res?.error && toast('Status evtl. nicht gespeichert', 'warning'))
+      .catch(() => toast('Status evtl. nicht gespeichert', 'warning'));
   }
 }
 export const removeWall = (id) => apply({ type: 'wall/remove', id });
