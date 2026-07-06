@@ -27,11 +27,8 @@ import InventorySidebar from './components/InventorySidebar';
 import SpellsSidebar from './components/SpellsSidebar';
 import PlayerBottomBar from './components/PlayerBottomBar';
 import Icon from './components/Icon';
-import ZoneEditor from './components/ZoneEditor';
-import WallEditor from './components/WallEditor';
 import TransitionEditor from './components/TransitionEditor';
-import LightEditor from './components/LightEditor';
-import TerrainEditor from './components/TerrainEditor';
+import ContextEditorDock from './components/ContextEditorDock';
 import InitiativeBar from './components/InitiativeBar';
 import TurnNotice from './components/TurnNotice';
 import DashToggle from './components/DashToggle';
@@ -50,7 +47,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import { openSheetPopout } from '../character-builder/lib/sheetPopout';
 import { TooltipProvider, TooltipLayer } from './components/tooltip/Tooltips';
 import { connectSync, getState, persistSnapshot } from './state/store';
-import { setSession, presentHandout, selectZone, selectTerrain, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap } from './state/actions';
+import { setSession, presentHandout, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap } from './state/actions';
 import { SupabaseAdapter } from './sync/SupabaseAdapter';
 import { RelayAdapter } from './sync/RelayAdapter';
 import { connectCharacterBinding, disconnectCharacterBinding } from './sync/characterBinding';
@@ -472,17 +469,9 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
       {/* DM tools view: active tool's settings, otherwise party passives. */}
       {isDM && !viewAsPlayer && activeMap && <DMBottomBar />}
 
-      {/* Contextual editors (zone/wall/light) float at top-center over the map.
-          A close button deselects without forcing any edit. */}
-      {hasContextEditor && (
-        <div style={S.topCenter}>
-          <button style={S.editorClose} title="Auswahl schließen" onClick={() => { selectZone(null); selectTerrain(null); }}>✕ Schließen</button>
-          <ZoneEditor />
-          <WallEditor />
-          <LightEditor />
-          <TerrainEditor />
-        </div>
-      )}
+      {/* Objekt-Editoren (Zone/Wand/Licht/Terrain) in einem verschieb- und
+          schließbaren Dock über der Karte. */}
+      {hasContextEditor && <ContextEditorDock />}
       {/* Übergangs-Editor: eigenes schwebendes, verschieb-/schließbares Fenster
           (per Klick aufs Feld wieder öffenbar) — nicht im fixen Kontext-Block. */}
       <TransitionEditor />

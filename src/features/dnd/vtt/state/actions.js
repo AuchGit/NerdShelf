@@ -301,6 +301,11 @@ export function travelToken(tokenId, exit, grid) {
   const cx = grid.offsetX + (exit.col + 0.5) * grid.size;
   const cy = grid.offsetY + (exit.row + 0.5) * grid.size;
   updateToken(tokenId, { level: exit.toLevel, x: cx, y: cy });
+  // Anzeige der bewegenden Person auf die Ziel-Ebene mitnehmen: der DM folgt
+  // dem Token, das er durch die Treppe/Portal geschickt hat; beim Spieler
+  // folgt die Ansicht ohnehin seinem eigenen Token (displayedLevel) — das
+  // setActiveLevel hält beide konsistent auf der neuen Etage.
+  if (exit.toLevel) setActiveLevel(exit.toLevel);
 }
 
 // ---- dynamic light ----
@@ -600,6 +605,8 @@ export function toggleTokenSelection(id) {
   const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
   setTokenSelection(next);
 }
+// Alle Objekt-Auswahlen (Zone/Wand/Licht/Terrain) auf einmal aufheben.
+export const clearObjectSelection = () => applyLocal({ type: 'ui/set', ui: { selectedZoneId: null, selectedWallId: null, selectedWallIds: [], selectedLightId: null, selectedLightIds: [], selectedTerrainId: null, terrainEdgeEdit: false } });
 export const selectZone = (selectedZoneId) => applyLocal({ type: 'ui/set', ui: { selectedZoneId, selectedTokenId: null, selectedTokenIds: [], selectedWallId: null, selectedLightId: null } });
 export const selectWall = (selectedWallId) => applyLocal({ type: 'ui/set', ui: { selectedWallId, selectedWallIds: selectedWallId ? [selectedWallId] : [], selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedLightId: null } });
 // Select a whole set of walls (e.g. a connected loop via double-click) so the
