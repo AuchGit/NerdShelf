@@ -54,7 +54,6 @@ export default function TokenPanel() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {isDM ? (
           <>
-            <Button size="sm" variant="secondary" onClick={() => spawn({ kind: 'npc', name: 'Monster', hp: 10, hpMax: 10 })}>+ NPC / Monster</Button>
             {/* Player tokens: pick a specific member, or add everyone at once.
                 Die Binding-Funktionen liefern die Token-Definition(en); das
                 Armen des Klick-zu-Platzierens passiert HIER (kein actions-Import

@@ -3,11 +3,11 @@
 // The Toolbar stays a pure tool PICKER; everything tool-specific lives here.
 import { useVtt } from '../state/useVtt';
 import {
-  setZoneTool, setZoneParam, setWallTool, setDoorDouble, setFogBrush, setFogErase,
+  setZoneTool, setZoneParam, setWallTool, setDoorDouble, setFogBrush, setFogErase, setFogMode,
   setLightMode, setDarkBrush, setLightDefaults, setTransitionTool, updateMap, clearDarkness,
   setTerrainKind, setTerrainHeight, setTerrainVisible, commitTerrain, eraseTerrainCells, clearTerrainSelection,
 } from '../state/actions';
-import { ZONE_TYPES, ZONE_COLORS, WALL_TYPES, LIGHT_PRESETS } from '../lib/constants';
+import { ZONE_TYPES, ZONE_COLORS, WALL_TYPES, LIGHT_PRESETS, FOG_MODES } from '../lib/constants';
 
 const PARAM_LABEL = { radiusFt: 'Radius', sideFt: 'Seite', lengthFt: 'Länge', widthFt: 'Breite' };
 import Icon from './Icon';
@@ -77,6 +77,15 @@ export default function ToolSettings({ map }) {
 
       {tool === 'fog' && (
         <>
+          {map && (
+            <>
+              <span style={S.muted}>Fog:</span>
+              <select value={map.fogMode || (map.fogEnabled ? 'manual' : 'none')} onChange={(e) => setFogMode(map.id, e.target.value)} style={S.select}>
+                {Object.entries(FOG_MODES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+              <div style={S.sep} />
+            </>
+          )}
           <button onClick={() => setFogErase(false)} style={{ ...S.btn, ...(!ui.fogErase ? S.active : null) }} title="Aufdecken"><Icon src="/Assets/vtt/fog-reveal.svg" emoji="☀" size={14} /> Aufdecken</button>
           <button onClick={() => setFogErase(true)} style={{ ...S.btn, ...(ui.fogErase ? S.active : null) }} title="Verbergen"><Icon src="/Assets/vtt/fog-hide.svg" emoji="🌑" size={14} /> Verbergen</button>
           <span style={S.muted}>Größe</span>

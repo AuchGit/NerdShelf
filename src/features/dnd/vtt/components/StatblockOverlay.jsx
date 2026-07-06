@@ -11,15 +11,28 @@ import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
 import Icon from './Icon';
 
+// Letzte Zeigerposition global mitschreiben, damit ein per Doppelklick
+// geöffnetes Statblock-Fenster in der Nähe der Maus erscheint.
+let _lastPointer = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointermove', (e) => { _lastPointer = { x: e.clientX, y: e.clientY }; }, { passive: true });
+  window.addEventListener('pointerdown', (e) => { _lastPointer = { x: e.clientX, y: e.clientY }; }, { passive: true });
+}
+
 const SIZE_LABELS = { T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large', H: 'Huge', G: 'Gargantuan' };
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
 export default function StatblockOverlay({ tokenId, index = 0, isGM, userId, onClose }) {
   const token = useVtt((s) => s.tokens[tokenId]);
-  const [pos, setPos] = useState(() => ({
-    x: Math.max(12, (typeof window !== 'undefined' ? window.innerWidth : 800) - 400) - index * 28,
-    y: 80 + index * 28,
-  }));
+  // Nahe der Maus öffnen (letzte Zeigerposition), leicht versetzt bei mehreren.
+  const [pos, setPos] = useState(() => {
+    const m = _lastPointer;
+    const W = typeof window !== 'undefined' ? window.innerWidth : 800;
+    const Hh = typeof window !== 'undefined' ? window.innerHeight : 600;
+    const x = Math.min(W - 380, Math.max(12, (m ? m.x + 16 : W - 400))) + index * 22;
+    const y = Math.min(Hh - 160, Math.max(60, (m ? m.y - 20 : 80))) + index * 22;
+    return { x, y };
+  });
   const [dragging, setDragging] = useState(false);
   const off = useRef({ dx: 0, dy: 0 });
 

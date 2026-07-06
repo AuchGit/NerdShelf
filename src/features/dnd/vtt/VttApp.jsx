@@ -331,10 +331,15 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const handleTokenActivate = (tokenId) => {
     const t = getState().tokens[tokenId];
     if (!t || !(t.statblock || t.characterId != null)) return;
-    // Double-clicking YOUR OWN character token opens the full sheet popout
-    // window; everything else opens the in-app statblock/sheet overlay.
-    if (t.characterId != null && t.characterId === myCharacterId) {
-      openSheetPopout(t.characterId);
+    // Charakter-Token (eigenes ODER fremdes): Sheet als Popout-Fenster.
+    //  • eigenes → editierbar. • DM auf fremdes → schreibgeschützt
+    //    (`#/campaign/<id>/character/<charId>`, campaignId aus dem Prop —
+    //    zuverlässig, session.campaignId war teils leer → Kampagnenseite).
+    // Nur NPC-Statblock-Token öffnen das In-App-Overlay.
+    if (t.characterId != null) {
+      if (t.characterId === myCharacterId) openSheetPopout(t.characterId);
+      else if (isGM) openSheetPopout(t.characterId, { route: `#/campaign/${campaignId}/character/${t.characterId}` });
+      else setStatTokenIds((ids) => (ids.includes(tokenId) ? ids : [...ids, tokenId]));
       return;
     }
     setStatTokenIds((ids) => (ids.includes(tokenId) ? ids : [...ids, tokenId]));

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { setGrid, updateLevel, resetFog, setFogMode, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
 import { useVtt } from '../state/useVtt';
-import { GRID_STYLES, FOG_MODES } from '../lib/constants';
+import { GRID_STYLES } from '../lib/constants';
 import { fitGridToMap } from '../lib/geometry';
 
 export default function GridControls({ map }) {
@@ -151,32 +151,8 @@ export default function GridControls({ map }) {
         <input type="color" value={g.color} onChange={(e) => patch({ color: e.target.value })} style={{ width: 40, height: 28, background: 'none', border: 'none' }} />
       </Row>
 
-      <div style={{ borderTop: '1px solid var(--color-border)', margin: '10px 0 8px' }} />
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Fog of War</div>
-      <Row label="Modus">
-        <select value={fogMode} onChange={(e) => setFogMode(map.id, e.target.value)} style={S.select}>
-          {Object.entries(FOG_MODES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-        </select>
-      </Row>
       {fogMode === 'manual' && (
         <button style={S.reset} onClick={() => resetFog(map.id)}>Fog zurücksetzen (alles verbergen)</button>
-      )}
-      {fogMode === 'dynamic' && (
-        <>
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
-            Spieler sehen nur, was ihr Token durch lichtblockende Wände sieht. Wände mit dem 🧱-Tool ziehen.
-          </p>
-          <Row label="Erkundete Bereiche">
-            <select value={map.memoryStyle || 'darkened'} onChange={(e) => updateMap(map.id, { memoryStyle: e.target.value })} style={S.select}>
-              <option value="darkened">Abgedunkelt (Farbe bleibt)</option>
-              <option value="grayscale">Schwarz-Weiß</option>
-            </select>
-          </Row>
-          <Row label={`Abdunklung (${Math.round((map.memoryStrength ?? 0.55) * 100)}%)`}>
-            <input type="range" min="0.1" max="0.9" step="0.05" value={map.memoryStrength ?? 0.55}
-              onChange={(e) => updateMap(map.id, { memoryStrength: +e.target.value })} style={{ width: '100%' }} />
-          </Row>
-        </>
       )}
 
       <div style={{ borderTop: '1px solid var(--color-border)', margin: '10px 0 8px' }} />
@@ -189,27 +165,9 @@ export default function GridControls({ map }) {
         />
         Dynamisches Licht (Fackeln/Laternen + Schatten)
       </label>
-      <Row label="Licht-Stil">
-        <select value={map.lightStyle || 'modern'} onChange={(e) => updateMap(map.id, { lightStyle: e.target.value })} style={S.select}>
-          <option value="modern">Modern (warmer, weicher Schein)</option>
-          <option value="classic">Klassisch (klare Hell/Dämmer-Stufen)</option>
-        </select>
-      </Row>
-      <Row label="Grundlicht (Baseline)">
-        <select value={map.lightBaseline || 'bright'} onChange={(e) => updateMap(map.id, { lightBaseline: e.target.value })} style={S.select}>
-          <option value="bright">Hell — alles sichtbar</option>
-          <option value="dim">Dämmrig — Lichter erhellen</option>
-          <option value="dark">Dunkel — nur Lichter erhellen</option>
-        </select>
-      </Row>
-      <label style={S.check} title="Geschlossene Wand-Loops (auch mit Tür/Fenster) sind innen immer dunkel, egal wie hell es draußen ist. Fenster & offene Türen lassen etwas vom Grundlicht hineinscheinen.">
-        <input
-          type="checkbox"
-          checked={!!map.enclosedDark}
-          onChange={(e) => updateMap(map.id, { enclosedDark: e.target.checked })}
-        />
-        Geschlossene Räume immer dunkel (Licht fällt durch Fenster/Türen)
-      </label>
+      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '2px 0 6px' }}>
+        Grundlicht, „Räume dunkel", Kontrast &amp; Weichheit stellst du in der Leiste des Licht-Tools ein.
+      </p>
       <Row label={`Dunkelflächen${darkCount ? ` (${darkCount})` : ''}`}>
         <div style={{ display: 'flex', gap: 6 }}>
           <button

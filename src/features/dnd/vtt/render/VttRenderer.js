@@ -460,7 +460,7 @@ export class VttRenderer {
         brightWalls: milkyWindows.length ? lightWalls.concat(milkyWindows) : lightWalls,
         shadowWalls: sightWalls, // Welt-Schatten nur von Sicht-blockenden Wänden
         bounds,
-        style: map.lightStyle || 'modern',
+        style: 'classic', // immer klassische, klare Hell/Dämmer-Stufen
         baseline,
         darkness: lightingOn ? (map.darkness || []).filter((d) => (d.level || base) === level) : [],
         darkPolys,
