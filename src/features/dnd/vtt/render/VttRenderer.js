@@ -177,7 +177,7 @@ export class VttRenderer {
     // React to VTT display-pref changes (memory style) live.
     this._onPrefs = () => { this.applyMemoryStyle(); this.reconcile(); };
     window.addEventListener(VTT_PREFS_EVENT, this._onPrefs);
-    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); this.tokens.tickTokens(this.drag?.id || this._tween?.id); });
+    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); this.tokens.tickTokens(this.drag?.id || this._tween?.id); this.tickLuminousMotion(); });
     this.reconcile();
   }
 
@@ -1602,6 +1602,45 @@ export class VttRenderer {
     });
   }
 
+  // Sichtbarer Karten-Ausschnitt in MAP-Koordinaten (für viewport-begrenztes
+  // Live-Compositing): der Licht-Compose muss beim Bewegen NUR das komponieren,
+  // was auf dem Schirm ist — die Kosten hängen dann an der Bildschirm- statt an
+  // der Map-Größe (auf 8192px-Maps der entscheidende Gewinn). Mit etwas Rand.
+  visibleMapBounds(map, padPx) {
+    try {
+      const W = this.app.renderer.width; const H = this.app.renderer.height;
+      const a = this.viewport.toMap(0, 0); const b = this.viewport.toMap(W, H);
+      const pad = padPx ?? (map.grid?.size || 70) * 1.5;
+      const minX = Math.max(0, Math.min(a.x, b.x) - pad);
+      const minY = Math.max(0, Math.min(a.y, b.y) - pad);
+      const maxX = Math.min(map.width, Math.max(a.x, b.x) + pad);
+      const maxY = Math.min(map.height, Math.max(a.y, b.y) + pad);
+      if (maxX - minX < 8 || maxY - minY < 8) return null;
+      return { minX, minY, maxX, maxY };
+    } catch { return null; }
+  }
+
+  // Pro Frame: gleitet gerade ein leuchtendes Token (lokal ODER per Peer-Ease),
+  // folgt das Licht per leichtem Live-Refresh — für jeden Client, nicht nur den
+  // Ziehenden. Erkennung: Sprite-Position weicht noch vom Ziel (_tx/_ty) ab,
+  // oder ein lokaler Drag/Tween läuft.
+  tickLuminousMotion() {
+    if (!this._lightEnv) return;
+    const s = getState();
+    const map = s.maps[s.activeMapId];
+    if (!map || map.lightingEnabled === false) return;
+    let moving = false;
+    for (const t of Object.values(s.tokens)) {
+      if (!t.light || t.mapId !== map.id) continue;
+      if (this.drag?.id === t.id || this._tween?.id === t.id) { moving = true; break; }
+      const node = this.tokens.nodes.get(t.id);
+      if (node && node._tx != null) {
+        if (Math.abs(node.root.position.x - node._tx) > 0.5 || Math.abs(node.root.position.y - node._ty) > 0.5) { moving = true; break; }
+      }
+    }
+    if (moving) this.refreshLightsLive();
+  }
+
   _refreshLightsLiveNow() {
     const env = this._lightEnv;
     if (!env) return;
@@ -1617,16 +1656,23 @@ export class VttRenderer {
         .filter((t) => t.mapId === map.id && (t.level || base) === level && t.light)
         .map((t) => {
           const halfFt = ((t.sizeCells || 1) * 5) / 2;
-          const live = (this.drag?.id === t.id || this._tween?.id === t.id)
-            ? this.tokens.nodes.get(t.id)?.root?.position : null;
-          const lx = live ? live.x : t.x;
-          const ly = live ? live.y : t.y;
-          if (live) liveKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
+          // IMMER die GERENDERTE Sprite-Position nutzen (nicht nur bei lokalem
+          // Drag/Tween): so folgt das Licht auch bei PEER-Bewegungen dem weich
+          // gleitenden Token — für jeden Client, nicht nur den Ziehenden.
+          const rp = this.tokens.nodes.get(t.id)?.root?.position;
+          const lx = rp ? rp.x : t.x;
+          const ly = rp ? rp.y : t.y;
+          liveKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
           return { id: 'tl_' + t.id, x: lx, y: ly, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, lx, ly) };
         }),
       ...env.ambientSources,
     ];
-    this.lights.update({ ...env.opts, sources, rev: env.revPrefix + liveKey, __live: true });
+    // Live: nur den sichtbaren Ausschnitt komponieren; fullBounds trägt die
+    // volle Map-Größe, damit der Final-Pass (in Ruhe) wieder alles komponiert.
+    const vb = this.visibleMapBounds(map);
+    // liveKey mit dem Ausschnitt salzen, damit ein Pan zwischen Frames neu baut.
+    const boundsKey = vb ? `|vb:${Math.round(vb.minX)},${Math.round(vb.minY)},${Math.round(vb.maxX)},${Math.round(vb.maxY)}` : '';
+    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey + boundsKey, __live: true });
   }
 
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-

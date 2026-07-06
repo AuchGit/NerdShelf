@@ -184,8 +184,10 @@ export class LightLayer {
     if (sig === this._sig) return;
     clearTimeout(this._finalTimer);
     if (wantLow) {
+      // Final-Pass in voller Auflösung UND über die GANZE Map (fullBounds) —
+      // der Live-Frame kann auf den sichtbaren Ausschnitt begrenzt sein.
       this._finalTimer = setTimeout(() => {
-        try { this.update({ ...opts, __final: true, __live: false }); } catch { /* Renderer evtl. schon weg */ }
+        try { this.update({ ...opts, bounds: opts.fullBounds || opts.bounds, __final: true, __live: false }); } catch { /* Renderer evtl. schon weg */ }
       }, 200);
       // ~60fps-Deckel für Interaktions-Composes; Zwischenstände dürfen
       // ausfallen, der Final-Pass oben fängt den Endstand garantiert.
