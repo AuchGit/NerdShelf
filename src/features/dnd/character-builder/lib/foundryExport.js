@@ -2923,8 +2923,10 @@ export async function exportToFoundry(character) {
         const dedupKey = `opt|${cls.classId}|${entry.name}`
         if (seenFeatures.has(dedupKey)) continue
         seenFeatures.add(dedupKey)
-        // Patch aus foundry-optionalfeatures.json (Effects/Icon/Activities)
-        const patch = (OPTFEAT_FNDRY || []).find(p =>
+        // Patch aus foundry-optionalfeatures.json. Die Datei ist ein OBJEKT
+        // ({optionalfeature:[…]}), kein Array → sonst "find is not a function".
+        const optfeatFndryArr = Array.isArray(OPTFEAT_FNDRY) ? OPTFEAT_FNDRY : (OPTFEAT_FNDRY?.optionalfeature || []);
+        const patch = optfeatFndryArr.find(p =>
           p?.name && p.name.toLowerCase() === entry.name.toLowerCase()
         ) || {}
         try {

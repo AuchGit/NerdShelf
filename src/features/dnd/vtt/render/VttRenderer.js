@@ -1518,12 +1518,23 @@ export class VttRenderer {
     // door's handles stay grabbable so placed doors remain editable.
     if (t === 'walls' && this.doorDraft) return; // mid-draft: click places the vertex
     e.stopPropagation?.();
-    A.selectWall(id);
     const s = getState();
     const w = s.walls[id];
     const base = s.maps[s.activeMapId]?.levels?.[0]?.id || null;
     const lvl = w.level || base;
     const v = w[end];
+    // Strg + Klick auf einen Wand-ECKPUNKT (Wand-Tool): von GENAU diesem Punkt
+    // aus eine neue, verbundene Wand weiterziehen/abzweigen — statt den Punkt zu
+    // verschieben. Strg ist hier nur der Aktivator; danach platziert man ganz
+    // normal (der nächste Klick snappt, außer man hält beim Ziehen erneut Strg).
+    if (t === 'walls' && this.keys.ctrl && !this.wallChain) {
+      A.selectWall(null);
+      this.wallChain = { start: { x: v.x, y: v.y }, last: { x: v.x, y: v.y } };
+      this.walls.drawPreview(v, v, s.ui.wallKind);
+      this.flashAt(v.x, v.y);
+      return; // KEIN Endpunkt-Drag
+    }
+    A.selectWall(id);
     // All wall endpoints sharing this vertex move together (stay connected).
     // Hold Ctrl while dragging to move only this one (break the connection).
     const welded = [];
