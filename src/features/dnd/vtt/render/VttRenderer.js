@@ -1036,7 +1036,7 @@ export class VttRenderer {
 
     // Alt-click = ping, in any tool. DM + Ctrl dazu = FOKUS-Ping: alle Kameras
     // schwenken auf die Stelle (Aufmerksamkeit der ganzen Runde).
-    if (this.keys.alt) { A.ping(map.id, pos.x, pos.y, undefined, this.keys.ctrl && s.session.role === 'dm'); return; }
+    if (this.keys.alt) { A.ping(map.id, pos.x, pos.y, this.myPingColor(s, map), this.keys.ctrl && s.session.role === 'dm'); return; }
 
     // Click-to-place: an armed token (Bestiary/TokenPanel) spawns on the
     // clicked grid cell. Left click only; Esc cancels (see onAction).
@@ -1223,6 +1223,15 @@ export class VttRenderer {
   finishWallChain() {
     this.wallChain = null;
     this.walls.drawPreview(null, null);
+  }
+
+  // Ping-Farbe = eigene Spielerfarbe (Token dieses Users auf der Map), beim
+  // DM das DM-Gelb. Fällt auf ein Spieler-Blau zurück, falls kein Token da ist.
+  myPingColor(s, map) {
+    if (s.session.role === 'dm') return '#ffe066';
+    const mine = Object.values(s.tokens).find((t) => t.mapId === map.id
+      && (t.ownerId === s.session.userId || (t.characterId != null && String(t.characterId) === String(s.ui.myCharacterId))));
+    return mine?.color || '#42a5f5';
   }
 
   // Brief "loop closed" pulse at a map-space point.

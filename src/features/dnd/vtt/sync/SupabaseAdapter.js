@@ -224,6 +224,26 @@ export class SupabaseAdapter {
 }
 
 // ── op → row (camelCase → snake_case) ──
+// Maps sind seltene, wichtige Kampagnen-Assets — sie dürfen NICHT nur in einem
+// flüchtigen Relay-Snapshot leben (ein schnelles Schließen nach dem Import
+// verlor sie). Dieser Helfer schreibt die Map-Zeile DURABEL nach Supabase
+// (await + Retry), unabhängig vom Live-Transport. Beim nächsten Öffnen lädt
+// der Supabase-Snapshot die Map garantiert.
+export async function saveMapRowDurable(supabase, map, campaignId) {
+  const row = mapToRow(map, campaignId);
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { error } = await supabase.from('vtt_maps').upsert(row);
+      if (!error) return true;
+      lastErr = error;
+    } catch (e) { lastErr = e; }
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+  }
+  console.warn('[vtt] Map dauerhaft speichern fehlgeschlagen', lastErr?.message || lastErr);
+  return false;
+}
+
 function mapToRow(m, cid) {
   return { id: m.id, campaign_id: cid, name: m.name, image_path: m.imagePath || null,
     width: m.width, height: m.height, grid: m.grid, fog_mode: m.fogMode || 'none',

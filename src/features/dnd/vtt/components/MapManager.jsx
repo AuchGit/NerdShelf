@@ -11,6 +11,17 @@ import { importMapImage } from '../lib/mapImage';
 import { parseUvtt } from '../lib/uvtt';
 import { uploadMapImage, uploadMapToRelay, saveMapOriginalLocal } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
+import { getState } from '../state/store';
+import { saveMapRowDurable } from '../sync/SupabaseAdapter';
+import { supabase } from '../../../../core/supabase/client';
+
+// Map-Zeile nach dem Anlegen DURABEL nach Supabase schreiben (await + Retry) —
+// unabhängig vom Live-Transport, damit ein schnelles Schließen/Relay-Only die
+// Map nicht verliert. Liest die frisch angelegte Map aus dem Store.
+async function persistMapDurable(mapId, campaignId) {
+  const map = getState().maps[mapId];
+  if (map) await saveMapRowDurable(supabase, map, campaignId);
+}
 
 export default function MapManager() {
   const isDM = useIsDM();
@@ -57,6 +68,7 @@ export default function MapManager() {
       // resolution converts onto the compressed map correctly.
       const id = addMap({ name: file.name.replace(/\.[^.]+$/, ''), imageUrl, imageFullName, imagePath, width, height, grid: { origWidth, origHeight } });
       setActiveMap(id);
+      await persistMapDurable(id, campaignId); // garantiert in Supabase, überlebt Schließen/Relay-Only
       console.log(`[vtt] map uploaded: ${width}×${height}, ${(bytes / 1024).toFixed(0)} KB${imageFullName ? ' (+ full-res original kept for direct connection)' : ''}`);
     } catch (e2) {
       setErr(e2.message);
@@ -75,6 +87,7 @@ export default function MapManager() {
       const { imagePath, imageUrl } = await uploadMapImage(campaignId, blob, hash);
       const id = addMap({ name, imageUrl, imagePath, width, height, grid: { size: gridSize } });
       setActiveMap(id);
+      await persistMapDurable(id, campaignId);
       const n = addWalls(id, walls);
       const nl = lights?.length ? addLights(id, lights) : 0;
       console.log(`[vtt] UVTT imported: ${width}×${height}, grid ${Math.round(gridSize)}px, ${n} wall segments, ${nl} lights`);

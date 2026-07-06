@@ -170,8 +170,13 @@ export class LightLayer {
     // Interaktions-Auflösung: immer höchstens die Hälfte der vollen — auch
     // kleine Maps profitieren, sonst liefe ein lokaler Drag (Compose pro
     // Mousemove!) komplett ungebremst in voller Auflösung.
-    const resLow = Math.max(0.35, Math.min(0.5, 2600 / Math.max(w, h)));
+    // Interaktions-Auflösung mit FESTEM Pixel-Budget statt map-proportional:
+    // die Compose-Kosten hängen an der RT-FLÄCHE, nicht an der Map-Größe. Ein
+    // 8192px-Map-Compose füllt so nur ~1400px längste Kante statt ~2900px
+    // (≈4× weniger GPU-Fill). EIN Budget für alle Low-Frames, damit der
+    // Low-RT-Satz zwischen Live/Recent nicht neu alloziert wird.
     const nowTs = performance.now();
+    const resLow = Math.max(0.18, Math.min(0.5, 1400 / Math.max(w, h)));
     // __live = Aufruf aus dem Licht-only-Drag/Glide-Pfad: IMMER low-res
     // (auch der erste Frame — kein Voll-Auflösungs-Hitch beim Drag-Start).
     const wantLow = !opts.__final && (opts.__live || nowTs - (this._lastCompose || 0) < 200);
