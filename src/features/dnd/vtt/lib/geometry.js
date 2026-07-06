@@ -19,19 +19,25 @@ export function pxToFeet(px, gridSize) {
   return (px / gridSize) * FEET_PER_CELL;
 }
 
+// Zellgröße pro Achse: beim "auf volle Felder snappen" sind die Zellen minimal
+// rechteckig (sizeX/sizeY), damit ein GANZZAHLIGES Feldraster die Karte EXAKT
+// füllt (keine halben Felder am Rand). Ohne Snap = quadratisch (grid.size).
+export const cellX = (grid) => grid.sizeX || grid.size;
+export const cellY = (grid) => grid.sizeY || grid.size;
+
 /** Cell (col,row) a map-space point falls in, honoring grid offset. */
 export function pointToCell(x, y, grid) {
   return {
-    col: Math.floor((x - grid.offsetX) / grid.size),
-    row: Math.floor((y - grid.offsetY) / grid.size),
+    col: Math.floor((x - grid.offsetX) / cellX(grid)),
+    row: Math.floor((y - grid.offsetY) / cellY(grid)),
   };
 }
 
 /** Map-space center of a cell. */
 export function cellCenter(col, row, grid) {
   return {
-    x: grid.offsetX + (col + 0.5) * grid.size,
-    y: grid.offsetY + (row + 0.5) * grid.size,
+    x: grid.offsetX + (col + 0.5) * cellX(grid),
+    y: grid.offsetY + (row + 0.5) * cellY(grid),
   };
 }
 
@@ -41,13 +47,14 @@ export function cellCenter(col, row, grid) {
  * line; for odd sizes on a cell center — matching how minis occupy squares.
  */
 export function snapToGrid(x, y, grid, sizeCells = 1) {
-  const half = (sizeCells * grid.size) / 2;
-  // top-left corner snapped to grid, then re-center
-  const col = Math.round((x - grid.offsetX - half) / grid.size);
-  const row = Math.round((y - grid.offsetY - half) / grid.size);
+  const sx = cellX(grid); const sy = cellY(grid);
+  const halfX = (sizeCells * sx) / 2; const halfY = (sizeCells * sy) / 2;
+  // top-left corner snapped to grid, then re-center (pro Achse)
+  const col = Math.round((x - grid.offsetX - halfX) / sx);
+  const row = Math.round((y - grid.offsetY - halfY) / sy);
   return {
-    x: grid.offsetX + col * grid.size + half,
-    y: grid.offsetY + row * grid.size + half,
+    x: grid.offsetX + col * sx + halfX,
+    y: grid.offsetY + row * sy + halfY,
   };
 }
 
@@ -76,18 +83,19 @@ export function gridDistanceFt(a, b, grid, euclidean = false) {
 export function fitGridToMap(mapWidth, mapHeight, desiredSize) {
   const cols = Math.max(1, Math.round(mapWidth / desiredSize));
   const rows = Math.max(1, Math.round(mapHeight / desiredSize));
-  // Quadratische Zellen (eine Größe) — der Durchschnitt hält sie möglichst
-  // nah am Wunsch beider Achsen.
-  const size = (mapWidth / cols + mapHeight / rows) / 2;
-  // WICHTIG: `cols`/`rows` = die ANZAHL VOLLER Zellen (aus dem Runden oben),
-  // NICHT round(mapWidth/size) — sonst fällt am Rand doch wieder eine halbe
-  // Zelle an. Der Rest (map − cols·size) wird als Offset zentriert, kann
-  // negativ sein (Gitter ragt minimal über den Bildrand — dann sind alle
-  // sichtbaren Zellen voll, keine halben am Rand).
+  // EXAKTE Passung ohne halbe Felder: pro Achse eine eigene Zellgröße, sodass
+  // cols·sizeX == mapWidth UND rows·sizeY == mapHeight (Offset 0). Die Zellen
+  // sind dadurch minimal rechteckig — bei realen Battlemaps kaum sichtbar, dafür
+  // liegt das Raster pixelgenau auf dem Kartenrand. `size` (Durchschnitt) bleibt
+  // für Distanz-/Radius-Mathe (feetToPx) erhalten.
+  const sizeX = mapWidth / cols;
+  const sizeY = mapHeight / rows;
   return {
-    size,
-    offsetX: (mapWidth - cols * size) / 2,
-    offsetY: (mapHeight - rows * size) / 2,
+    size: (sizeX + sizeY) / 2,
+    sizeX,
+    sizeY,
+    offsetX: 0,
+    offsetY: 0,
     cols,
     rows,
   };

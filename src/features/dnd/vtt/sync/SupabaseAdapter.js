@@ -235,12 +235,14 @@ export async function saveMapRowDurable(supabase, map, campaignId) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const { error } = await supabase.from('vtt_maps').upsert(row);
-      if (!error) return true;
+      if (!error) { console.log('[vtt] Map durabel in Supabase gespeichert:', map.id, map.name); return true; }
       lastErr = error;
-    } catch (e) { lastErr = e; }
+      console.warn(`[vtt] Map-Speichern Versuch ${attempt + 1} fehlgeschlagen:`, error.message);
+    } catch (e) { lastErr = e; console.warn(`[vtt] Map-Speichern Versuch ${attempt + 1} Exception:`, e?.message || e); }
     await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
   }
-  console.warn('[vtt] Map dauerhaft speichern fehlgeschlagen', lastErr?.message || lastErr);
+  // Sichtbar melden statt still verlieren — DAS ist der "2. Map weg"-Bug.
+  toast(`Map „${map.name}" konnte nicht dauerhaft gespeichert werden: ${lastErr?.message || lastErr}`, 'error');
   return false;
 }
 

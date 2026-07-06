@@ -49,7 +49,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import { openSheetPopout } from '../character-builder/lib/sheetPopout';
 import { TooltipProvider, TooltipLayer } from './components/tooltip/Tooltips';
 import { connectSync, getState, persistSnapshot } from './state/store';
-import { setSession, presentHandout, selectZone, selectTerrain, setPaused, confirmTargeting, cancelTargeting, setContextTokens } from './state/actions';
+import { setSession, presentHandout, selectZone, selectTerrain, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap } from './state/actions';
 import { SupabaseAdapter } from './sync/SupabaseAdapter';
 import { RelayAdapter } from './sync/RelayAdapter';
 import { connectCharacterBinding, disconnectCharacterBinding } from './sync/characterBinding';
@@ -403,6 +403,9 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
           {onExit && <button style={S.back} onClick={onExit}>← Zurück</button>}
           <span style={{ fontWeight: 600 }}>Battlemap</span>
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>{isDM ? 'DM' : (playerName || 'Spieler')}</span>
+          {/* Spieler-Kartenwahl: zwischen allen DM-sichtbaren Karten wechseln;
+              die aktive ist markiert. Nur in der Spieler-Ansicht. */}
+          {(!isDM || viewAsPlayer) && <PlayerMapSwitcher />}
           {isGM && (
             <button style={S.viewToggle} onClick={() => setViewAsPlayer((v) => !v)}
               title="Zwischen DM-Werkzeugen und Spieler-Ansicht wechseln">
@@ -516,6 +519,30 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
       <TooltipLayer />
     </div>
     </TooltipProvider>
+  );
+}
+
+// Spieler-Kartenwahl (Top-Toolbar): Dropdown über alle DM-sichtbaren Karten
+// + die aktive. Auswahl setzt die lokal betrachtete Karte; "● aktiv"
+// kennzeichnet die vom DM aktivierte. Aktiviert der DM eine neue Karte, wird
+// viewedMapId serverseitig zurückgesetzt → der Spieler springt automatisch drauf.
+function PlayerMapSwitcher() {
+  const maps = useVtt((s) => Object.values(s.maps));
+  const activeMapId = useVtt((s) => s.activeMapId);
+  const viewedMapId = useVtt((s) => s.ui.viewedMapId);
+  const visible = maps.filter((m) => m.id === activeMapId || m.playerVisible);
+  if (visible.length <= 1) return null; // nichts zu wechseln
+  const current = viewedMapId || activeMapId || '';
+  return (
+    <select
+      value={current}
+      onChange={(e) => setViewedMap(e.target.value === activeMapId ? null : e.target.value)}
+      title="Karte wählen"
+      style={{ padding: '3px 8px', borderRadius: 6, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', fontSize: 'var(--fs-sm)', maxWidth: 220 }}>
+      {visible.map((m) => (
+        <option key={m.id} value={m.id}>{m.name}{m.id === activeMapId ? '  ● aktiv' : ''}</option>
+      ))}
+    </select>
   );
 }
 

@@ -297,6 +297,11 @@ function reduce(op) {
       state.activeMapId = op.mapId;
       // The active map is shown to the table, so it's player-visible by default.
       if (state.maps[op.mapId]) state.maps[op.mapId] = { ...state.maps[op.mapId], playerVisible: true };
+      // DM aktiviert eine Karte → sie öffnet sich für ALLE sofort: die lokale
+      // "gerade angeschaute" Auswahl wird zurückgesetzt, damit jeder Client der
+      // neuen aktiven Karte folgt (Spieler können danach per Dropdown wieder
+      // eine andere sichtbare Karte durchblättern).
+      state.ui.viewedMapId = null;
       break;
     case 'map/setGrid':
       if (state.maps[op.mapId]) {

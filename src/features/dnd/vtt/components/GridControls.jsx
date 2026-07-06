@@ -12,6 +12,8 @@ export default function GridControls({ map }) {
   const darkCount = (map.darkness || []).length;
   const g = map.grid;
   const patch = (p) => setGrid(map.id, p);
+  // Eingabe-Methode (lokal): Default abgeleitet — snap-Maps sind Slider-Maps.
+  const [gridMode, setGridMode] = useState(g.snapMapToGrid ? 'slider' : 'slider');
   const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
 
   // When "Karte auf volle Felder" is on, derive size/offset so an integer
@@ -19,7 +21,7 @@ export default function GridControls({ map }) {
   const onSize = (size) => {
     if (g.snapMapToGrid) {
       const fit = fitGridToMap(map.width, map.height, size);
-      patch({ size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
+      patch({ size: fit.size, sizeX: fit.sizeX, sizeY: fit.sizeY, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
     } else {
       patch({ size });
     }
@@ -28,9 +30,10 @@ export default function GridControls({ map }) {
   const toggleSnap = (on) => {
     if (on) {
       const fit = fitGridToMap(map.width, map.height, g.size);
-      patch({ snapMapToGrid: true, size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
+      patch({ snapMapToGrid: true, size: fit.size, sizeX: fit.sizeX, sizeY: fit.sizeY, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
     } else {
-      patch({ snapMapToGrid: false });
+      // Zurück auf quadratisch: per-Achsen-Größen entfernen.
+      patch({ snapMapToGrid: false, sizeX: null, sizeY: null });
     }
   };
 
@@ -42,44 +45,57 @@ export default function GridControls({ map }) {
   // Grid-Vergrößern und „auf volle Felder snappen" dort unbenutzbar.
   const sliderMax = Math.max(240, Math.round(Math.max(map.width, map.height) / 4));
 
+  // 'dpi' ist exaktes Eintippen — Snap (das die Größe rundet) passt dazu nicht,
+  // also beim Wechsel auf dpi ausschalten.
+  const pickMode = (m) => { setGridMode(m); if (m === 'dpi' && g.snapMapToGrid) toggleSnap(false); };
+  const mode = gridMode;
+
   return (
     <>
-      <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
-        <input type="range" min="20" max={sliderMax} value={Math.min(sliderMax, Math.round(g.size))} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+      <Row label="Grid einstellen mit">
+        <select value={mode} onChange={(e) => pickMode(e.target.value)} style={S.select}>
+          <option value="slider">Schieberegler (Größe ziehen)</option>
+          <option value="dpi">Genau eintippen (px/Feld · Feldzahl)</option>
+        </select>
       </Row>
 
-      {/* Exact calibration for standard battlemaps ("44x32 @ 72dpi"): type the
-          cell pitch in px OR the column/row count — committed on Enter/blur (a
-          per-keystroke commit clamped "72" to "82" mid-typing and made these
-          values impossible to enter). Offset (below) aligns the origin. */}
-      <Row label="Genau kalibrieren (z. B. 44×32 · 72 dpi)">
-        {/* dpi always refers to the ORIGINAL image. If the import downscaled the
-            map, convert via origWidth (stored in the grid) so typing the
-            original's dpi still lands exactly on the compressed map. */}
-        {(() => {
-          const origScale = g.origWidth ? map.width / g.origWidth : 1;
-          return (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <CommitNum label="px/Feld (dpi)" value={Math.round(g.size / origScale)} min={8} max={4000}
-                onCommit={(v) => onSize(v * origScale)} />
-              <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
-                onCommit={(n) => onSize(map.width / n)} />
-              <CommitNum label="Felder hoch" value={Math.max(1, Math.round(map.height / g.size))} min={1} max={500}
-                onCommit={(n) => onSize(map.height / n)} />
-            </div>
-          );
-        })()}
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '3px 0 0' }}>
-          Eingabe mit Enter bestätigen. „72 dpi" = 72 px/Feld, bezogen auf die Originaldatei{g.origWidth && Math.round(map.width / g.origWidth * 100) !== 100 ? ' (wird automatisch auf die komprimierte Map umgerechnet)' : ''}.
-        </p>
-      </Row>
+      {mode === 'slider' && (
+        <>
+          <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
+            <input type="range" min="20" max={sliderMax} value={Math.min(sliderMax, Math.round(g.size))} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+          </Row>
+          <label style={S.check} title="An: nur Zellgrößen, die die Karte EXAKT in ganze Felder teilen — keine halben Felder am Rand (Zellen minimal rechteckig).">
+            <input type="checkbox" checked={!!g.snapMapToGrid} onChange={(e) => toggleSnap(e.target.checked)} />
+            Auf volle Felder snappen (keine halben Felder am Rand)
+          </label>
+        </>
+      )}
 
-      <label style={S.check}>
-        <input type="checkbox" checked={!!g.snapMapToGrid} onChange={(e) => toggleSnap(e.target.checked)} />
-        Karte auf volle Felder snappen
-      </label>
+      {mode === 'dpi' && (
+        // Exakte Kalibrierung: px/Feld ODER Feldzahl eintippen (Enter bestätigt).
+        // dpi bezieht sich auf das ORIGINALbild — via origWidth auf die
+        // komprimierte Map umgerechnet.
+        <Row label="Genau kalibrieren (z. B. 44×32 · 72 dpi)">
+          {(() => {
+            const origScale = g.origWidth ? map.width / g.origWidth : 1;
+            return (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <CommitNum label="px/Feld (dpi)" value={Math.round(g.size / origScale)} min={8} max={4000}
+                  onCommit={(v) => onSize(v * origScale)} />
+                <CommitNum label="Felder breit" value={Math.max(1, Math.round(map.width / g.size))} min={1} max={500}
+                  onCommit={(n) => onSize(map.width / n)} />
+                <CommitNum label="Felder hoch" value={Math.max(1, Math.round(map.height / g.size))} min={1} max={500}
+                  onCommit={(n) => onSize(map.height / n)} />
+              </div>
+            );
+          })()}
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '3px 0 0' }}>
+            Eingabe mit Enter bestätigen. „72 dpi" = 72 px/Feld, bezogen auf die Originaldatei{g.origWidth && Math.round(map.width / g.origWidth * 100) !== 100 ? ' (wird automatisch auf die komprimierte Map umgerechnet)' : ''}.
+          </p>
+        </Row>
+      )}
 
-      {!g.snapMapToGrid && (
+      {mode === 'slider' && !g.snapMapToGrid && (
         <Row label={`Offset X/Y (${g.offsetX}, ${g.offsetY})`}>
           <div style={{ display: 'flex', gap: 6 }}>
             <input type="range" min="0" max={Math.round(g.size)} value={g.offsetX} onChange={(e) => patch({ offsetX: +e.target.value })} style={{ flex: 1 }} />

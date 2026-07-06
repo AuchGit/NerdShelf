@@ -8,6 +8,7 @@ import {
   useTerrainOpacity, setTerrainOpacity, useTerrainPattern, setTerrainPattern,
   useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle, useDifficultStyle, setDifficultStyle,
   useInitiativeRollEnabled, setInitiativeRollEnabled,
+  usePingScale, setPingScale,
   useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
 } from '../lib/vttPrefs';
 
@@ -26,6 +27,7 @@ export default function VttSettings({ onClose }) {
   const initRoll = useInitiativeRollEnabled();
   const dice3d = useDice3d();
   const dmCursor = useDmCursorLight();
+  const pingScale = usePingScale();
   const connMode = useConnectionMode();
   const relayUrl = useRelayUrl();
 
@@ -45,6 +47,9 @@ export default function VttSettings({ onClose }) {
           </Row>
           <Row label={`AC-Badge-Größe (${Math.round(acScale * 100)}%) — zusätzlich nur für die AC-Badge`}>
             <input type="range" min="0.4" max="2.5" step="0.1" value={acScale} onChange={(e) => setAcBadgeScale(+e.target.value)} style={{ width: '100%' }} />
+          </Row>
+          <Row label={`Ping-Größe (${Math.round(pingScale * 100)}%) — wie groß/deutlich Pings bei mir erscheinen`}>
+            <input type="range" min="0.5" max="2.5" step="0.1" value={pingScale} onChange={(e) => setPingScale(+e.target.value)} style={{ width: '100%' }} />
           </Row>
 
           <div style={S.section}>Erkundeter Bereich (erinnert, nicht sichtbar)</div>

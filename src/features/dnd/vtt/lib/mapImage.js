@@ -24,11 +24,12 @@
  *           Raise per-import for an exceptionally detailed map.
  *   quality: WebP quality 0..1 (default 0.92 — visually near-lossless for maps)
  */
-// Online-Kompressgröße: seit die Direktverbindung das UNANGETASTETE Original
-// in voller Auflösung serviert, muss die Online-Kopie nicht mehr riesig sein
-// — 8192px Kante ist online mehr als scharf genug und encodiert ~2.3× schneller
-// als die früheren 12288px (WebP-Encode ist DER langsame Schritt beim Import).
-export async function importMapImage(file, { maxDim = 8192, quality = 0.92 } = {}) {
+// Online-Kompressgröße: die Direktverbindung serviert das UNANGETASTETE
+// Original in VOLLER Auflösung (Tisch + gleiches Netz) — die Online-WebP-Kopie
+// ist nur das Fallback für entfernte Spieler und darf deshalb klein sein.
+// 4096px Kante reicht online locker und encodiert ~4× schneller als 8192
+// (der WebP-Encode ist DER langsame Schritt — bei 115-MB-Maps entscheidend).
+export async function importMapImage(file, { maxDim = 4096, quality = 0.85 } = {}) {
   if (!file) throw new Error('Keine Datei ausgewählt.');
   // KEIN Byte-Limit: das Original wird lokal in voller Größe gespeichert
   // (Direktverbindung serviert es unkomprimiert), online geht ohnehin nur

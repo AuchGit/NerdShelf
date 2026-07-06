@@ -2,6 +2,7 @@
 // expanding ring that fades out. Pings auto-expire from the store after a TTL.
 import { Container, Graphics } from 'pixi.js';
 import { PING_TTL_MS } from '../../lib/constants';
+import { getPingScale } from '../../lib/vttPrefs';
 
 export class PingLayer {
   constructor() {
@@ -32,16 +33,23 @@ export class PingLayer {
   // die frühere laute Dauer-Animation. Die Expansion läuft in den ersten
   // ~800ms ab, danach nur noch dezent ausklingend.
   tick(now) {
+    const scale = getPingScale(); // pro Client einstellbar (VTT-Einstellungen)
     for (const { g, ping } of this.nodes.values()) {
       const age = now - ping.at;
-      const t = Math.min(1, age / 800);       // Expansions-Fortschritt
       const life = Math.min(1, age / PING_TTL_MS); // Gesamt-Ausblenden
       g.clear();
-      const r = 12 + t * 90;
-      g.circle(0, 0, r).stroke({ width: 4, color: ping.color, alpha: (1 - t) * 0.95 });
-      g.circle(0, 0, r * 0.5).stroke({ width: 3, color: ping.color, alpha: (1 - t) * 0.6 });
-      // Kleiner Punkt bleibt bis zum Ende der TTL sichtbar (markiert die Stelle).
-      g.circle(0, 0, 5).fill({ color: ping.color, alpha: (1 - life) * 0.9 });
+      // Weiche Ripple: zwei phasenversetzte Wellen, die aufsteigen und sanft
+      // ausklingen (schlicht wie der Loop-Puls). Größe/Deutlichkeit skaliert.
+      const baseR = 46 * scale;
+      for (const phase of [0, 0.5]) {
+        const tt = ((age / 900) + phase) % 1;
+        const r = baseR * (0.25 + tt * 0.85);
+        const a = (1 - tt) * (1 - life) * 0.85;
+        if (a <= 0.01) continue;
+        g.circle(0, 0, r).stroke({ width: 3 * scale, color: ping.color, alpha: a });
+      }
+      // Kleiner Kern markiert die exakte Stelle bis zum TTL-Ende.
+      g.circle(0, 0, 5 * scale).fill({ color: ping.color, alpha: (1 - life) * 0.85 });
     }
   }
 }

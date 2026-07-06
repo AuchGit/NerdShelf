@@ -79,6 +79,12 @@ export function getMemoryBrightness() { const v = parseFloat(read(MEMB_KEY, '0.4
 export function setMemoryBrightness(v) { write(MEMB_KEY, v); }
 export function useMemoryBrightness() { return usePref(getMemoryBrightness); }
 
+// ── Ping-Größe/Deutlichkeit (pro Client). 1 = Standard, 0.5…2.5. ──
+const PING_KEY = 'nerdshelf:vttPingScale';
+export function getPingScale() { const v = parseFloat(read(PING_KEY, '1')); return Number.isFinite(v) ? Math.min(2.5, Math.max(0.5, v)) : 1; }
+export function setPingScale(v) { write(PING_KEY, v); }
+export function usePingScale() { return usePref(getPingScale); }
+
 // ── connection transport: 'supabase' (cloud) or 'relay' (direct via GM PC) ──
 const CONN_KEY = 'nerdshelf:vttConnectionMode';
 const RELAY_KEY = 'nerdshelf:vttRelayUrl';
