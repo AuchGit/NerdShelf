@@ -592,7 +592,7 @@ export class VttRenderer {
       this._glowArmed = isDM && getDmCursorLight();
       this._setReveal(this._glowArmed && this.keys.alt);
       if (this._glowArmed) { const gs = map.grid.size * 4.2; this.cursorGlow.width = gs; this.cursorGlow.height = gs; }
-      this.updateMovementPreview(s, map, level, base, isDM);
+      this.updateMovementPreview();
       this.drawTargeting(levelTokens, map.grid);
       this.transitions.update(s.transitions, map.id, level, map.grid, isDM, s.ui.selectedTransitionId, seenTransIds);
       // Stairs/ladders are visible to everyone (players need to see where they
@@ -630,7 +630,7 @@ export class VttRenderer {
         // darkened/grayscale memory of explored terrain + remembered ghosts.
         this.fog.hide();
         // Invisible tokens are excluded from memory/ghosts too (truly hidden).
-        this.updateMemoryVision(map, visiblePolys, invisibleHidden ? filterObj(levelTokens, (t) => !invisibleHidden.has(t.id)) : levelTokens);
+        this.updateMemoryVision(map, visiblePolys, invisibleHidden ? filterObj(levelTokens, (t) => !invisibleHidden.has(t.id)) : levelTokens, level);
       } else if (playerDynamic) {
         // Dynamic fog but this viewer has NO vision source on this level (e.g.
         // a GM previewing the player view without a token here). Don't black the
@@ -654,7 +654,7 @@ export class VttRenderer {
   }
 
   // ---- explored-memory compositor (player + dynamic fog) ----
-  updateMemoryVision(map, polys, tokens) {
+  updateMemoryVision(map, polys, tokens, level) {
     // DM "Sicht zurücksetzen": when one of THIS client's own tokens has a newer
     // sightResetAt, wipe the accumulated explored memory (forces a fresh RT).
     const myId = getState().session.userId;
@@ -664,14 +664,18 @@ export class VttRenderer {
       this._exploredFor = null; // invalidate → recreated empty below
       this.tokenMemory = {};
     }
-    // (re)create the explored-accumulation RenderTexture per map
-    if (this._exploredFor !== map.id || !this._exploredRT) {
+    // Explored-Memory + gesehene Objekte/Ghosts sind PRO EBENE (Stockwerk) —
+    // sonst blutet der erkundete Bereich / gesehene Tokens von Ebene 1 auf
+    // Ebene 2 durch. Key = map.id|level; ein Ebenenwechsel baut frisch auf.
+    const levelKey = `${map.id}|${level ?? ''}`;
+    // (re)create the explored-accumulation RenderTexture per map+level
+    if (this._exploredFor !== levelKey || !this._exploredRT) {
       this._exploredRT?.destroy(true);
       this._exploredSprite?.destroy();
       this._exploredRT = RenderTexture.create({ width: map.width, height: map.height });
       this._exploredSprite = new Sprite(this._exploredRT);
       this.bgGray.addChild(this._exploredSprite); // mask lives under the masked sprite
-      this._exploredFor = map.id;
+      this._exploredFor = levelKey;
       this.tokenMemory = {};
       // Forget explored doors/transitions/light switches too (sight-reset or new map).
       this._seenWalls?.clear();
@@ -1940,29 +1944,11 @@ export class VttRenderer {
   // Draw the reachable-cells overlay for the active combatant on their turn.
   // Cells within the normal move budget are tinted accent; the additional cells
   // reachable WITH Dash (×2) are tinted amber, so the Dash range previews too.
-  updateMovementPreview(s, map, level, base, isDM) {
-    const g = this.moveLayer;
-    g.clear();
-    const init = s.initiative;
-    if (!init?.active || !init.order?.length) return;
-    const activeId = init.order[init.activeIndex]?.tokenId;
-    const token = activeId ? s.tokens[activeId] : null;
-    if (!token || token.mapId !== map.id || (token.level || base) !== level) return;
-    // Only the controller (or the DM) sees the active token's movement preview.
-    if (!isDM && !this.canControl(token)) return;
-    const speed = this.tokenSpeedFt(token);
-    if (!(speed > 0)) return;
-    // Normal speed by default; the extended (×2) Dash overlay only when the
-    // controller has the Dash preview active (DashToggle pill / hover).
-    const budget = s.ui.showDash ? speed * 2 : speed;
-    const reach = this.reachableCells(token, map, level, base, budget);
-    const sz = map.grid.size;
-    for (const [key, cost] of reach) {
-      const [col, row] = key.split(',').map(Number);
-      const dash = cost > speed;
-      g.rect(map.grid.offsetX + col * sz, map.grid.offsetY + row * sz, sz, sz)
-        .fill({ color: dash ? 0xffa53d : 0x6c8cff, alpha: dash ? 0.12 : 0.2 });
-    }
+  // Bewegungs-Vorschau (Reichweiten-Felder) auf Wunsch entfernt — die Ebene
+  // bleibt leer. Distanz/Bewegungskosten zeigt weiterhin das Lineal + der
+  // Live-Wert beim Token-Ziehen.
+  updateMovementPreview() {
+    this.moveLayer.clear();
   }
 
   // Movement cost (ft) along the ruler — pure impl lives in lib/wallGeometry.

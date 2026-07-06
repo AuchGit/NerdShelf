@@ -31,7 +31,6 @@ import TransitionEditor from './components/TransitionEditor';
 import ContextEditorDock from './components/ContextEditorDock';
 import InitiativeBar from './components/InitiativeBar';
 import TurnNotice from './components/TurnNotice';
-import DashToggle from './components/DashToggle';
 import TransitionPrompt from './components/TransitionPrompt';
 import JournalSidebar from './components/JournalSidebar';
 import HandoutOverlay from './components/HandoutOverlay';
@@ -444,7 +443,6 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
 
       {activeMap && <InitiativeBar />}
       {activeMap && <TurnNotice />}
-      {activeMap && <DashToggle />}
 
       {paused && (
         <div style={S.pauseBanner}>⏸ Session pausiert{isDM ? ' — nur du kannst noch bearbeiten' : ' — warte auf den DM'}</div>
