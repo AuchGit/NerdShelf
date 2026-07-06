@@ -273,17 +273,17 @@ export class LightLayer {
       const col = s.color || WARM;
       if (brightPx > 0) cbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly)));
       if (dimPx > 0) cdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly)));
-      // Colour unions. Auf Baselines, die das Band nicht anheben (z.B. helle
-      // Map), kommen NUR Lichter mit expliziter Custom-Farbe rein — der
-      // Standard-Warmton würde dort sonst als orangene Flächen über schon
-      // erkundeten Bereichen auftauchen. Im Live-Frame komplett übersprungen.
+      // Colour unions — AUCH im Live-Frame (jeden Frame frisch aufgebaut, daher
+      // keine Streifen mehr): so bleibt der warme Fackel-Schein beim Bewegen
+      // erhalten statt bläulich/neutral zu wirken. Auf hellen Baselines nur
+      // Custom-Farb-Lichter (sonst Warmton-Flächen über Erkundetem).
       const custom = !!s.color;
-      if (!live && brightPx > 0 && (BL < 2 || custom)) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
-      if (!live && dimPx > 0 && (BL < 1 || custom)) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
+      if (brightPx > 0 && (BL < 2 || custom)) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
+      if (dimPx > 0 && (BL < 1 || custom)) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
     }
     renderer.render({ container: cbContainer, target: covB, clear: true });
     renderer.render({ container: cdContainer, target: covD, clear: true });
-    if (!live) {
+    {
       renderer.render({ container: ccbContainer, target: covCB, clear: true });
       renderer.render({ container: ccdContainer, target: covCD, clear: true });
     }
@@ -396,14 +396,12 @@ export class LightLayer {
     }
     // deep-dark layer (already carved by the lights) composites on top
     scene.addChild(stamp(rts.dark, 'normal', 1));
-    // world-dark marking inside darkvision + coloured glow: NUR im vollen
-    // Compose (nicht im Live-Frame — sonst mischen sich veraltete Farb-/DV-
-    // Flächen mit der neuen Lichtposition zu farbigen Sichel-Streifen).
-    if (!live) {
-      if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
-      // Coloured glow: stamp the merged colour unions ONCE (overlaps already
-      // merged in the RT, so no brighter lens/rims). Auf Baselines, die das
-      // Band nicht anheben, bleibt der Farbton dezent (halbe Stärke).
+    // Darkvision-Wäsche NUR im vollen Compose (die stale DV-Position mischt
+    // sich sonst mit der neuen Lichtposition zu blauen Sicheln). Der warme
+    // Farb-Schein wird jeden Frame FRISCH gebaut → auch live gestempelt, damit
+    // die Fackel beim Bewegen nicht bläulich/neutral wirkt.
+    if (wantDV && !live) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
+    {
       const dimA = style === 'classic' ? 0.10 : 0.14;
       const brightA = style === 'classic' ? 0.16 : 0.22;
       scene.addChild(stamp(covCD, 'add', BL < 1 ? dimA : dimA * 0.5));
