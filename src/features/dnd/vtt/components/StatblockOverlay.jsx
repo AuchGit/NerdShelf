@@ -72,6 +72,17 @@ export default function StatblockOverlay({ tokenId, index = 0, isGM, userId, onC
   );
 }
 
+// Kompakte Verteidigungs-/Sinne-Zeile: farbiges Chip-Label + Wert.
+function DefRow({ label, val, tone }) {
+  if (!val) return null;
+  return (
+    <div style={S.defRow}>
+      <span style={{ ...S.defLabel, ...(tone ? { color: tone, borderColor: `color-mix(in srgb, ${tone} 45%, transparent)` } : null) }}>{label}</span>
+      <span style={S.defVal}>{val}</span>
+    </div>
+  );
+}
+
 // ── NPC: render the 5etools statblock compactly ──
 function NpcStatblock({ m }) {
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
@@ -89,29 +100,40 @@ function NpcStatblock({ m }) {
   ];
   return (
     <div style={S.body}>
-      <div style={S.sub}>{[size, type].filter(Boolean).join(' ')}{m.cr != null ? ` · CR ${crText(m.cr)}` : ''}</div>
-      <div style={S.line}><b>AC</b> {ac} &nbsp; <b>HP</b> {hp}</div>
-      {speed && <div style={S.line}><b>Speed</b> {speed}</div>}
+      {/* Typ + CR-Badge in einer Zeile, sofort erfassbar. */}
+      <div style={S.metaRow}>
+        <span style={S.sub}>{[size, type].filter(Boolean).join(' ') || '—'}</span>
+        {m.cr != null && <span style={S.crBadge}>CR {crText(m.cr)} · PB +{pbFromCr(m.cr)}</span>}
+      </div>
+      {/* Kern-Kampfwerte als Kacheln (AC / HP / Speed) — schnell scannbar. */}
+      <div style={S.statTiles}>
+        <div style={S.tile}><div style={S.tileLabel}>🛡 AC</div><div style={S.tileVal}>{ac}</div></div>
+        <div style={S.tile}><div style={S.tileLabel}>❤ HP</div><div style={S.tileVal}>{hp}</div></div>
+        {speed && <div style={S.tile}><div style={S.tileLabel}>👟 Speed</div><div style={S.tileValSm}>{speed}</div></div>}
+      </div>
       <div style={S.abilities}>
         {ABILITIES.map((a) => {
           const score = m[a];
           return (
             <div key={a} style={S.ab}>
               <div style={S.abName}>{a.toUpperCase()}</div>
-              <div style={S.abVal}>{score != null ? `${score} (${mod(score)})` : '—'}</div>
+              <div style={S.abVal}>{score != null ? score : '—'}</div>
+              <div style={S.abMod}>{score != null ? mod(score) : ''}</div>
             </div>
           );
         })}
       </div>
-      {m.save && <div style={S.lineSm}><b>Rettungswürfe</b> {bonusObj(m.save)}</div>}
-      {m.skill && <div style={S.lineSm}><b>Fertigkeiten</b> {bonusObj(m.skill)}</div>}
-      {m.vulnerable?.length ? <div style={S.lineSm}><b>Verwundbar</b> {typeList(m.vulnerable)}</div> : null}
-      {m.resist?.length ? <div style={S.lineSm}><b>Resistenzen</b> {typeList(m.resist)}</div> : null}
-      {m.immune?.length ? <div style={S.lineSm}><b>Immunitäten</b> {typeList(m.immune)}</div> : null}
-      {m.conditionImmune?.length ? <div style={S.lineSm}><b>Zustandsimmun</b> {typeList(m.conditionImmune)}</div> : null}
-      {(m.senses?.length || m.passive != null) ? <div style={S.lineSm}><b>Sinne</b> {sensesText(m)}</div> : null}
-      {m.languages?.length ? <div style={S.lineSm}><b>Sprachen</b> {m.languages.map(resolveTags).join(', ')}</div> : null}
-      <div style={S.lineSm}><b>Übungsbonus</b> +{pbFromCr(m.cr)}</div>
+      {/* Verteidigung / Sinne als kompakte Label-Zeilen mit Chip-Label. */}
+      <div style={S.defs}>
+        {m.save && <DefRow label="Rettungswürfe" val={bonusObj(m.save)} />}
+        {m.skill && <DefRow label="Fertigkeiten" val={bonusObj(m.skill)} />}
+        {m.vulnerable?.length ? <DefRow label="Verwundbar" val={typeList(m.vulnerable)} tone="#ff9e64" /> : null}
+        {m.resist?.length ? <DefRow label="Resistenzen" val={typeList(m.resist)} tone="#7dcfff" /> : null}
+        {m.immune?.length ? <DefRow label="Immunitäten" val={typeList(m.immune)} tone="#4ade80" /> : null}
+        {m.conditionImmune?.length ? <DefRow label="Zustandsimmun" val={typeList(m.conditionImmune)} tone="#4ade80" /> : null}
+        {(m.senses?.length || m.passive != null) ? <DefRow label="Sinne" val={sensesText(m)} /> : null}
+        {m.languages?.length ? <DefRow label="Sprachen" val={m.languages.map(resolveTags).join(', ')} /> : null}
+      </div>
       {/* Zauberwirken: Slots pro Grad + Zauberlisten (Klassen- + innate). */}
       {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => (
         <div key={`sc${si}`} style={S.section}>
@@ -332,15 +354,29 @@ const S = {
   head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--color-border)', userSelect: 'none' },
   close: { width: 26, height: 26, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 },
   body: { display: 'flex', flexDirection: 'column', gap: 8, fontSize: 'var(--fs-sm)' },
+  metaRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   sub: { color: 'var(--color-text-muted)', fontStyle: 'italic' },
+  crBadge: { flexShrink: 0, fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)' },
   line: { lineHeight: 1.5 },
   lineSm: { fontSize: 11, color: 'var(--color-text-muted)' },
+  // Kern-Kampfwerte als Kacheln.
+  statTiles: { display: 'flex', gap: 6 },
+  tile: { flex: 1, minWidth: 0, background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '5px 8px' },
+  tileLabel: { fontSize: 9, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 },
+  tileVal: { fontSize: 16, fontWeight: 800, lineHeight: 1.15 },
+  tileValSm: { fontSize: 11, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   abilities: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 },
-  ab: { background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '3px 0', textAlign: 'center' },
+  ab: { background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '4px 0 3px', textAlign: 'center' },
   abName: { fontSize: 9, color: 'var(--color-text-muted)', fontWeight: 700 },
-  abVal: { fontSize: 11, fontWeight: 700 },
+  abVal: { fontSize: 13, fontWeight: 800, lineHeight: 1.1 },
+  abMod: { fontSize: 10, fontWeight: 700, color: 'var(--color-accent)' },
+  // Verteidigung/Sinne: Chip-Label + Wert, kompakt & scannbar.
+  defs: { display: 'flex', flexDirection: 'column', gap: 3 },
+  defRow: { display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 11, lineHeight: 1.4 },
+  defLabel: { flexShrink: 0, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 5px' },
+  defVal: { color: 'var(--color-text)' },
   section: { borderTop: '1px solid var(--color-border)', paddingTop: 6 },
-  sectionTitle: { fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-accent)', marginBottom: 4 },
-  entry: { fontSize: 11, lineHeight: 1.45, marginBottom: 6, color: 'var(--color-text)' },
+  sectionTitle: { fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--color-accent)', marginBottom: 5 },
+  entry: { fontSize: 11, lineHeight: 1.5, marginBottom: 6, color: 'var(--color-text)' },
   sheetBtn: { marginTop: 4, padding: '6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
 };
