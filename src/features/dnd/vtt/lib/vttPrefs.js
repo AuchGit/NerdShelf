@@ -85,6 +85,18 @@ export function getPingScale() { const v = parseFloat(read(PING_KEY, '1')); retu
 export function setPingScale(v) { write(PING_KEY, v); }
 export function usePingScale() { return usePref(getPingScale); }
 
+// ── Ping-Dauer in Sekunden (pro Client, gilt für die EIGENEN Pings). 1…8. ──
+const PING_DUR_KEY = 'nerdshelf:vttPingDurationS';
+export function getPingDurationS() { const v = parseFloat(read(PING_DUR_KEY, '3')); return Number.isFinite(v) ? Math.min(8, Math.max(1, v)) : 3; }
+export function setPingDurationS(v) { write(PING_DUR_KEY, v); }
+export function usePingDurationS() { return usePref(getPingDurationS); }
+
+// ── DM-Ping-Farbe (pro Client). Default Gelb. ──
+const DM_PING_KEY = 'nerdshelf:vttDmPingColor';
+export function getDmPingColor() { return read(DM_PING_KEY, '#ffe066'); }
+export function setDmPingColor(v) { write(DM_PING_KEY, v); }
+export function useDmPingColor() { return usePref(getDmPingColor); }
+
 // ── connection transport: 'supabase' (cloud) or 'relay' (direct via GM PC) ──
 const CONN_KEY = 'nerdshelf:vttConnectionMode';
 const RELAY_KEY = 'nerdshelf:vttRelayUrl';

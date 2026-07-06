@@ -27,6 +27,15 @@ export default function GridControls({ map }) {
     }
   };
 
+  // Snap-Modus: Feldzahl (Spalten) direkt setzen → exakte Passung pro Achse.
+  const onCols = (cols) => {
+    const c = Math.max(1, Math.round(cols));
+    const sizeX = map.width / c;
+    const rows = Math.max(1, Math.round(map.height / sizeX));
+    const sizeY = map.height / rows;
+    patch({ snapMapToGrid: true, size: (sizeX + sizeY) / 2, sizeX, sizeY, offsetX: 0, offsetY: 0, cols: c, rows });
+  };
+
   const toggleSnap = (on) => {
     if (on) {
       const fit = fitGridToMap(map.width, map.height, g.size);
@@ -61,10 +70,21 @@ export default function GridControls({ map }) {
 
       {mode === 'slider' && (
         <>
-          <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
-            <input type="range" min="20" max={sliderMax} value={Math.min(sliderMax, Math.round(g.size))} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
-          </Row>
-          <label style={S.check} title="An: nur Zellgrößen, die die Karte EXAKT in ganze Felder teilen — keine halben Felder am Rand (Zellen minimal rechteckig).">
+          {g.snapMapToGrid ? (
+            // Snap AN: der Regler stellt die FELDZAHL (Spalten) in ganzen
+            // Schritten ein — jeder Schritt passt exakt (size = Breite/Spalten),
+            // keine halben Felder. So ist der Effekt eindeutig sichtbar.
+            <Row label={`Feldzahl: ${g.cols || Math.round(map.width / g.size)} × ${g.rows || Math.round(map.height / g.size)} Felder`}>
+              <input type="range" min="3" max={Math.max(6, Math.min(120, Math.round(map.width / 24)))}
+                value={g.cols || Math.round(map.width / g.size)}
+                onChange={(e) => onCols(+e.target.value)} style={{ width: '100%' }} />
+            </Row>
+          ) : (
+            <Row label={`Größe (${Math.round(g.size)} px) · ${cells}`}>
+              <input type="range" min="20" max={sliderMax} value={Math.min(sliderMax, Math.round(g.size))} onChange={(e) => onSize(+e.target.value)} style={{ width: '100%' }} />
+            </Row>
+          )}
+          <label style={S.check} title="An: nur Zellgrößen, die die Karte EXAKT in ganze Felder teilen — keine halben Felder am Rand (Zellen minimal rechteckig). Der Regler stellt dann die Feldzahl ein.">
             <input type="checkbox" checked={!!g.snapMapToGrid} onChange={(e) => toggleSnap(e.target.checked)} />
             Auf volle Felder snappen (keine halben Felder am Rand)
           </label>

@@ -4,6 +4,7 @@
 import { apply, applyLocal, getState } from './store';
 import { toast } from '../lib/toast';
 import { DEFAULT_GRID, PING_TTL_MS, DEFAULT_LIGHT, LIGHT_PRESETS, DISPOSITIONS } from '../lib/constants';
+import { getPingDurationS } from '../lib/vttPrefs';
 import { patchCombat } from '../sync/characterBinding';
 
 const uid = (p = '') => p + Math.random().toString(36).slice(2, 10);
@@ -517,8 +518,11 @@ export const endCombat = () => setInitiative({ order: [], activeIndex: 0, round:
 // ping so the whole table looks at the same spot.
 export function ping(mapId, x, y, color = '#ffe066', focus = false) {
   const id = uid('ping_');
-  apply({ type: 'ping/add', ping: { id, mapId, x, y, color, at: Date.now(), focus: !!focus } });
-  setTimeout(() => apply({ type: 'ping/expire', id }), PING_TTL_MS);
+  // Dauer aus der eigenen Client-Einstellung (fällt auf die Konstante zurück).
+  let ttl = PING_TTL_MS;
+  try { ttl = Math.round(getPingDurationS() * 1000); } catch { /* Default */ }
+  apply({ type: 'ping/add', ping: { id, mapId, x, y, color, at: Date.now(), focus: !!focus, ttl } });
+  setTimeout(() => apply({ type: 'ping/expire', id }), ttl);
 }
 
 // ---- ruler (broadcast so the table sees the DM's measurement) ----

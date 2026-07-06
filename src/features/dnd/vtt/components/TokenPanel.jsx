@@ -55,14 +55,17 @@ export default function TokenPanel() {
         {isDM ? (
           <>
             <Button size="sm" variant="secondary" onClick={() => spawn({ kind: 'npc', name: 'Monster', hp: 10, hpMax: 10 })}>+ NPC / Monster</Button>
-            {/* Player tokens: pick a specific member, or add everyone at once. */}
+            {/* Player tokens: pick a specific member, or add everyone at once.
+                Die Binding-Funktionen liefern die Token-Definition(en); das
+                Armen des Klick-zu-Platzierens passiert HIER (kein actions-Import
+                im Binding → kein Zirkel-Import, der das Platzieren blockierte). */}
             {unplaced.length > 0 && (
-              <Button size="sm" variant="secondary" onClick={() => spawnAllMemberTokens()}>
+              <Button size="sm" variant="secondary" onClick={() => { const d = spawnAllMemberTokens(); if (d) armTokenPlacement(d); }}>
                 + Alle Spieler ({unplaced.length})
               </Button>
             )}
             {unplaced.map((m) => (
-              <Button key={m.characterId} size="sm" variant="ghost" onClick={() => spawnMemberToken(m.characterId)}>
+              <Button key={m.characterId} size="sm" variant="ghost" onClick={() => { const d = spawnMemberToken(m.characterId); if (d) armTokenPlacement(d); }}>
                 + {m.name}
               </Button>
             ))}

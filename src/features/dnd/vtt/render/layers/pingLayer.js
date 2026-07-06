@@ -36,7 +36,8 @@ export class PingLayer {
     const scale = getPingScale(); // pro Client einstellbar (VTT-Einstellungen)
     for (const { g, ping } of this.nodes.values()) {
       const age = now - ping.at;
-      const life = Math.min(1, age / PING_TTL_MS); // Gesamt-Ausblenden
+      const ttl = ping.ttl || PING_TTL_MS;      // Dauer aus dem Ping (Sender-Einstellung)
+      const life = Math.min(1, age / ttl);       // Gesamt-Ausblenden
       g.clear();
       // Weiche Ripple: zwei phasenversetzte Wellen, die aufsteigen und sanft
       // ausklingen (schlicht wie der Loop-Puls). Größe/Deutlichkeit skaliert.

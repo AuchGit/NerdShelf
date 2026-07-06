@@ -24,7 +24,7 @@ import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
 import { WALL_TYPES, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
-import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
+import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getDmPingColor, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
 import { relayFullUrl } from '../lib/mapStorage';
 import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance } from '../lib/wallGeometry';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
@@ -1228,7 +1228,7 @@ export class VttRenderer {
   // Ping-Farbe = eigene Spielerfarbe (Token dieses Users auf der Map), beim
   // DM das DM-Gelb. Fällt auf ein Spieler-Blau zurück, falls kein Token da ist.
   myPingColor(s, map) {
-    if (s.session.role === 'dm') return '#ffe066';
+    if (s.session.role === 'dm') return getDmPingColor();
     const mine = Object.values(s.tokens).find((t) => t.mapId === map.id
       && (t.ownerId === s.session.userId || (t.characterId != null && String(t.characterId) === String(s.ui.myCharacterId))));
     return mine?.color || '#42a5f5';

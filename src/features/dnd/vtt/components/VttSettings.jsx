@@ -1,5 +1,6 @@
 // VTT "overall settings" — personal, per-device display prefs (localStorage via
 // vttPrefs). Opened from the gear in the VTT top bar. Not shared game state.
+import { useIsDM } from '../state/useVtt';
 import {
   useUiScale, setUiScale, useTokenBadgeScale, setTokenBadgeScale, useAcBadgeScale, setAcBadgeScale, useMemoryStyle, setMemoryStyle,
   useDice3d, setDice3d, useDmCursorLight, setDmCursorLight,
@@ -8,7 +9,7 @@ import {
   useTerrainOpacity, setTerrainOpacity, useTerrainPattern, setTerrainPattern,
   useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle, useDifficultStyle, setDifficultStyle,
   useInitiativeRollEnabled, setInitiativeRollEnabled,
-  usePingScale, setPingScale,
+  usePingScale, setPingScale, usePingDurationS, setPingDurationS, useDmPingColor, setDmPingColor,
   useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
 } from '../lib/vttPrefs';
 
@@ -28,6 +29,9 @@ export default function VttSettings({ onClose }) {
   const dice3d = useDice3d();
   const dmCursor = useDmCursorLight();
   const pingScale = usePingScale();
+  const pingDur = usePingDurationS();
+  const dmPingColor = useDmPingColor();
+  const isDM = useIsDM();
   const connMode = useConnectionMode();
   const relayUrl = useRelayUrl();
 
@@ -51,6 +55,14 @@ export default function VttSettings({ onClose }) {
           <Row label={`Ping-Größe (${Math.round(pingScale * 100)}%) — wie groß/deutlich Pings bei mir erscheinen`}>
             <input type="range" min="0.5" max="2.5" step="0.1" value={pingScale} onChange={(e) => setPingScale(+e.target.value)} style={{ width: '100%' }} />
           </Row>
+          <Row label={`Ping-Dauer (${pingDur.toFixed(1)} s) — wie lange meine eigenen Pings sichtbar bleiben`}>
+            <input type="range" min="1" max="8" step="0.5" value={pingDur} onChange={(e) => setPingDurationS(+e.target.value)} style={{ width: '100%' }} />
+          </Row>
+          {isDM && (
+            <Row label="DM-Ping-Farbe">
+              <input type="color" value={dmPingColor} onChange={(e) => setDmPingColor(e.target.value)} style={{ width: 44, height: 28, background: 'none', border: 'none', cursor: 'pointer' }} />
+            </Row>
+          )}
 
           <div style={S.section}>Erkundeter Bereich (erinnert, nicht sichtbar)</div>
           <Row label="Darstellung">

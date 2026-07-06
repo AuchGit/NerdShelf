@@ -21,9 +21,6 @@
 // (local only); the one GM spawn uses apply (broadcast + persist).
 
 import { apply, applyLocal, getState, subscribe } from '../state/store';
-// Laufzeit-Zyklus actions↔binding ist ok — beide Module definieren nur
-// Funktionen, der Aufruf passiert erst lange nach der Initialisierung.
-import { armTokenPlacement } from '../state/actions';
 import { listMembers, patchCombatState } from '../../character-builder/lib/campaigns';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
@@ -208,8 +205,9 @@ class CharacterBinding {
     }
   }
 
-  // GM: Klick-zu-Platzieren für ALLE unplatzierten Member — nacheinander,
-  // jedes Token wird auf das angeklickte Feld gesetzt (Queue im Placement).
+  // GM: Token-Definitionen ALLER unplatzierten Member (auf DIESER Map) —
+  // liefert das erste def mit __queue der restlichen; der Caller (TokenPanel)
+  // armt Klick-zu-Platzieren. Kein direkter actions-Import (Zyklus vermeiden).
   spawnMemberTokens() {
     const bound = boundCharIds();
     const defs = [];
@@ -218,19 +216,16 @@ class CharacterBinding {
       const def = this.memberTokenDef(m);
       if (def) defs.push(def);
     }
-    if (!defs.length) return;
+    if (!defs.length) return null;
     const [first, ...rest] = defs;
-    armTokenPlacement({ ...first, __queue: rest });
+    return { ...first, __queue: rest };
   }
 
-  // GM: spawn one specific member's bound token (no-op if already present).
-  // Klick-zu-Platzieren wie bei NPC/Monster-Tokens.
+  // GM: Token-Definition eines Members (no-op wenn schon auf dieser Map).
   spawnMemberToken(characterId) {
     if (boundCharIds().has(String(characterId))) return null;
     const m = this.members.find((x) => String(x.character_id) === String(characterId));
-    const def = m ? this.memberTokenDef(m) : null;
-    if (def) armTokenPlacement(def);
-    return null;
+    return m ? this.memberTokenDef(m) : null;
   }
 
   // Token-Definition eines Members (ohne Position — die kommt vom Klick).
