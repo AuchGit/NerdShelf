@@ -567,6 +567,17 @@ export function startCombat(tokenIds, tokensById, opts = {}) {
   setInitiative({ order, activeIndex: 0, round: 1, active: true });
 }
 export const endCombat = () => setInitiative({ order: [], activeIndex: 0, round: 1, active: false });
+// Weitere Tokens NACHTRÄGLICH zum laufenden Kampf hinzufügen (nur die, die
+// noch nicht drin sind). Behält die bestehende Reihenfolge/aktive Runde.
+export function addToCombat(tokenIds, tokensById) {
+  const init = getState().initiative || { order: [], activeIndex: 0, round: 1, active: false };
+  const have = new Set((init.order || []).map((o) => o.tokenId).filter(Boolean));
+  const add = tokenIds.map((id) => tokensById[id]).filter((t) => t && !have.has(t.id))
+    .map((t) => ({ id: 'ini_' + t.id, tokenId: t.id, name: t.name, value: 10 }));
+  if (!add.length) return;
+  const order = [...(init.order || []), ...add];
+  setInitiative({ ...init, order, active: true });
+}
 
 // ---- pings ----
 // `focus: true` (DM only, Ctrl+Alt-Klick) pans every player's camera to the

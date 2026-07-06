@@ -30,6 +30,7 @@ import Icon from './components/Icon';
 import TransitionEditor from './components/TransitionEditor';
 import ContextEditorDock from './components/ContextEditorDock';
 import InitiativeBar from './components/InitiativeBar';
+import InitiativeFab from './components/InitiativeFab';
 import TurnNotice from './components/TurnNotice';
 import TransitionPrompt from './components/TransitionPrompt';
 import JournalSidebar from './components/JournalSidebar';
@@ -215,6 +216,12 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const mkToggle = (setter) => (id) => setter((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   const toggleLeft = mkToggle(setOpenLeft);
   const toggleRight = mkToggle(setOpenRight);
+  // Der Initiative-FAB über der Karte öffnet die Initiative-Leiste rechts.
+  useEffect(() => {
+    const open = () => setOpenRight((ids) => (ids.includes('initiative') ? ids : [...ids, 'initiative']));
+    window.addEventListener('vtt:open-initiative', open);
+    return () => window.removeEventListener('vtt:open-initiative', open);
+  }, []);
 
   // Per-sidebar width overrides (drag the inner edge to widen; never below the
   // category's minimum width).
@@ -448,6 +455,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
 
       {activeMap && <InitiativeBar />}
       {activeMap && <TurnNotice />}
+      {activeMap && <InitiativeFab />}
 
       {paused && (
         <div style={S.pauseBanner}>⏸ Session pausiert{isDM ? ' — nur du kannst noch bearbeiten' : ' — warte auf den DM'}</div>
