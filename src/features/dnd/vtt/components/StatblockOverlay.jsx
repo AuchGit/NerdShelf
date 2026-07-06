@@ -103,8 +103,26 @@ function NpcStatblock({ m }) {
           );
         })}
       </div>
-      {m.senses?.length ? <div style={S.lineSm}><b>Senses</b> {m.senses.join(', ')}</div> : null}
-      {m.languages?.length ? <div style={S.lineSm}><b>Languages</b> {m.languages.join(', ')}</div> : null}
+      {m.save && <div style={S.lineSm}><b>Rettungswürfe</b> {bonusObj(m.save)}</div>}
+      {m.skill && <div style={S.lineSm}><b>Fertigkeiten</b> {bonusObj(m.skill)}</div>}
+      {m.vulnerable?.length ? <div style={S.lineSm}><b>Verwundbar</b> {typeList(m.vulnerable)}</div> : null}
+      {m.resist?.length ? <div style={S.lineSm}><b>Resistenzen</b> {typeList(m.resist)}</div> : null}
+      {m.immune?.length ? <div style={S.lineSm}><b>Immunitäten</b> {typeList(m.immune)}</div> : null}
+      {m.conditionImmune?.length ? <div style={S.lineSm}><b>Zustandsimmun</b> {typeList(m.conditionImmune)}</div> : null}
+      {(m.senses?.length || m.passive != null) ? <div style={S.lineSm}><b>Sinne</b> {sensesText(m)}</div> : null}
+      {m.languages?.length ? <div style={S.lineSm}><b>Sprachen</b> {m.languages.map(resolveTags).join(', ')}</div> : null}
+      <div style={S.lineSm}><b>Übungsbonus</b> +{pbFromCr(m.cr)}</div>
+      {/* Zauberwirken: Slots pro Grad + Zauberlisten (Klassen- + innate). */}
+      {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => (
+        <div key={`sc${si}`} style={S.section}>
+          <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
+          {spellcastingBlocks(sc).map((b, bi) => (
+            <div key={bi} style={S.entry}>
+              {b.label && <span style={{ fontWeight: 700 }}>{b.label}: </span>}{b.text}
+            </div>
+          ))}
+        </div>
+      ))}
       {sections.map(([title, arr]) => (arr?.length ? (
         <div key={title} style={S.section}>
           <div style={S.sectionTitle}>{title}</div>
@@ -189,6 +207,69 @@ function speedText(sp) {
 function crText(cr) { return typeof cr === 'object' ? (cr.cr ?? '—') : String(cr); }
 function mod(score) { const m = Math.floor((score - 10) / 2); return (m >= 0 ? '+' : '') + m; }
 function fmt(n) { const v = Number(n) || 0; return (v >= 0 ? '+' : '') + v; }
+// Proficiency bonus aus der CR (5e-Tabelle) ableiten, wenn nicht angegeben.
+function pbFromCr(cr) {
+  const c = typeof cr === 'object' ? (cr.cr ?? cr) : cr;
+  const n = c === '1/8' ? 0.125 : c === '1/4' ? 0.25 : c === '1/2' ? 0.5 : parseFloat(c);
+  if (!Number.isFinite(n)) return 2;
+  return Math.max(2, Math.floor((Math.max(0, n) - 1) / 4) + 2);
+}
+// {str:"+5",…} → "STR +5, DEX +3". Speichern/Skills sind so kodiert.
+function bonusObj(o) {
+  if (!o || typeof o !== 'object') return '';
+  return Object.entries(o).map(([k, v]) => `${k[0].toUpperCase()}${k.slice(1)} ${resolveTags(String(v))}`).join(', ');
+}
+// resist/immune/vulnerable/conditionImmune: Array aus Strings ODER
+// {resist:[…],note} / {immune:[…]} / {special:"…"} → lesbare Liste.
+function typeList(arr) {
+  if (!Array.isArray(arr)) return '';
+  const out = [];
+  for (const e of arr) {
+    if (typeof e === 'string') out.push(resolveTags(e));
+    else if (e && typeof e === 'object') {
+      const inner = e.resist || e.immune || e.vulnerable || e.conditionImmune || [];
+      const list = inner.map((x) => (typeof x === 'string' ? resolveTags(x) : '')).filter(Boolean).join(', ');
+      const pre = e.preNote ? `${resolveTags(e.preNote)} ` : '';
+      const note = e.note ? ` ${resolveTags(e.note)}` : '';
+      out.push(`${pre}${list}${note}`.trim() || (e.special ? resolveTags(e.special) : ''));
+    }
+  }
+  return out.filter(Boolean).join('; ');
+}
+// Sinne inkl. passiver Wahrnehmung. Darkvision & Co. stehen in m.senses.
+function sensesText(m) {
+  const parts = (m.senses || []).map(resolveTags);
+  if (m.passive != null) parts.push(`passive Perception ${m.passive}`);
+  return parts.join(', ');
+}
+// Spellcasting-Trait (Klassenzauber + innate) → strukturierte Blöcke:
+//   Kopftext, Cantrips (at will), Level-Slots + Spells, At-will/N/day innate.
+function spellcastingBlocks(sc) {
+  const blocks = [];
+  const spellLine = (label, spells) => spells?.length
+    ? { label, text: spells.map((s) => resolveTags(String(s))).join(', ') } : null;
+  if (Array.isArray(sc.headerEntries)) {
+    const t = flattenEntries(sc.headerEntries);
+    if (t) blocks.push({ label: '', text: t });
+  }
+  // Slot-Zauber pro Grad (0 = Cantrips „at will").
+  for (const lvl of Object.keys(sc.spells || {}).sort()) {
+    const g = sc.spells[lvl];
+    if (!g) continue;
+    const label = lvl === '0' ? 'Zaubertricks (nach Belieben)'
+      : `Grad ${lvl}${g.slots ? ` (${g.slots} ${g.slots === 1 ? 'Slot' : 'Slots'})` : g.slots === 0 ? ' (0 Slots)' : ''}`;
+    const b = spellLine(label, g.spells);
+    if (b) blocks.push(b);
+  }
+  // Innate: at-will + N/day.
+  const w = spellLine('Nach Belieben', sc.will); if (w) blocks.push(w);
+  for (const key of Object.keys(sc.daily || {})) {
+    const n = key.replace('e', ''); const each = key.endsWith('e') ? ' je' : '';
+    const b = spellLine(`${n}/Tag${each}`, sc.daily[key]); if (b) blocks.push(b);
+  }
+  const r = spellLine('Ritual', sc.ritual); if (r) blocks.push(r);
+  return blocks;
+}
 
 // Flatten 5etools entries (strings + nested objects) to plain text, stripping
 // 5etools-Entries → lesbarer Text. Verschachtelte entries/items/Tabellen werden
