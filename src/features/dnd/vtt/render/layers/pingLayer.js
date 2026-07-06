@@ -27,16 +27,30 @@ export class PingLayer {
   }
 
   // Called every frame by the renderer ticker to animate active pings.
+  // Deutlich sichtbar: größere, dickere Ringe mit dunkler Kontur-Unterlage
+  // (liest sich auf hellem UND dunklem Grund), heller Mittelpunkt + Fadenkreuz.
   tick(now) {
     for (const { g, ping } of this.nodes.values()) {
       const t = Math.min(1, (now - ping.at) / PING_TTL_MS);
-      const baseR = 30;
+      const baseR = 46;
+      const fade = 1 - t; // Gesamt-Ausblenden über die TTL
       g.clear();
-      // two expanding rings, offset in phase
-      for (const phase of [0, 0.5]) {
+      // Drei expandierende Ringe, phasenversetzt — je mit dunkler Unterlage.
+      for (const phase of [0, 0.33, 0.66]) {
         const tt = (t + phase) % 1;
-        g.circle(0, 0, baseR * (0.4 + tt)).stroke({ width: 4, color: ping.color, alpha: (1 - tt) * 0.9 });
+        const r = baseR * (0.35 + tt);
+        const a = (1 - tt) * fade;
+        g.circle(0, 0, r).stroke({ width: 7, color: 0x000000, alpha: a * 0.5 });
+        g.circle(0, 0, r).stroke({ width: 4, color: ping.color, alpha: a });
       }
+      // Fadenkreuz + heller Kern markieren den exakten Punkt.
+      const cross = 16;
+      for (const [x1, y1, x2, y2] of [[-cross, 0, cross, 0], [0, -cross, 0, cross]]) {
+        g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 5, color: 0x000000, alpha: fade * 0.5 });
+        g.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 2.5, color: ping.color, alpha: fade });
+      }
+      g.circle(0, 0, 5).fill({ color: 0xffffff, alpha: fade });
+      g.circle(0, 0, 5).stroke({ width: 2, color: ping.color, alpha: fade });
     }
   }
 }

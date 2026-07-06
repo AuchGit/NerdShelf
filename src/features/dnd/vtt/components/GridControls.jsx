@@ -19,7 +19,7 @@ export default function GridControls({ map }) {
   const onSize = (size) => {
     if (g.snapMapToGrid) {
       const fit = fitGridToMap(map.width, map.height, size);
-      patch({ size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY });
+      patch({ size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
     } else {
       patch({ size });
     }
@@ -28,13 +28,15 @@ export default function GridControls({ map }) {
   const toggleSnap = (on) => {
     if (on) {
       const fit = fitGridToMap(map.width, map.height, g.size);
-      patch({ snapMapToGrid: true, size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY });
+      patch({ snapMapToGrid: true, size: fit.size, offsetX: fit.offsetX, offsetY: fit.offsetY, cols: fit.cols, rows: fit.rows });
     } else {
       patch({ snapMapToGrid: false });
     }
   };
 
-  const cells = `${Math.round(map.width / g.size)} × ${Math.round(map.height / g.size)} Felder`;
+  const cells = g.snapMapToGrid && g.cols
+    ? `${g.cols} × ${g.rows} Felder`
+    : `${Math.round(map.width / g.size)} × ${Math.round(map.height / g.size)} Felder`;
   // Slider-Obergrenze an der Map-Größe orientieren: große (hochauflösende)
   // Maps brauchen entsprechend große Zellen — ein fixes 200px-Maximum machte
   // Grid-Vergrößern und „auf volle Felder snappen" dort unbenutzbar.

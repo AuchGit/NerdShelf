@@ -76,17 +76,20 @@ export function gridDistanceFt(a, b, grid, euclidean = false) {
 export function fitGridToMap(mapWidth, mapHeight, desiredSize) {
   const cols = Math.max(1, Math.round(mapWidth / desiredSize));
   const rows = Math.max(1, Math.round(mapHeight / desiredSize));
-  // Use a single square size; bias to width, then verify rows aren't wildly off.
-  const sizeByW = mapWidth / cols;
-  const sizeByH = mapHeight / rows;
-  // Pick the size that keeps cells closest to square against both dimensions.
-  const size = (sizeByW + sizeByH) / 2;
+  // Quadratische Zellen (eine Größe) — der Durchschnitt hält sie möglichst
+  // nah am Wunsch beider Achsen.
+  const size = (mapWidth / cols + mapHeight / rows) / 2;
+  // WICHTIG: `cols`/`rows` = die ANZAHL VOLLER Zellen (aus dem Runden oben),
+  // NICHT round(mapWidth/size) — sonst fällt am Rand doch wieder eine halbe
+  // Zelle an. Der Rest (map − cols·size) wird als Offset zentriert, kann
+  // negativ sein (Gitter ragt minimal über den Bildrand — dann sind alle
+  // sichtbaren Zellen voll, keine halben am Rand).
   return {
     size,
-    offsetX: 0,
-    offsetY: 0,
-    cols: Math.round(mapWidth / size),
-    rows: Math.round(mapHeight / size),
+    offsetX: (mapWidth - cols * size) / 2,
+    offsetY: (mapHeight - rows * size) / 2,
+    cols,
+    rows,
   };
 }
 

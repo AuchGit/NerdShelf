@@ -188,6 +188,15 @@ export class LightLayer {
     }
     this._sig = sig;
 
+    // Live-Frame (Drag/Glide): NUR die weißen Erase-Unionen (covB/covD)
+    // werden neu gebaut, damit sich der Lichtpool sichtbar mitbewegt. Die
+    // FARB-Unionen (covCB/covCD) und die Darkvision-Wäsche (covDV/covDVD)
+    // werden weder neu gerechnet NOCH gestempelt — sonst entstehen aus
+    // veralteten Farb-/DV-Flächen gemischt mit der neuen Lichtposition die
+    // farbigen Sichel-Streifen. Farbe + DV schnappen im Final-Pass sauber
+    // zurück. Spart zusätzlich mehrere RT-Passes pro Frame.
+    const live = !!opts.__live;
+
     const rts = this._getRtSet(w, h, wantLow ? resLow : 1, wantLow);
     if (this.sprite.texture !== rts.main) this.sprite.texture = rts.main;
     this.sprite.position.set(ox, oy);
@@ -260,15 +269,17 @@ export class LightLayer {
       // Colour unions. Auf Baselines, die das Band nicht anheben (z.B. helle
       // Map), kommen NUR Lichter mit expliziter Custom-Farbe rein — der
       // Standard-Warmton würde dort sonst als orangene Flächen über schon
-      // erkundeten Bereichen auftauchen.
+      // erkundeten Bereichen auftauchen. Im Live-Frame komplett übersprungen.
       const custom = !!s.color;
-      if (brightPx > 0 && (BL < 2 || custom)) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
-      if (dimPx > 0 && (BL < 1 || custom)) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
+      if (!live && brightPx > 0 && (BL < 2 || custom)) ccbContainer.addChild(reach(cx, cy, brightPx, mkMaskFrom(brightPoly), col));
+      if (!live && dimPx > 0 && (BL < 1 || custom)) ccdContainer.addChild(reach(cx, cy, dimPx, mkMaskFrom(poly), col));
     }
     renderer.render({ container: cbContainer, target: covB, clear: true });
     renderer.render({ container: cdContainer, target: covD, clear: true });
-    renderer.render({ container: ccbContainer, target: covCB, clear: true });
-    renderer.render({ container: ccdContainer, target: covCD, clear: true });
+    if (!live) {
+      renderer.render({ container: ccbContainer, target: covCB, clear: true });
+      renderer.render({ container: ccdContainer, target: covCD, clear: true });
+    }
     cbContainer.destroy({ children: true });
     cdContainer.destroy({ children: true });
     ccbContainer.destroy({ children: true });
@@ -297,9 +308,11 @@ export class LightLayer {
     } // end coverageChanged
 
     // Darkvision coverage: union of each viewer-token's reach disc, clipped to
-    // its line of sight (so it can't see through walls). Rebuilt every time (it
-    // follows a moving token) but it's cheap — a few masked discs.
-    if (wantDV) {
+    // its line of sight (so it can't see through walls). Im Live-Frame NICHT
+    // neu gebaut — die DV-Position steht auf dem Stand des letzten vollen
+    // Reconciles, gemischt mit der neuen Lichtposition ergäbe das die blauen
+    // Sichel-Streifen. DV schnappt im Final-/nächsten-Op-Reconcile sauber nach.
+    if (wantDV && !live) {
       const dv = new Container();
       for (const d of darkvision) {
         if (!d || !(d.radiusPx > 0)) continue;
@@ -351,7 +364,7 @@ export class LightLayer {
     // darkvision likewise lifts one step within its range.
     dark.addChild(stamp(covD, 'erase', liftToDim));
     dark.addChild(stamp(covB, 'erase', 1));
-    if (wantDV) dark.addChild(stamp(covDV, 'erase', liftToDim));
+    if (wantDV && !live) dark.addChild(stamp(covDV, 'erase', liftToDim));
     renderer.render({ container: dark, target: rts.dark, clear: true });
     dark.destroy({ children: true });
 
@@ -372,20 +385,18 @@ export class LightLayer {
     if (baseA > 0) {
       if (BL < 1) scene.addChild(stamp(covD, 'erase', dimErase));
       scene.addChild(stamp(covB, 'erase', 1));
-      if (wantDV && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
+      if (wantDV && !live && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
     // deep-dark layer (already carved by the lights) composites on top
     scene.addChild(stamp(rts.dark, 'normal', 1));
-    // world-dark marking inside darkvision: cool desaturating wash where the
-    // viewer sees only thanks to darkvision (Schleichen!). Deutlich sichtbar,
-    // damit Spieler sofort erkennen "hier ist es eigentlich dunkel".
-    if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
-    // Coloured glow: stamp the merged colour unions ONCE (overlaps already merged
-    // in the RT, so no brighter lens/rims where lights overlap). Auf Baselines,
-    // die das Band eigentlich nicht anheben, bleibt der Farbton mit halber
-    // Stärke LEICHT sichtbar — farbiges Licht soll auch auf hellen Maps lesbar
-    // sein, nur eben dezent.
-    {
+    // world-dark marking inside darkvision + coloured glow: NUR im vollen
+    // Compose (nicht im Live-Frame — sonst mischen sich veraltete Farb-/DV-
+    // Flächen mit der neuen Lichtposition zu farbigen Sichel-Streifen).
+    if (!live) {
+      if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
+      // Coloured glow: stamp the merged colour unions ONCE (overlaps already
+      // merged in the RT, so no brighter lens/rims). Auf Baselines, die das
+      // Band nicht anheben, bleibt der Farbton dezent (halbe Stärke).
       const dimA = style === 'classic' ? 0.10 : 0.14;
       const brightA = style === 'classic' ? 0.16 : 0.22;
       scene.addChild(stamp(covCD, 'add', BL < 1 ? dimA : dimA * 0.5));
