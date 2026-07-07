@@ -12,6 +12,15 @@ import { loadSpellList } from '../../character-builder/lib/dataLoader';
 import { deriveSpellArea } from '../../character-builder/lib/spellEffectParser';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { Pinnable } from './tooltip/Tooltips';
+import { rollAttack, rollDamage } from '../lib/rollDice';
+
+// First rollable damage in a spell's entries ({@damage XdY} / {@scaledamage}).
+function spellDamageFormula(sp) {
+  const raw = JSON.stringify(sp?.entries || []);
+  const m = /\{@(?:damage|dice) ([^}|]+)/.exec(raw);
+  if (m) { const f = m[1].replace(/\s+/g, ''); if (/\d*d\d+/.test(f)) return f; }
+  return null;
+}
 
 export default function SpellsSidebar() {
   const myId = useVtt((s) => s.ui.myCharacterId);
