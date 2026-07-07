@@ -40,10 +40,10 @@ function useSpellCatalog(edition = '5e') {
 }
 
 const SCHOOL = {
-  A: 'Bannmagie', C: 'Beschwörung', D: 'Erkenntnis', E: 'Verzauberung',
-  V: 'Hervorrufung', I: 'Illusion', N: 'Nekromantie', T: 'Verwandlung', P: 'Psionik',
+  A: 'Abjuration', C: 'Conjuration', D: 'Divination', E: 'Enchantment',
+  V: 'Evocation', I: 'Illusion', N: 'Necromancy', T: 'Transmutation', P: 'Psionic',
 };
-const SPELL_LEVEL_LABEL = (lvl) => (lvl === 0 ? 'Zaubertrick' : `Grad ${lvl}`);
+const SPELL_LEVEL_LABEL = (lvl) => (lvl === 0 ? 'Cantrip' : `Level ${lvl}`);
 // Zaubername aus einem Statblock-Eintrag säubern: {@spell Name|Quelle} → "Name".
 function cleanSpellName(s) {
   return resolveTags(String(s || '')).replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -152,11 +152,11 @@ function actionRolls(e) {
     const formula = m[1].replace(/\s+/g, '');
     if (/\d*d\d+/.test(formula)) out.damages.push({ formula, type: m[2] || '' });
   }
-  const rc = /\{@recharge ?(\d*)\}/.exec(raw); if (rc) out.recharge = rc[1] ? `Aufladen ${rc[1]}–6` : 'Aufladen 6';
+  const rc = /\{@recharge ?(\d*)\}/.exec(raw); if (rc) out.recharge = rc[1] ? `Recharge ${rc[1]}–6` : 'Recharge 6';
   const us = /(\d+)\/(day|short rest|long rest|turn)/i.exec(raw);
   if (us) {
     out.usesN = +us[1];
-    out.usesLabel = `${us[1]}/${us[2].toLowerCase().replace('day', 'Tag').replace('short rest', 'Kurze Rast').replace('long rest', 'Lange Rast').replace('turn', 'Zug')}`;
+    out.usesLabel = `${us[1]}/${us[2].toLowerCase().replace('short rest', 'short rest').replace('long rest', 'long rest')}`;
   }
   return out;
 }
@@ -169,7 +169,7 @@ function ActionEntry({ e, uid, usage, setUsage }) {
   const r = actionRolls(e);
   const hasBadges = r.atk || r.damages.length || r.dc || r.recharge || r.usesN;
   // Name auflösen (Tags) und den Aufladen-Zusatz raus (steht als Badge).
-  const name = resolveTags(String(e?.name || '')).replace(/\s*\(Aufladen[^)]*\)/i, '').replace(/\s*\(Recharge[^)]*\)/i, '').trim();
+  const name = resolveTags(String(e?.name || '')).replace(/\s*\(Recharge[^)]*\)/i, '').replace(/\s*\(Aufladen[^)]*\)/i, '').trim();
   const rcUsed = !!usage[`${uid}:rc`];
   const usesUsed = usage[`${uid}:uses`] || 0;
   const toggleRc = () => setUsage((u) => ({ ...u, [`${uid}:rc`]: !u[`${uid}:rc`] }));
@@ -195,7 +195,7 @@ function ActionEntry({ e, uid, usage, setUsage }) {
               })}
             </span>
           )}
-          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, r.atk, `${e.name}: Angriff`)}>🎲 {r.atk}</button>}
+          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, r.atk, `${e.name}: Angriff`)}>{r.atk}</button>}
           {r.dc && <span style={S.badgeSave}>DC {r.dc}{r.save ? ` ${r.save}` : ''}</span>}
           {r.damages.map((d, i) => (
             <button key={i} style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, d.formula, `${e.name}: Schaden`)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
@@ -221,7 +221,7 @@ function DefRow({ label, val, tone }) {
 // Eine Zauber-Zeile in der NPC-Übersicht: Name + Meta (Grad · Schule · Zeit ·
 // Reichweite) + passende Pills (SG/Zauberangriff aus dem Statblock, Schaden zum
 // Würfeln). Klick auf den Namen klappt die Beschreibung auf.
-function SpellRow({ name, sp, scDc, scAtk, scAbi }) {
+function SpellRow({ name, sp, scDc, scAtk }) {
   const [open, setOpen] = useState(false);
   const clean = cleanSpellName(name);
   const needsSave = Array.isArray(sp?.savingThrow) && sp.savingThrow.length > 0;
@@ -243,8 +243,8 @@ function SpellRow({ name, sp, scDc, scAtk, scAbi }) {
         <span style={S.badges}>
           {sp?.concentration && <span style={S.pillMini} title="Konzentration">K</span>}
           {sp?.meta?.ritual && <span style={S.pillMini} title="Ritual">R</span>}
-          {needsSave && scDc && <span style={S.badgeSave} title="Rettungswurf-SG aus dem Statblock">{scAbi ? '' : ''}SG {scDc}{sp.savingThrow[0] ? ` ${sp.savingThrow[0].slice(0, 3).toUpperCase()}` : ''}</span>}
-          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, `${clean}: Zauberangriff`)}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {needsSave && scDc && <span style={S.badgeSave} title="Save DC (aus dem Statblock)">DC {scDc}{sp.savingThrow[0] ? ` ${sp.savingThrow[0].slice(0, 3).toUpperCase()}` : ''}</span>}
+          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, `${clean}: Zauberangriff`)}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
           {dmg && <button style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, dmg, `${clean}: Schaden`)}>{dmg}</button>}
         </span>
       </div>
@@ -275,10 +275,10 @@ function NpcSpellcasting({ sc, catalog }) {
   return (
     <div style={S.section}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-        <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
+        <div style={S.sectionTitle}>{sc.name || 'Spellcasting'}</div>
         <span style={S.badges}>
-          {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}SG {scDc}</span>}
-          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}DC {scDc}</span>}
+          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, 'Zauberangriff')}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
         </span>
       </div>
       {headerText && <div style={{ ...S.entryText, marginBottom: 4 }}>{headerText}</div>}
@@ -287,7 +287,7 @@ function NpcSpellcasting({ sc, catalog }) {
           <div style={S.spGroupLabel}>{g.label}</div>
           {g.spells.map((nm, si) => (
             <SpellRow key={si} name={nm} sp={catalog ? catalog.get(cleanSpellName(nm).toLowerCase()) : null}
-              scDc={scDc} scAtk={scAtk} scAbi={scAbi} />
+              scDc={scDc} scAtk={scAtk} />
           ))}
         </div>
       ))}
@@ -310,7 +310,7 @@ function NpcBottomBar({ m, token }) {
     <div style={S.bar}>
       <div style={S.barRow}>
         <div style={S.barHp}>
-          <span style={S.barLbl}>❤ TP</span>
+          <span style={S.barLbl}>HP</span>
           <button style={S.hpBtn} onClick={() => nudge(-5)} title="−5">−5</button>
           <button style={S.hpBtn} onClick={() => nudge(-1)} title="−1">−</button>
           <input style={S.hpInput} value={hp ?? ''} inputMode="numeric"
@@ -319,7 +319,7 @@ function NpcBottomBar({ m, token }) {
           <button style={S.hpBtn} onClick={() => nudge(1)} title="+1">+</button>
           <button style={S.hpBtn} onClick={() => nudge(5)} title="+5">+5</button>
         </div>
-        <div style={S.barAc}><span style={S.barLbl}>🛡 RK</span><b>{acN}</b></div>
+        <div style={S.barAc}><span style={S.barLbl}>AC</span><b>{acN}</b></div>
       </div>
       <div style={S.barSaves}>
         {ABILITIES.map((a) => {
@@ -330,8 +330,8 @@ function NpcBottomBar({ m, token }) {
           const prof = explicit != null;
           return (
             <button key={a} style={{ ...S.saveBtn, ...(prof ? S.saveBtnProf : null) }}
-              title={`${a.toUpperCase()}-Rettungswurf${prof ? ' (geübt)' : ''} würfeln — Shift: Vorteil · Strg: Nachteil`}
-              onClick={(ev) => rollSave(ev, clean, `${a.toUpperCase()}-Rettungswurf`)}>
+              title={`${a.toUpperCase()} Save${prof ? ' (proficient)' : ''} — Shift: Vorteil · Strg: Nachteil`}
+              onClick={(ev) => rollSave(ev, clean, `${a.toUpperCase()} Save`)}>
               <span style={S.saveAb}>{a.toUpperCase()}</span>
               <span style={S.saveVal}>{clean.startsWith('-') ? clean : `+${clean.replace('+', '')}`}</span>
             </button>
@@ -356,11 +356,7 @@ function NpcStatblock({ m, token }) {
   };
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
   const type = typeof m.type === 'string' ? m.type : (m.type?.type || '');
-  // AC/HP getrennt in "große Zahl" + "kleiner Zusatz", damit die Kacheln auch
-  // bei langen Quellen ("+2 Studded Leather …") ordentlich aussehen.
-  const acN = acNum(m.ac); const acNote = acFrom(m.ac);
-  const hpN = m.hp?.average != null ? String(m.hp.average) : '—';
-  const hpNote = m.hp?.formula || '';
+  // AC/HP stehen in der bearbeitbaren Fußleiste (NpcBottomBar), hier oben nicht.
   const speed = speedText(m.speed);
   const lg = m._legendaryGroup || null;
   const sections = [
@@ -377,12 +373,13 @@ function NpcStatblock({ m, token }) {
         <span style={S.sub}>{[size, type].filter(Boolean).join(' ') || '—'}</span>
         {m.cr != null && <span style={S.crBadge}>CR {crText(m.cr)} · PB +{pbFromCr(m.cr)}</span>}
       </div>
-      {/* Kern-Kampfwerte als Kacheln (AC / HP / Speed) — schnell scannbar. */}
-      <div style={S.statTiles}>
-        <div style={S.tile}><div style={S.tileLabel}>🛡 AC</div><div style={S.tileVal}>{acN}</div>{acNote && <div style={S.tileNote}>{acNote}</div>}</div>
-        <div style={S.tile}><div style={S.tileLabel}>❤ HP</div><div style={S.tileVal}>{hpN}</div>{hpNote && <div style={S.tileNote}>{hpNote}</div>}</div>
-        {speed && <div style={S.tile}><div style={S.tileLabel}>👟 Speed</div><div style={S.tileValSm}>{speed}</div></div>}
-      </div>
+      {/* AC/HP stehen in der bearbeitbaren Fußleiste — hier nur Speed, sonst
+          doppelt. */}
+      {speed && (
+        <div style={S.statTiles}>
+          <div style={S.tile}><div style={S.tileLabel}>Speed</div><div style={S.tileValSm}>{speed}</div></div>
+        </div>
+      )}
       <div style={S.abilities}>
         {ABILITIES.map((a) => {
           const score = m[a];
@@ -395,16 +392,16 @@ function NpcStatblock({ m, token }) {
           );
         })}
       </div>
-      {/* Verteidigung / Sinne als kompakte Label-Zeilen mit Chip-Label. */}
+      {/* Verteidigung / Sinne als kompakte Label-Zeilen (Rettungswürfe stehen in
+          der Fußleiste → hier nicht doppeln). Englische Begriffe. */}
       <div style={S.defs}>
-        {m.save && <DefRow label="Rettungswürfe" val={bonusObj(m.save)} />}
-        {m.skill && <DefRow label="Fertigkeiten" val={bonusObj(m.skill)} />}
-        {m.vulnerable?.length ? <DefRow label="Verwundbar" val={typeList(m.vulnerable)} tone="#ff9e64" /> : null}
-        {m.resist?.length ? <DefRow label="Resistenzen" val={typeList(m.resist)} tone="#7dcfff" /> : null}
-        {m.immune?.length ? <DefRow label="Immunitäten" val={typeList(m.immune)} tone="#4ade80" /> : null}
-        {m.conditionImmune?.length ? <DefRow label="Zustandsimmun" val={typeList(m.conditionImmune)} tone="#4ade80" /> : null}
-        {(m.senses?.length || m.passive != null) ? <DefRow label="Sinne" val={sensesText(m)} /> : null}
-        {m.languages?.length ? <DefRow label="Sprachen" val={m.languages.map(resolveTags).join(', ')} /> : null}
+        {m.skill && <DefRow label="Skills" val={bonusObj(m.skill)} />}
+        {m.vulnerable?.length ? <DefRow label="Vulnerable" val={typeList(m.vulnerable)} tone="#ff9e64" /> : null}
+        {m.resist?.length ? <DefRow label="Resistances" val={typeList(m.resist)} tone="#7dcfff" /> : null}
+        {m.immune?.length ? <DefRow label="Immunities" val={typeList(m.immune)} tone="#4ade80" /> : null}
+        {m.conditionImmune?.length ? <DefRow label="Cond. Immun" val={typeList(m.conditionImmune)} tone="#4ade80" /> : null}
+        {(m.senses?.length || m.passive != null) ? <DefRow label="Senses" val={sensesText(m)} /> : null}
+        {m.languages?.length ? <DefRow label="Languages" val={m.languages.map(resolveTags).join(', ')} /> : null}
       </div>
       {/* Zauberwirken: echte Übersicht mit Katalogdaten (Grad/Schule/Zeit/
           Reichweite/Schaden) + Statblock-Pills (SG/Zauberangriff). */}
@@ -419,7 +416,7 @@ function NpcStatblock({ m, token }) {
       ) : null))}
       {token && (
         <div style={S.section}>
-          <div style={S.sectionTitle}>Notiz</div>
+          <div style={S.sectionTitle}>Notes</div>
           <textarea defaultValue={token.combat?.notes || ''} placeholder="Notiz zu diesem Token…"
             onBlur={(e) => updateToken(token.id, { combat: { ...(token.combat || {}), notes: e.target.value } })}
             style={S.noteArea} />
@@ -482,10 +479,6 @@ function acNum(ac) {
   if (Array.isArray(ac)) { const f = ac[0]; return String(typeof f === 'number' ? f : (f?.ac ?? '—')); }
   return typeof ac === 'number' ? String(ac) : '—';
 }
-function acFrom(ac) {
-  if (Array.isArray(ac)) { const f = ac[0]; if (f?.from?.length) return f.from.map(resolveTags).join(', '); }
-  return '';
-}
 function speedText(sp) {
   if (!sp) return '';
   if (typeof sp === 'number') return `${sp} ft.`;
@@ -545,14 +538,14 @@ function spellcastingGroups(sc) {
   for (const lvl of Object.keys(sc.spells || {}).sort()) {
     const g = sc.spells[lvl];
     if (!g) continue;
-    const label = lvl === '0' ? 'Zaubertricks (nach Belieben)'
-      : `Grad ${lvl}${g.slots ? ` · ${g.slots} ${g.slots === 1 ? 'Slot' : 'Slots'}` : ''}`;
+    const label = lvl === '0' ? 'Cantrips (at will)'
+      : `Level ${lvl}${g.slots ? ` · ${g.slots} ${g.slots === 1 ? 'Slot' : 'Slots'}` : ''}`;
     push(label, g.spells);
   }
-  push('Nach Belieben', sc.will);
+  push('At will', sc.will);
   for (const key of Object.keys(sc.daily || {})) {
-    const n = key.replace('e', ''); const each = key.endsWith('e') ? ' je' : '';
-    push(`${n}/Tag${each}`, sc.daily[key]);
+    const n = key.replace('e', ''); const each = key.endsWith('e') ? ' each' : '';
+    push(`${n}/day${each}`, sc.daily[key]);
   }
   push('Ritual', sc.ritual);
   return groups;
@@ -589,9 +582,9 @@ function resolveTags(str) {
   let s = String(str);
   // Zuerst Tags OHNE Argumente (fester Ersatztext).
   s = s.replace(/\{@(h|hom|actSaveFail|actSaveSuccess|actSaveSuccessOrFail|actTrigger|actResponse)\}/g, (_, t) => ({
-    h: 'Treffer: ', hom: 'Treffer oder Fehlschlag: ',
-    actSaveFail: 'Misserfolg: ', actSaveSuccess: 'Erfolg: ', actSaveSuccessOrFail: 'Erfolg oder Misserfolg: ',
-    actTrigger: 'Auslöser: ', actResponse: 'Reaktion: ',
+    h: 'Hit: ', hom: 'Hit or Miss: ',
+    actSaveFail: 'Failure: ', actSaveSuccess: 'Success: ', actSaveSuccessOrFail: 'Success or Failure: ',
+    actTrigger: 'Trigger: ', actResponse: 'Response: ',
   }[t] || ''));
   // Dann Tags MIT Argumenten (Pipe-getrennt; erstes Segment = Anzeige).
   s = s.replace(/\{@(\w+)(?:\s+([^}]*))?\}/g, (_, tag, args) => {
@@ -601,8 +594,8 @@ function resolveTags(str) {
       case 'atk': case 'atkr': return ATK_TYPE[first.trim()] || first;
       case 'hit': case 'h': return (first.startsWith('-') ? '' : '+') + first;
       case 'dc': return `DC ${first}`;
-      case 'recharge': return first ? `(Aufladen ${first}${(+first > 1 && +first < 6) ? '–6' : ''})` : '(Aufladen 6)';
-      case 'actSave': return `${first.toUpperCase()}-Rettungswurf`;
+      case 'recharge': return first ? `(Recharge ${first}${(+first > 1 && +first < 6) ? '–6' : ''})` : '(Recharge 6)';
+      case 'actSave': return `${first.toUpperCase()} Save`;
       case 'chance': return `${first}%`;
       case 'damage': case 'dice': case 'scaledamage': case 'scaledice': case 'd20': case 'hitYourSpellAttack':
         return first;

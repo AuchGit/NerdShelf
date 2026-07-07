@@ -16,6 +16,7 @@ import { CONDITIONS } from '../lib/constants';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { modStr, ABILITY_KEYS } from '../../character-builder/lib/sheetUtils';
 import { getModifier } from '../../character-builder/lib/characterModel';
+import { rollSave } from '../lib/rollDice';
 
 export default function CharacterSheetPanel() {
   const chars = useVtt((s) => s.ui.characters || {});
@@ -98,12 +99,17 @@ export default function CharacterSheetPanel() {
           const score = computed.abilityScores?.[k] ?? 10;
           const mod = getModifier(score);
           const save = computed.savingThrows?.[k]?.total ?? mod;
+          const K = k.toUpperCase();
           return (
             <div key={k} style={S.ab}>
-              <div style={S.abName}>{k.toUpperCase()}</div>
+              <div style={S.abName}>{K}</div>
               <div style={S.abScore}>{score}</div>
-              <div style={S.abMod}>{modStr(mod)}</div>
-              <div style={S.abSave} title="Save">{modStr(save)}</div>
+              <div role="button" tabIndex={0} style={{ ...S.abMod, cursor: 'pointer' }}
+                title={`${K}-Attributswurf — Shift: Vorteil · Strg: Nachteil`}
+                onClick={(ev) => rollSave(ev, mod, `${K}-Attributswurf`)}>{modStr(mod)}</div>
+              <div role="button" tabIndex={0} style={{ ...S.abSave, cursor: 'pointer' }}
+                title={`${K}-Rettungswurf — Shift: Vorteil · Strg: Nachteil`}
+                onClick={(ev) => rollSave(ev, save, `${K}-Rettungswurf`)}>{modStr(save)}</div>
             </div>
           );
         })}
@@ -141,7 +147,9 @@ export default function CharacterSheetPanel() {
               const txtColor = sk?.expertise ? 'var(--accent-purple, #b98cff)' : sk?.proficient ? 'var(--color-accent)' : 'var(--color-text)';
               const dot = sk?.expertise ? 'var(--accent-purple, #b98cff)' : sk?.proficient ? 'var(--color-accent)' : 'transparent';
               return (
-                <div key={name} style={{ ...S.skillRow, color: txtColor }} title={sk?.expertise ? 'Expertise' : sk?.proficient ? 'Proficiency' : ''}>
+                <div key={name} role="button" tabIndex={0} style={{ ...S.skillRow, color: txtColor, cursor: 'pointer' }}
+                  title={`${name} würfeln${sk?.expertise ? ' (Expertise)' : sk?.proficient ? ' (Übung)' : ''} — Shift: Vorteil · Strg: Nachteil`}
+                  onClick={(ev) => rollSave(ev, total, `${name.charAt(0).toUpperCase()}${name.slice(1)} (Fertigkeit)`)}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, border: '1px solid var(--color-border)', flexShrink: 0 }} />
                   <span style={{ flex: 1, textTransform: 'capitalize', fontWeight: prof ? 700 : 400 }}>{name}</span>
                   <span style={{ fontWeight: 700 }}>{modStr(total)}</span>

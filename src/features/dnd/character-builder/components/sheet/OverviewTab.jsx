@@ -129,7 +129,7 @@ function actionRowTooltipContent(r) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginBottom: 4 }}>
           {r.attack && (
             <button style={ROLL_PILL.atk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil"
-              onClick={(ev) => rollAttack(ev, r.attack, `${r.name}: Angriff`)}>🎲 {r.attack}</button>
+              onClick={(ev) => rollAttack(ev, r.attack, `${r.name}: Angriff`)}>{r.attack}</button>
           )}
           {hasDmgDice ? (
             <button style={ROLL_PILL.dmg} title="Schaden würfeln — Shift: Kritisch (Würfel verdoppelt)"
@@ -3088,7 +3088,7 @@ function CombatActionsCategorisedList({
                     onClick={(ev) => { ev.stopPropagation(); rollAttack(ev, r.attack, `${r.name}: Angriff`) }}
                     style={{
                       ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)', cursor: 'pointer',
-                    }} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil">🎲 {r.attack}</span>
+                    }} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil">{r.attack}</span>
                 )
                 // ×N Multi-Hit-Pille SITZT DIREKT VOR der Damage-Pille
                 // (gleiches Layout wie Spell-Rows mit Scorching Ray /
