@@ -46,6 +46,13 @@ function assemble(THREE, clusters) {
     const center = new THREE.Vector3();
     for (const p of uniq) center.add(p);
     center.divideScalar(uniq.length);
+    // Normale MUSS nach AUSSEN zeigen (weg vom Solid-Zentrum bei 0). Die
+    // handgebauten d10-Kites sind ALLE nach innen gewickelt → sonst werden ihre
+    // Flächen per FrontSide weggecullt (dunkler/kaputter d10) UND cannon bekommt
+    // falsche Kollisions-Normalen (andere Würfel fallen durch). `flip` dreht dann
+    // auch die Dreiecks-Wicklung beim Ablegen um.
+    const flip = n.dot(center) < 0;
+    if (flip) n.multiplyScalar(-1);
     // Glyph-Ausrichtung wie auf echten Würfeln (nicht willkürlich schräg):
     //   • Kite (d10) → entlang der Symmetrieachse (cl._up)
     //   • ungerade Flächen (Dreieck/Fünfeck) → Oberkante zeigt zu einer Ecke
@@ -76,7 +83,10 @@ function assemble(THREE, clusters) {
     const s = cl._up ? extU : Math.max(extU, extV);
     const start = positions.length / 3;
     for (const t of cl) {
-      for (const p of [t.a, t.b, t.c]) {
+      // Bei geflippter Normale die Wicklung mitdrehen (a, c, b), damit die
+      // sichtbare Vorderseite zur (jetzt äußeren) Normale passt.
+      const verts = flip ? [t.a, t.c, t.b] : [t.a, t.b, t.c];
+      for (const p of verts) {
         positions.push(p.x, p.y, p.z);
         normals.push(n.x, n.y, n.z);
         const d = new THREE.Vector3().subVectors(p, center);
