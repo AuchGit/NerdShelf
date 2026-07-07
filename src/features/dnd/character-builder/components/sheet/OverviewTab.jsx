@@ -3054,13 +3054,28 @@ function CombatActionsCategorisedList({
                     if (seenPillKey.has(dedupKey)) continue
                     seenPillKey.add(dedupKey)
                     const color = pillColorForKind(p, pillColors, DAMAGE_TYPE_COLOR)
+                    // Würfelbare Effekt-Pills: Angriff (kind 'attack') und Schaden
+                    // (kind 'damage'/'damage-bonus') klicken → in den Würfeltray.
+                    const isAtkPill = p.kind === 'attack'
+                    const dmgStr = (p.kind === 'damage' || p.kind === 'damage-bonus')
+                      ? (String(p.value ?? p.label).match(/\d*d\d+(?:\s*[+-]\s*\d+)?/) || [])[0]
+                      : null
+                    const rollable = isAtkPill || dmgStr
                     leftPills.push(
-                      <span key={`fx-${p.kind}-${p.label}`} title={p.title} style={{
-                        ...caePill,
-                        border: `1px solid ${color}`,
-                        color,
-                        background: `color-mix(in srgb, ${color} 10%, transparent)`,
-                      }}>
+                      <span key={`fx-${p.kind}-${p.label}`} role={rollable ? 'button' : undefined} tabIndex={rollable ? 0 : undefined}
+                        onClick={rollable ? (ev) => {
+                          ev.stopPropagation()
+                          if (isAtkPill) rollAttack(ev, p.value, `${r.name}: ${p.label}`)
+                          else rollDamage(ev, dmgStr, `${r.name}: Schaden`)
+                        } : undefined}
+                        title={rollable ? (isAtkPill ? 'Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil' : 'Schaden würfeln — Shift: Kritisch') : p.title}
+                        style={{
+                          ...caePill,
+                          border: `1px solid ${color}`,
+                          color,
+                          background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                          cursor: rollable ? 'pointer' : undefined,
+                        }}>
                         {p.value != null ? `${p.label} ${p.value}` : p.label}
                       </span>
                     )
@@ -3069,9 +3084,11 @@ function CombatActionsCategorisedList({
                 // Legacy-Felder (Weapon-Attack-Rows): atk/dmg sind reine
                 // Strings — wenn vorhanden, einfügen.
                 if (r.attack) leftPills.push(
-                  <span key="att-legacy" style={{
-                    ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)',
-                  }} title="Attack-Bonus">{r.attack}</span>
+                  <span key="att-legacy" role="button" tabIndex={0}
+                    onClick={(ev) => { ev.stopPropagation(); rollAttack(ev, r.attack, `${r.name}: Angriff`) }}
+                    style={{
+                      ...caePill, border: '1px solid var(--accent-blue)', color: 'var(--accent-blue)', cursor: 'pointer',
+                    }} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil">🎲 {r.attack}</span>
                 )
                 // ×N Multi-Hit-Pille SITZT DIREKT VOR der Damage-Pille
                 // (gleiches Layout wie Spell-Rows mit Scorching Ray /
@@ -3109,11 +3126,15 @@ function CombatActionsCategorisedList({
                       ? `Type von ${overrideEffect.label} überschrieben`
                       : null,
                   ].filter(Boolean).join(' · ')
+                  const dmgRollable = /\d*d\d+/.test(String(r.damage))
                   leftPills.push(
-                    <span key="dmg-legacy" title={tip || undefined}
+                    <span key="dmg-legacy" role={dmgRollable ? 'button' : undefined} tabIndex={dmgRollable ? 0 : undefined}
+                      onClick={dmgRollable ? (ev) => { ev.stopPropagation(); rollDamage(ev, r.damage, `${r.name}: Schaden`) } : undefined}
+                      title={dmgRollable ? 'Schaden würfeln — Shift: Kritisch' : (tip || undefined)}
                       style={{
                         ...caePill, border: `1px solid ${color}`, color,
                         background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                        cursor: dmgRollable ? 'pointer' : undefined,
                       }}>
                       {r.damage}{typeLabel ? ` ${typeLabel}` : ''}
                     </span>,

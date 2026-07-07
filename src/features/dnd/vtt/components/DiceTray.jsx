@@ -122,21 +122,31 @@ export default function DiceTray() {
   });
   const clear = () => setRoll({ dice: [], total: null });
 
-  // Externer Wurf: Statblock-Angriffe/Zauber/Rettungswürfe schicken
-  // `vtt:roll` mit einer Formel (z.B. "1d20+11" oder "4d10+5") + Label →
-  // Tray öffnet sich und würfelt sofort.
+  // Externer Wurf: Roll-Pills (Statblock, Spieler-Aktionen, Zauber) schicken
+  // `vtt:roll` mit einer Formel (z.B. "1d20+11") + Label + optionalem Modus.
+  // Kommt AUCH per BroadcastChannel an, damit ein Klick im ausgeklappten
+  // Sheet-Fenster (Popout, eigener DOM) den Tray im VTT-Fenster erreicht. Ein
+  // Nonce dedupliziert, falls beide Wege im selben Fenster ankommen.
+  const lastRollId = useRef(null);
   useEffect(() => {
-    const onRoll = (e) => {
-      const f = String(e.detail?.formula || '').trim();
+    const handle = (detail) => {
+      if (!detail) return;
+      if (detail.id && detail.id === lastRollId.current) return; // schon gewürfelt
+      lastRollId.current = detail.id || null;
+      const f = String(detail.formula || '').trim();
       const terms = parseFormula(f);
       if (!terms) return;
-      const mode = e.detail?.mode || null; // 'adv' | 'dis' | 'crit'
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => rollFormula(terms, mode));
+      setRevealed(false); setRoll(() => rollFormula(terms, detail.mode || null));
     };
+    const onRoll = (e) => handle(e.detail);
     window.addEventListener('vtt:roll', onRoll);
-    return () => window.removeEventListener('vtt:roll', onRoll);
+    let ch = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try { ch = new BroadcastChannel('nerdshelf:vtt-roll'); ch.onmessage = (e) => handle(e.data); } catch { ch = null; }
+    }
+    return () => { window.removeEventListener('vtt:roll', onRoll); try { ch?.close(); } catch { /* ignore */ } };
   }, []);
 
   // Ergebnis-Reveal: 3D meldet Fertigstellung (onDone); ohne 3D (WebGL kaputt

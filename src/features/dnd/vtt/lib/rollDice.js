@@ -6,9 +6,24 @@
 // The DiceTray computes the mathematically-correct result; the animation only
 // visualises it. Dispatching is harmless where no tray is mounted.
 
+// Cross-window channel: the character sheet can live in its OWN window (Tauri
+// popout / window.open), which has a SEPARATE DiceTray-less DOM. A same-origin
+// BroadcastChannel carries the roll to whichever window hosts the tray. We also
+// fire the local DOM event (fast path for the same window); a nonce dedupes so
+// a roll is never played twice.
+let _rollChannel = null;
+function rollChannel() {
+  if (_rollChannel === null && typeof BroadcastChannel !== 'undefined') {
+    try { _rollChannel = new BroadcastChannel('nerdshelf:vtt-roll'); } catch { _rollChannel = false; }
+  }
+  return _rollChannel || null;
+}
+
 export function dispatchRoll(formula, label, mode) {
   if (!formula) return;
-  window.dispatchEvent(new CustomEvent('vtt:roll', { detail: { formula: String(formula), label: label || '', mode: mode || null } }));
+  const detail = { formula: String(formula), label: label || '', mode: mode || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  window.dispatchEvent(new CustomEvent('vtt:roll', { detail }));
+  try { rollChannel()?.postMessage(detail); } catch { /* channel closed */ }
 }
 
 // Advantage/disadvantage from the click's modifier keys (for d20 rolls).
