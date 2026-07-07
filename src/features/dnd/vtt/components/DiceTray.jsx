@@ -1,28 +1,14 @@
 // Dice tray — a draggable bottom-right widget (position persists). Roll single
 // dice (buttons) or a full formula (e.g. 2d6+4, 1d4+2d6+5) typed or built up.
-// By default real 3D dice (three.js, lazy chunk) tumble and settle in the tray;
-// the CSS dice remain as the fallback (WebGL failure / 3D off / >12 dice).
-// Either way the result is mathematically random — the animation only
-// visualises it.
+// Real 3D dice (three.js, lazy chunk) tumble and settle in the tray. If WebGL
+// is unavailable or a roll exceeds 12 dice, we skip the 3D scene and just show
+// the numeric result — there is no 2D dice widget anymore. Either way the
+// result is mathematically random; the animation only visualises it.
 import { useEffect, useRef, useState } from 'react';
 import Dice3D from './Dice3D';
-import { useDice3d, setDice3d } from '../lib/vttPrefs';
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const POS_KEY = 'nerdshelf:vttDicePos';
-const KEYFRAMES = `
-@keyframes vtt-die-fall {
-  0%   { transform: translateY(-240px) rotateX(0deg) rotateY(0deg) scale(0.5); opacity: 0; }
-  15%  { opacity: 1; }
-  70%  { transform: translateY(6px) rotateX(560deg) rotateY(380deg) scale(1.08); }
-  84%  { transform: translateY(-5px) rotateX(640deg) rotateY(410deg) scale(0.98); }
-  100% { transform: translateY(0) rotateX(720deg) rotateY(360deg) scale(1); }
-}`;
-let _styleInjected = false;
-function injectStyle() {
-  if (_styleInjected || typeof document === 'undefined') return;
-  const el = document.createElement('style'); el.textContent = KEYFRAMES; document.head.appendChild(el); _styleInjected = true;
-}
 
 // Parse a dice formula like "1d4+2d6+5" → terms. Returns null if unparseable.
 function parseFormula(str) {
@@ -44,13 +30,26 @@ function parseFormula(str) {
   return terms;
 }
 
+const rid = () => 'd' + Math.random().toString(36).slice(2, 8);
+// Ein d100 wird wie ECHTE Perzentilwürfel dargestellt: ein Zehner-Würfel
+// (00,10,…,90) + ein Einer-Würfel (0–9). 00+0 = 100. Der Zehner trägt den
+// vollen Wert für die Summe, der Einer 0 (kein Doppelzählen).
+function diceFor(sides, r) {
+  if (sides === 100) {
+    return [
+      { id: rid(), sides: 10, result: (Math.floor(r / 10) % 10) * 10, value: r, faceSet: 'd100tens' },
+      { id: rid(), sides: 10, result: r % 10, value: 0, faceSet: 'd100units' },
+    ];
+  }
+  return [{ id: rid(), sides, result: r, value: r }];
+}
 function rollFormula(terms) {
   const dice = []; let total = 0;
   for (const t of terms) {
     if (t.kind === 'mod') { total += t.value; continue; }
     for (let i = 0; i < t.count; i++) {
       const r = 1 + Math.floor(Math.random() * t.sides);
-      dice.push({ id: 'd' + Math.random().toString(36).slice(2, 8), sides: t.sides, result: r });
+      dice.push(...diceFor(t.sides, r));
       total += t.sign * r;
     }
   }
@@ -65,9 +64,8 @@ export default function DiceTray() {
   const dice = roll.dice;
   const total = roll.total;
   const [formula, setFormula] = useState('');
-  const want3d = useDice3d();
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
-  // damit "3D geht nicht" diagnostizierbar ist statt still 2D zu zeigen.
+  // damit "3D geht nicht" diagnostizierbar ist statt still nur Zahlen zu zeigen.
   const [webglBroken, setWebglBroken] = useState(null);
   // Live-Statuszeile der 3D-Pipeline (Lade Module / Init / läuft) — zeigt
   // beim Hängen sichtbar WO es hängt.
@@ -76,7 +74,6 @@ export default function DiceTray() {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
   const drag = useRef(null);
-  useEffect(injectStyle, []);
   useEffect(() => {
     const move = (e) => { const d = drag.current; if (!d) return; setPos({ x: e.clientX - d.dx, y: e.clientY - d.dy }); };
     const up = () => { drag.current = null; };
@@ -86,10 +83,12 @@ export default function DiceTray() {
   // Persist the tray position whenever it changes (cheap; survives reloads).
   useEffect(() => { if (pos) { try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch { /* ignore */ } } }, [pos]);
 
-  const rollOne = (sides) => setRoll(() => ({ dice: [{ id: 'd' + Math.random().toString(36).slice(2, 8), sides, result: 1 + Math.floor(Math.random() * sides) }], total: null }));
+  // Ergebnis erst NACH der Animation zeigen.
+  const [revealed, setRevealed] = useState(false);
+  const rollOne = (sides) => { setRevealed(false); setRoll(() => ({ dice: diceFor(sides, 1 + Math.floor(Math.random() * sides)), total: null })); };
   const rollFromFormula = () => {
     const terms = parseFormula(formula); if (!terms) return;
-    setRoll(() => rollFormula(terms));
+    setRevealed(false); setRoll(() => rollFormula(terms));
   };
   const appendDie = (sides) => setFormula((f) => {
     const m = f.match(new RegExp(`(\\d+)d${sides}(?!\\d)`));
@@ -108,17 +107,27 @@ export default function DiceTray() {
       if (!terms) return;
       setOpen(true);
       setFormula(f);
-      setRoll(() => rollFormula(terms));
+      setRevealed(false); setRoll(() => rollFormula(terms));
     };
     window.addEventListener('vtt:roll', onRoll);
     return () => window.removeEventListener('vtt:roll', onRoll);
   }, []);
 
+  // Ergebnis-Reveal: 3D meldet Fertigstellung (onDone); ohne 3D (WebGL kaputt
+  // oder >12 Würfel) nach kurzer Verzögerung. Das Ergebnis wird ohnehin nur bei
+  // dice.length > 0 angezeigt, der Leer-Fall braucht also nichts zu setzen.
+  const use3d = !webglBroken && dice.length > 0 && dice.length <= 12;
+  useEffect(() => {
+    if (dice.length === 0 || use3d) return undefined; // 3D → wartet auf onDone
+    const t = setTimeout(() => setRevealed(true), 500);
+    return () => clearTimeout(t);
+  }, [dice, use3d]);
+
   // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
   // animates instantly instead of waiting on the lazy import.
   useEffect(() => {
-    if (open && want3d) { import('three').catch(() => {}); import('cannon-es').catch(() => {}); }
-  }, [open, want3d]);
+    if (open) { import('three').catch(() => {}); import('cannon-es').catch(() => {}); }
+  }, [open]);
 
   if (!open) return <button style={S.fab} onClick={() => setOpen(true)} title="Würfel">🎲</button>;
 
@@ -129,16 +138,13 @@ export default function DiceTray() {
     if (!pos) setPos(base);
     drag.current = { dx: e.clientX - base.x, dy: e.clientY - base.y };
   };
-  const sum = dice.reduce((s, d) => s + d.result, 0);
+  const sum = dice.reduce((s, d) => s + (d.value ?? d.result), 0);
 
   return (
     <div style={style}>
       <div style={S.head} onMouseDown={onTitleDown} title="Ziehen zum Verschieben">
         <span style={{ fontWeight: 700 }}>🎲 Würfel</span>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button style={{ ...S.smallBtn, ...(want3d && !webglBroken ? S.toggleOn : null) }}
-            onClick={() => setDice3d(!want3d)} onMouseDown={(e) => e.stopPropagation()}
-            title={want3d ? '3D-Würfel an — Klick schaltet auf klassische Anzeige' : 'Klassische Anzeige — Klick schaltet 3D-Würfel an'}>3D</button>
           {dice.length > 0 && <button style={S.smallBtn} onClick={clear} onMouseDown={(e) => e.stopPropagation()}>Leeren</button>}
           <button style={S.smallBtn} onClick={() => setOpen(false)} onMouseDown={(e) => e.stopPropagation()}>×</button>
         </div>
@@ -156,56 +162,50 @@ export default function DiceTray() {
       <div style={S.tray}>
         {dice.length === 0
           ? <span style={S.hint}>Würfel wählen oder Formel eingeben…</span>
-          : (want3d && !webglBroken && dice.length <= 12)
+          : use3d
             // key = roll identity → every roll remounts the scene for a fresh throw
-            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result }))}
+            ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result, faceSet: d.faceSet }))}
                 onStatus={setD3status}
+                onDone={() => setRevealed(true)}
                 onFallback={(reason) => { setD3status(null); setWebglBroken(reason || 'unbekannt'); }} />
-            : dice.map((d) => <Die key={d.id} sides={d.sides} result={d.result} />)}
+            // Kein 3D (WebGL kaputt / zu viele Würfel): nur die nackten Werte.
+            : <div style={S.plainRow}>{dice.map((d) => (
+                <span key={d.id} style={{ ...S.plainDie, color: (d.faceSet ? DIE_COLOR[100] : DIE_COLOR[d.sides]) || 'var(--color-accent)' }}>
+                  {faceText(d.faceSet, d.result)}
+                </span>
+              ))}</div>}
       </div>
-      {want3d && !webglBroken && d3status && (
+      {use3d && d3status && (
         <div style={S.statusNote}>{d3status}</div>
       )}
-      {want3d && webglBroken && (
+      {webglBroken && (
         <div style={S.fallbackNote}>
-          ⚠ 3D-Fallback: {webglBroken}{' '}
+          ⚠ 3D nicht verfügbar: {webglBroken}{' '}
           <button style={{ ...S.smallBtn, marginLeft: 4 }} onClick={() => setWebglBroken(null)}>Nochmal versuchen</button>
         </div>
       )}
-      {/* Bei 3D immer auch als Text — das Ergebnis darf nie an einer
-          klemmenden Animation hängen. */}
-      {(total != null || dice.length > 1 || (dice.length > 0 && want3d && !webglBroken)) && (
+      {/* Ergebnis erst NACH der Animation (revealed). */}
+      {revealed && dice.length > 0 && (
         <div style={S.total}>{total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}</div>
       )}
     </div>
   );
 }
 
-function Die({ sides, result }) {
-  const [face, setFace] = useState(result);
-  const timer = useRef(null);
-  useEffect(() => {
-    let n = 0;
-    timer.current = setInterval(() => { n += 1; if (n >= 9) { clearInterval(timer.current); setFace(result); return; } setFace(1 + Math.floor(Math.random() * sides)); }, 70);
-    return () => clearInterval(timer.current);
-  }, [sides, result]);
-  const color = DIE_COLOR[sides] || 'var(--color-accent)';
-  return (
-    <div style={{ ...S.die, animation: 'vtt-die-fall 0.85s cubic-bezier(.3,.8,.4,1) both', borderColor: color }}>
-      <span style={{ ...S.dieFace, color }}>{face}</span>
-      <span style={S.dieLabel}>d{sides}</span>
-    </div>
-  );
+// Anzeige eines Würfelwerts (nur noch für den Zahlen-Fallback ohne 3D):
+// Perzentil-Zehner zeigen 00–90, sonst der nackte Wert.
+function faceText(faceSet, v) {
+  if (faceSet === 'd100tens') return String(v).padStart(2, '0');
+  return String(v);
 }
 
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
 
 const S = {
   fab: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-bg-elevated) 92%, transparent)', color: 'var(--color-text)', fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 16px #0007' },
-  wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 250, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
+  wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 300, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--color-border)', cursor: 'move', userSelect: 'none' },
   smallBtn: { background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '1px 7px' },
-  toggleOn: { borderColor: 'var(--color-accent)', color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' },
   picker: { display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 8px 4px' },
   dieBtn: { flex: '1 0 28%', padding: '5px 0', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: 'var(--fs-sm)' },
   formulaRow: { display: 'flex', gap: 4, padding: '4px 8px 8px' },
@@ -213,9 +213,8 @@ const S = {
   rollBtn: { padding: '5px 10px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 },
   tray: { minHeight: 76, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', padding: 10, margin: '0 8px 8px', background: 'radial-gradient(ellipse at 50% 120%, #2a2f3a, #15171b)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', perspective: 600 },
   hint: { color: 'var(--color-text-muted)', fontSize: 11, alignSelf: 'center', margin: '0 auto' },
-  die: { width: 40, height: 40, display: 'grid', placeItems: 'center', position: 'relative', background: 'linear-gradient(145deg, #2c313c, #1a1d24)', border: '2px solid', borderRadius: 8, transformStyle: 'preserve-3d', boxShadow: '0 3px 8px #0008' },
-  dieFace: { fontSize: 18, fontWeight: 800, lineHeight: 1 },
-  dieLabel: { position: 'absolute', bottom: 1, right: 3, fontSize: 7, color: 'var(--color-text-muted)' },
+  plainRow: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
+  plainDie: { fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' },
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
   fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
   statusNote: { padding: '0 10px 6px', fontSize: 10, color: 'var(--color-text-muted)' },

@@ -16,8 +16,8 @@
 // falls back to the tray's classic CSS dice via onFallback.
 import { useEffect, useRef, useState } from 'react';
 
-const W = 214; const H = 150;            // canvas css size (tray inner width)
-const AREA_X = 3.1; const AREA_Z = 2.05; // inner wall half-extents (world units)
+const W = 262; const H = 196;            // canvas css size (fits the 300px tray widget)
+const AREA_X = 2.55; const AREA_Z = 1.72; // inner wall half-extents — enger = größere Würfel
 const MAX_SIM_STEPS = 900;               // 1/60s steps → 15s hard cap
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
 
@@ -152,52 +152,133 @@ function hullFor(THREE, CANNON, geometry) {
   return new CANNON.ConvexPolyhedron({ vertices: verts, faces });
 }
 
-// Number texture: die-coloured background, dark centered number (underlined for
-// 6/9 so orientation is readable). Cached globally per label|color.
+// Number texture: coloured face with soft spherical shading + a defined bevel
+// edge, and an ENGRAVED-looking centered number (highlight + shadow give depth
+// instead of a flat painted glyph). An underline bar sits under any number that
+// contains a 6 or 9 (6, 9, 16, 60, 69, 90, 96, …) so its orientation is
+// unambiguous — exactly as on real dice. Cached globally per label|color.
+// How much of a face a glyph may fill — smaller on faces that taper to points
+// (triangles/kites) than on the roomy d6 square, so numbers never spill over
+// the edges. Keyed by die sides (d100 uses the d10 body).
+const GLYPH_FIT = { 4: 0.74, 6: 1.0, 8: 0.66, 10: 0.8, 12: 0.86, 20: 0.58, 100: 0.8 };
+
 const texCache = new Map();
-function numberTexture(THREE, label, color) {
-  const key = `${label}|${color}`;
+const SZ = 256;
+function numberTexture(THREE, label, color, fit = 0.85) {
+  const key = `${label}|${color}|${fit}`;
   const hit = texCache.get(key);
   if (hit) return hit;
-  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const c = document.createElement('canvas'); c.width = c.height = SZ;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = color; ctx.fillRect(0, 0, 128, 128);
-  const grad = ctx.createRadialGradient(64, 64, 30, 64, 64, 92);
-  grad.addColorStop(0, 'rgba(255,255,255,0.10)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
+  // base colour
+  ctx.fillStyle = color; ctx.fillRect(0, 0, SZ, SZ);
+  // spherical shading: light from top-left, shadow bottom-right → curved feel
+  const sh = ctx.createRadialGradient(SZ * 0.36, SZ * 0.32, SZ * 0.08, SZ * 0.52, SZ * 0.54, SZ * 0.72);
+  sh.addColorStop(0, 'rgba(255,255,255,0.22)');
+  sh.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+  sh.addColorStop(1, 'rgba(0,0,0,0.34)');
+  ctx.fillStyle = sh; ctx.fillRect(0, 0, SZ, SZ);
+  // bevel edge: dark inset + inner highlight so the face rim is readable
+  ctx.lineWidth = SZ * 0.05;
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, SZ - ctx.lineWidth, SZ - ctx.lineWidth);
+  ctx.lineWidth = SZ * 0.018;
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  const o = SZ * 0.055;
+  ctx.strokeRect(o, o, SZ - 2 * o, SZ - 2 * o);
+  // number: bright ivory glyph with a thin dark outline + soft drop shadow →
+  // high contrast on any die colour, crisp and readable, not a fat painted blob.
   const s = String(label);
-  ctx.fillStyle = '#181b22';
-  ctx.font = `800 ${s.length > 2 ? 40 : s.length > 1 ? 52 : 62}px system-ui, sans-serif`;
+  const base = s.length > 2 ? 0.40 : s.length > 1 ? 0.5 : 0.58;
+  const fs = Math.round(SZ * base * fit);
+  ctx.font = `600 ${fs}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(s, 64, 64);
-  if (s === '6' || s === '9') ctx.fillRect(46, 94, 36, 6);
+  const cx = SZ / 2; const cy = SZ * 0.47;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = SZ * 0.03; ctx.shadowOffsetY = SZ * 0.012;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = fs * 0.09;
+  ctx.strokeStyle = 'rgba(20,22,28,0.85)';
+  ctx.strokeText(s, cx, cy);
+  ctx.restore();
+  ctx.fillStyle = '#f4f1e8'; // ivory
+  ctx.fillText(s, cx, cy);
+  // underline for 6/9-containing labels so orientation is unambiguous
+  if (/[69]/.test(s)) {
+    const w = Math.min(SZ * 0.52, fs * s.length * 0.5);
+    ctx.strokeStyle = 'rgba(20,22,28,0.85)';
+    ctx.lineWidth = SZ * 0.02;
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2, cy + fs * 0.52);
+    ctx.lineTo(cx + w / 2, cy + fs * 0.52);
+    ctx.stroke();
+    ctx.strokeStyle = '#f4f1e8'; ctx.lineWidth = SZ * 0.012;
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2, cy + fs * 0.52);
+    ctx.lineTo(cx + w / 2, cy + fs * 0.52);
+    ctx.stroke();
+  }
   const tex = new THREE.CanvasTexture(c);
   // Ohne sRGB-Markierung interpretiert three die Canvas-Farben als linear
   // → überbelichtet/ausgebrannt ("brennende" Würfel).
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   texCache.set(key, tex);
-  if (texCache.size > 300) texCache.delete(texCache.keys().next().value);
+  if (texCache.size > 400) texCache.delete(texCache.keys().next().value);
   return tex;
 }
 
-// Labels for a die: the rolled result goes on `upFace`; the rest of the number
-// set fills the remaining faces in order (d100 shows multiples of 10).
-function labelsFor(sides, faceCount, result, upFace) {
-  const pool = [];
-  for (let n = 1; pool.length < faceCount; n++) {
-    const val = sides === 100 ? Math.min(100, n * 10) : n;
-    if (val !== result) pool.push(val);
-  }
-  const labels = new Array(faceCount);
-  labels[upFace] = result;
-  let j = 0;
-  for (let i = 0; i < faceCount; i++) if (i !== upFace) labels[i] = pool[j++];
-  return labels;
+// Full value set for a die (as display strings). Percentile dice show 00–90
+// (tens) or 0–9 (units); everything else 1…N.
+function valueSet(sides, faceCount, faceSet) {
+  if (faceSet === 'd100tens') return [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
+  if (faceSet === 'd100units') return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const out = [];
+  for (let n = 1; out.length < faceCount; n++) out.push(n);
+  return out;
 }
 
-export default function Dice3D({ dice, onFallback, onStatus }) {
+// Labels for a die, arranged like a REAL die: opposite faces sum to a constant
+// (d6→7, d8→9, d20→21, d10→9, percentile-tens→90). The rolled `result` is
+// placed on the physically-up face (guaranteed correct reading, no final flip);
+// its opposite gets the complement; the remaining value pairs fill the other
+// opposite-face pairs. `faces` carries each face's outward normal so we can find
+// antipodal partners. d4 has no antipodal faces → falls back to a plain fill.
+function labelsFor(faces, sides, result, upFace, faceSet) {
+  const N = faces.length;
+  const fmt = (v) => (faceSet === 'd100tens' ? String(v).padStart(2, '0') : String(v));
+  const values = valueSet(sides, N, faceSet);
+  const complementSum = values[0] + values[values.length - 1]; // e.g. 7, 9, 21, 90
+  const oppOf = (i) => {
+    let opp = -1; let best = -0.9; // require nearly antipodal normals
+    for (let j = 0; j < N; j++) {
+      if (j === i) continue;
+      const d = -faces[i].normal.dot(faces[j].normal);
+      if (d > best) { best = d; opp = j; }
+    }
+    return opp;
+  };
+  const labels = new Array(N).fill(null);
+  const remaining = values.slice();
+  const take = (v) => { const k = remaining.indexOf(v); if (k >= 0) remaining.splice(k, 1); };
+  const place = (face, v) => { labels[face] = v; take(v); };
+  // result up + complement opposite
+  place(upFace, result);
+  const upOpp = oppOf(upFace);
+  if (upOpp >= 0 && labels[upOpp] == null) place(upOpp, complementSum - result);
+  // fill the rest, keeping opposite pairs complementary
+  for (let i = 0; i < N; i++) {
+    if (labels[i] != null) continue;
+    const v = remaining[0];
+    place(i, v);
+    const opp = oppOf(i);
+    if (opp >= 0 && labels[opp] == null) place(opp, complementSum - v);
+  }
+  return labels.map((v) => fmt(v));
+}
+
+export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
   const hostRef = useRef(null);
   const [chips, setChips] = useState([]); // d4 result chips only
 
@@ -238,25 +319,67 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
       try {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(W, H);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
       renderer.domElement.style.display = 'block';
       host.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 50);
-      camera.position.set(0, 6.6, 3.6); // steep-ish so the up faces read well
-      camera.lookAt(0, 0, 0.1);
-      scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-      const keyL = new THREE.DirectionalLight(0xffffff, 1.15);
-      keyL.position.set(-2, 7, 3);
+      const camera = new THREE.PerspectiveCamera(34, W / H, 0.1, 50);
+      camera.position.set(0, 6.4, 2.7); // steep so the up faces read clearly
+      camera.lookAt(0, 0, 0.05);
+
+      // ── lighting: soft sky/ground + warm key (shadow) + cool fill + rim ──
+      scene.add(new THREE.HemisphereLight(0x9fb4d8, 0x151820, 0.55));
+      scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+      const keyL = new THREE.DirectionalLight(0xfff2df, 1.15);
+      keyL.position.set(-3.2, 8.5, 4);
+      keyL.castShadow = true;
+      keyL.shadow.mapSize.set(1024, 1024);
+      keyL.shadow.bias = -0.0007;
+      keyL.shadow.camera.near = 1; keyL.shadow.camera.far = 22;
+      keyL.shadow.camera.left = -4.5; keyL.shadow.camera.right = 4.5;
+      keyL.shadow.camera.top = 4.5; keyL.shadow.camera.bottom = -4.5;
       scene.add(keyL);
+      const fillL = new THREE.DirectionalLight(0x8fbcff, 0.35);
+      fillL.position.set(4, 3.5, 5);
+      scene.add(fillL);
+      const rimL = new THREE.DirectionalLight(0xffffff, 0.5);
+      rimL.position.set(0, 3, -6); // backlight → crisp edges on the up faces
+      scene.add(rimL);
+
+      // ── 3D tray model: felt floor + wooden rim (real geometry, casts/receives
+      // shadows) so the dice sit in a proper little tray instead of empty space.
+      const feltMat = new THREE.MeshStandardMaterial({ color: 0x1b2130, roughness: 0.98, metalness: 0.0 });
+      const felt = new THREE.Mesh(new THREE.PlaneGeometry(2 * (AREA_X + 0.18), 2 * (AREA_Z + 0.18)), feltMat);
+      felt.rotation.x = -Math.PI / 2; felt.position.y = 0.001; felt.receiveShadow = true;
+      scene.add(felt);
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x3b3128, roughness: 0.55, metalness: 0.18 });
+      const t = 0.22; // rim thickness
+      const addRim = (w, h, d, x, z) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), rimMat);
+        m.position.set(x, h / 2, z); m.castShadow = true; m.receiveShadow = true;
+        scene.add(m);
+      };
+      const sideH = 0.5; const frontH = 0.3; // low front lip → never hides dice
+      addRim(t, sideH, 2 * AREA_Z + 2 * t, -AREA_X - t / 2, 0);          // left
+      addRim(t, sideH, 2 * AREA_Z + 2 * t, AREA_X + t / 2, 0);           // right
+      addRim(2 * AREA_X + 2 * t, sideH, t, 0, -AREA_Z - t / 2);          // back
+      addRim(2 * AREA_X + 2 * t, frontH, t, 0, AREA_Z + t / 2);          // front (low)
 
       // ── physics world: floor + 4 walls (dice bounce off the tray edges) ──
       const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -26, 0) });
       world.allowSleep = true;
+      // Mehr Solver-Iterationen → tiefe Durchdringungen werden sauber
+      // aufgelöst, Würfel fallen nicht mehr ineinander.
+      world.solver.iterations = 24;
+      world.solver.tolerance = 0.001;
       const matDie = new CANNON.Material('die');
       const matWorld = new CANNON.Material('world');
-      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matWorld, { restitution: 0.42, friction: 0.22 }));
-      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matDie, { restitution: 0.35, friction: 0.15 }));
+      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matWorld, { restitution: 0.32, friction: 0.28 }));
+      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matDie, { restitution: 0.28, friction: 0.22 }));
       const addPlane = (nx, ny, nz, px, py, pz) => {
         const b = new CANNON.Body({ type: CANNON.Body.STATIC, shape: new CANNON.Plane(), material: matWorld });
         b.quaternion.setFromVectors(new CANNON.Vec3(0, 0, 1), new CANNON.Vec3(nx, ny, nz));
@@ -274,15 +397,16 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
       const bodies = shown.map((d, i) => {
         const { geometry, faces } = facedDieFor(THREE, d.sides);
         const shape = hullFor(THREE, CANNON, geometry);
-        // Spawn on a random side of the tray, hurled across it: dice fly, hit
-        // the opposite wall, bounce and tumble — different every time.
-        const ang = Math.random() * Math.PI * 2;
+        // Spawn spread over the tray on an even ring (no two dice at the same
+        // spot) and clearly STACKED in height, so nothing starts interpenetrated
+        // — then hurl each across the tray to tumble. Different every time.
+        const ang = (i / Math.max(1, shown.length)) * Math.PI * 2 + Math.random() * 0.6;
         const sx = Math.cos(ang) * (AREA_X - 0.7);
-        const sz = Math.sin(ang) * (AREA_Z - 0.6);
+        const sz = Math.sin(ang) * (AREA_Z - 0.55);
         const body = new CANNON.Body({
           mass: 1, shape, material: matDie, allowSleep: true,
-          sleepSpeedLimit: 0.55, sleepTimeLimit: 0.28,
-          position: new CANNON.Vec3(sx, 1.6 + Math.random() * 1.6 + i * 0.4, sz),
+          sleepSpeedLimit: 0.5, sleepTimeLimit: 0.3,
+          position: new CANNON.Vec3(sx, 1.4 + i * 0.85, sz), // big Y-gap → no overlap
           velocity: new CANNON.Vec3(
             -sx * (1.6 + Math.random() * 1.6) + (Math.random() - 0.5) * 3,
             1 + Math.random() * 2.5,
@@ -314,7 +438,6 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
 
       // ── read each die's physical up-face and label it with the true result ──
       const up = new THREE.Vector3(0, 1, 0);
-      const shadowGeo = new THREE.CircleGeometry(0.5, 24);
       const d4Chips = [];
       for (const b of bodies) {
         let fq = b.frames[b.frames.length - 1];
@@ -325,14 +448,12 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
           if (dot > bestDot) { bestDot = dot; bestFace = i; }
         });
         // Schräg liegengeblieben (an Wand/Würfel angelehnt oder gekippt
-        // eingeschlafen)? → kurzer Kipp-Nachlauf ans Ende der Aufzeichnung:
-        // der Würfel kippt sichtbar flach (beste Fläche exakt nach oben,
-        // Grundhöhe auf dem Boden). d4 ausgenommen — der ruht mit Spitze
-        // nach oben, da ist "keine Fläche oben" der Normalzustand.
+        // eingeschlafen)? → kurzer Kipp-Nachlauf: die Ergebnis-Fläche kippt
+        // flach nach oben (natürliche, NICHT zur Kamera ausgerichtete Drehung —
+        // Würfel liegen realistisch beliebig). d4 ruht mit Spitze oben.
         if (b.die.sides !== 4 && bestDot < 0.985) {
           const worldN = b.faces[bestFace].normal.clone().applyQuaternion(quat);
           const qFlat = new THREE.Quaternion().setFromUnitVectors(worldN, up).multiply(quat);
-          // Ruhehöhe der flachen Pose: tiefster Geometrie-Punkt auf den Boden.
           const posAttr = b.geometry.getAttribute('position');
           let minY = Infinity;
           const v = new THREE.Vector3();
@@ -351,16 +472,22 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
           }
           fq = b.frames[b.frames.length - 1];
         }
-        const color = DIE_COLOR[b.die.sides] || '#8899ff';
-        const labels = labelsFor(b.die.sides, b.faces.length, b.die.result, bestFace);
-        b.mesh = new THREE.Mesh(b.geometry, labels.map((l) => new THREE.MeshStandardMaterial({
-          map: numberTexture(THREE, l, color), roughness: 0.32, metalness: 0.1,
+        const color = b.die.faceSet ? DIE_COLOR[100] : (DIE_COLOR[b.die.sides] || '#8899ff');
+        const fit = GLYPH_FIT[b.die.sides] ?? 0.82;
+        const labels = labelsFor(b.faces, b.die.sides, b.die.result, bestFace, b.die.faceSet);
+        // Physical material with a clear-coat → glossy resin dice, not flat paint.
+        b.mesh = new THREE.Mesh(b.geometry, labels.map((l) => new THREE.MeshPhysicalMaterial({
+          map: numberTexture(THREE, l, color, fit), roughness: 0.38, metalness: 0.0,
+          clearcoat: 0.65, clearcoatRoughness: 0.3, envMapIntensity: 0.6,
         })));
+        b.mesh.castShadow = true; b.mesh.receiveShadow = true;
+        // Dark edge lines make the facet boundaries clearly readable.
+        const edges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(b.geometry, 18),
+          new THREE.LineBasicMaterial({ color: 0x0a0c10, transparent: true, opacity: 0.55 }),
+        );
+        b.mesh.add(edges);
         scene.add(b.mesh);
-        b.shadow = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 }));
-        b.shadow.rotation.x = -Math.PI / 2;
-        b.shadow.position.y = 0.01;
-        scene.add(b.shadow);
         if (b.die.sides === 4) {
           const v = new THREE.Vector3(fq[0], fq[1] + 0.5, fq[2]).project(camera);
           d4Chips.push({ x: (v.x * 0.5 + 0.5) * W, y: (-v.y * 0.5 + 0.5) * H - 14, result: b.die.result, sides: 4 });
@@ -391,12 +518,6 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
           b.mesh.position.set(a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t);
           qa.set(a[3], a[4], a[5], a[6]); qb.set(c[3], c[4], c[5], c[6]);
           b.mesh.quaternion.copy(qa.slerp(qb, t));
-          const hgt = Math.max(0, b.mesh.position.y - 0.4);
-          b.shadow.position.x = b.mesh.position.x;
-          b.shadow.position.z = b.mesh.position.z;
-          const sc = Math.max(0.35, 1 - hgt * 0.18);
-          b.shadow.scale.set(sc, sc, 1);
-          b.shadow.material.opacity = 0.3 * sc;
         }
         renderer.render(scene, camera);
         if (!started) {
@@ -408,7 +529,10 @@ export default function Dice3D({ dice, onFallback, onStatus }) {
           setTimeout(() => { if (!disposed) onStatus?.(null); }, 1500);
         }
         if (!done) raf = requestAnimationFrame(tick);
-        else if (d4Chips.length) setChips(d4Chips);
+        else {
+          if (d4Chips.length) setChips(d4Chips);
+          onDone?.(); // Animation fertig → Tray darf das Gesamtergebnis zeigen
+        }
         } catch (e) {
           console.error('[vtt] 3D-Playback-Fehler', e);
           onStatus?.(null);
