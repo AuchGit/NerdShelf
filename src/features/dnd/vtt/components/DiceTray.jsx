@@ -85,9 +85,6 @@ export default function DiceTray() {
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
   // damit "3D geht nicht" diagnostizierbar ist statt still nur Zahlen zu zeigen.
   const [webglBroken, setWebglBroken] = useState(null);
-  // Live-Statuszeile der 3D-Pipeline (Lade Module / Init / läuft) — zeigt
-  // beim Hängen sichtbar WO es hängt.
-  const [d3status, setD3status] = useState(null);
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -184,9 +181,8 @@ export default function DiceTray() {
           : use3d
             // key = roll identity → every roll remounts the scene for a fresh throw
             ? <Dice3D key={dice[0].id} dice={dice.map((d) => ({ sides: d.sides, result: d.result, faceSet: d.faceSet }))}
-                onStatus={setD3status}
                 onDone={() => setRevealed(true)}
-                onFallback={(reason) => { setD3status(null); setWebglBroken(reason || 'unbekannt'); }} />
+                onFallback={(reason) => { setWebglBroken(reason || 'unbekannt'); }} />
             // Kein 3D (WebGL kaputt / zu viele Würfel): nur die nackten Werte.
             : <div style={S.plainRow}>{dice.map((d) => (
                 <span key={d.id} style={{ ...S.plainDie, color: (d.faceSet ? DIE_COLOR[100] : DIE_COLOR[d.sides]) || 'var(--color-accent)' }}>
@@ -194,9 +190,6 @@ export default function DiceTray() {
                 </span>
               ))}</div>}
       </div>
-      {use3d && d3status && (
-        <div style={S.statusNote}>{d3status}</div>
-      )}
       {webglBroken && (
         <div style={S.fallbackNote}>
           ⚠ 3D nicht verfügbar: {webglBroken}{' '}
@@ -226,7 +219,7 @@ const MODE_LABEL = { adv: 'Vorteil', dis: 'Nachteil', crit: 'Kritisch' };
 
 const S = {
   fab: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-bg-elevated) 92%, transparent)', color: 'var(--color-text)', fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 16px #0007' },
-  wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 330, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
+  wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 362, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--color-border)', cursor: 'move', userSelect: 'none' },
   smallBtn: { background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '1px 7px' },
   picker: { display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 8px 4px' },
@@ -241,5 +234,4 @@ const S = {
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
   modeTag: { display: 'inline-block', marginRight: 6, padding: '0 6px', borderRadius: 999, fontSize: 10, fontWeight: 800, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)' },
   fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
-  statusNote: { padding: '0 10px 6px', fontSize: 10, color: 'var(--color-text-muted)' },
 };

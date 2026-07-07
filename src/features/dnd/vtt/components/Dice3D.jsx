@@ -14,9 +14,9 @@
 //
 // three.js + cannon-es load lazily (own chunks, first roll only); any failure
 // falls back to the tray's classic CSS dice via onFallback.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
-const W = 292; const H = 236;            // canvas css size (fits the 330px tray widget)
+const W = 324; const H = 262;            // canvas css size (fits the 362px tray widget)
 const AREA_X = 3.15; const AREA_Z = 2.25; // inner wall half-extents — mehr Platz, kleinere Würfel im Bild
 const MAX_SIM_STEPS = 900;               // 1/60s steps → 15s hard cap
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
@@ -75,7 +75,12 @@ function assemble(THREE, clusters) {
       }
     }
     groups.push({ start, count: cl.length * 3, materialIndex: faces.length });
-    faces.push({ normal: n.clone(), corners: uniq });
+    // Per-Ecke auch die UV merken — der d4 malt an jede Ecke eine eigene Zahl.
+    const cornerUV = uniq.map((p) => {
+      const d = new THREE.Vector3().subVectors(p, center);
+      return [0.5 + d.dot(u0) / (2.3 * ext), 0.5 + d.dot(v0) / (2.3 * ext)];
+    });
+    faces.push({ normal: n.clone(), corners: uniq, cornerUV });
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -107,15 +112,23 @@ function facedFromGeometry(THREE, baseGeo) {
 }
 
 // Proper d10 (pentagonal trapezohedron), built manually with EXPLICIT kite
-// clusters — the sphere-normalisation of PolyhedronGeometry would bend the
-// kites out of plane and break both clustering and labeling.
+// clusters. For a REAL trapezohedron each kite must be PLANAR — that only holds
+// when the zig-zag equator height is exactly h = H·(1−cos36°)/(1+cos36°) and the
+// kite's centre (outer tip) sits on the OPPOSITE side of the equator from its
+// apex. Getting that sign wrong bends every face out of plane → smeared numbers
+// AND a broken collision hull (other dice tunnel straight through it).
 function facedD10(THREE) {
-  const apexT = new THREE.Vector3(0, 0.74, 0);
-  const apexB = new THREE.Vector3(0, -0.74, 0);
+  const H = 0.78;
+  const c = Math.cos(Math.PI / 5);            // cos 36°
+  const h = H * (1 - c) / (1 + c);            // planar-kite equator height
+  const R = 0.62;
+  const apexT = new THREE.Vector3(0, H, 0);
+  const apexB = new THREE.Vector3(0, -H, 0);
   const eq = [];
   for (let i = 0; i < 10; i++) {
     const a = (i * Math.PI) / 5;
-    eq.push(new THREE.Vector3(Math.cos(a) * 0.62, i % 2 ? -0.078 : 0.078, Math.sin(a) * 0.62));
+    // even verts (top-kite centres) sit BELOW the equator, odd verts ABOVE.
+    eq.push(new THREE.Vector3(Math.cos(a) * R, (i % 2 ? h : -h), Math.sin(a) * R));
   }
   const E = (i) => eq[(i + 10) % 10];
   const clusters = [];
@@ -240,6 +253,48 @@ function numberTexture(THREE, label, color, fit = 0.85) {
   return tex;
 }
 
+// d4-Fläche: KEINE zentrierte Zahl, sondern an jeder der drei Ecken eine kleine
+// Zahl (wie auf echten d4). Man liest die Zahl an der Spitze, die nach dem
+// Fallen oben steht. `cornerUV`/`cornerNums` sind pro Ecke ausgerichtet; jede
+// Zahl steht aufrecht, wenn IHRE Ecke oben ist (Oberkante zeigt zur Flächen-
+// mitte). Nicht gecacht (jede Fläche ist einzigartig).
+function d4FaceTexture(THREE, cornerUV, cornerNums, color) {
+  const c = document.createElement('canvas'); c.width = c.height = SZ;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color; ctx.fillRect(0, 0, SZ, SZ);
+  const sh = ctx.createRadialGradient(SZ * 0.4, SZ * 0.36, SZ * 0.06, SZ * 0.5, SZ * 0.5, SZ * 0.7);
+  sh.addColorStop(0, 'rgba(255,255,255,0.18)');
+  sh.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sh.addColorStop(1, 'rgba(0,0,0,0.30)');
+  ctx.fillStyle = sh; ctx.fillRect(0, 0, SZ, SZ);
+  const fs = Math.round(SZ * 0.2);
+  ctx.font = `700 ${fs}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < cornerUV.length; i++) {
+    const px = cornerUV[i][0] * SZ;
+    const py = (1 - cornerUV[i][1]) * SZ; // CanvasTexture flipY → v gespiegelt
+    // Zahl von der Ecke ~42% Richtung Flächenmitte einrücken.
+    const qx = px + (SZ / 2 - px) * 0.42;
+    const qy = py + (SZ / 2 - py) * 0.42;
+    // Glyph-Oberkante zeigt zur ECKE (nicht zur Mitte): steht diese Spitze oben,
+    // ist die Zahl richtigrum lesbar.
+    const dx = px - SZ / 2; const dy = py - SZ / 2; // Mitte → Ecke
+    const ang = Math.atan2(dx, -dy); // lokales „oben" (0,−1) → (dx,dy)
+    ctx.save();
+    ctx.translate(qx, qy); ctx.rotate(ang);
+    ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.12;
+    ctx.strokeStyle = 'rgba(20,22,28,0.85)';
+    ctx.strokeText(String(cornerNums[i]), 0, 0);
+    ctx.fillStyle = '#f4f1e8';
+    ctx.fillText(String(cornerNums[i]), 0, 0);
+    ctx.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 // Full value set for a die (as display strings). Percentile dice show 00–90
 // (tens) or 0–9 (units); everything else 1…N.
 function valueSet(sides, faceCount, faceSet) {
@@ -291,7 +346,6 @@ function labelsFor(faces, sides, result, upFace, faceSet) {
 
 export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
   const hostRef = useRef(null);
-  const [chips, setChips] = useState([]); // d4 result chips only
 
   useEffect(() => {
     let disposed = false;
@@ -333,7 +387,7 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = 0.92; // etwas dunkler → keine ausgebrannten Flächen
       renderer.domElement.style.display = 'block';
       host.appendChild(renderer.domElement);
 
@@ -343,9 +397,9 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       camera.lookAt(0, 0, 0.05);
 
       // ── lighting: soft sky/ground + warm key (shadow) + cool fill + rim ──
-      scene.add(new THREE.HemisphereLight(0x9fb4d8, 0x151820, 0.55));
-      scene.add(new THREE.AmbientLight(0xffffff, 0.22));
-      const keyL = new THREE.DirectionalLight(0xfff2df, 1.15);
+      scene.add(new THREE.HemisphereLight(0x9fb4d8, 0x151820, 0.5));
+      scene.add(new THREE.AmbientLight(0xffffff, 0.24));
+      const keyL = new THREE.DirectionalLight(0xfff2df, 0.9);
       keyL.position.set(-3.2, 8.5, 4);
       keyL.castShadow = true;
       keyL.shadow.mapSize.set(1024, 1024);
@@ -354,10 +408,10 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       keyL.shadow.camera.left = -5.2; keyL.shadow.camera.right = 5.2;
       keyL.shadow.camera.top = 5.2; keyL.shadow.camera.bottom = -5.2;
       scene.add(keyL);
-      const fillL = new THREE.DirectionalLight(0x8fbcff, 0.35);
+      const fillL = new THREE.DirectionalLight(0x8fbcff, 0.3);
       fillL.position.set(4, 3.5, 5);
       scene.add(fillL);
-      const rimL = new THREE.DirectionalLight(0xffffff, 0.5);
+      const rimL = new THREE.DirectionalLight(0xffffff, 0.35);
       rimL.position.set(0, 3, -6); // backlight → crisp edges on the up faces
       scene.add(rimL);
 
@@ -442,14 +496,13 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
             b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w,
           ]);
           if (b.body.sleepState !== CANNON.Body.SLEEPING
-            && (b.body.velocity.length() > 0.12 || b.body.angularVelocity.length() > 0.12)) calm = false;
+            && (b.body.velocity.length() > 0.08 || b.body.angularVelocity.length() > 0.08)) calm = false;
         }
-        if (calm && steps > 45) break;
+        if (calm && steps > 60) break; // etwas länger simulieren → wirklich flach ausgerollt
       }
 
       // ── read each die's physical up-face and label it with the true result ──
       const up = new THREE.Vector3(0, 1, 0);
-      const d4Chips = [];
       for (const b of bodies) {
         let fq = b.frames[b.frames.length - 1];
         const quat = new THREE.Quaternion(fq[3], fq[4], fq[5], fq[6]);
@@ -458,12 +511,11 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
           const dot = f.normal.clone().applyQuaternion(quat).dot(up);
           if (dot > bestDot) { bestDot = dot; bestFace = i; }
         });
-        // Nur wenn ein Würfel WIRKLICH schräg liegengeblieben ist (an Wand/
-        // Würfel angelehnt, >~35° gekippt) kippt die Ergebnis-Fläche flach nach
-        // oben. Normale Würfe ruhen ohnehin mit einer Fläche oben und werden
-        // NICHT nachgedreht → kein unnatürliches Snappen am Ende. d4 ruht mit
-        // Spitze oben.
-        if (b.die.sides !== 4 && bestDot < 0.82) {
+        // Liegt der Würfel nicht sauber flach (>~25° gekippt, an Wand/Würfel
+        // angelehnt)? → die Ergebnis-Fläche rollt SANFT flach nach oben
+        // (ease-in-out über ~0,5s, sieht aus wie natürliches Aussetzen, kein
+        // hartes Snappen). d4 ruht mit Spitze oben.
+        if (b.die.sides !== 4 && bestDot < 0.9) {
           const worldN = b.faces[bestFace].normal.clone().applyQuaternion(quat);
           const qFlat = new THREE.Quaternion().setFromUnitVectors(worldN, up).multiply(quat);
           const posAttr = b.geometry.getAttribute('position');
@@ -487,13 +539,36 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
         // Verworfener Würfel (Vorteil/Nachteil: der nicht gewertete d20) → grau.
         const color = b.die.dropped ? '#6b7280'
           : b.die.faceSet ? DIE_COLOR[100] : (DIE_COLOR[b.die.sides] || '#8899ff');
-        const fit = GLYPH_FIT[b.die.sides] ?? 0.82;
-        const labels = labelsFor(b.faces, b.die.sides, b.die.result, bestFace, b.die.faceSet);
-        // Physical material with a clear-coat → glossy resin dice, not flat paint.
-        b.mesh = new THREE.Mesh(b.geometry, labels.map((l) => new THREE.MeshPhysicalMaterial({
-          map: numberTexture(THREE, l, color, fit), roughness: 0.38, metalness: 0.0,
-          clearcoat: 0.65, clearcoatRoughness: 0.3, envMapIntensity: 0.6,
-        })));
+        // Mattere Beschichtung (weniger Clearcoat) → keine ausgebrannten
+        // Glanz-Hotspots mehr ("brennende" Flächen).
+        const matOf = (map) => new THREE.MeshPhysicalMaterial({
+          map, roughness: 0.5, metalness: 0.0, clearcoat: 0.28, clearcoatRoughness: 0.45,
+        });
+        if (b.die.sides === 4) {
+          // d4: an jede Ecke jeder Fläche eine Zahl; die Zahl an der oben
+          // stehenden SPITZE ist das Ergebnis. Vier Eckwerte, Ergebnis auf die
+          // nach dem Fallen oben liegende Ecke.
+          const V4 = [];
+          for (const f of b.faces) for (const cc of f.corners) {
+            if (!V4.some((q) => q.distanceToSquared(cc) < 1e-6)) V4.push(cc.clone());
+          }
+          const qNow = new THREE.Quaternion(fq[3], fq[4], fq[5], fq[6]);
+          let upV = 0; let upY = -Infinity;
+          V4.forEach((vv, i) => { const y = vv.clone().applyQuaternion(qNow).y; if (y > upY) { upY = y; upV = i; } });
+          const nums = new Array(V4.length);
+          nums[upV] = b.die.result;
+          const pool = [1, 2, 3, 4].filter((nn) => nn !== b.die.result);
+          let pj = 0;
+          for (let i = 0; i < V4.length; i++) if (i !== upV) nums[i] = pool[pj++];
+          const idxOf = (p) => { let bi = 0; let bd = Infinity; V4.forEach((q, i) => { const dd = q.distanceToSquared(p); if (dd < bd) { bd = dd; bi = i; } }); return bi; };
+          b.mesh = new THREE.Mesh(b.geometry, b.faces.map((f) => matOf(
+            d4FaceTexture(THREE, f.cornerUV, f.corners.map((cc) => nums[idxOf(cc)]), color),
+          )));
+        } else {
+          const fit = GLYPH_FIT[b.die.sides] ?? 0.82;
+          const labels = labelsFor(b.faces, b.die.sides, b.die.result, bestFace, b.die.faceSet);
+          b.mesh = new THREE.Mesh(b.geometry, labels.map((l) => matOf(numberTexture(THREE, l, color, fit))));
+        }
         b.mesh.castShadow = true; b.mesh.receiveShadow = true;
         // Dark edge lines make the facet boundaries clearly readable.
         const edges = new THREE.LineSegments(
@@ -502,10 +577,6 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
         );
         b.mesh.add(edges);
         scene.add(b.mesh);
-        if (b.die.sides === 4) {
-          const v = new THREE.Vector3(fq[0], fq[1] + 0.5, fq[2]).project(camera);
-          d4Chips.push({ x: (v.x * 0.5 + 0.5) * W, y: (-v.y * 0.5 + 0.5) * H - 14, result: b.die.result, sides: 4 });
-        }
       }
 
       // ── visible playback of the recorded throw ──
@@ -543,10 +614,7 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
           setTimeout(() => { if (!disposed) onStatus?.(null); }, 1500);
         }
         if (!done) raf = requestAnimationFrame(tick);
-        else {
-          if (d4Chips.length) setChips(d4Chips);
-          onDone?.(); // Animation fertig → Tray darf das Gesamtergebnis zeigen
-        }
+        else onDone?.(); // Animation fertig → Tray darf das Gesamtergebnis zeigen
         } catch (e) {
           console.error('[vtt] 3D-Playback-Fehler', e);
           onStatus?.(null);
@@ -579,25 +647,5 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
-    <div style={{ position: 'relative', width: W, height: H, margin: '0 auto' }} ref={hostRef}>
-      {chips.map((c, i) => (
-        <span key={i} style={{ ...S.chip, left: c.x, top: c.y }}>
-          {c.result}
-          <span style={S.chipLabel}>d{c.sides}</span>
-        </span>
-      ))}
-    </div>
-  );
+  return <div style={{ position: 'relative', width: W, height: H, margin: '0 auto' }} ref={hostRef} />;
 }
-
-const S = {
-  chip: {
-    position: 'absolute', transform: 'translate(-50%, -100%)', padding: '1px 7px',
-    background: 'color-mix(in srgb, var(--color-bg-elevated) 92%, transparent)',
-    border: '1px solid var(--color-border)', borderRadius: 999,
-    fontWeight: 800, fontSize: 14, color: 'var(--color-text)', pointerEvents: 'none',
-    boxShadow: '0 2px 8px #0008', whiteSpace: 'nowrap',
-  },
-  chipLabel: { fontSize: 8, fontWeight: 600, color: 'var(--color-text-muted)', marginLeft: 3 },
-};
