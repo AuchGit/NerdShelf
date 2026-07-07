@@ -279,6 +279,15 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
             </div>
           </div>
           <div style={S.section}>
+            <div style={S.label} title="Beim Kampfstart: Auto = automatisch im 3D-Tray würfeln; Selbst = du gibst die Initiative selbst ein/würfelst.">Initiative</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[{ v: 'auto', l: 'Auto würfeln' }, { v: 'manual', l: 'Selbst' }].map((o) => (
+                <button key={o.v} onClick={() => updateToken(tokenId, { combat: { ...(token.combat || {}), initMode: o.v } })}
+                  style={{ ...S.size, ...((token.combat?.initMode || 'auto') === o.v ? S.sizeActive : null) }}>{o.l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={S.section}>
             <div style={S.label}>Kontrolle (Spieler dürfen dieses Token steuern & durch es sehen)</div>
             <label style={S.visRow}>
               <input type="checkbox" checked={(token.controllers || []).includes('all')} onChange={() => toggleController('all')} />

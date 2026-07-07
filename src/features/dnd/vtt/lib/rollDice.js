@@ -19,11 +19,51 @@ function rollChannel() {
   return _rollChannel || null;
 }
 
-export function dispatchRoll(formula, label, mode) {
+export function dispatchRoll(formula, label, mode, captureId) {
   if (!formula) return;
-  const detail = { formula: String(formula), label: label || '', mode: mode || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  const detail = { formula: String(formula), label: label || '', mode: mode || null, captureId: captureId || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
   window.dispatchEvent(new CustomEvent('vtt:roll', { detail }));
   try { rollChannel()?.postMessage(detail); } catch { /* channel closed */ }
+}
+
+// Result round-trip: dispatch a roll and RESOLVE with the tray's total once the
+// 3D animation finishes. Used for automatic initiative rolls (roll in the tray,
+// capture the number). Works cross-window via the result BroadcastChannel.
+let _resultChannel = null;
+let _resultListening = false;
+const _resultWaiters = new Map();
+function resultChannel() {
+  if (_resultChannel === null && typeof BroadcastChannel !== 'undefined') {
+    try { _resultChannel = new BroadcastChannel('nerdshelf:vtt-roll-result'); } catch { _resultChannel = false; }
+  }
+  return _resultChannel || null;
+}
+function onResult(detail) {
+  const w = detail?.captureId && _resultWaiters.get(detail.captureId);
+  if (w) { _resultWaiters.delete(detail.captureId); w(detail.total); }
+}
+function ensureResultListener() {
+  if (_resultListening) return;
+  _resultListening = true;
+  window.addEventListener('vtt:roll-result', (e) => onResult(e.detail));
+  const ch = resultChannel();
+  if (ch) ch.onmessage = (e) => onResult(e.data);
+}
+export function rollForResult(formula, label, mode) {
+  ensureResultListener();
+  const captureId = `cap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  return new Promise((resolve) => {
+    _resultWaiters.set(captureId, resolve);
+    setTimeout(() => { if (_resultWaiters.has(captureId)) { _resultWaiters.delete(captureId); resolve(null); } }, 20000);
+    dispatchRoll(formula, label, mode, captureId);
+  });
+}
+// Called by the DiceTray when a captured roll's animation finishes.
+export function emitRollResult(captureId, total, label) {
+  if (!captureId) return;
+  const detail = { captureId, total, label: label || '' };
+  window.dispatchEvent(new CustomEvent('vtt:roll-result', { detail }));
+  try { resultChannel()?.postMessage(detail); } catch { /* ignore */ }
 }
 
 // Advantage/disadvantage from the click's modifier keys (for d20 rolls).

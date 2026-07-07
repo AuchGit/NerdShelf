@@ -6,6 +6,7 @@
 // result is mathematically random; the animation only visualises it.
 import { useEffect, useRef, useState } from 'react';
 import Dice3D from './Dice3D';
+import { emitRollResult } from '../lib/rollDice';
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const POS_KEY = 'nerdshelf:vttDicePos';
@@ -138,7 +139,7 @@ export default function DiceTray() {
       if (!terms) return;
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => rollFormula(terms, detail.mode || null));
+      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '' }));
     };
     const onRoll = (e) => handle(e.detail);
     window.addEventListener('vtt:roll', onRoll);
@@ -158,6 +159,17 @@ export default function DiceTray() {
     const t = setTimeout(() => setRevealed(true), 500);
     return () => clearTimeout(t);
   }, [dice, use3d]);
+
+  // Ergebnis-Rückmeldung: gehörte der Wurf zu einer captureId (z.B. eine
+  // automatische Initiative), melden wir das Gesamtergebnis NACH der Animation
+  // zurück (rollForResult löst dann auf). Einmal pro Wurf.
+  const emittedRef = useRef(null);
+  useEffect(() => {
+    if (revealed && roll.captureId && roll.total != null && emittedRef.current !== roll.captureId) {
+      emittedRef.current = roll.captureId;
+      emitRollResult(roll.captureId, roll.total, roll.label);
+    }
+  }, [revealed, roll]);
 
   // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
   // animates instantly instead of waiting on the lazy import.

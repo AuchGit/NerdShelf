@@ -7,8 +7,10 @@ import { Button } from '../../../../shared/ui';
 import Icon from './Icon';
 import { useVtt, useIsDM, useSession } from '../state/useVtt';
 import { setInitiative, selectToken, startCombat, endCombat } from '../state/actions';
+import { getState } from '../state/store';
 import { getBoundCharacter } from '../sync/characterBinding';
 import { useInitiativeRollEnabled } from '../lib/vttPrefs';
+import { rollForResult } from '../lib/rollDice';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
 export default function InitiativeTracker() {
@@ -22,13 +24,40 @@ export default function InitiativeTracker() {
 
   const commit = (next) => setInitiative(next);
 
+  // Wert in die AKTUELLE Reihenfolge schreiben (getState → nie stale im Queue-Lauf).
+  const setValById = (id, value) => {
+    const cur = getState().initiative;
+    if (!cur) return;
+    setInitiative({ ...cur, order: cur.order.map((e) => (e.id === id ? { ...e, value, pending: false } : e)) });
+  };
+  // Ein Eintrag würfelt ECHT im 3D-Tray (rollForResult) und übernimmt das
+  // Ergebnis. d20 + korrekter Ini-Bonus (Charakter-Ini bzw. NPC-DEX/2024-Bonus).
+  const rollEntryTo = async (e) => {
+    const t = tokens[e.tokenId];
+    const total = await rollForResult(`1d20${fmt(initBonus(t))}`, `${e.name}: Initiative`);
+    if (total != null) setValById(e.id, total);
+  };
+  const isAutoNpc = (t) => t && t.characterId == null && (t.combat?.initMode || 'auto') !== 'manual';
+  // Alle Auto-NPCs NACHEINANDER automatisch im 3D-Tray würfeln.
+  const rollAutoNpcs = async () => {
+    const order = getState().initiative?.order || [];
+    for (const e of order) {
+      if (e.lair || e.tokenId == null) continue;
+      if (isAutoNpc(tokens[e.tokenId])) await rollEntryTo(e);
+    }
+  };
+
   const begin = () => {
     const ids = (selectedIds && selectedIds.length) ? selectedIds : Object.keys(tokens);
-    startCombat(ids, tokens, { lair });
+    // Alle Einträge starten offen (pending); Auto-NPCs würfeln direkt danach
+    // automatisch im 3D-Tray, Spieler werden per Prompt gefragt.
+    startCombat(ids, tokens, { lair, valueFor: () => ({ value: null, pending: true }) });
+    setTimeout(() => { rollAutoNpcs(); }, 60);
   };
+  const rollAllNpcs = () => { rollAutoNpcs(); };
   // Descending by value; lair actions lose ties (placed after others at 20).
-  const sortDesc = () => commit({ ...init, order: [...init.order].sort((a, b) => b.value - a.value || (a.lair ? 1 : 0) - (b.lair ? 1 : 0)), activeIndex: 0 });
-  const setValue = (id, value) => commit({ ...init, order: init.order.map((e) => (e.id === id ? { ...e, value } : e)) });
+  const sortDesc = () => commit({ ...init, order: [...init.order].sort((a, b) => (b.value ?? -99) - (a.value ?? -99) || (a.lair ? 1 : 0) - (b.lair ? 1 : 0)), activeIndex: 0 });
+  const setValue = (id, value) => commit({ ...init, order: init.order.map((e) => (e.id === id ? { ...e, value, pending: false } : e)) });
   const remove = (id) => commit({ ...init, order: init.order.filter((e) => e.id !== id) });
   const step = (dir) => {
     if (!init.order.length) return;
@@ -39,8 +68,8 @@ export default function InitiativeTracker() {
     commit({ ...init, activeIndex: i, round });
   };
 
-  // d20 + the combatant's initiative bonus (bound character, else NPC DEX mod).
-  const rollInitiative = (e) => setValue(e.id, rollD20() + initBonus(tokens[e.tokenId]));
+  // Einzel-Wurf → echter 3D-Wurf, Ergebnis wird übernommen.
+  const rollInitiative = (e) => rollEntryTo(e);
   const mayRoll = (e) => isDM || tokens[e.tokenId]?.ownerId === session.userId;
 
   return (
@@ -54,6 +83,7 @@ export default function InitiativeTracker() {
             ? <Button size="sm" onClick={begin}>Kampf starten{selectedIds?.length ? ` (${selectedIds.length})` : ''}</Button>
             : <Button size="sm" variant="danger" onClick={endCombat}>Kampf beenden</Button>}
           {init.active && <Button size="sm" variant="secondary" onClick={sortDesc}>Sortieren</Button>}
+          {init.active && <Button size="sm" variant="secondary" onClick={rollAllNpcs}>NPCs würfeln</Button>}
         </div>
       )}
       {isDM && !init.active && (
@@ -85,12 +115,13 @@ export default function InitiativeTracker() {
             {isDM ? (
               <input
                 type="number"
-                value={e.value}
+                value={e.value ?? ''}
+                placeholder={e.pending ? '…' : ''}
                 onClick={(ev) => ev.stopPropagation()}
-                onChange={(ev) => setValue(e.id, +ev.target.value)}
+                onChange={(ev) => setValue(e.id, ev.target.value === '' ? null : +ev.target.value)}
                 style={S.val}
               />
-            ) : <span style={S.valRO}>{e.value}</span>}
+            ) : <span style={S.valRO}>{e.value ?? '…'}</span>}
             {isDM && <span style={S.del} onClick={(ev) => { ev.stopPropagation(); remove(e.id); }}>✕</span>}
           </div>
         ))}
@@ -127,7 +158,6 @@ function initBonus(token) {
 }
 
 function fmt(n) { return (n >= 0 ? '+' : '') + n; }
-function rollD20() { return 1 + Math.floor(Math.random() * 20); }
 
 // d20 icon, falling back to a 🎲 emoji if the asset is missing.
 function D20Icon() {

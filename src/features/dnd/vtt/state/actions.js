@@ -558,11 +558,15 @@ export const setInitiative = (initiative) => apply({ type: 'initiative/set', ini
 // order (value 10 by default, DM edits / rolls), marks combat active.
 // opts.lair adds a "Lair Action" entry at initiative 20 that loses ties (it's
 // flagged so the sort places it after other 20s — RAW: on initiative 20).
+// opts.valueFor(token) → { value, pending } lets the caller pre-roll initiative
+// (auto NPCs) or flag entries as awaiting a roll (players get prompted). Missing
+// → the classic flat 10 the DM edits.
 export function startCombat(tokenIds, tokensById, opts = {}) {
+  const valueFor = opts.valueFor || (() => ({ value: 10 }));
   const order = tokenIds
     .map((id) => tokensById[id])
     .filter(Boolean)
-    .map((t) => ({ id: 'ini_' + t.id, tokenId: t.id, name: t.name, value: 10 }));
+    .map((t) => { const v = valueFor(t) || {}; return { id: 'ini_' + t.id, tokenId: t.id, name: t.name, value: v.value == null ? null : v.value, pending: !!v.pending }; });
   if (opts.lair) {
     order.push({ id: 'ini_lair_' + Math.random().toString(36).slice(2, 8), tokenId: null, name: 'Lair Action', value: 20, lair: true });
   }
