@@ -60,25 +60,34 @@ function assemble(THREE, clusters) {
     const v0 = gUp.normalize();
     // u0 = v0 × n  ⇒  n × u0 = v0 (gleiche Händigkeit wie zuvor → Text nicht gespiegelt)
     const u0 = new THREE.Vector3().crossVectors(v0, n).normalize();
-    let ext = 0;
+    // Getrennte Halb-Ausdehnungen entlang u0 (Breite) und v0 (Länge).
+    let extU = 0; let extV = 0;
     for (const p of uniq) {
       const d = new THREE.Vector3().subVectors(p, center);
-      ext = Math.max(ext, Math.abs(d.dot(u0)), Math.abs(d.dot(v0)));
+      extU = Math.max(extU, Math.abs(d.dot(u0)));
+      extV = Math.max(extV, Math.abs(d.dot(v0)));
     }
+    // WICHTIG für den d10: die Kite-Fläche ist lang & schmal. Mit EINER
+    // gemeinsamen (max) Ausdehnung würde die schmale u-Richtung die Zahl auf
+    // einen dünnen vertikalen Streifen stauchen → genau die „zerlaufenen"
+    // d10/d100-Zahlen. Beim Kite (cl._up) skalieren wir daher BEIDE Achsen mit
+    // der schmalen Breite (quadratisch, mittig, unverzerrt). Alle anderen
+    // Flächen sind ~gleichseitig → gemeinsame max-Ausdehnung wie bisher.
+    const s = cl._up ? extU : Math.max(extU, extV);
     const start = positions.length / 3;
     for (const t of cl) {
       for (const p of [t.a, t.b, t.c]) {
         positions.push(p.x, p.y, p.z);
         normals.push(n.x, n.y, n.z);
         const d = new THREE.Vector3().subVectors(p, center);
-        uvs.push(0.5 + d.dot(u0) / (2.3 * ext), 0.5 + d.dot(v0) / (2.3 * ext));
+        uvs.push(0.5 + d.dot(u0) / (2.3 * s), 0.5 + d.dot(v0) / (2.3 * s));
       }
     }
     groups.push({ start, count: cl.length * 3, materialIndex: faces.length });
     // Per-Ecke auch die UV merken — der d4 malt an jede Ecke eine eigene Zahl.
     const cornerUV = uniq.map((p) => {
       const d = new THREE.Vector3().subVectors(p, center);
-      return [0.5 + d.dot(u0) / (2.3 * ext), 0.5 + d.dot(v0) / (2.3 * ext)];
+      return [0.5 + d.dot(u0) / (2.3 * s), 0.5 + d.dot(v0) / (2.3 * s)];
     });
     faces.push({ normal: n.clone(), corners: uniq, cornerUV });
   }
