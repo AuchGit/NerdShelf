@@ -152,25 +152,48 @@ function actionRolls(e) {
   }
   const rc = /\{@recharge ?(\d*)\}/.exec(raw); if (rc) out.recharge = rc[1] ? `Aufladen ${rc[1]}–6` : 'Aufladen 6';
   const us = /(\d+)\/(day|short rest|long rest|turn)/i.exec(raw);
-  if (us) out.uses = `${us[1]}/${us[2].toLowerCase().replace('day', 'Tag').replace('short rest', 'Kurze Rast').replace('long rest', 'Lange Rast').replace('turn', 'Zug')}`;
+  if (us) {
+    out.usesN = +us[1];
+    out.usesLabel = `${us[1]}/${us[2].toLowerCase().replace('day', 'Tag').replace('short rest', 'Kurze Rast').replace('long rest', 'Lange Rast').replace('turn', 'Zug')}`;
+  }
   return out;
 }
 const roll = (formula, label) => window.dispatchEvent(new CustomEvent('vtt:roll', { detail: { formula, label } }));
 
 // Eine Aktion/Reaktion/… mit würfelbaren Badges (Angriff/Schaden/Rettung) +
-// Beschreibungstext. Badges → klick würfelt in den Würfel-Tray.
-function ActionEntry({ e }) {
+// Beschreibungstext. Badges → klick würfelt in den Würfel-Tray. Aufladbare
+// Fähigkeiten (Aufladen X–6) und begrenzte (N/Tag, N/Zug) sind anklickbar
+// abhakbar (Combat-Tracking, nur solange das Fenster offen ist).
+function ActionEntry({ e, uid, usage, setUsage }) {
   const r = actionRolls(e);
-  const hasBadges = r.atk || r.damages.length || r.dc || r.recharge || r.uses;
+  const hasBadges = r.atk || r.damages.length || r.dc || r.recharge || r.usesN;
   // Name auflösen (Tags) und den Aufladen-Zusatz raus (steht als Badge).
   const name = resolveTags(String(e?.name || '')).replace(/\s*\(Aufladen[^)]*\)/i, '').replace(/\s*\(Recharge[^)]*\)/i, '').trim();
+  const rcUsed = !!usage[`${uid}:rc`];
+  const usesUsed = usage[`${uid}:uses`] || 0;
+  const toggleRc = () => setUsage((u) => ({ ...u, [`${uid}:rc`]: !u[`${uid}:rc`] }));
+  const setUses = (n) => setUsage((u) => ({ ...u, [`${uid}:uses`]: n }));
   return (
     <div style={S.entry}>
       {name && <span style={S.entryName}>{name}. </span>}
       {hasBadges && (
         <span style={S.badges}>
-          {r.recharge && <span style={S.badgeGray}>{r.recharge}</span>}
-          {r.uses && <span style={S.badgeGray}>{r.uses}</span>}
+          {r.recharge && (
+            <button style={rcUsed ? S.badgeUsed : S.badgeReady} onClick={toggleRc}
+              title={rcUsed ? 'Verbraucht — klick: wieder aufgeladen' : 'Bereit — klick: verbraucht markieren'}>
+              {rcUsed ? '○' : '⚡'} {r.recharge}
+            </button>
+          )}
+          {r.usesN > 0 && (
+            <span style={S.usePips} title={`${r.usesLabel} — Pips anklicken`}>
+              <span style={S.useLbl}>{r.usesLabel}</span>
+              {Array.from({ length: Math.min(r.usesN, 8) }, (_, j) => {
+                const avail = j < (r.usesN - usesUsed);
+                return <button key={j} onClick={() => setUses(avail ? r.usesN - j : r.usesN - (j + 1))}
+                  style={{ ...S.usePip, ...(avail ? S.usePipOn : null) }} title={`${r.usesN - usesUsed}/${r.usesN} übrig`} />;
+              })}
+            </span>
+          )}
           {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln" onClick={() => roll(`1d20${r.atk}`, `${e.name}: Angriff`)}>🎲 {r.atk}</button>}
           {r.dc && <span style={S.badgeSave}>DC {r.dc}{r.save ? ` ${r.save}` : ''}</span>}
           {r.damages.map((d, i) => (
@@ -272,9 +295,55 @@ function NpcSpellcasting({ sc, catalog }) {
   );
 }
 
+// Kompakte, immer sichtbare Fußleiste mit den wichtigsten Kampfwerten:
+// veränderbare TP (Schaden/Heilung tracken), RK und die sechs Rettungswürfe
+// als Ein-Klick-Würfe. Bleibt beim Scrollen unten kleben.
+function NpcBottomBar({ m }) {
+  const maxHp = m.hp?.average != null ? m.hp.average : null;
+  const [hp, setHp] = useState(maxHp);
+  const acN = acNum(m.ac);
+  const nudge = (d) => setHp((v) => Math.max(0, (v == null ? 0 : v) + d));
+  return (
+    <div style={S.bar}>
+      <div style={S.barRow}>
+        <div style={S.barHp}>
+          <span style={S.barLbl}>❤ TP</span>
+          <button style={S.hpBtn} onClick={() => nudge(-5)} title="−5">−5</button>
+          <button style={S.hpBtn} onClick={() => nudge(-1)} title="−1">−</button>
+          <input style={S.hpInput} value={hp ?? ''} inputMode="numeric"
+            onChange={(e) => { const n = e.target.value.replace(/\D/g, ''); setHp(n === '' ? null : +n); }} />
+          {maxHp != null && <span style={S.barMax}>/ {maxHp}</span>}
+          <button style={S.hpBtn} onClick={() => nudge(1)} title="+1">+</button>
+          <button style={S.hpBtn} onClick={() => nudge(5)} title="+5">+5</button>
+        </div>
+        <div style={S.barAc}><span style={S.barLbl}>🛡 RK</span><b>{acN}</b></div>
+      </div>
+      <div style={S.barSaves}>
+        {ABILITIES.map((a) => {
+          const score = m[a];
+          const explicit = m.save?.[a];
+          const bonus = explicit != null ? resolveTags(String(explicit)) : (score != null ? mod(score) : '+0');
+          const clean = bonus.replace(/[^+\-0-9]/g, '') || '+0';
+          const prof = explicit != null;
+          return (
+            <button key={a} style={{ ...S.saveBtn, ...(prof ? S.saveBtnProf : null) }}
+              title={`${a.toUpperCase()}-Rettungswurf${prof ? ' (geübt)' : ''} würfeln`}
+              onClick={() => roll(`1d20${clean.startsWith('-') ? '' : '+'}${clean}`, `${a.toUpperCase()}-Rettungswurf`)}>
+              <span style={S.saveAb}>{a.toUpperCase()}</span>
+              <span style={S.saveVal}>{clean.startsWith('-') ? clean : `+${clean.replace('+', '')}`}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── NPC: render the 5etools statblock compactly ──
 function NpcStatblock({ m }) {
   const catalog = useSpellCatalog();
+  // Ephemeres Combat-Tracking (Aufladen / N-pro-Tag) — nur solange offen.
+  const [usage, setUsage] = useState({});
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
   const type = typeof m.type === 'string' ? m.type : (m.type?.type || '');
   // AC/HP getrennt in "große Zahl" + "kleiner Zusatz", damit die Kacheln auch
@@ -335,9 +404,10 @@ function NpcStatblock({ m }) {
       {sections.map(([title, arr]) => (arr?.length ? (
         <div key={title} style={S.section}>
           <div style={S.sectionTitle}>{title}</div>
-          {arr.map((e, i) => <ActionEntry key={i} e={e} />)}
+          {arr.map((e, i) => <ActionEntry key={i} e={e} uid={`${title}:${i}`} usage={usage} setUsage={setUsage} />)}
         </div>
       ) : null))}
+      <NpcBottomBar m={m} />
     </div>
   );
 }
@@ -564,6 +634,12 @@ const S = {
   badgeDmg: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, cursor: 'pointer', color: '#ff6b6b', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', border: '1px solid color-mix(in srgb, #ff6b6b 45%, transparent)' },
   badgeSave: { fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 999, color: '#9ab3d6', background: 'color-mix(in srgb, #9ab3d6 16%, transparent)', border: '1px solid color-mix(in srgb, #9ab3d6 45%, transparent)' },
   badgeGray: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, color: 'var(--color-text-muted)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
+  badgeReady: { fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 999, cursor: 'pointer', color: '#4ade80', background: 'color-mix(in srgb, #4ade80 16%, transparent)', border: '1px solid color-mix(in srgb, #4ade80 45%, transparent)' },
+  badgeUsed: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, cursor: 'pointer', color: 'var(--color-text-muted)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', textDecoration: 'line-through' },
+  usePips: { display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 7px', borderRadius: 999, background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
+  useLbl: { fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', marginRight: 1 },
+  usePip: { width: 9, height: 9, borderRadius: '50%', border: '1px solid var(--color-border)', background: 'var(--color-surface)', cursor: 'pointer', padding: 0 },
+  usePipOn: { background: 'var(--color-accent)', borderColor: 'var(--color-accent)' },
   spellLine: { fontSize: 11, lineHeight: 1.5, marginBottom: 3, color: 'var(--color-text)' },
   spellLevel: { display: 'inline-block', minWidth: 92, fontWeight: 800, color: 'var(--color-accent)', marginRight: 4 },
   // Zauber-Übersicht (NPC)
@@ -576,4 +652,18 @@ const S = {
   spDetail: { paddingLeft: 12, marginTop: 2 },
   pillMini: { fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--color-accent)', borderRadius: 3, padding: '0 4px', lineHeight: 1.5 },
   sheetBtn: { marginTop: 4, padding: '6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
+  // Sticky-Fußleiste (wichtigste Kampfwerte, immer sichtbar).
+  bar: { position: 'sticky', bottom: -12, margin: '4px -12px -12px', padding: '7px 12px 9px', background: 'color-mix(in srgb, var(--color-bg-elevated) 97%, transparent)', borderTop: '1px solid var(--color-border)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', gap: 6 },
+  barRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  barHp: { display: 'flex', alignItems: 'center', gap: 3 },
+  barLbl: { fontSize: 10, fontWeight: 800, color: 'var(--color-text-muted)', marginRight: 2 },
+  hpBtn: { minWidth: 22, padding: '2px 5px', fontSize: 11, fontWeight: 700, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' },
+  hpInput: { width: 40, textAlign: 'center', padding: '2px 3px', fontSize: 13, fontWeight: 800, background: 'var(--color-bg-sunken)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' },
+  barMax: { fontSize: 11, color: 'var(--color-text-muted)' },
+  barAc: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 },
+  barSaves: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 3 },
+  saveBtn: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3px 0', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--color-text)' },
+  saveBtnProf: { borderColor: 'color-mix(in srgb, var(--color-accent) 55%, transparent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' },
+  saveAb: { fontSize: 8, fontWeight: 700, color: 'var(--color-text-muted)' },
+  saveVal: { fontSize: 11, fontWeight: 800 },
 };
