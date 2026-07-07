@@ -34,14 +34,22 @@ function assemble(THREE, clusters) {
     const n = new THREE.Vector3();
     for (const t of cl) n.add(new THREE.Vector3().subVectors(t.b, t.a).cross(new THREE.Vector3().subVectors(t.c, t.a)));
     n.normalize();
+    // TRUE face centroid = average of the UNIQUE corners (a per-triangle
+    // average double-counts the shared diagonal of kite/fan faces and pushes
+    // the number off-centre — the exact d10 bug). Everything (centre, axes,
+    // extent, UVs) is derived from the real polygon centre so the glyph sits
+    // dead-centre on triangles, kites and pentagons alike.
+    const uniq = [];
+    for (const t of cl) for (const p of [t.a, t.b, t.c]) {
+      if (!uniq.some((q) => q.distanceToSquared(p) < 1e-8)) uniq.push(p.clone());
+    }
     const center = new THREE.Vector3();
-    const cornersRaw = [];
-    for (const t of cl) for (const p of [t.a, t.b, t.c]) { center.add(p); cornersRaw.push(p); }
-    center.divideScalar(cl.length * 3);
-    const u0 = new THREE.Vector3().subVectors(cl[0].a, center).normalize();
+    for (const p of uniq) center.add(p);
+    center.divideScalar(uniq.length);
+    const u0 = new THREE.Vector3().subVectors(uniq[0], center).normalize();
     const v0 = new THREE.Vector3().crossVectors(n, u0).normalize();
     let ext = 0;
-    for (const p of cornersRaw) {
+    for (const p of uniq) {
       const d = new THREE.Vector3().subVectors(p, center);
       ext = Math.max(ext, Math.abs(d.dot(u0)), Math.abs(d.dot(v0)));
     }
@@ -55,10 +63,6 @@ function assemble(THREE, clusters) {
       }
     }
     groups.push({ start, count: cl.length * 3, materialIndex: faces.length });
-    // unique corners ordered around the face center (for reference/debug; the
-    // physics hull uses raw triangles, which are always planar)
-    const uniq = [];
-    for (const p of cornersRaw) if (!uniq.some((q) => q.distanceToSquared(p) < 1e-6)) uniq.push(p.clone());
     faces.push({ normal: n.clone(), corners: uniq });
   }
   const geo = new THREE.BufferGeometry();
@@ -172,20 +176,15 @@ function numberTexture(THREE, label, color, fit = 0.85) {
   const ctx = c.getContext('2d');
   // base colour
   ctx.fillStyle = color; ctx.fillRect(0, 0, SZ, SZ);
-  // spherical shading: light from top-left, shadow bottom-right → curved feel
-  const sh = ctx.createRadialGradient(SZ * 0.36, SZ * 0.32, SZ * 0.08, SZ * 0.52, SZ * 0.54, SZ * 0.72);
-  sh.addColorStop(0, 'rgba(255,255,255,0.22)');
+  // spherical shading: light from top-left, shadow bottom-right → curved feel.
+  // NO painted rectangular border — faces are triangles/kites/pentagons, a
+  // square frame would never line up; the real facet edges come from the 3D
+  // EdgesGeometry overlay instead.
+  const sh = ctx.createRadialGradient(SZ * 0.36, SZ * 0.32, SZ * 0.08, SZ * 0.52, SZ * 0.54, SZ * 0.78);
+  sh.addColorStop(0, 'rgba(255,255,255,0.20)');
   sh.addColorStop(0.5, 'rgba(255,255,255,0.0)');
-  sh.addColorStop(1, 'rgba(0,0,0,0.34)');
+  sh.addColorStop(1, 'rgba(0,0,0,0.30)');
   ctx.fillStyle = sh; ctx.fillRect(0, 0, SZ, SZ);
-  // bevel edge: dark inset + inner highlight so the face rim is readable
-  ctx.lineWidth = SZ * 0.05;
-  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
-  ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, SZ - ctx.lineWidth, SZ - ctx.lineWidth);
-  ctx.lineWidth = SZ * 0.018;
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  const o = SZ * 0.055;
-  ctx.strokeRect(o, o, SZ - 2 * o, SZ - 2 * o);
   // number: bright ivory glyph with a thin dark outline + soft drop shadow →
   // high contrast on any die colour, crisp and readable, not a fat painted blob.
   const s = String(label);
@@ -447,11 +446,12 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
           const dot = f.normal.clone().applyQuaternion(quat).dot(up);
           if (dot > bestDot) { bestDot = dot; bestFace = i; }
         });
-        // Schräg liegengeblieben (an Wand/Würfel angelehnt oder gekippt
-        // eingeschlafen)? → kurzer Kipp-Nachlauf: die Ergebnis-Fläche kippt
-        // flach nach oben (natürliche, NICHT zur Kamera ausgerichtete Drehung —
-        // Würfel liegen realistisch beliebig). d4 ruht mit Spitze oben.
-        if (b.die.sides !== 4 && bestDot < 0.985) {
+        // Nur wenn ein Würfel WIRKLICH schräg liegengeblieben ist (an Wand/
+        // Würfel angelehnt, >~35° gekippt) kippt die Ergebnis-Fläche flach nach
+        // oben. Normale Würfe ruhen ohnehin mit einer Fläche oben und werden
+        // NICHT nachgedreht → kein unnatürliches Snappen am Ende. d4 ruht mit
+        // Spitze oben.
+        if (b.die.sides !== 4 && bestDot < 0.82) {
           const worldN = b.faces[bestFace].normal.clone().applyQuaternion(quat);
           const qFlat = new THREE.Quaternion().setFromUnitVectors(worldN, up).multiply(quat);
           const posAttr = b.geometry.getAttribute('position');
@@ -463,10 +463,10 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
           }
           const yFlat = -minY + 0.005;
           const qFrom = quat.clone();
-          const K = 22;
+          const K = 32; // langsamer, sanfter Kipp statt hartem Snap
           for (let k = 1; k <= K; k++) {
             const t = k / K;
-            const e = 1 - (1 - t) * (1 - t); // ease-out
+            const e = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2; // ease-in-out
             const q = qFrom.clone().slerp(qFlat, e);
             b.frames.push([fq[0], fq[1] + (yFlat - fq[1]) * e, fq[2], q.x, q.y, q.z, q.w]);
           }
@@ -483,8 +483,8 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
         b.mesh.castShadow = true; b.mesh.receiveShadow = true;
         // Dark edge lines make the facet boundaries clearly readable.
         const edges = new THREE.LineSegments(
-          new THREE.EdgesGeometry(b.geometry, 18),
-          new THREE.LineBasicMaterial({ color: 0x0a0c10, transparent: true, opacity: 0.55 }),
+          new THREE.EdgesGeometry(b.geometry, 12),
+          new THREE.LineBasicMaterial({ color: 0x0a0c10, transparent: true, opacity: 0.7 }),
         );
         b.mesh.add(edges);
         scene.add(b.mesh);

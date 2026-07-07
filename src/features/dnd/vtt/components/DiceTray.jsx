@@ -43,17 +43,34 @@ function diceFor(sides, r) {
   }
   return [{ id: rid(), sides, result: r, value: r }];
 }
-function rollFormula(terms) {
+// mode: 'adv' | 'dis' (roll the d20 twice, keep higher/lower) | 'crit' (double
+// every dice term's count — the classic crit rule, modifiers stay) | null.
+function rollFormula(terms, mode) {
   const dice = []; let total = 0;
+  const crit = mode === 'crit';
+  const adv = mode === 'adv'; const dis = mode === 'dis';
+  let d20Done = false;
   for (const t of terms) {
     if (t.kind === 'mod') { total += t.value; continue; }
-    for (let i = 0; i < t.count; i++) {
+    let count = crit ? t.count * 2 : t.count;
+    if ((adv || dis) && t.sides === 20 && !d20Done) {
+      d20Done = true;
+      const r1 = 1 + Math.floor(Math.random() * 20);
+      const r2 = 1 + Math.floor(Math.random() * 20);
+      const keep = adv ? Math.max(r1, r2) : Math.min(r1, r2);
+      const drop = adv ? Math.min(r1, r2) : Math.max(r1, r2);
+      dice.push({ id: rid(), sides: 20, result: keep, value: keep });
+      dice.push({ id: rid(), sides: 20, result: drop, value: 0, dropped: true });
+      total += t.sign * keep;
+      count -= 1; // one d20 consumed by the advantage pair
+    }
+    for (let i = 0; i < count; i++) {
       const r = 1 + Math.floor(Math.random() * t.sides);
       dice.push(...diceFor(t.sides, r));
       total += t.sign * r;
     }
   }
-  return { dice, total };
+  return { dice, total, mode: mode || null };
 }
 
 export default function DiceTray() {
