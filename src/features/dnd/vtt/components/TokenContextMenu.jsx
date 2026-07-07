@@ -23,8 +23,9 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
   const selectedTokenId = useVtt((s) => s.ui.selectedTokenId);
   const ref = useRef(null);
   const fileRef = useRef(null);
-  // Draggable position (initialised from the open coordinates).
-  const [pos, setPos] = useState({ x, y });
+  // Draggable position — leicht NEBEN dem Cursor öffnen (nicht direkt darunter),
+  // damit man sieht, wo man geklickt hat.
+  const [pos, setPos] = useState({ x: x + 18, y: y + 12 });
   const dragRef = useRef(null);
 
   useEffect(() => {

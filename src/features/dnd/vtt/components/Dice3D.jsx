@@ -447,7 +447,7 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
         m.position.set(x, h / 2, z); m.castShadow = true; m.receiveShadow = true;
         scene.add(m);
       };
-      const sideH = 0.5; const frontH = 0.3; // low front lip → never hides dice
+      const sideH = 0.72; const frontH = 0.44; // höhere Holzränder, Front-Lippe bleibt niedriger
       addRim(t, sideH, 2 * AREA_Z + 2 * t, -AREA_X - t / 2, 0);          // left
       addRim(t, sideH, 2 * AREA_Z + 2 * t, AREA_X + t / 2, 0);           // right
       addRim(2 * AREA_X + 2 * t, sideH, t, 0, -AREA_Z - t / 2);          // back
@@ -462,8 +462,11 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       world.solver.tolerance = 0.001;
       const matDie = new CANNON.Material('die');
       const matWorld = new CANNON.Material('world');
-      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matWorld, { restitution: 0.32, friction: 0.28 }));
-      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matDie, { restitution: 0.28, friction: 0.22 }));
+      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matWorld, { restitution: 0.3, friction: 0.32 }));
+      // Sehr GLATTER Würfel-zu-Würfel-Kontakt: ein Würfel, der auf einem anderen
+      // landet, rutscht wieder herunter statt oben liegen zu bleiben (keine
+      // physikalisch unsinnigen Stapel).
+      world.addContactMaterial(new CANNON.ContactMaterial(matDie, matDie, { restitution: 0.2, friction: 0.02 }));
       const addPlane = (nx, ny, nz, px, py, pz) => {
         const b = new CANNON.Body({ type: CANNON.Body.STATIC, shape: new CANNON.Plane(), material: matWorld });
         b.quaternion.setFromVectors(new CANNON.Vec3(0, 0, 1), new CANNON.Vec3(nx, ny, nz));
@@ -514,6 +517,10 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
             b.body.position.x, b.body.position.y, b.body.position.z,
             b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w,
           ]);
+          // Liegt ein Würfel zu HOCH (Mitte > 0.8), ruht er vermutlich auf einem
+          // anderen → wach halten und NICHT als „ruhig" zählen, damit er (mit dem
+          // glatten Würfel-Kontakt) herunterrutscht statt oben liegen zu bleiben.
+          if (b.body.position.y > 0.8) { b.body.wakeUp?.(); calm = false; continue; }
           if (b.body.sleepState !== CANNON.Body.SLEEPING
             && (b.body.velocity.length() > 0.08 || b.body.angularVelocity.length() > 0.08)) calm = false;
         }
