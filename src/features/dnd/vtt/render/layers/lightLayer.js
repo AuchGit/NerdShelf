@@ -176,19 +176,26 @@ export class LightLayer {
     // (≈4× weniger GPU-Fill). EIN Budget für alle Low-Frames, damit der
     // Low-RT-Satz zwischen Live/Recent nicht neu alloziert wird.
     const nowTs = performance.now();
-    const resLow = Math.max(0.18, Math.min(0.5, 1400 / Math.max(w, h)));
+    // Höheres Live-Pixel-Budget: der Live-Frame komponiert nur den SICHTBAREN
+    // Ausschnitt (visibleMapBounds), die Kosten hängen also an der Bildschirm-
+    // statt an der Map-Größe. Darum darf die Interaktions-Auflösung deutlich
+    // schärfer sein (0.72 statt 0.5) → das mitwandernde Licht sieht beim Bewegen
+    // sichtbar besser aus, ohne dass große Maps teurer werden.
+    const resLow = Math.max(0.2, Math.min(0.72, 1800 / Math.max(w, h)));
     // __live = Aufruf aus dem Licht-only-Drag/Glide-Pfad: IMMER low-res
     // (auch der erste Frame — kein Voll-Auflösungs-Hitch beim Drag-Start).
-    const wantLow = !opts.__final && (opts.__live || nowTs - (this._lastCompose || 0) < 200);
+    const wantLow = !opts.__final && (opts.__live || nowTs - (this._lastCompose || 0) < 110);
     const sig = `${baseSig}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
     if (sig === this._sig) return;
     clearTimeout(this._finalTimer);
     if (wantLow) {
       // Final-Pass in voller Auflösung UND über die GANZE Map (fullBounds) —
       // der Live-Frame kann auf den sichtbaren Ausschnitt begrenzt sein.
+      // Kürzeres Settle (110ms) → volle Auflösung + Darkvision schnappen nach
+      // dem Anhalten spürbar schneller zurück (weniger „Low-Res dann Pop").
       this._finalTimer = setTimeout(() => {
         try { this.update({ ...opts, bounds: opts.fullBounds || opts.bounds, __final: true, __live: false }); } catch { /* Renderer evtl. schon weg */ }
-      }, 200);
+      }, 110);
       // ~60fps-Deckel für Interaktions-Composes; Zwischenstände dürfen
       // ausfallen, der Final-Pass oben fängt den Endstand garantiert.
       if (nowTs - (this._lastCompose || 0) < 15) return;
