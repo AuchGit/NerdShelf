@@ -9,7 +9,54 @@ import { useVtt, useSession } from '../state/useVtt';
 import { getBoundCharacter } from '../sync/characterBinding';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
+import { loadSpellList } from '../../character-builder/lib/dataLoader';
 import Icon from './Icon';
+
+// Zauber-Katalog (Name→Daten) einmalig laden & cachen. NPC-Statblöcke liefern
+// nur Zaubernamen — die vollen Daten (Grad, Schule, Zeit, Reichweite, Schaden)
+// holen wir daraus, damit der DM eine echte Übersicht statt einer Namensliste
+// hat. Editions-Unterschiede bei Namen sind minimal → Standard-Katalog reicht.
+const _spellCatalogCache = new Map();
+function loadSpellCatalog(edition = '5e') {
+  if (!_spellCatalogCache.has(edition)) {
+    _spellCatalogCache.set(edition, loadSpellList(edition).then((list) => {
+      const map = new Map();
+      for (const sp of list || []) map.set(String(sp.name).toLowerCase(), sp);
+      return map;
+    }).catch(() => new Map()));
+  }
+  return _spellCatalogCache.get(edition);
+}
+function useSpellCatalog(edition = '5e') {
+  const [catalog, setCatalog] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadSpellCatalog(edition).then((m) => { if (alive) setCatalog(m); });
+    return () => { alive = false; };
+  }, [edition]);
+  return catalog;
+}
+
+const SCHOOL = {
+  A: 'Bannmagie', C: 'Beschwörung', D: 'Erkenntnis', E: 'Verzauberung',
+  V: 'Hervorrufung', I: 'Illusion', N: 'Nekromantie', T: 'Verwandlung', P: 'Psionik',
+};
+const SPELL_LEVEL_LABEL = (lvl) => (lvl === 0 ? 'Zaubertrick' : `Grad ${lvl}`);
+// Zaubername aus einem Statblock-Eintrag säubern: {@spell Name|Quelle} → "Name".
+function cleanSpellName(s) {
+  return resolveTags(String(s || '')).replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+// Erster würfelbarer Schaden aus den Zauber-Entries ({@damage XdY}).
+function spellDamageFormula(sp) {
+  const raw = rawText(sp?.entries || []);
+  const m = /\{@(?:damage|dice) ([^}|]+)/.exec(raw);
+  if (m) { const f = m[1].replace(/\s+/g, ''); if (/\d*d\d+/.test(f)) return f; }
+  const scale = sp?.scalingLevelDice;
+  const sc = Array.isArray(scale) ? scale[0] : scale;
+  const first = sc?.scaling && Object.values(sc.scaling)[0];
+  if (typeof first === 'string' && /\d*d\d+/.test(first)) return first.replace(/\s+/g, '');
+  return null;
+}
 
 // Letzte Zeigerposition global mitschreiben, damit ein per Doppelklick
 // geöffnetes Statblock-Fenster in der Nähe der Maus erscheint.
@@ -147,8 +194,87 @@ function DefRow({ label, val, tone }) {
   );
 }
 
+// Eine Zauber-Zeile in der NPC-Übersicht: Name + Meta (Grad · Schule · Zeit ·
+// Reichweite) + passende Pills (SG/Zauberangriff aus dem Statblock, Schaden zum
+// Würfeln). Klick auf den Namen klappt die Beschreibung auf.
+function SpellRow({ name, sp, scDc, scAtk, scAbi }) {
+  const [open, setOpen] = useState(false);
+  const clean = cleanSpellName(name);
+  const needsSave = Array.isArray(sp?.savingThrow) && sp.savingThrow.length > 0;
+  const isAtk = Array.isArray(sp?.spellAttack) && sp.spellAttack.length > 0;
+  const dmg = sp ? spellDamageFormula(sp) : null;
+  const meta = sp ? [
+    SPELL_LEVEL_LABEL(sp.level ?? 0),
+    SCHOOL[sp.school] || null,
+    sp.castingTime && sp.castingTime !== '1 action' ? sp.castingTime : null,
+    sp.range,
+  ].filter(Boolean).join(' · ') : null;
+  return (
+    <div style={S.spRow}>
+      <div style={S.spTop}>
+        <button style={S.spName} onClick={() => setOpen((o) => !o)} title={sp ? 'Details' : 'Keine Katalogdaten'}>
+          <span style={{ width: 9, color: 'var(--color-text-muted)' }}>{sp ? (open ? '▾' : '▸') : '·'}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clean}</span>
+        </button>
+        <span style={S.badges}>
+          {sp?.concentration && <span style={S.pillMini} title="Konzentration">K</span>}
+          {sp?.meta?.ritual && <span style={S.pillMini} title="Ritual">R</span>}
+          {needsSave && scDc && <span style={S.badgeSave} title="Rettungswurf-SG aus dem Statblock">{scAbi ? '' : ''}SG {scDc}{sp.savingThrow[0] ? ` ${sp.savingThrow[0].slice(0, 3).toUpperCase()}` : ''}</span>}
+          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, `${clean}: Zauberangriff`)}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {dmg && <button style={S.badgeDmg} title="Schaden würfeln" onClick={() => roll(dmg, `${clean}: Schaden`)}>{dmg}</button>}
+        </span>
+      </div>
+      {meta && <div style={S.spMeta}>{meta}</div>}
+      {open && sp && (
+        <div style={S.spDetail}>
+          <div style={S.spMeta2}>
+            {[sp.range && `Reichweite: ${sp.range}`, sp.duration && `Dauer: ${sp.duration}`, componentsText(sp)].filter(Boolean).join(' · ')}
+          </div>
+          <div style={S.entryText}>{flattenEntries(sp.entries)}</div>
+          {sp.entriesHigherLevel?.length > 0 && (
+            <div style={{ ...S.entryText, marginTop: 3 }}><b>Höhere Grade: </b>{flattenEntries(sp.entriesHigherLevel)}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Zauberwirken-Block eines NPCs als echte Übersicht (Katalogdaten + Pills).
+function NpcSpellcasting({ sc, catalog }) {
+  const scHdr = rawText(sc.headerEntries || []);
+  const scDc = /\{@dc (\d+)\}/.exec(scHdr)?.[1];
+  const scAtk = /\{@hit ([+-]?\d+)\}/.exec(scHdr)?.[1] || /([+-]?\d+) to hit with spell/i.exec(scHdr)?.[1];
+  const scAbi = (sc.ability || '').toUpperCase();
+  const headerText = flattenEntries(sc.headerEntries || []);
+  const groups = spellcastingGroups(sc);
+  return (
+    <div style={S.section}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
+        <span style={S.badges}>
+          {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}SG {scDc}</span>}
+          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+        </span>
+      </div>
+      {headerText && <div style={{ ...S.entryText, marginBottom: 4 }}>{headerText}</div>}
+      {groups.map((g, gi) => (
+        <div key={gi} style={{ marginBottom: 5 }}>
+          <div style={S.spGroupLabel}>{g.label}</div>
+          {g.spells.map((nm, si) => (
+            <SpellRow key={si} name={nm} sp={catalog ? catalog.get(cleanSpellName(nm).toLowerCase()) : null}
+              scDc={scDc} scAtk={scAtk} scAbi={scAbi} />
+          ))}
+        </div>
+      ))}
+      {!catalog && <div style={S.sub}>Lade Zauberdaten…</div>}
+    </div>
+  );
+}
+
 // ── NPC: render the 5etools statblock compactly ──
 function NpcStatblock({ m }) {
+  const catalog = useSpellCatalog();
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
   const type = typeof m.type === 'string' ? m.type : (m.type?.type || '');
   // AC/HP getrennt in "große Zahl" + "kleiner Zusatz", damit die Kacheln auch
@@ -201,29 +327,11 @@ function NpcStatblock({ m }) {
         {(m.senses?.length || m.passive != null) ? <DefRow label="Sinne" val={sensesText(m)} /> : null}
         {m.languages?.length ? <DefRow label="Sprachen" val={m.languages.map(resolveTags).join(', ')} /> : null}
       </div>
-      {/* Zauberwirken: Slots pro Grad + Zauberlisten (Klassen- + innate). */}
-      {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => {
-        const scHdr = rawText(sc.headerEntries || []);
-        const scDc = /\{@dc (\d+)\}/.exec(scHdr)?.[1];
-        const scAtk = /\{@hit ([+-]?\d+)\}/.exec(scHdr)?.[1] || /([+-]?\d+) to hit with spell/i.exec(scHdr)?.[1];
-        const scAbi = (sc.ability || '').toUpperCase(); // WIS/INT/CHA
-        return (
-          <div key={`sc${si}`} style={S.section}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
-              <span style={S.badges}>
-                {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}DC {scDc}</span>}
-                {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
-              </span>
-            </div>
-            {spellcastingBlocks(sc).map((b, bi) => (
-              <div key={bi} style={b.label ? S.spellLine : S.entryText}>
-                {b.label && <span style={S.spellLevel}>{b.label}</span>}{b.text}
-              </div>
-            ))}
-          </div>
-        );
-      })}
+      {/* Zauberwirken: echte Übersicht mit Katalogdaten (Grad/Schule/Zeit/
+          Reichweite/Schaden) + Statblock-Pills (SG/Zauberangriff). */}
+      {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => (
+        <NpcSpellcasting key={`sc${si}`} sc={sc} catalog={catalog} />
+      ))}
       {sections.map(([title, arr]) => (arr?.length ? (
         <div key={title} style={S.section}>
           <div style={S.sectionTitle}>{title}</div>
@@ -298,6 +406,11 @@ function speedText(sp) {
     .map(([k, v]) => (k === 'walk' ? `${v} ft.` : `${k} ${v} ft.`))
     .join(', ');
 }
+function componentsText(sp) {
+  const c = sp?.components || {};
+  const parts = [c.v && 'V', c.s && 'S', c.m && 'M'].filter(Boolean);
+  return parts.length ? `Komponenten: ${parts.join(', ')}` : '';
+}
 function crText(cr) { return typeof cr === 'object' ? (cr.cr ?? '—') : String(cr); }
 function mod(score) { const m = Math.floor((score - 10) / 2); return (m >= 0 ? '+' : '') + m; }
 function fmt(n) { const v = Number(n) || 0; return (v >= 0 ? '+' : '') + v; }
@@ -336,33 +449,25 @@ function sensesText(m) {
   if (m.passive != null) parts.push(`passive Perception ${m.passive}`);
   return parts.join(', ');
 }
-// Spellcasting-Trait (Klassenzauber + innate) → strukturierte Blöcke:
-//   Kopftext, Cantrips (at will), Level-Slots + Spells, At-will/N/day innate.
-function spellcastingBlocks(sc) {
-  const blocks = [];
-  const spellLine = (label, spells) => spells?.length
-    ? { label, text: spells.map((s) => resolveTags(String(s))).join(', ') } : null;
-  if (Array.isArray(sc.headerEntries)) {
-    const t = flattenEntries(sc.headerEntries);
-    if (t) blocks.push({ label: '', text: t });
-  }
-  // Slot-Zauber pro Grad (0 = Cantrips „at will").
+// Spellcasting-Trait (Klassenzauber + innate) → rohe Zaubernamen-Arrays pro
+// Gruppe (für die Rich-Übersicht mit Katalogdaten). Plus optionaler Kopftext.
+function spellcastingGroups(sc) {
+  const groups = [];
+  const push = (label, spells) => { if (spells?.length) groups.push({ label, spells: spells.slice() }); };
   for (const lvl of Object.keys(sc.spells || {}).sort()) {
     const g = sc.spells[lvl];
     if (!g) continue;
     const label = lvl === '0' ? 'Zaubertricks (nach Belieben)'
-      : `Grad ${lvl}${g.slots ? ` (${g.slots} ${g.slots === 1 ? 'Slot' : 'Slots'})` : g.slots === 0 ? ' (0 Slots)' : ''}`;
-    const b = spellLine(label, g.spells);
-    if (b) blocks.push(b);
+      : `Grad ${lvl}${g.slots ? ` · ${g.slots} ${g.slots === 1 ? 'Slot' : 'Slots'}` : ''}`;
+    push(label, g.spells);
   }
-  // Innate: at-will + N/day.
-  const w = spellLine('Nach Belieben', sc.will); if (w) blocks.push(w);
+  push('Nach Belieben', sc.will);
   for (const key of Object.keys(sc.daily || {})) {
     const n = key.replace('e', ''); const each = key.endsWith('e') ? ' je' : '';
-    const b = spellLine(`${n}/Tag${each}`, sc.daily[key]); if (b) blocks.push(b);
+    push(`${n}/Tag${each}`, sc.daily[key]);
   }
-  const r = spellLine('Ritual', sc.ritual); if (r) blocks.push(r);
-  return blocks;
+  push('Ritual', sc.ritual);
+  return groups;
 }
 
 // Flatten 5etools entries (strings + nested objects) to plain text, stripping
@@ -461,5 +566,14 @@ const S = {
   badgeGray: { fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999, color: 'var(--color-text-muted)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
   spellLine: { fontSize: 11, lineHeight: 1.5, marginBottom: 3, color: 'var(--color-text)' },
   spellLevel: { display: 'inline-block', minWidth: 92, fontWeight: 800, color: 'var(--color-accent)', marginRight: 4 },
+  // Zauber-Übersicht (NPC)
+  spGroupLabel: { fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-muted)', margin: '3px 0 2px' },
+  spRow: { borderTop: '1px solid color-mix(in srgb, var(--color-border) 55%, transparent)', padding: '2px 0' },
+  spTop: { display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' },
+  spName: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', color: 'var(--color-text)', font: 'inherit', fontSize: 11, fontWeight: 600, textAlign: 'left', cursor: 'pointer', padding: 0 },
+  spMeta: { fontSize: 9.5, color: 'var(--color-text-muted)', paddingLeft: 12, lineHeight: 1.3 },
+  spMeta2: { fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 },
+  spDetail: { paddingLeft: 12, marginTop: 2 },
+  pillMini: { fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--color-accent)', borderRadius: 3, padding: '0 4px', lineHeight: 1.5 },
   sheetBtn: { marginTop: 4, padding: '6px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
 };
