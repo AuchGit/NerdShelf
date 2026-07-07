@@ -1487,6 +1487,27 @@ export class VttRenderer {
     // the walls tool is active, so you must be able to pick them there to edit).
     if (s.ui.tool !== 'select' && s.ui.tool !== 'walls') return;
     e.stopPropagation?.();
+    // Wand-Tool: Klick NAHE einem Endpunkt = von dort eine neue, verbundene Wand
+    // ziehen (Abzweigung); Klick auf die MITTE = Segment auswählen/bearbeiten.
+    // BEIDES direkt beim ersten Klick — nicht erst selektieren.
+    if (s.ui.tool === 'walls' && s.session.role === 'dm' && !this.keys.shift) {
+      const wall0 = s.walls[id];
+      if (wall0 && wall0.kind !== 'door' && wall0.kind !== 'window') {
+        const p = this.mapPos(e);
+        const grid = s.maps[s.activeMapId]?.grid?.size || 70;
+        const dA = Math.hypot(wall0.a.x - p.x, wall0.a.y - p.y);
+        const dB = Math.hypot(wall0.b.x - p.x, wall0.b.y - p.y);
+        if (Math.min(dA, dB) < grid * 0.35) {
+          const end = dA < dB ? wall0.a : wall0.b;
+          A.selectWall(null);
+          const v = { x: end.x, y: end.y };
+          this.wallChain = { start: v, last: v };
+          this.walls.drawPreview(v, v, s.ui.wallKind);
+          this.flashAt(v.x, v.y);
+          return;
+        }
+      }
+    }
     // Shift-Klick (DM): Wand zur Mehrfachauswahl hinzufügen/entfernen —
     // danach im Editor alle gemeinsam ändern.
     if (this.keys.shift && s.session.role === 'dm') {
@@ -1532,16 +1553,16 @@ export class VttRenderer {
     const base = s.maps[s.activeMapId]?.levels?.[0]?.id || null;
     const lvl = w.level || base;
     const v = w[end];
-    // Strg + Klick auf einen Wand-ECKPUNKT (Wand-Tool): von GENAU diesem Punkt
-    // aus eine neue, verbundene Wand weiterziehen/abzweigen — statt den Punkt zu
-    // verschieben. Strg ist hier nur der Aktivator; danach platziert man ganz
-    // normal (der nächste Klick snappt, außer man hält beim Ziehen erneut Strg).
-    if (t === 'walls' && this.keys.ctrl && !this.wallChain) {
+    // Wand-Tool: Klick auf einen ECKPUNKT zieht von GENAU diesem Punkt eine neue,
+    // verbundene Wand weiter (Abzweigung) — kein Strg nötig. Endpunkte VERSCHIEBEN
+    // macht man mit dem Auswahl-Tool. So kann man im Wand-Tool ein Segment (Mitte)
+    // bearbeiten ODER an einem Endpunkt weiterbauen.
+    if (t === 'walls' && !this.wallChain) {
       A.selectWall(null);
       this.wallChain = { start: { x: v.x, y: v.y }, last: { x: v.x, y: v.y } };
       this.walls.drawPreview(v, v, s.ui.wallKind);
       this.flashAt(v.x, v.y);
-      return; // KEIN Endpunkt-Drag
+      return; // KEIN Endpunkt-Drag im Wand-Tool
     }
     A.selectWall(id);
     // All wall endpoints sharing this vertex move together (stay connected).
