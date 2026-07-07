@@ -10,6 +10,7 @@ import { getBoundCharacter } from '../sync/characterBinding';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
 import { loadSpellList } from '../../character-builder/lib/dataLoader';
+import { rollAttack, rollDamage, rollSave } from '../lib/rollDice';
 import Icon from './Icon';
 
 // Zauber-Katalog (Name→Daten) einmalig laden & cachen. NPC-Statblöcke liefern
@@ -158,7 +159,6 @@ function actionRolls(e) {
   }
   return out;
 }
-const roll = (formula, label) => window.dispatchEvent(new CustomEvent('vtt:roll', { detail: { formula, label } }));
 
 // Eine Aktion/Reaktion/… mit würfelbaren Badges (Angriff/Schaden/Rettung) +
 // Beschreibungstext. Badges → klick würfelt in den Würfel-Tray. Aufladbare
@@ -194,10 +194,10 @@ function ActionEntry({ e, uid, usage, setUsage }) {
               })}
             </span>
           )}
-          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln" onClick={() => roll(`1d20${r.atk}`, `${e.name}: Angriff`)}>🎲 {r.atk}</button>}
+          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, r.atk, `${e.name}: Angriff`)}>🎲 {r.atk}</button>}
           {r.dc && <span style={S.badgeSave}>DC {r.dc}{r.save ? ` ${r.save}` : ''}</span>}
           {r.damages.map((d, i) => (
-            <button key={i} style={S.badgeDmg} title="Schaden würfeln" onClick={() => roll(d.formula, `${e.name}: Schaden`)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
+            <button key={i} style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, d.formula, `${e.name}: Schaden`)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
           ))}
         </span>
       )}
@@ -243,8 +243,8 @@ function SpellRow({ name, sp, scDc, scAtk, scAbi }) {
           {sp?.concentration && <span style={S.pillMini} title="Konzentration">K</span>}
           {sp?.meta?.ritual && <span style={S.pillMini} title="Ritual">R</span>}
           {needsSave && scDc && <span style={S.badgeSave} title="Rettungswurf-SG aus dem Statblock">{scAbi ? '' : ''}SG {scDc}{sp.savingThrow[0] ? ` ${sp.savingThrow[0].slice(0, 3).toUpperCase()}` : ''}</span>}
-          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, `${clean}: Zauberangriff`)}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
-          {dmg && <button style={S.badgeDmg} title="Schaden würfeln" onClick={() => roll(dmg, `${clean}: Schaden`)}>{dmg}</button>}
+          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, `${clean}: Zauberangriff`)}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {dmg && <button style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, dmg, `${clean}: Schaden`)}>{dmg}</button>}
         </span>
       </div>
       {meta && <div style={S.spMeta}>{meta}</div>}
@@ -277,7 +277,7 @@ function NpcSpellcasting({ sc, catalog }) {
         <div style={S.sectionTitle}>{sc.name || 'Zauberwirken'}</div>
         <span style={S.badges}>
           {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}SG {scDc}</span>}
-          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln" onClick={() => roll(`1d20${scAtk.startsWith('-') ? '' : '+'}${scAtk}`, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, 'Zauberangriff')}>🎲 {scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
         </span>
       </div>
       {headerText && <div style={{ ...S.entryText, marginBottom: 4 }}>{headerText}</div>}
@@ -327,8 +327,8 @@ function NpcBottomBar({ m }) {
           const prof = explicit != null;
           return (
             <button key={a} style={{ ...S.saveBtn, ...(prof ? S.saveBtnProf : null) }}
-              title={`${a.toUpperCase()}-Rettungswurf${prof ? ' (geübt)' : ''} würfeln`}
-              onClick={() => roll(`1d20${clean.startsWith('-') ? '' : '+'}${clean}`, `${a.toUpperCase()}-Rettungswurf`)}>
+              title={`${a.toUpperCase()}-Rettungswurf${prof ? ' (geübt)' : ''} würfeln — Shift: Vorteil · Strg: Nachteil`}
+              onClick={(ev) => rollSave(ev, clean, `${a.toUpperCase()}-Rettungswurf`)}>
               <span style={S.saveAb}>{a.toUpperCase()}</span>
               <span style={S.saveVal}>{clean.startsWith('-') ? clean : `+${clean.replace('+', '')}`}</span>
             </button>

@@ -80,6 +80,7 @@ export default function DiceTray() {
   const [roll, setRoll] = useState({ dice: [], total: null });
   const dice = roll.dice;
   const total = roll.total;
+  const mode = roll.mode; // 'adv' | 'dis' | 'crit' | null
   const [formula, setFormula] = useState('');
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
   // damit "3D geht nicht" diagnostizierbar ist statt still nur Zahlen zu zeigen.
@@ -204,7 +205,10 @@ export default function DiceTray() {
       )}
       {/* Ergebnis erst NACH der Animation (revealed). */}
       {revealed && dice.length > 0 && (
-        <div style={S.total}>{total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}</div>
+        <div style={S.total}>
+          {mode && <span style={S.modeTag}>{MODE_LABEL[mode]}</span>}
+          {total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}
+        </div>
       )}
     </div>
   );
@@ -218,6 +222,7 @@ function faceText(faceSet, v) {
 }
 
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
+const MODE_LABEL = { adv: 'Vorteil', dis: 'Nachteil', crit: 'Kritisch' };
 
 const S = {
   fab: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-bg-elevated) 92%, transparent)', color: 'var(--color-text)', fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 16px #0007' },
@@ -234,6 +239,7 @@ const S = {
   plainRow: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
   plainDie: { fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' },
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
+  modeTag: { display: 'inline-block', marginRight: 6, padding: '0 6px', borderRadius: 999, fontSize: 10, fontWeight: 800, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)' },
   fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
   statusNote: { padding: '0 10px 6px', fontSize: 10, color: 'var(--color-text-muted)' },
 };

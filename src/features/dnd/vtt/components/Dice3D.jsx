@@ -484,7 +484,9 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
           }
           fq = b.frames[b.frames.length - 1];
         }
-        const color = b.die.faceSet ? DIE_COLOR[100] : (DIE_COLOR[b.die.sides] || '#8899ff');
+        // Verworfener Würfel (Vorteil/Nachteil: der nicht gewertete d20) → grau.
+        const color = b.die.dropped ? '#6b7280'
+          : b.die.faceSet ? DIE_COLOR[100] : (DIE_COLOR[b.die.sides] || '#8899ff');
         const fit = GLYPH_FIT[b.die.sides] ?? 0.82;
         const labels = labelsFor(b.faces, b.die.sides, b.die.result, bestFace, b.die.faceSet);
         // Physical material with a clear-coat → glossy resin dice, not flat paint.
