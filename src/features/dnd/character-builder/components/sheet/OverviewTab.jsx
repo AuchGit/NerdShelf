@@ -28,6 +28,13 @@ import SpellPrepareModal from './SpellPrepareModal'
 import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/usePersistedState'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
+import { rollAttack, rollDamage } from '../../../vtt/lib/rollDice'
+
+// Klickbare Würfel-Pills (Angriff/Schaden) — würfeln in den VTT-Würfeltray.
+const ROLL_PILL = {
+  atk: { fontSize: 11, fontWeight: 800, padding: '1px 8px', borderRadius: 999, cursor: 'pointer', color: '#e0af68', background: 'color-mix(in srgb, #e0af68 16%, transparent)', border: '1px solid color-mix(in srgb, #e0af68 45%, transparent)' },
+  dmg: { fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, cursor: 'pointer', color: '#ff6b6b', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', border: '1px solid color-mix(in srgb, #ff6b6b 45%, transparent)' },
+}
 import { resolveFormula, formatFormula } from '../../lib/formulaResolver'
 import { usePillColors } from '../../lib/pillColors'
 import { parseFeatureEffect, pillColorForKind } from '../../lib/featureEffectParser'
@@ -115,15 +122,22 @@ function actionRowTooltipContent(r) {
     )
   }
   if (r.kind === 'attack') {
+    const hasDmgDice = r.damage && r.damage !== '—' && /\d*d\d+/.test(String(r.damage))
     return (
       <div>
         {titleEl}
-        <div style={{ color: 'var(--text-muted)', marginBottom: 4 }}>
-          {[
-            r.attack && `To Hit ${r.attack}`,
-            r.damage && r.damage !== '—' && `${r.damage} ${r.damageType || ''}`.trim(),
-            r.range && r.range !== '—' && `Range ${r.range}`,
-          ].filter(Boolean).join(' · ')}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+          {r.attack && (
+            <button style={ROLL_PILL.atk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil"
+              onClick={(ev) => rollAttack(ev, r.attack, `${r.name}: Angriff`)}>🎲 {r.attack}</button>
+          )}
+          {hasDmgDice ? (
+            <button style={ROLL_PILL.dmg} title="Schaden würfeln — Shift: Kritisch (Würfel verdoppelt)"
+              onClick={(ev) => rollDamage(ev, r.damage, `${r.name}: Schaden`)}>{r.damage}{r.damageType ? ` ${r.damageType}` : ''}</button>
+          ) : (r.damage && r.damage !== '—' && (
+            <span style={{ color: 'var(--text-muted)' }}>{`${r.damage} ${r.damageType || ''}`.trim()}</span>
+          ))}
+          {r.range && r.range !== '—' && <span style={{ color: 'var(--text-muted)' }}>Range {r.range}</span>}
         </div>
         {Array.isArray(r.properties) && r.properties.length > 0 && (
           <div style={{ marginBottom: 4 }}>Properties: {r.properties.join(', ')}</div>

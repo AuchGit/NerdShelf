@@ -122,9 +122,10 @@ export default function DiceTray() {
       const f = String(e.detail?.formula || '').trim();
       const terms = parseFormula(f);
       if (!terms) return;
+      const mode = e.detail?.mode || null; // 'adv' | 'dis' | 'crit'
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => rollFormula(terms));
+      setRevealed(false); setRoll(() => rollFormula(terms, mode));
     };
     window.addEventListener('vtt:roll', onRoll);
     return () => window.removeEventListener('vtt:roll', onRoll);
