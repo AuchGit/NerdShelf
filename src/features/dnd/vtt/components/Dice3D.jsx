@@ -16,8 +16,8 @@
 // falls back to the tray's classic CSS dice via onFallback.
 import { useEffect, useRef, useState } from 'react';
 
-const W = 262; const H = 196;            // canvas css size (fits the 300px tray widget)
-const AREA_X = 2.55; const AREA_Z = 1.72; // inner wall half-extents — enger = größere Würfel
+const W = 292; const H = 236;            // canvas css size (fits the 330px tray widget)
+const AREA_X = 3.15; const AREA_Z = 2.25; // inner wall half-extents — mehr Platz, kleinere Würfel im Bild
 const MAX_SIM_STEPS = 900;               // 1/60s steps → 15s hard cap
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
 
@@ -46,8 +46,20 @@ function assemble(THREE, clusters) {
     const center = new THREE.Vector3();
     for (const p of uniq) center.add(p);
     center.divideScalar(uniq.length);
-    const u0 = new THREE.Vector3().subVectors(uniq[0], center).normalize();
-    const v0 = new THREE.Vector3().crossVectors(n, u0).normalize();
+    // Glyph-Ausrichtung wie auf echten Würfeln (nicht willkürlich schräg):
+    //   • Kite (d10) → entlang der Symmetrieachse (cl._up)
+    //   • ungerade Flächen (Dreieck/Fünfeck) → Oberkante zeigt zu einer Ecke
+    //     (Basis parallel zur Gegenkante — d8/d20/d12-Look)
+    //   • gerade Flächen (Quadrat/d6) → Oberkante zur Kantenmitte (achsparallel)
+    let gUp;
+    if (cl._up) gUp = cl._up.clone();
+    else if (uniq.length % 2 === 1) gUp = new THREE.Vector3().subVectors(uniq[0], center);
+    else gUp = new THREE.Vector3().addVectors(uniq[0], uniq[1]).multiplyScalar(0.5).sub(center);
+    gUp.addScaledVector(n, -gUp.dot(n)); // in die Flächenebene projizieren
+    if (gUp.lengthSq() < 1e-9) gUp.subVectors(uniq[0], center); // Fallback
+    const v0 = gUp.normalize();
+    // u0 = v0 × n  ⇒  n × u0 = v0 (gleiche Händigkeit wie zuvor → Text nicht gespiegelt)
+    const u0 = new THREE.Vector3().crossVectors(v0, n).normalize();
     let ext = 0;
     for (const p of uniq) {
       const d = new THREE.Vector3().subVectors(p, center);
@@ -107,17 +119,17 @@ function facedD10(THREE) {
   }
   const E = (i) => eq[(i + 10) % 10];
   const clusters = [];
+  // Each kite carries its symmetry axis (pole apex → outer equator tip) as
+  // `_up`, so the number is drawn UPRIGHT along the kite instead of slanted.
   for (let i = 0; i < 10; i += 2) { // top kites centered on the "up" equator verts
-    clusters.push([
-      { a: apexT, b: E(i - 1), c: E(i) },
-      { a: apexT, b: E(i), c: E(i + 1) },
-    ]);
+    const cl = [{ a: apexT, b: E(i - 1), c: E(i) }, { a: apexT, b: E(i), c: E(i + 1) }];
+    cl._up = E(i).clone().sub(apexT); // apex (up) → outer tip (down): glyph baseline down
+    clusters.push(cl);
   }
   for (let i = 1; i < 10; i += 2) { // bottom kites centered on the "down" verts
-    clusters.push([
-      { a: apexB, b: E(i), c: E(i - 1) },
-      { a: apexB, b: E(i + 1), c: E(i) },
-    ]);
+    const cl = [{ a: apexB, b: E(i), c: E(i - 1) }, { a: apexB, b: E(i + 1), c: E(i) }];
+    cl._up = E(i).clone().sub(apexB);
+    clusters.push(cl);
   }
   return assemble(THREE, clusters);
 }
@@ -326,8 +338,8 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       host.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(34, W / H, 0.1, 50);
-      camera.position.set(0, 6.4, 2.7); // steep so the up faces read clearly
+      const camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 50);
+      camera.position.set(0, 7.6, 3.1); // etwas weiter weg → Würfel kleiner, mehr Tray sichtbar
       camera.lookAt(0, 0, 0.05);
 
       // ── lighting: soft sky/ground + warm key (shadow) + cool fill + rim ──
@@ -338,9 +350,9 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       keyL.castShadow = true;
       keyL.shadow.mapSize.set(1024, 1024);
       keyL.shadow.bias = -0.0007;
-      keyL.shadow.camera.near = 1; keyL.shadow.camera.far = 22;
-      keyL.shadow.camera.left = -4.5; keyL.shadow.camera.right = 4.5;
-      keyL.shadow.camera.top = 4.5; keyL.shadow.camera.bottom = -4.5;
+      keyL.shadow.camera.near = 1; keyL.shadow.camera.far = 24;
+      keyL.shadow.camera.left = -5.2; keyL.shadow.camera.right = 5.2;
+      keyL.shadow.camera.top = 5.2; keyL.shadow.camera.bottom = -5.2;
       scene.add(keyL);
       const fillL = new THREE.DirectionalLight(0x8fbcff, 0.35);
       fillL.position.set(4, 3.5, 5);
