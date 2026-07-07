@@ -110,6 +110,16 @@ export default function DiceTray() {
     if (m) return f.replace(m[0], `${+m[1] + 1}d${sides}`);
     return f ? `${f}+1d${sides}` : `1d${sides}`;
   });
+  // Einen Würfel dieser Seitenzahl aus der Formel entfernen (Term ganz weg bei 0).
+  const removeDie = (sides) => setFormula((f) => {
+    const m = f.match(new RegExp(`(\\d+)d${sides}(?!\\d)`));
+    if (!m) return f;
+    const cnt = +m[1] - 1;
+    let nf = cnt <= 0
+      ? f.replace(new RegExp(`([+\\-]?)\\s*${m[1]}d${sides}(?!\\d)`), '')
+      : f.replace(m[0], `${cnt}d${sides}`);
+    return nf.replace(/^\s*\+/, '').replace(/\+\s*\+/g, '+').trim();
+  });
   const clear = () => setRoll({ dice: [], total: null });
 
   // Externer Wurf: Statblock-Angriffe/Zauber/Rettungswürfe schicken
@@ -167,13 +177,19 @@ export default function DiceTray() {
       </div>
       <div style={S.picker}>
         {DICE.map((s) => (
-          <button key={s} style={S.dieBtn} onClick={() => rollOne(s)} onContextMenu={(e) => { e.preventDefault(); appendDie(s); }} title={`Links: d${s} würfeln · Rechts: zur Formel +`}>d{s}</button>
+          <div key={s} style={S.dieCell}>
+            <button style={S.dieName} onClick={() => rollOne(s)} title={`d${s} sofort würfeln`}>d{s}</button>
+            <div style={S.pmRow}>
+              <button style={S.pmBtn} onClick={() => removeDie(s)} title={`ein d${s} aus der Formel`}>−</button>
+              <button style={S.pmBtn} onClick={() => appendDie(s)} title={`ein d${s} zur Formel`}>+</button>
+            </div>
+          </div>
         ))}
       </div>
       <div style={S.formulaRow}>
         <input value={formula} onChange={(e) => setFormula(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') rollFromFormula(); }}
-          placeholder="z.B. 2d6+4" spellCheck={false} style={S.formula} />
-        <button style={S.rollBtn} onClick={rollFromFormula} disabled={!parseFormula(formula)}>Wurf</button>
+          placeholder="z.B. 2d6+4 — mit + / − aufbauen" spellCheck={false} style={S.formula} />
+        <button style={S.rollBtn} onClick={rollFromFormula} disabled={!parseFormula(formula)}>Roll</button>
       </div>
       <div style={S.tray}>
         {dice.length === 0
@@ -222,8 +238,11 @@ const S = {
   wrap: { position: 'absolute', right: 16, bottom: 16, zIndex: 25, width: 362, background: 'color-mix(in srgb, var(--color-bg-elevated) 96%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 8px 30px #000a', overflow: 'hidden' },
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--color-border)', cursor: 'move', userSelect: 'none' },
   smallBtn: { background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '1px 7px' },
-  picker: { display: 'flex', flexWrap: 'wrap', gap: 4, padding: '8px 8px 4px' },
-  dieBtn: { flex: '1 0 28%', padding: '5px 0', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: 'var(--fs-sm)' },
+  picker: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, padding: '8px 8px 4px' },
+  dieCell: { display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 3 },
+  dieName: { background: 'transparent', border: 'none', color: 'var(--color-text)', cursor: 'pointer', fontWeight: 800, fontSize: 'var(--fs-sm)', padding: '2px 0' },
+  pmRow: { display: 'flex', gap: 3 },
+  pmBtn: { flex: 1, padding: '1px 0', background: 'var(--color-bg-sunken)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', fontWeight: 800, fontSize: 13, lineHeight: 1.1 },
   formulaRow: { display: 'flex', gap: 4, padding: '4px 8px 8px' },
   formula: { flex: 1, minWidth: 0, padding: '5px 8px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-sm)' },
   rollBtn: { padding: '5px 10px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700 },
