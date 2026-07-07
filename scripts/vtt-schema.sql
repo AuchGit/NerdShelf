@@ -116,6 +116,7 @@ alter table public.vtt_tokens add column if not exists sight_reset_at bigint;
 alter table public.vtt_tokens add column if not exists inside boolean;
 alter table public.vtt_tokens add column if not exists controllers jsonb not null default '[]'::jsonb;
 alter table public.vtt_tokens add column if not exists bloodied text;  -- per-token blood override: 'on' | 'off' | null(auto)
+alter table public.vtt_tokens add column if not exists combat jsonb;   -- per-token combat/session state (statblock notes, recharge/N-per-day usage, slot tracking) shared across all views of the same unit
 
 create table if not exists public.vtt_zones (
   id           text primary key,

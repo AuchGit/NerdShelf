@@ -11,6 +11,7 @@ import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
 import { loadSpellList } from '../../character-builder/lib/dataLoader';
 import { rollAttack, rollDamage, rollSave } from '../lib/rollDice';
+import { updateToken } from '../state/actions';
 import Icon from './Icon';
 
 // Zauber-Katalog (Name→Daten) einmalig laden & cachen. NPC-Statblöcke liefern
@@ -114,7 +115,7 @@ export default function StatblockOverlay({ tokenId, index = 0, isGM, userId, onC
         <button style={S.close} onClick={onClose} onMouseDown={(e) => e.stopPropagation()} aria-label="Schließen">×</button>
       </div>
       {token.statblock
-        ? <NpcStatblock m={token.statblock} />
+        ? <NpcStatblock m={token.statblock} token={token} />
         : <CharacterStub token={token} isGM={isGM} userId={userId} />}
     </div>
   );
@@ -297,12 +298,14 @@ function NpcSpellcasting({ sc, catalog }) {
 
 // Kompakte, immer sichtbare Fußleiste mit den wichtigsten Kampfwerten:
 // veränderbare TP (Schaden/Heilung tracken), RK und die sechs Rettungswürfe
-// als Ein-Klick-Würfe. Bleibt beim Scrollen unten kleben.
-function NpcBottomBar({ m }) {
-  const maxHp = m.hp?.average != null ? m.hp.average : null;
-  const [hp, setHp] = useState(maxHp);
+// als Ein-Klick-Würfe. TP liegen AM TOKEN → dieselbe HP wie die Token-Leiste
+// auf der Karte und synchron über alle Clients.
+function NpcBottomBar({ m, token }) {
+  const maxHp = token?.hpMax != null ? token.hpMax : (m.hp?.average != null ? m.hp.average : null);
+  const hp = token?.hp != null ? token.hp : maxHp;
   const acN = acNum(m.ac);
-  const nudge = (d) => setHp((v) => Math.max(0, (v == null ? 0 : v) + d));
+  const setHp = (v) => { if (token) updateToken(token.id, { hp: v == null ? null : Math.max(0, v) }); };
+  const nudge = (d) => setHp((hp == null ? 0 : hp) + d);
   return (
     <div style={S.bar}>
       <div style={S.barRow}>
@@ -340,10 +343,17 @@ function NpcBottomBar({ m }) {
 }
 
 // ── NPC: render the 5etools statblock compactly ──
-function NpcStatblock({ m }) {
+function NpcStatblock({ m, token }) {
   const catalog = useSpellCatalog();
-  // Ephemeres Combat-Tracking (Aufladen / N-pro-Tag) — nur solange offen.
-  const [usage, setUsage] = useState({});
+  // Combat-Tracking (Aufladen / N-pro-Tag) liegt AM TOKEN (token.combat.usage)
+  // → synchron über alle Ansichten (Token, Statblock, Bottom-Bar) und alle
+  // Clients, weil es dieselbe Einheit ist. Kein lokaler ephemerer State mehr.
+  const usage = token?.combat?.usage || {};
+  const setUsage = (updater) => {
+    if (!token) return;
+    const next = typeof updater === 'function' ? updater(token.combat?.usage || {}) : updater;
+    updateToken(token.id, { combat: { ...(token.combat || {}), usage: next } });
+  };
   const size = SIZE_LABELS[Array.isArray(m.size) ? m.size[0] : m.size] || '';
   const type = typeof m.type === 'string' ? m.type : (m.type?.type || '');
   // AC/HP getrennt in "große Zahl" + "kleiner Zusatz", damit die Kacheln auch
@@ -407,7 +417,15 @@ function NpcStatblock({ m }) {
           {arr.map((e, i) => <ActionEntry key={i} e={e} uid={`${title}:${i}`} usage={usage} setUsage={setUsage} />)}
         </div>
       ) : null))}
-      <NpcBottomBar m={m} />
+      {token && (
+        <div style={S.section}>
+          <div style={S.sectionTitle}>Notiz</div>
+          <textarea defaultValue={token.combat?.notes || ''} placeholder="Notiz zu diesem Token…"
+            onBlur={(e) => updateToken(token.id, { combat: { ...(token.combat || {}), notes: e.target.value } })}
+            style={S.noteArea} />
+        </div>
+      )}
+      <NpcBottomBar m={m} token={token} />
     </div>
   );
 }
@@ -598,7 +616,9 @@ function resolveTags(str) {
 
 const S = {
   panel: { position: 'fixed', zIndex: 1000, width: 390, maxHeight: '82vh', overflowY: 'auto', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 40px #000b', padding: 12 },
-  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--color-border)', userSelect: 'none' },
+  // Kopf bleibt beim Scrollen IMMER oben sichtbar (Name + ×). Negative Ränder
+  // + sticky top:-12 heben das 12px-Panel-Padding auf, damit er bündig klebt.
+  head: { position: 'sticky', top: -12, zIndex: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '-12px -12px 8px', padding: '10px 12px 8px', borderBottom: '1px solid var(--color-border)', userSelect: 'none', background: 'color-mix(in srgb, var(--color-bg-elevated) 98%, transparent)', backdropFilter: 'blur(4px)' },
   close: { width: 26, height: 26, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 },
   body: { display: 'flex', flexDirection: 'column', gap: 8, fontSize: 'var(--fs-sm)' },
   metaRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
@@ -666,4 +686,5 @@ const S = {
   saveBtnProf: { borderColor: 'color-mix(in srgb, var(--color-accent) 55%, transparent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' },
   saveAb: { fontSize: 8, fontWeight: 700, color: 'var(--color-text-muted)' },
   saveVal: { fontSize: 11, fontWeight: 800 },
+  noteArea: { width: '100%', boxSizing: 'border-box', minHeight: 46, resize: 'vertical', background: 'var(--color-bg-sunken)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '4px 6px', fontFamily: 'inherit', fontSize: 11 },
 };

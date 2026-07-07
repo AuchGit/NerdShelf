@@ -40,11 +40,13 @@ export function rollAttack(ev, bonus, label) {
   dispatchRoll(`1d20${sign}${b || '+0'}`, label, rollModeFromEvent(ev));
 }
 
-// A damage roll: "2d6 + 4" → "2d6+4". Shift = Krit (dice doubled by the tray).
+// A damage roll. Robust to labelled strings: "1d8 slashing", "2d6 + 4 fire",
+// "1d8+3 (STR)" → extracts just the dice expression ("1d8", "2d6+4", "1d8+3").
+// Shift = Krit (dice doubled by the tray).
 export function rollDamage(ev, formula, label) {
-  const f = String(formula ?? '').replace(/\s+/g, '');
-  if (!/\d*d\d+/.test(f)) return;
-  dispatchRoll(f, label, ev?.shiftKey ? 'crit' : null);
+  const m = String(formula ?? '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i);
+  if (!m) return;
+  dispatchRoll(m[0].replace(/\s+/g, ''), label, ev?.shiftKey ? 'crit' : null);
 }
 
 // A raw d20 save/check with a numeric modifier, honouring Vorteil/Nachteil.

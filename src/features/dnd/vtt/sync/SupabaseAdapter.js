@@ -308,7 +308,7 @@ function tokenToRow(t, cid) {
   return { id: t.id, campaign_id: cid, map_id: t.mapId, level: t.level || null, kind: t.kind,
     owner_user_id: t.ownerId || null, character_id: t.characterId || null, name: t.name,
     image_url: t.imageUrl || null, color: t.color, x: t.x, y: t.y, size_cells: t.sizeCells,
-    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [], bloodied: t.bloodied ?? null };
+    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [], bloodied: t.bloodied ?? null, combat: t.combat ?? null };
 }
 function tokenPatchToRow(p) {
   const map = { mapId: 'map_id', ownerId: 'owner_user_id', characterId: 'character_id', imageUrl: 'image_url', sizeCells: 'size_cells', hpMax: 'hp_max', visibleTo: 'visible_to', sightResetAt: 'sight_reset_at' };
@@ -351,7 +351,7 @@ function lightPatchToRow(p) {
 function rowToToken(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, kind: r.kind, ownerId: r.owner_user_id,
     characterId: r.character_id, name: r.name, imageUrl: r.image_url, color: r.color,
-    x: r.x, y: r.y, sizeCells: r.size_cells, hp: r.hp, hpMax: r.hp_max, ac: r.ac, conditions: r.conditions || [], light: r.light || null, statblock: r.statblock || null, visibleTo: r.visible_to || [], auras: r.auras || [], sightResetAt: r.sight_reset_at || 0, inside: r.inside ?? undefined, controllers: r.controllers || [], bloodied: r.bloodied ?? undefined };
+    x: r.x, y: r.y, sizeCells: r.size_cells, hp: r.hp, hpMax: r.hp_max, ac: r.ac, conditions: r.conditions || [], light: r.light || null, statblock: r.statblock || null, visibleTo: r.visible_to || [], auras: r.auras || [], sightResetAt: r.sight_reset_at || 0, inside: r.inside ?? undefined, controllers: r.controllers || [], bloodied: r.bloodied ?? undefined, combat: r.combat ?? null };
 }
 function rowToZone(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, createdBy: r.created_by, type: r.type,
