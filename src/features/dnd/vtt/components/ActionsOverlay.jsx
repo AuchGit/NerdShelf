@@ -2,7 +2,11 @@
 // zur Bottom-Bar fürs Action-Tracking. Reiter: Alle (Spalten wie die Bottom-Bar),
 // Pinned, Action, Bonus Action, Reaction. Position/Größe bleiben erhalten
 // (localStorage). Öffnen über den Popout-Button im Aktionen-Panel der Bottom-Bar.
+// Rendert per PORTAL in document.body: die Bottom-Bar hat transform +
+// backdropFilter, darin würde position:fixed an der Bar kleben statt frei über
+// allem zu schweben (wie das Würfelfenster).
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CombatActionsExplorer } from '../../character-builder/components/sheet/OverviewTab';
 
 const BOX_KEY = 'nerdshelf:vttActionsOverlayBox';
@@ -52,7 +56,7 @@ export default function ActionsOverlay({ character, computed, applyCharacter, on
   const startMove = (e) => { e.preventDefault(); gesture.current = { kind: 'move', startX: e.clientX, startY: e.clientY, box }; };
   const startResize = (e) => { e.preventDefault(); gesture.current = { kind: 'resize', startX: e.clientX, startY: e.clientY, box }; };
 
-  return (
+  return createPortal(
     <div style={{ ...S.wrap, left: box.x, top: box.y, width: box.w, height: box.h }}>
       <div style={S.head} onMouseDown={startMove} title="Ziehen zum Verschieben">
         <span style={S.title}>Aktionen</span>
@@ -69,7 +73,8 @@ export default function ActionsOverlay({ character, computed, applyCharacter, on
           embedded columns onlySlots={tab === 'all' ? null : [tab]} />
       </div>
       <div style={S.resize} onMouseDown={startResize} title="Größe ziehen" />
-    </div>
+    </div>,
+    document.body,
   );
 }
 
