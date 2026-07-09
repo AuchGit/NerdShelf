@@ -1,8 +1,9 @@
-// DM-Würfelprotokoll: wer hat wann was mit welcher Formel gewürfelt und was kam
+// Würfelprotokoll: wer hat wann was mit welcher Formel gewürfelt und was kam
 // raus. Jeder Client loggt seine eigenen Würfe (DiceTray → logRoll), der Log
 // synct live über den Op-Broadcast — bewusst nicht persistiert (Sitzungs-Log;
-// neue Clients starten leer). Neueste oben.
-import { useVtt } from '../state/useVtt';
+// neue Clients starten leer). Neueste oben. Der DM sieht ALLE Würfe, ein
+// Spieler nur seine eigenen (gefiltert über die userId am Eintrag).
+import { useVtt, useIsDM, useSession } from '../state/useVtt';
 
 const MODE_LABEL = { adv: 'Vorteil', dis: 'Nachteil', crit: 'Krit' };
 
@@ -11,7 +12,10 @@ function timeOf(ts) {
 }
 
 export default function RollLogSidebar() {
-  const log = useVtt((s) => s.rollLog || []);
+  const all = useVtt((s) => s.rollLog || []);
+  const isDM = useIsDM();
+  const session = useSession();
+  const log = isDM ? all : all.filter((e) => e.userId === session.userId);
   if (!log.length) {
     return <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>Noch keine Würfe in dieser Sitzung.</p>;
   }
