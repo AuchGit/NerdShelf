@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Dice3D from './Dice3D';
 import { emitRollResult } from '../lib/rollDice';
+import { useVtt } from '../state/useVtt';
+import { logRoll } from '../state/actions';
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const POS_KEY = 'nerdshelf:vttDicePos';
@@ -86,6 +88,9 @@ export default function DiceTray() {
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
   // damit "3D geht nicht" diagnostizierbar ist statt still nur Zahlen zu zeigen.
   const [webglBroken, setWebglBroken] = useState(null);
+  // Wer würfelt hier? DM heißt „DM", Spieler nach ihrem gebundenen Charakter.
+  const rollerName = useVtt((s) => (s.session.role === 'dm' ? 'DM'
+    : (s.ui.myCharacterId != null ? s.ui.characters?.[s.ui.myCharacterId]?.data?.name : null) || 'Spieler'));
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -101,10 +106,12 @@ export default function DiceTray() {
 
   // Ergebnis erst NACH der Animation zeigen.
   const [revealed, setRevealed] = useState(false);
-  const rollOne = (sides) => { setRevealed(false); setRoll(() => ({ dice: diceFor(sides, 1 + Math.floor(Math.random() * sides)), total: null })); };
+  // Formel am WURF festhalten (fürs Protokoll) — das Eingabefeld kann sich
+  // danach ändern.
+  const rollOne = (sides) => { setRevealed(false); setRoll(() => ({ dice: diceFor(sides, 1 + Math.floor(Math.random() * sides)), total: null, formula: `1d${sides}` })); };
   const rollFromFormula = () => {
     const terms = parseFormula(formula); if (!terms) return;
-    setRevealed(false); setRoll(() => rollFormula(terms));
+    setRevealed(false); setRoll(() => ({ ...rollFormula(terms), formula }));
   };
   const appendDie = (sides) => setFormula((f) => {
     const m = f.match(new RegExp(`(\\d+)d${sides}(?!\\d)`));
@@ -139,7 +146,7 @@ export default function DiceTray() {
       if (!terms) return;
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '' }));
+      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f }));
     };
     const onRoll = (e) => handle(e.detail);
     window.addEventListener('vtt:roll', onRoll);
@@ -173,6 +180,25 @@ export default function DiceTray() {
       emitRollResult(roll.captureId, roll.total, roll.label, perDie);
     }
   }, [revealed, roll]);
+
+  // Würfelprotokoll: jeden AUFGEDECKTEN Wurf genau einmal loggen (synct an
+  // alle; der DM liest es in der Roll-Log-Sidebar).
+  const loggedRef = useRef(null);
+  useEffect(() => {
+    if (!revealed || !dice.length) return;
+    const key = dice[0].id;
+    if (loggedRef.current === key) return;
+    loggedRef.current = key;
+    const nat = dice.filter((d) => !d.dropped).map((d) => d.value ?? d.result);
+    logRoll({
+      name: rollerName,
+      label: roll.label || '',
+      formula: roll.formula || '',
+      mode: roll.mode || null,
+      total: roll.total != null ? roll.total : nat.reduce((s, v) => s + v, 0),
+      dice: nat,
+    });
+  }, [revealed, dice, roll, rollerName]);
 
   // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
   // animates instantly instead of waiting on the lazy import.

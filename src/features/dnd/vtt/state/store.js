@@ -51,6 +51,7 @@ function freshState() {
     presentedHandout: null, // id of the handout the DM is currently showing to everyone
     paused: false,     // DM froze the session: players can't move/act (synced)
     pings: [],         // transient {id, x, y, mapId, color, at}
+    rollLog: [],       // Sitzungs-Würfelprotokoll {id, ts, userId, name, label, formula, mode, total, dice[]} (synct, nicht persistiert)
     ruler: null,       // transient {from:{x,y}, to:{x,y}} while measuring
     ui: { tool: 'select', selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedWallId: null, zoneType: 'circle', zoneColor: '#ff5252', wallKind: 'both', doorDouble: false, activeLevel: null, transitionKind: 'stairs', transitionTarget: null, selectedTransitionId: null, selectedLightId: null, viewedMapId: null, fogBrushCells: 1.5, lightMode: 'light', darkBrushCells: 2, pendingWallChain: null,
       lightDefaults: { brightFt: 20, dimFt: 40, color: '#ffd9a0', heightFt: 0 },
@@ -434,6 +435,13 @@ function reduce(op) {
       break;
     case 'initiative/set':
       state.initiative = op.initiative;
+      break;
+
+    case 'roll/log':
+      // Sitzungs-Würfelprotokoll (wer, wann, was, Ergebnis) — synct live über
+      // den Op-Broadcast, wird aber bewusst NICHT persistiert (persist()
+      // default) und ist nicht im Snapshot: neue Clients starten leer.
+      state.rollLog = [...(state.rollLog || []), op.entry].slice(-100);
       break;
 
     case 'ping/add':

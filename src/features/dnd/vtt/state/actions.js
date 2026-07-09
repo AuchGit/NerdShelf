@@ -554,6 +554,13 @@ export const setFogBrush = (fogBrushCells) => applyLocal({ type: 'ui/set', ui: {
 // ---- initiative / combat ----
 export const setInitiative = (initiative) => apply({ type: 'initiative/set', initiative });
 
+// Würfelprotokoll: jeder Client loggt seine eigenen Würfe; synct live an alle
+// (der DM liest es in der Roll-Log-Sidebar). Bewusst nicht persistiert.
+export function logRoll(partial) {
+  const s = getState();
+  apply({ type: 'roll/log', entry: { id: uid('roll_'), ts: Date.now(), userId: s.session.userId, ...partial } });
+}
+
 // Start combat from a set of tokens (the DM's current selection). Builds the
 // order (value 10 by default, DM edits / rolls), marks combat active.
 // opts.lair adds a "Lair Action" entry at initiative 20 that loses ties (it's

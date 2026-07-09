@@ -19,6 +19,7 @@ import LevelPanel from './components/LevelPanel';
 import TokenPanel from './components/TokenPanel';
 import DataPanel from './components/DataPanel';
 import InitiativeTracker from './components/InitiativeTracker';
+import RollLogSidebar from './components/RollLogSidebar';
 import TokenContextMenu from './components/TokenContextMenu';
 import StatblockOverlay from './components/StatblockOverlay';
 import CharacterSheetPanel from './components/CharacterSheetPanel';
@@ -228,6 +229,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
     { id: 'tokens', label: 'Tokens', icon: '👤', iconSrc: '/Assets/vtt/tokens.svg', show: effDM, render: () => <TokenPanel /> },
     { id: 'bestiary', label: 'Kompendium', icon: '🐉', iconSrc: '/Assets/vtt/bestiary.svg', show: effDM && !!activeMap, render: () => <DataPanel edition={edition} /> },
     { id: 'initiative', label: 'Initiative', icon: '⚔', iconSrc: '/Assets/vtt/initiative.svg', show: effDM && !!activeMap, render: () => <InitiativeTracker /> },
+    { id: 'rolllog', label: 'Roll-Log', icon: '🎲', iconSrc: '/Assets/vtt/rolllog.svg', show: effDM, render: () => <RollLogSidebar /> },
     { id: 'journal', label: 'Journal', icon: '📓', iconSrc: '/Assets/vtt/journal.svg', show: true, render: () => <JournalSidebar /> },
   ].filter((s) => s.show);
   // Identical rail on both edges: open a category on the left OR the right, so
