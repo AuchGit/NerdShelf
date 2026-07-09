@@ -60,6 +60,16 @@ import { startEmbeddedRelay, stopEmbeddedRelay, listLocalIps, probeRelayUrls, cl
 // Base theme font sizes (theme.css) — scaled by the VTT UI-size preference.
 const FS_BASE = { '--fs-xs': 11, '--fs-sm': 13, '--fs-md': 14, '--fs-lg': 16, '--fs-xl': 19, '--fs-2xl': 24, '--fs-3xl': 32 };
 
+// Automatischer Chrome-Maßstab: das UI ist für 2K (2560×1440) getunt. Auf
+// kleineren Schirmen skalieren wir proportional (kleinere Kante entscheidet),
+// begrenzt auf einen sinnvollen Bereich, damit es nie winzig/riesig wird.
+const DESIGN_W = 2560; const DESIGN_H = 1440;
+function computeAutoFactor() {
+  if (typeof window === 'undefined') return 1;
+  const w = window.innerWidth || DESIGN_W; const h = window.innerHeight || DESIGN_H;
+  return Math.max(0.72, Math.min(1.1, Math.min(w / DESIGN_W, h / DESIGN_H)));
+}
+
 export default function VttApp({ campaignId, userId, isGM = false, playerName = '', edition = '5e', onExit }) {
   const rendererRef = useRef(null);
   const [ctxMenus, setCtxMenus] = useState([]); // multiple, draggable token menus
@@ -182,11 +192,21 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   // newly presented one always shows again).
   const [dismissedHandout, setDismissedHandout] = useState(null);
   const presentedHandout = presentedId && dismissedHandout !== presentedId ? journal.find((e) => e.id === presentedId) : null;
-  // VTT UI size: scale the theme font-size variables on the root only.
+  // VTT UI size: scale the theme font-size variables on the root only. Das UI
+  // ist für 2K (2560×1440) getunt; auf kleineren Schirmen (z.B. 1080p) skalieren
+  // wir die Chrome PROPORTIONAL herunter, damit Größen/Abstände relativ gleich
+  // aussehen. Der manuelle uiScale bleibt als Feineinstellung obendrauf.
   const uiScale = useUiScale();
+  const [autoFactor, setAutoFactor] = useState(() => computeAutoFactor());
+  useEffect(() => {
+    const onResize = () => setAutoFactor(computeAutoFactor());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const effScale = uiScale * autoFactor;
   const fsVars = useMemo(() => {
-    const v = {}; for (const k in FS_BASE) v[k] = `${Math.round(FS_BASE[k] * uiScale)}px`; return v;
-  }, [uiScale]);
+    const v = {}; for (const k in FS_BASE) v[k] = `${(FS_BASE[k] * effScale).toFixed(2)}px`; return v;
+  }, [effScale]);
   // Each category is its own collapsible sidebar, toggled by an icon button on
   // the left edge. Multiple can be open at once (side by side).
   // `icon` is an emoji placeholder; once SVGs are dropped into public/Assets/vtt
@@ -266,7 +286,9 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const renderPanels = (open, toggle, containerStyle, panelStyle, side) => (
     <div style={containerStyle}>
       {open.map((id) => SIDEBARS.find((s) => s.id === id)).filter(Boolean).map((s) => {
-        const minW = s.width || 290;
+        // Standardbreite proportional zur Chrome-Skalierung (2K→1080p), damit
+        // die Panels relativ gleich breit wirken; eigene Resizes bleiben erhalten.
+        const minW = Math.round((s.width || 290) * autoFactor);
         const w = Math.max(minW, widths[s.id] || minW);
         return (
         <aside key={s.id} style={{ ...panelStyle, width: w, ...(myInspired ? S.panelInsp : null) }}>
