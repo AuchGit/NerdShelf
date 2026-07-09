@@ -230,7 +230,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
     { id: 'bestiary', label: 'Kompendium', icon: '🐉', iconSrc: '/Assets/vtt/bestiary.svg', show: effDM && !!activeMap, render: () => <DataPanel edition={edition} /> },
     { id: 'initiative', label: 'Initiative', icon: '⚔', iconSrc: '/Assets/vtt/initiative.svg', show: effDM && !!activeMap, render: () => <InitiativeTracker /> },
     // DM sieht alle Würfe, Spieler nur die eigenen (Filter in der Sidebar).
-    { id: 'rolllog', label: 'Roll-Log', icon: '🎲', iconSrc: '/Assets/vtt/rolllog.svg', show: true, render: () => <RollLogSidebar /> },
+    { id: 'rolllog', label: 'Roll-Log', icon: '🎲', iconSrc: '/Assets/dice-twenty-faces-twenty.svg', show: true, render: () => <RollLogSidebar /> },
     { id: 'journal', label: 'Journal', icon: '📓', iconSrc: '/Assets/vtt/journal.svg', show: true, render: () => <JournalSidebar /> },
   ].filter((s) => s.show);
   // Identical rail on both edges: open a category on the left OR the right, so
