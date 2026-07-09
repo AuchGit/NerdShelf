@@ -146,10 +146,12 @@ export const DISPOSITIONS = [
 
 // Quick presets for "luminous tokens" (a torch-bearer, a lantern, …). `null`
 // turns a token's light off. Keyed list keeps the cycle order data-driven.
+// playerSwitch: dürfen SPIELER dieses Licht an-/ausschalten (Lichtschalter auf
+// der Karte)? Default: alles schaltbar außer die Laterne (die trägt man).
 export const LIGHT_PRESETS = {
-  torch:   { label: 'Fackel',   brightFt: 20, dimFt: 40, color: '#ffb866', icon: '/Assets/map/torch.svg' },
-  lantern: { label: 'Laterne',  brightFt: 30, dimFt: 60, color: '#ffd9a0', icon: '/Assets/map/lantern.svg' },
-  candle:  { label: 'Kerze',    brightFt: 5,  dimFt: 10, color: '#ffe0b0', icon: '/Assets/map/candle.svg' },
+  torch:   { label: 'Fackel',   brightFt: 20, dimFt: 40, color: '#ffb866', icon: '/Assets/map/torch.svg', playerSwitch: true },
+  lantern: { label: 'Laterne',  brightFt: 30, dimFt: 60, color: '#ffd9a0', icon: '/Assets/map/lantern.svg', playerSwitch: false },
+  candle:  { label: 'Kerze',    brightFt: 5,  dimFt: 10, color: '#ffe0b0', icon: '/Assets/map/candle.svg', playerSwitch: true },
 };
 
 // Distinct, stable per-player colours (derived from the user id — no storage),

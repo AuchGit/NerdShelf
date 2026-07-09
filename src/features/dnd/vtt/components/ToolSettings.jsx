@@ -106,7 +106,8 @@ export default function ToolSettings({ map }) {
             <>
               <div style={S.sep} />
               {lightPresets.map((p) => (
-                <button key={p.id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft`} onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, preset: p.id, icon: p.icon || null })}>{p.label}</button>
+                <button key={p.id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft${p.playerSwitch ? ' · Spieler dürfen schalten' : ''}`}
+                  onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, preset: p.id, icon: p.icon || null, playerSwitch: p.playerSwitch !== false })}>{p.label}</button>
               ))}
               <span style={S.muted}>Hell {(ui.lightDefaults || {}).brightFt ?? 20}ft</span>
               <input type="range" min="0" max="120" step="5" value={(ui.lightDefaults || {}).brightFt ?? 20} onChange={(e) => setLightDefaults({ brightFt: +e.target.value })} style={{ width: 90 }} />

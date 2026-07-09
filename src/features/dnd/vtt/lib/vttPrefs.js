@@ -172,4 +172,16 @@ export function getDisabledLightPresets() { const v = readJson(LIGHT_DISABLED_KE
 export function setDisabledLightPresets(ids) { writeJson(LIGHT_DISABLED_KEY, ids?.length ? ids : null); }
 export function useDisabledLightPresets() { return usePref(getDisabledLightPresets); }
 
+// Bearbeitungen der BUILT-IN-Presets: id → Partial (Label/Farbe/Werte/Toggles).
+// Leeres Objekt = unverändert; ein „Zurücksetzen" löscht den Eintrag.
+const WALL_EDITS_KEY = 'nerdshelf:vttBuiltinWallEdits';
+export function getBuiltinWallEdits() { const v = readJson(WALL_EDITS_KEY, {}); return v && typeof v === 'object' ? v : {}; }
+export function setBuiltinWallEdits(map) { writeJson(WALL_EDITS_KEY, map && Object.keys(map).length ? map : null); }
+export function useBuiltinWallEdits() { return usePref(getBuiltinWallEdits); }
+
+const LIGHT_EDITS_KEY = 'nerdshelf:vttBuiltinLightEdits';
+export function getBuiltinLightEdits() { const v = readJson(LIGHT_EDITS_KEY, {}); return v && typeof v === 'object' ? v : {}; }
+export function setBuiltinLightEdits(map) { writeJson(LIGHT_EDITS_KEY, map && Object.keys(map).length ? map : null); }
+export function useBuiltinLightEdits() { return usePref(getBuiltinLightEdits); }
+
 export const VTT_PREFS_EVENT = EVENT;

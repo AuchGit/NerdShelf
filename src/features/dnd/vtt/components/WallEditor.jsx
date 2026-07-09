@@ -50,8 +50,8 @@ export default function WallEditor() {
       <div style={S.presetGrid}>
         {presets.map((p) => (
           <button key={p.id} title={p.label}
-            onClick={() => apply(p.custom
-              ? { kind: 'both', ...p.overrides }
+            onClick={() => apply(p.overrides
+              ? { kind: p.kind, ...p.overrides }
               : { kind: p.kind, blockMove: null, blockLight: null, blockSight: null, seeOutFt: null, seeFarFt: null })}
             style={{ ...S.preset, ...((p.builtin && wall.kind === p.kind && wall.blockMove == null && wall.blockLight == null && wall.blockSight == null) ? S.presetOn : null) }}>
             <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color, flexShrink: 0 }} />

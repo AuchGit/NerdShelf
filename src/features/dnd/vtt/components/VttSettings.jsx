@@ -13,8 +13,9 @@ import {
   useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
   useCustomWallPresets, setCustomWallPresets, useDisabledWallPresets, setDisabledWallPresets,
   useCustomLightPresets, setCustomLightPresets, useDisabledLightPresets, setDisabledLightPresets,
+  useBuiltinWallEdits, setBuiltinWallEdits, useBuiltinLightEdits, setBuiltinLightEdits,
 } from '../lib/vttPrefs';
-import { WALL_TYPES, LIGHT_PRESETS } from '../lib/constants';
+import { WALL_TYPES, LIGHT_PRESETS, wallBaseBlocks, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
 
 export default function VttSettings({ onClose }) {
   const uiScale = useUiScale();
@@ -145,89 +146,133 @@ export default function VttSettings({ onClose }) {
 }
 
 // ── Wand-/Licht-Preset-Verwaltung (DM/VTT-Setup, lokal) ──
-// Built-ins lassen sich deaktivieren (verschwinden aus allen Pickern), eigene
-// Presets anlegen/bearbeiten/löschen. Eigene Wand-Presets = Block-Toggles
-// (kind 'both' + Overrides), eigene Licht-Presets = hell/dämmer/Farbe.
+// AUCH die Built-ins sind editierbar (Label/Farbe/Verhalten; Edits liegen als
+// Partial über dem Default, „↺" setzt zurück) und einzeln deaktivierbar
+// (verschwinden aus allen Pickern). Eigene Presets frei anlegen/löschen.
+// Wand-Verhalten = Block-Toggles (werden als Overrides mitplatziert); Licht-
+// Presets tragen zusätzlich „Spieler dürfen schalten" (playerSwitch).
 function PresetEditor() {
   const customWalls = useCustomWallPresets();
   const disabledWalls = useDisabledWallPresets();
   const customLights = useCustomLightPresets();
   const disabledLights = useDisabledLightPresets();
+  const wallEdits = useBuiltinWallEdits();
+  const lightEdits = useBuiltinLightEdits();
 
   const toggleBuiltin = (list, setList, id) => setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const patchWall = (id, patch) => setCustomWallPresets(customWalls.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-  const patchLight = (id, patch) => setCustomLightPresets(customLights.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const patchCustomWall = (id, patch) => setCustomWallPresets(customWalls.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const patchCustomLight = (id, patch) => setCustomLightPresets(customLights.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const patchWallEdit = (id, patch) => setBuiltinWallEdits({ ...wallEdits, [id]: { ...(wallEdits[id] || {}), ...patch } });
+  const patchLightEdit = (id, patch) => setBuiltinLightEdits({ ...lightEdits, [id]: { ...(lightEdits[id] || {}), ...patch } });
+  const resetWallEdit = (id) => { const m = { ...wallEdits }; delete m[id]; setBuiltinWallEdits(m); };
+  const resetLightEdit = (id) => { const m = { ...lightEdits }; delete m[id]; setBuiltinLightEdits(m); };
   const rid = () => 'p' + Math.random().toString(36).slice(2, 8);
+
+  // Wand-Zeile: Built-ins zeigen effektive Werte (Default + Edit). Tür/Fenster
+  // erscheinen hier gar nicht — sie sind keine Presets (eigenes Verhalten).
+  const wallRow = (p) => {
+    const isBuiltin = !p.custom;
+    const def = isBuiltin ? WALL_TYPES[p.id] : null;
+    const edit = isBuiltin ? (wallEdits[p.id] || {}) : null;
+    const base = isBuiltin ? wallBaseBlocks(p.id) : null;
+    const val = isBuiltin
+      ? {
+          label: edit.label ?? def.label, color: edit.color ?? def.color,
+          blockMove: edit.blockMove ?? base.move, blockLight: edit.blockLight ?? base.light, blockSight: edit.blockSight ?? base.sight,
+          seeOutFt: edit.seeOutFt ?? (p.id === 'cover' ? DEFAULT_COVER_SEE_OUT_FT : 0), seeFarFt: edit.seeFarFt ?? 0,
+        }
+      : p;
+    const patch = isBuiltin ? (pt) => patchWallEdit(p.id, pt) : (pt) => patchCustomWall(p.id, pt);
+    const disabled = isBuiltin && disabledWalls.includes(p.id);
+    return (
+      <div key={p.id} style={{ ...S.presetRow, ...(disabled ? { opacity: 0.5 } : null) }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isBuiltin && (
+            <input type="checkbox" checked={!disabled} title="Aktiv (im Picker sichtbar)"
+              onChange={() => toggleBuiltin(disabledWalls, setDisabledWallPresets, p.id)} />
+          )}
+          <input type="color" value={val.color} onChange={(e) => patch({ color: e.target.value })} style={S.colorIn} />
+          <input value={val.label} onChange={(e) => patch({ label: e.target.value })} placeholder="Name" style={S.textIn} />
+          {isBuiltin
+            ? (Object.keys(edit).length > 0 && <button style={S.smallBtn} title="Auf Standard zurücksetzen" onClick={() => resetWallEdit(p.id)}>↺</button>)
+            : <button style={S.smallBtn} title="Löschen" onClick={() => setCustomWallPresets(customWalls.filter((x) => x.id !== p.id))}>✕</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+          {[['blockMove', 'Bewegung'], ['blockLight', 'Licht'], ['blockSight', 'Sicht']].map(([k, l]) => (
+            <label key={k} style={{ ...S.check, margin: 0 }}>
+              <input type="checkbox" checked={!!val[k]} onChange={(e) => patch({ [k]: e.target.checked })} />
+              {l}
+            </label>
+          ))}
+        </div>
+        {val.blockSight && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+            <label style={S.ftLbl} title="0 = nie durchsehen">Durchsehen ab (ft)
+              <input type="number" min="0" step="5" value={val.seeOutFt || 0} onChange={(e) => patch({ seeOutFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+            </label>
+            {(val.seeOutFt || 0) > 0 && (
+              <label style={S.ftLbl} title="0 = unbegrenzt">Sichtweite dahinter (ft)
+                <input type="number" min="0" step="5" value={val.seeFarFt || 0} onChange={(e) => patch({ seeFarFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const lightRow = (p) => {
+    const isBuiltin = !p.custom;
+    const def = isBuiltin ? LIGHT_PRESETS[p.id] : null;
+    const edit = isBuiltin ? (lightEdits[p.id] || {}) : null;
+    const val = isBuiltin ? { ...def, ...edit } : p;
+    const patch = isBuiltin ? (pt) => patchLightEdit(p.id, pt) : (pt) => patchCustomLight(p.id, pt);
+    const disabled = isBuiltin && disabledLights.includes(p.id);
+    return (
+      <div key={p.id} style={{ ...S.presetRow, ...(disabled ? { opacity: 0.5 } : null) }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isBuiltin && (
+            <input type="checkbox" checked={!disabled} title="Aktiv (im Picker sichtbar)"
+              onChange={() => toggleBuiltin(disabledLights, setDisabledLightPresets, p.id)} />
+          )}
+          <input type="color" value={val.color || '#ffd9a0'} onChange={(e) => patch({ color: e.target.value })} style={S.colorIn} />
+          <input value={val.label || ''} onChange={(e) => patch({ label: e.target.value })} placeholder="Name" style={S.textIn} />
+          {isBuiltin
+            ? (Object.keys(edit).length > 0 && <button style={S.smallBtn} title="Auf Standard zurücksetzen" onClick={() => resetLightEdit(p.id)}>↺</button>)
+            : <button style={S.smallBtn} title="Löschen" onClick={() => setCustomLightPresets(customLights.filter((x) => x.id !== p.id))}>✕</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+          <label style={S.ftLbl}>Hell (ft)
+            <input type="number" min="0" step="5" value={val.brightFt ?? 20} onChange={(e) => patch({ brightFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+          </label>
+          <label style={S.ftLbl}>Dämmer (ft)
+            <input type="number" min="0" step="5" value={val.dimFt ?? 40} onChange={(e) => patch({ dimFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+          </label>
+          <label style={{ ...S.check, margin: 0 }} title="Dürfen Spieler dieses Licht über den Lichtschalter an-/ausmachen?">
+            <input type="checkbox" checked={val.playerSwitch !== false} onChange={(e) => patch({ playerSwitch: e.target.checked })} />
+            Spieler dürfen schalten
+          </label>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
       <div style={S.section}>Wand-Presets (DM)</div>
-      {Object.entries(WALL_TYPES).map(([id, def]) => (
-        <label key={id} style={S.check} title="Deaktivierte Presets verschwinden aus den Wand-Pickern.">
-          <input type="checkbox" checked={!disabledWalls.includes(id)} onChange={() => toggleBuiltin(disabledWalls, setDisabledWallPresets, id)} />
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: def.color, flexShrink: 0 }} />
-          {def.label}
-        </label>
-      ))}
-      {customWalls.map((p) => (
-        <div key={p.id} style={S.presetRow}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="color" value={p.color || '#8899ff'} onChange={(e) => patchWall(p.id, { color: e.target.value })} style={S.colorIn} />
-            <input value={p.label || ''} onChange={(e) => patchWall(p.id, { label: e.target.value })} placeholder="Name" style={S.textIn} />
-            <button style={S.smallBtn} onClick={() => setCustomWallPresets(customWalls.filter((x) => x.id !== p.id))}>✕</button>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
-            {[['blockMove', 'Bewegung'], ['blockLight', 'Licht'], ['blockSight', 'Sicht']].map(([k, l]) => (
-              <label key={k} style={{ ...S.check, margin: 0 }}>
-                <input type="checkbox" checked={!!p[k]} onChange={(e) => patchWall(p.id, { [k]: e.target.checked })} />
-                {l}
-              </label>
-            ))}
-          </div>
-          {p.blockSight && (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
-              <label style={S.ftLbl} title="0 = nie durchsehen">Durchsehen ab (ft)
-                <input type="number" min="0" step="5" value={p.seeOutFt || 0} onChange={(e) => patchWall(p.id, { seeOutFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
-              </label>
-              {(p.seeOutFt || 0) > 0 && (
-                <label style={S.ftLbl} title="0 = unbegrenzt">Sichtweite dahinter (ft)
-                  <input type="number" min="0" step="5" value={p.seeFarFt || 0} onChange={(e) => patchWall(p.id, { seeFarFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
-                </label>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+        Tür und Fenster sind keine Presets (eigenes Verhalten) und immer verfügbar.
+      </div>
+      {Object.keys(WALL_TYPES).filter((id) => id !== 'door' && id !== 'window').map((id) => wallRow({ id }))}
+      {customWalls.map((p) => wallRow({ ...p, custom: true }))}
       <button style={S.smallBtn} onClick={() => setCustomWallPresets([...customWalls, { id: rid(), label: 'Neues Preset', color: '#8899ff', blockMove: true, blockLight: true, blockSight: true }])}>
         + Wand-Preset
       </button>
 
       <div style={S.section}>Licht-Presets (DM)</div>
-      {Object.entries(LIGHT_PRESETS).map(([id, def]) => (
-        <label key={id} style={S.check} title="Deaktivierte Presets verschwinden aus den Licht-Pickern.">
-          <input type="checkbox" checked={!disabledLights.includes(id)} onChange={() => toggleBuiltin(disabledLights, setDisabledLightPresets, id)} />
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
-          {def.label} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>({def.brightFt}/{def.dimFt} ft)</span>
-        </label>
-      ))}
-      {customLights.map((p) => (
-        <div key={p.id} style={S.presetRow}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="color" value={p.color || '#ffd9a0'} onChange={(e) => patchLight(p.id, { color: e.target.value })} style={S.colorIn} />
-            <input value={p.label || ''} onChange={(e) => patchLight(p.id, { label: e.target.value })} placeholder="Name" style={S.textIn} />
-            <button style={S.smallBtn} onClick={() => setCustomLightPresets(customLights.filter((x) => x.id !== p.id))}>✕</button>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
-            <label style={S.ftLbl}>Hell (ft)
-              <input type="number" min="0" step="5" value={p.brightFt ?? 20} onChange={(e) => patchLight(p.id, { brightFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
-            </label>
-            <label style={S.ftLbl}>Dämmer (ft)
-              <input type="number" min="0" step="5" value={p.dimFt ?? 40} onChange={(e) => patchLight(p.id, { dimFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
-            </label>
-          </div>
-        </div>
-      ))}
-      <button style={S.smallBtn} onClick={() => setCustomLightPresets([...customLights, { id: rid(), label: 'Neues Licht', color: '#ffd9a0', brightFt: 20, dimFt: 40 }])}>
+      {Object.keys(LIGHT_PRESETS).map((id) => lightRow({ id }))}
+      {customLights.map((p) => lightRow({ ...p, custom: true }))}
+      <button style={S.smallBtn} onClick={() => setCustomLightPresets([...customLights, { id: rid(), label: 'Neues Licht', color: '#ffd9a0', brightFt: 20, dimFt: 40, playerSwitch: true }])}>
         + Licht-Preset
       </button>
     </>
