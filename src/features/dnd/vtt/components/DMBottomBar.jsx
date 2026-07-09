@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import { useVtt, useActiveMap } from '../state/useVtt';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
-import { applyHpDelta } from '../state/actions';
+import { applyHpDelta, setRollRequest } from '../state/actions';
 import { patchCombat } from '../sync/characterBinding';
 import { ABILITY_KEYS, modStr } from '../../character-builder/lib/sheetUtils';
 import { getModifier } from '../../character-builder/lib/characterModel';
@@ -14,6 +14,10 @@ import ToolSettings from './ToolSettings';
 
 export default function DMBottomBar() {
   const characters = useVtt((s) => s.ui.characters || {});
+  const rollRequest = useVtt((s) => s.rollRequest);
+  // Wurf-Anforderung: Ziel(e) werden über die Spieler-Karten gewählt, das
+  // gemeinsame Mini-Formular (Attribut, Save/Check, DC) erscheint darüber.
+  const [reqDraft, setReqDraft] = useState(null); // {characterIds, label}
   const campaignId = useVtt((s) => s.session.campaignId);
   const tool = useVtt((s) => s.ui.tool);
   const selId = useVtt((s) => s.ui.selectedTokenId);
@@ -43,16 +47,61 @@ export default function DMBottomBar() {
             <button style={{ ...S.toggle, borderBottom: 'none', flex: 1, textAlign: 'left' }} onClick={() => setOpen((o) => !o)} title="Party-Panel ein-/ausklappen">
               {open ? '▼' : '▲'} Party ({list.length})
             </button>
+            {list.length > 1 && (
+              <button style={S.giveAll} title="Wurf von ALLEN anwesenden Spielern anfordern"
+                onClick={() => setReqDraft({ characterIds: list.map((c) => c.id), label: 'alle' })}>Wurf: alle</button>
+            )}
             <button style={S.giveAll} title="Allen Spielern Inspiration geben"
               onClick={() => list.forEach((c) => patchCombat(c.id, { inspiration: true }))}>◆ Allen Insp.</button>
           </div>
+          {rollRequest && (
+            <div style={S.reqBanner}>
+              <span>Angefordert: <b>{rollRequest.ability?.toUpperCase()} {rollRequest.kind === 'save' ? 'Save' : 'Check'}{rollRequest.dc ? ` (DC ${rollRequest.dc})` : ''}</b> — Ergebnisse im Roll-Log</span>
+              <button style={S.reqEnd} onClick={() => setRollRequest(null)}>Beenden</button>
+            </div>
+          )}
+          {reqDraft && <RollRequestForm draft={reqDraft} onClose={() => setReqDraft(null)} />}
           {open && (
             <div style={S.row}>
-              {list.map((c) => <PartyCard key={c.id} entry={c} campaignId={campaignId} />)}
+              {list.map((c) => <PartyCard key={c.id} entry={c} campaignId={campaignId} onRequest={() => setReqDraft({ characterIds: [c.id], label: c.data?.info?.name || c.name })} />)}
             </div>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Mini-Formular fürs Anfordern eines Wurfs (über die Spieler-Karten geöffnet):
+// Attribut, Save/Check, optionaler DC → setzt die synchronisierte Anforderung,
+// die den Ziel-Spielern den RollRequestPrompt zeigt.
+function RollRequestForm({ draft, onClose }) {
+  const [ability, setAbility] = useState('dex');
+  const [kind, setKind] = useState('save');
+  const [dc, setDc] = useState('');
+  const send = () => {
+    setRollRequest({
+      id: 'req_' + Math.random().toString(36).slice(2, 8),
+      characterIds: draft.characterIds,
+      ability, kind,
+      dc: parseInt(dc, 10) || null,
+      ts: Date.now(),
+    });
+    onClose();
+  };
+  return (
+    <div style={S.reqForm}>
+      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Wurf anfordern von <b>{draft.label}</b>:</span>
+      {ABILITY_KEYS.map((a) => (
+        <button key={a} style={{ ...S.reqBtn, ...(ability === a ? S.reqOn : null) }} onClick={() => setAbility(a)}>{a.toUpperCase()}</button>
+      ))}
+      <span style={{ width: 6 }} />
+      {[['save', 'Save'], ['check', 'Check']].map(([v, l]) => (
+        <button key={v} style={{ ...S.reqBtn, ...(kind === v ? S.reqOn : null) }} onClick={() => setKind(v)}>{l}</button>
+      ))}
+      <input type="number" placeholder="DC" value={dc} onChange={(e) => setDc(e.target.value)} style={S.reqDc} />
+      <button style={{ ...S.reqBtn, ...S.reqOn }} onClick={send}>Anfordern</button>
+      <button style={S.reqBtn} onClick={onClose}>✕</button>
     </div>
   );
 }
@@ -127,7 +176,7 @@ function TokenDetail({ token, characters, campaignId }) {
   );
 }
 
-function PartyCard({ entry, campaignId }) {
+function PartyCard({ entry, campaignId, onRequest }) {
   const ch = entry.data;
   const computed = useMemo(() => { try { return computeCharacter(ch); } catch { return null; } }, [ch]);
   if (!computed) return null;
@@ -153,6 +202,11 @@ function PartyCard({ entry, campaignId }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ ...S.name, flex: 1 }}>{name}</div>
+            <button title="Wurf von diesem Spieler anfordern (Save/Check)"
+              onClick={(e) => { e.stopPropagation(); onRequest?.(); }}
+              style={S.insp}>
+              <img src="/Assets/dice-twenty-faces-twenty.svg" alt="Wurf" style={{ width: 13, height: 13, display: 'block', margin: 'auto' }} />
+            </button>
             <button title={inspired ? 'Inspiration entfernen' : 'Inspiration geben'}
               onClick={(e) => { e.stopPropagation(); patchCombat(entry.id, { inspiration: !inspired }); }}
               style={{ ...S.insp, ...(inspired ? S.inspOn : null) }}>◆</button>
@@ -210,6 +264,12 @@ const S = {
   act: { padding: '6px 12px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
   detailPortrait: { width: 52, height: 52, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '2px solid var(--color-border)', background: 'var(--color-bg-sunken)' },
   giveAll: { padding: '4px 12px', background: 'transparent', border: 'none', color: 'var(--color-warning,#e0af68)', cursor: 'pointer', fontSize: 'var(--fs-sm)', fontWeight: 700, whiteSpace: 'nowrap' },
+  reqBanner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '4px 14px', fontSize: 'var(--fs-sm)', borderBottom: '1px solid var(--color-border)', background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)' },
+  reqEnd: { padding: '2px 10px', fontSize: 11, fontWeight: 700, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 999, cursor: 'pointer' },
+  reqForm: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', padding: '6px 14px', borderBottom: '1px solid var(--color-border)' },
+  reqBtn: { padding: '2px 8px', fontSize: 11, fontWeight: 700, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 999, cursor: 'pointer' },
+  reqOn: { borderColor: 'var(--color-accent)', color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' },
+  reqDc: { width: 52, padding: '2px 6px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 },
   insp: { width: 22, height: 22, flexShrink: 0, borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-muted)', cursor: 'pointer', fontWeight: 800, lineHeight: 1, padding: 0 },
   inspOn: { border: '1px solid var(--color-warning,#e0af68)', background: 'color-mix(in srgb, var(--color-warning,#e0af68) 22%, transparent)', color: 'var(--color-warning,#e0af68)' },
 };

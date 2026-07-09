@@ -51,6 +51,7 @@ function freshState() {
     presentedHandout: null, // id of the handout the DM is currently showing to everyone
     paused: false,     // DM froze the session: players can't move/act (synced)
     pings: [],         // transient {id, x, y, mapId, color, at}
+    rollRequest: null, // DM fordert einen Wurf an: {id, characterIds:[], ability, kind:'save'|'check', dc, ts} (synct, transient)
     rollLog: [],       // Würfelprotokoll {id, ts, userId, name, portrait, label, formula, mode, total, dice[]} (synct + persistiert, letzte 100)
     ruler: null,       // transient {from:{x,y}, to:{x,y}} while measuring
     ui: { tool: 'select', selectedTokenId: null, selectedTokenIds: [], selectedZoneId: null, selectedWallId: null, zoneType: 'circle', zoneColor: '#ff5252', wallKind: 'both', doorDouble: false, activeLevel: null, transitionKind: 'stairs', transitionTarget: null, selectedTransitionId: null, selectedLightId: null, viewedMapId: null, fogBrushCells: 1.5, lightMode: 'light', darkBrushCells: 2, pendingWallChain: null,
@@ -439,6 +440,12 @@ function reduce(op) {
       break;
     case 'initiative/set':
       state.initiative = op.initiative;
+      break;
+
+    case 'rollRequest/set':
+      // DM fordert einen Wurf von den Spielern an (oder beendet die Anforderung
+      // mit null). Transient — nicht persistiert, Late-Joiner sehen nur neue.
+      state.rollRequest = op.request || null;
       break;
 
     case 'roll/log':

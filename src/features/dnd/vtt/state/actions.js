@@ -550,6 +550,10 @@ export const setFogBrush = (fogBrushCells) => applyLocal({ type: 'ui/set', ui: {
 // ---- initiative / combat ----
 export const setInitiative = (initiative) => apply({ type: 'initiative/set', initiative });
 
+// DM: Wurf von allen Spielern anfordern (STR..CHA, Save/Check, optional DC).
+// null beendet die Anforderung. Spieler bekommen einen Prompt (RollRequestPrompt).
+export const setRollRequest = (request) => apply({ type: 'rollRequest/set', request });
+
 // Würfelprotokoll: jeder Client loggt seine eigenen Würfe; synct live an alle
 // (der DM liest es in der Roll-Log-Sidebar). Bewusst nicht persistiert.
 export function logRoll(partial) {

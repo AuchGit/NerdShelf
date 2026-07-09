@@ -34,6 +34,7 @@ import InitiativeBar from './components/InitiativeBar';
 import InitiativeFab from './components/InitiativeFab';
 import TurnNotice from './components/TurnNotice';
 import InitiativePrompt from './components/InitiativePrompt';
+import RollRequestPrompt from './components/RollRequestPrompt';
 import TransitionPrompt from './components/TransitionPrompt';
 import JournalSidebar from './components/JournalSidebar';
 import HandoutOverlay from './components/HandoutOverlay';
@@ -482,6 +483,7 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
       {activeMap && <InitiativeBar />}
       {activeMap && <TurnNotice />}
       {activeMap && <InitiativePrompt />}
+      {activeMap && <RollRequestPrompt />}
       {activeMap && <InitiativeFab />}
 
       {paused && (
