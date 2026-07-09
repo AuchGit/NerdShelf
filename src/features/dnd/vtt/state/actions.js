@@ -3,7 +3,7 @@
 // never hand-write op objects and the op vocabulary stays in one place.
 import { apply, applyLocal, getState } from './store';
 import { toast } from '../lib/toast';
-import { DEFAULT_GRID, PING_TTL_MS, DEFAULT_LIGHT, LIGHT_PRESETS, DISPOSITIONS } from '../lib/constants';
+import { DEFAULT_GRID, PING_TTL_MS, DEFAULT_LIGHT, DISPOSITIONS } from '../lib/constants';
 import { getPingDurationS } from '../lib/vttPrefs';
 import { patchCombat } from '../sync/characterBinding';
 
@@ -528,17 +528,6 @@ export function addLights(mapId, lightDefs) {
   const lights = lightDefs.map((l) => ({ id: uid('light_'), mapId, level, ...DEFAULT_LIGHT, ...l }));
   apply({ type: 'light/addMany', lights });
   return lights.length;
-}
-
-// Cycle a token's emitted light through the presets (off → torch → lantern →
-// … → off). The light follows the token, so no separate placement is needed.
-export function cycleTokenLight(id, token) {
-  const keys = Object.keys(LIGHT_PRESETS);
-  const curIx = token.light?.preset ? keys.indexOf(token.light.preset) : -1;
-  const nextKey = keys[curIx + 1] || null; // past the last preset → off
-  const light = nextKey ? { preset: nextKey, ...LIGHT_PRESETS[nextKey] } : null;
-  updateToken(id, { light });
-  return nextKey;
 }
 
 // ---- fog ----

@@ -10,7 +10,6 @@ import {
   useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle, useDifficultStyle, setDifficultStyle,
   useInitiativeRollEnabled, setInitiativeRollEnabled,
   usePingScale, setPingScale, usePingDurationS, setPingDurationS, useDmPingColor, setDmPingColor,
-  useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
   useCustomWallPresets, setCustomWallPresets, useDisabledWallPresets, setDisabledWallPresets,
   useCustomLightPresets, setCustomLightPresets, useDisabledLightPresets, setDisabledLightPresets,
   useBuiltinWallEdits, setBuiltinWallEdits, useBuiltinLightEdits, setBuiltinLightEdits,
@@ -35,8 +34,6 @@ export default function VttSettings({ onClose }) {
   const pingDur = usePingDurationS();
   const dmPingColor = useDmPingColor();
   const isDM = useIsDM();
-  const connMode = useConnectionMode();
-  const relayUrl = useRelayUrl();
 
   return (
     <div style={S.backdrop} onClick={onClose}>
@@ -125,18 +122,8 @@ export default function VttSettings({ onClose }) {
             <input type="checkbox" checked={initRoll} onChange={(e) => setInitiativeRollEnabled(e.target.checked)} />
             Würfel-Knopf in der Initiative-Leiste (d20 + Bonus)
           </label>
-          <Row label="Verbindung">
-            <div style={S.seg}>
-              {[['supabase', 'Cloud'], ['relay', 'Direkt (Relay)']].map(([v, l]) => (
-                <button key={v} onClick={() => setConnectionMode(v)} style={{ ...S.segBtn, ...(connMode === v ? S.segOn : null) }}>{l}</button>
-              ))}
-            </div>
-            {connMode === 'relay' && (
-              <input value={relayUrl} onChange={(e) => setRelayUrl(e.target.value)} placeholder="ws://192.168.x.x:7373" spellCheck={false}
-                style={{ marginTop: 6, width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 }} />
-            )}
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>Änderung greift beim nächsten VTT-Start.</div>
-          </Row>
+          {/* Verbindungs-Auswahl entfernt: die Direktverbindung läuft automatisch
+              (Session-Start → Relay announced → Spieler joinen; Stop → Cloud). */}
 
           {isDM && <PresetEditor />}
         </div>

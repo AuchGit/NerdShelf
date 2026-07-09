@@ -135,7 +135,9 @@ export class VttRenderer {
     // always fully drawn even where it pokes into fog of war.
     this.moveLayer = new Graphics(); // reachable-cells movement preview (on the floor)
     this.moveLayer.eventMode = 'none';
-    this.liveGroup.addChild(this.bg, this.grid.container, this.zones.container, this.terrain.container, this.moveLayer, this.lights.container, this.auras, this.transitions.container, this.tokens.container, this.currentMaskGfx);
+    // Zonen (AoE-Templates) liegen ÜBER den Tokens — man soll immer sehen,
+    // welche Tokens in einer Fläche stehen (halbtransparente Füllung).
+    this.liveGroup.addChild(this.bg, this.grid.container, this.terrain.container, this.moveLayer, this.lights.container, this.auras, this.transitions.container, this.tokens.container, this.zones.container, this.currentMaskGfx);
 
     // DM-„Mauslicht" (Alt): KEIN additiver Lichtschein mehr — ein weicher
     // Kreis, in dem die Licht-/Dunkel-Überlagerung lokal ausgeblendet wird,
@@ -916,7 +918,17 @@ export class VttRenderer {
     // several — e.g. a companion NPC — can switch whose eyes they look through).
     const sel = s.ui.selectedTokenId;
     if (sel && controlled.some((t) => t.id === sel)) controlled = controlled.filter((t) => t.id === sel);
-    return controlled.map((t) => ({ x: t.x, y: t.y, inside: t.inside, id: t.id }));
+    const obs = controlled.map((t) => ({ x: t.x, y: t.y, inside: t.inside, id: t.id }));
+    // Einmalige Phantom-Beobachter an den Schritt-Mittelpunkten der EIGENEN
+    // Bewegung (moveSelectedByCell): schließt Explored-Lücken, die nur auf dem
+    // Weg zwischen zwei Feldern sichtbar waren (z.B. durch einen Türspalt).
+    if (this._visTrail?.length) {
+      for (const tr of this._visTrail) {
+        if (controlled.some((t) => 'trail_' + t.id === tr.id)) obs.push(tr);
+      }
+      this._visTrail = null;
+    }
+    return obs;
   }
 
   // Is a straight move from→to blocked by a movement-blocking wall on `level`?
@@ -933,35 +945,8 @@ export class VttRenderer {
     return false;
   }
 
-  // Place a door on the wall nearest the click: the 1-cell portion under the
-  // click becomes a door, and the original wall is split into the parts around
-  // it. Doors can only be created on a wall.
-  placeDoorOnWall(pos, map, level) {
-    const s = getState();
-    const grid = map.grid;
-    const base = map.levels?.[0]?.id || null;
-    let best = null, bestD = grid.size * 0.7;
-    for (const w of Object.values(s.walls)) {
-      if (w.mapId !== map.id || (w.level || base) !== level || w.kind === 'door') continue;
-      const d = distToSegment(pos, w.a, w.b);
-      if (d < bestD) { bestD = d; best = w; }
-    }
-    if (!best) return; // not on a wall → nothing
-    const { a, b, kind } = best;
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    const cells = Math.max(1, Math.round(len / grid.size));
-    const span = Math.min(getState().ui.doorDouble ? 2 : 1, cells); // double door = 2 cells
-    if (cells <= span) { A.updateWall(best.id, { kind: 'door', open: false }); return; } // whole wall becomes the door
-    const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
-    let k = Math.floor(((pos.x - a.x) * ux + (pos.y - a.y) * uy) / grid.size);
-    k = Math.max(0, Math.min(cells - span, k));
-    const ds = { x: a.x + ux * grid.size * k, y: a.y + uy * grid.size * k };
-    const de = { x: a.x + ux * grid.size * (k + span), y: a.y + uy * grid.size * (k + span) };
-    A.removeWall(best.id);
-    if (k > 0) A.addWall({ mapId: map.id, level, a, b: ds, kind });
-    A.addWall({ mapId: map.id, level, a: ds, b: de, kind: 'door', open: false });
-    if (k + span < cells) A.addWall({ mapId: map.id, level, a: de, b, kind });
-  }
+  // (placeDoorOnWall wurde entfernt — Türen/Fenster werden immer per
+  // Zwei-Klick-Zeichnung platziert, auch direkt in bestehende Wände.)
 
   // After a token move settles, switch its level if it stepped on a transition.
   checkTransition(tokenId) {
@@ -2194,6 +2179,12 @@ export class VttRenderer {
     const fromX = node ? node.root.position.x : token.x;
     const fromY = node ? node.root.position.y : token.y;
     A.moveToken(id, to.x, to.y);
+    // Explored-Memory-Lücken schließen: die Sicht wird nur an Zellzentren
+    // berechnet — ein schmaler Durchblick (Türspalt), den man nur AUF DEM WEG
+    // zwischen zwei Feldern sieht, bliebe sonst für immer unexplored. Der
+    // Mittelpunkt des Schritts wird beim nächsten Reconcile einmalig als
+    // Phantom-Beobachter mitgesehen (nur lokal, nur Memory/Sicht für 1 Frame).
+    this._visTrail = [...(this._visTrail || []), { x: (token.x + to.x) / 2, y: (token.y + to.y) / 2, inside: token.inside, id: 'trail_' + id }].slice(-6);
     // Point the ease-target at the destination NOW. The token is excluded from
     // tokens.update while it glides, so `_tx/_ty` would otherwise stay on the OLD
     // cell — when the glide ends, tickTokens would ease it BACK there until the
@@ -2519,14 +2510,6 @@ function snapPointToGrid(p, grid) {
     x: grid.offsetX + Math.round((p.x - grid.offsetX) / sz) * sz,
     y: grid.offsetY + Math.round((p.y - grid.offsetY) / sz) * sz,
   };
-}
-
-function distToSegment(p, a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy || 1;
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 // Snap a map-space point to the nearest grid vertex (line intersection), so
