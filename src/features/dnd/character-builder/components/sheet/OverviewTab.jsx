@@ -1667,6 +1667,15 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       if (/\b(?:you\s+can\s+)?(?:take|use)\s+(?:an?\s+|your\s+)action\b/.test(raw)) return 'action'
       return null
     }
+    // Rein passive Statik-Boni („you gain a +2 bonus to damage rolls …" —
+    // Fighting Styles wie Dueling / Archery / Thrown Weapon 2024) sind KEINE
+    // Aktionen: es gibt nichts zu klicken, der Bonus ist immer an. Sie
+    // erscheinen stattdessen in den Specials (VTT) bzw. im Features-Tab.
+    // Datengetrieben über die Formulierung (keine Namensliste); eine
+    // Entscheidungs-/Kosten-Phrase („you can …", „expend", „once per …")
+    // macht das Feature wieder aktiv nutzbar (Sneak Attack, Manöver, Smites).
+    const passiveStaticBonus = (t) => /\byou (?:gain|have) a \+\d+ bonus\b/i.test(t || '')
+      && !/\byou can\b|\bexpend\b|\bonce (?:per|on each)\b/i.test(t || '')
 
     // Active class / subclass features whose entry text declares an
     // action economy ("as a bonus action you can …" / "as a
@@ -1692,9 +1701,10 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       // via the effect pills + text parser — no hardcoded feature names.
       const hasTriggerPill = (fxF?.pills || []).some(p => p.kind === 'trigger')
       const hasDamagePill  = (fxF?.pills || []).some(p => p.kind === 'damage' || p.kind === 'damage-bonus')
-      const slot = explicitSlot || ((hasTriggerPill || hasDamagePill) ? 'action' : null)
+      const rawText = flattenEntries(f.entries)
+      const slot = explicitSlot || (((hasTriggerPill || hasDamagePill) && !passiveStaticBonus(rawText)) ? 'action' : null)
       if (!slot) continue
-      const raw = flattenEntries(f.entries).toLowerCase()
+      const raw = rawText.toLowerCase()
       // Collect referenced standard actions — case-insensitive whole-
       // word matches against the feature's prose. Skips one-off
       // mentions ("the Attack action" alone) by requiring ≥2 hits.
@@ -1734,8 +1744,9 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       const hasTriggerPill = (fxT?.pills || []).some(p => p.kind === 'trigger')
       const hasDamagePill  = (fxT?.pills || []).some(p => p.kind === 'damage' || p.kind === 'damage-bonus')
       // Passive Trigger ohne explizite Action-Economy → ins Action-
-      // Bucket weil er bei einem normalen Attack-Wurf feuert.
-      const slot = explicitSlot || ((hasTriggerPill || hasDamagePill) ? 'action' : null)
+      // Bucket weil er bei einem normalen Attack-Wurf feuert. Statik-Boni
+      // (immer an, nichts zu benutzen) bleiben draußen.
+      const slot = explicitSlot || (((hasTriggerPill || hasDamagePill) && !passiveStaticBonus(flattenEntries(t.entries))) ? 'action' : null)
       if (!slot) continue
       b[slot].push({
         id: `race-${t.name}`,
