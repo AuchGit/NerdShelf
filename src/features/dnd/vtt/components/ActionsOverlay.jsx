@@ -23,9 +23,23 @@ function defaultBox() {
   return { x: Math.max(12, W / 2 - 330), y: 90, w: 660, h: 440 };
 }
 
+// Box IMMER in den sichtbaren Bereich zwingen. Wichtig: früher gespeicherte
+// Koordinaten stammen aus der Zeit, als das Overlay in der Bottom-Bar verankert
+// war (bar-relativ) — als Viewport-Koordinaten interpretiert lägen sie sonst
+// komplett außerhalb des Bildschirms („Popout geöffnet und nichts kommt").
+function clampBox(b) {
+  const W = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const H = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const w = Math.min(Math.max(320, b?.w || 660), Math.max(320, W - 24));
+  const h = Math.min(Math.max(220, b?.h || 440), Math.max(220, H - 24));
+  const x = Math.min(Math.max(0, b?.x ?? 12), Math.max(0, W - w - 8));
+  const y = Math.min(Math.max(0, b?.y ?? 90), Math.max(0, H - h - 8));
+  return { x, y, w, h };
+}
+
 export default function ActionsOverlay({ character, computed, applyCharacter, onClose }) {
   const [box, setBox] = useState(() => {
-    try { return { ...defaultBox(), ...(JSON.parse(localStorage.getItem(BOX_KEY)) || {}) }; } catch { return defaultBox(); }
+    try { return clampBox({ ...defaultBox(), ...(JSON.parse(localStorage.getItem(BOX_KEY)) || {}) }); } catch { return defaultBox(); }
   });
   const [tab, setTab] = useState('all');
   const gesture = useRef(null); // { kind: 'move'|'resize', startX, startY, box }
@@ -36,15 +50,17 @@ export default function ActionsOverlay({ character, computed, applyCharacter, on
       if (!g) return;
       const dx = e.clientX - g.startX; const dy = e.clientY - g.startY;
       if (g.kind === 'move') {
-        setBox({ ...g.box, x: Math.max(0, g.box.x + dx), y: Math.max(0, g.box.y + dy) });
+        setBox(clampBox({ ...g.box, x: g.box.x + dx, y: g.box.y + dy }));
       } else {
-        setBox({ ...g.box, w: Math.max(320, g.box.w + dx), h: Math.max(220, g.box.h + dy) });
+        setBox(clampBox({ ...g.box, w: g.box.w + dx, h: g.box.h + dy }));
       }
     };
     const up = () => { gesture.current = null; };
+    const onResize = () => setBox((b) => clampBox(b)); // Fenster kleiner → Overlay bleibt sichtbar
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
-    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); window.removeEventListener('resize', onResize); };
   }, []);
   useEffect(() => { try { localStorage.setItem(BOX_KEY, JSON.stringify(box)); } catch { /* ignore */ } }, [box]);
   useEffect(() => {
