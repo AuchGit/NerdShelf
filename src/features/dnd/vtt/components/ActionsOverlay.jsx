@@ -9,7 +9,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CombatActionsExplorer } from '../../character-builder/components/sheet/OverviewTab';
 
-const BOX_KEY = 'nerdshelf:vttActionsOverlayBox';
+// v2: v1-Koordinaten stammten aus der Bar-verankerten Zeit (bar-relativ) und
+// sind als Viewport-Koordinaten unbrauchbar → neuer Key, sauberer Start.
+const BOX_KEY = 'nerdshelf:vttActionsOverlayBox2';
 const TABS = [
   { id: 'all', label: 'Alle' },
   { id: 'pinned', label: 'Pinned' },
@@ -63,6 +65,12 @@ export default function ActionsOverlay({ character, computed, applyCharacter, on
     return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); window.removeEventListener('resize', onResize); };
   }, []);
   useEffect(() => { try { localStorage.setItem(BOX_KEY, JSON.stringify(box)); } catch { /* ignore */ } }, [box]);
+  // Sichtbare Diagnose: taucht das Fenster nicht auf, zeigt die Konsole wo es
+  // hingerendert wurde (statt still nichts).
+  const loggedRef = useRef(false);
+  useEffect(() => {
+    if (!loggedRef.current) { loggedRef.current = true; console.log('[vtt] ActionsOverlay geöffnet', box); }
+  }, [box]);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -95,7 +103,9 @@ export default function ActionsOverlay({ character, computed, applyCharacter, on
 }
 
 const S = {
-  wrap: { position: 'fixed', zIndex: 70, display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated) 97%, transparent)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 12px 40px #000b', overflow: 'hidden' },
+  // zIndex hoch (über Bars/Tray/Docks) + Fallback-Farben, falls Theme-Variablen
+  // am body-Portal fehlen sollten — das Fenster darf NIE unsichtbar sein.
+  wrap: { position: 'fixed', zIndex: 1100, display: 'flex', flexDirection: 'column', background: 'color-mix(in srgb, var(--color-bg-elevated, #1c1f26) 97%, transparent)', color: 'var(--color-text, #e6e6e6)', border: '1px solid var(--color-border, #3a3f4a)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 12px 40px #000b', overflow: 'hidden' },
   head: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--color-border)', cursor: 'move', userSelect: 'none', flexShrink: 0 },
   title: { fontWeight: 700, fontSize: 'var(--fs-sm)' },
   tabs: { display: 'flex', gap: 3, flex: 1, justifyContent: 'center', flexWrap: 'wrap' },
