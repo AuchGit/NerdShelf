@@ -239,6 +239,13 @@ export function toggleDoor(id) {
   if (!toggleCooled(`d:${id}`)) return;
   const w = getState().walls[id];
   if (!w) return;
+  // Verriegelt: „Spieler dürfen öffnen" ist am Segment abgehakt → nur der DM
+  // kann sie bedienen; Spieler sehen einen Hinweis statt eines Toggles.
+  const sess0 = getState().session;
+  if (w.playerOpen === false && sess0.role !== 'dm' && !sess0.realGM) {
+    toast(w.kind === 'window' ? 'Das Fenster ist verriegelt.' : 'Die Tür ist verschlossen.', 'info');
+    return;
+  }
   apply({ type: 'wall/update', id, patch: { open: !w.open } });
   // RPC only when the direct table write can NOT land (a real non-GM player).
   // A GM in player VIEW still writes directly — calling the toggle-RPC on top

@@ -1,7 +1,7 @@
 // Würfelprotokoll: wer hat wann was mit welcher Formel gewürfelt und was kam
 // raus. Jeder Client loggt seine eigenen Würfe (DiceTray → logRoll), der Log
-// synct live über den Op-Broadcast — bewusst nicht persistiert (Sitzungs-Log;
-// neue Clients starten leer). Neueste oben. Der DM sieht ALLE Würfe, ein
+// synct live über den Op-Broadcast und wird persistiert (letzte 100 in
+// campaign_state.roll_log — übersteht Reloads). Neueste oben. Der DM sieht ALLE Würfe, ein
 // Spieler nur seine eigenen (gefiltert über die userId am Eintrag).
 import { useVtt, useIsDM, useSession } from '../state/useVtt';
 

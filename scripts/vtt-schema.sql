@@ -34,6 +34,7 @@ alter table public.vtt_campaign_state add column if not exists journal jsonb not
 alter table public.vtt_campaign_state add column if not exists presented_handout text;
 alter table public.vtt_campaign_state add column if not exists paused boolean not null default false;
 alter table public.vtt_campaign_state add column if not exists relay_url text;  -- GM-hosted direct-connection (relay) ws:// URL, announced to players
+alter table public.vtt_campaign_state add column if not exists roll_log jsonb not null default '[]'::jsonb;  -- persistiertes Würfelprotokoll (letzte 100 Würfe)
 
 create table if not exists public.vtt_maps (
   id            text primary key,
@@ -162,6 +163,7 @@ alter table public.vtt_walls add column if not exists block_move boolean;
 alter table public.vtt_walls add column if not exists block_light boolean;
 alter table public.vtt_walls add column if not exists block_sight boolean;
 alter table public.vtt_walls add column if not exists see_far_ft int;
+alter table public.vtt_walls add column if not exists player_open boolean;  -- false = verriegelt: nur der DM kann diese Tür/dieses Fenster bedienen (NULL/true = Spieler dürfen)
 
 create table if not exists public.vtt_transitions (
   id           text primary key,
@@ -311,13 +313,16 @@ create policy vtt_zones_owner on public.vtt_zones for all to authenticated
 -- ── vtt_toggle_door — any member can open/close a door ────────────────
 create or replace function public.vtt_toggle_door(p_wall text)
 returns boolean language plpgsql security definer set search_path = public as $$
-declare v_campaign uuid; v_kind text; v_open boolean;
+declare v_campaign uuid; v_kind text; v_open boolean; v_player_open boolean;
 begin
-  select campaign_id, kind, open into v_campaign, v_kind, v_open
+  select campaign_id, kind, open, player_open into v_campaign, v_kind, v_open, v_player_open
   from public.vtt_walls where id = p_wall;
   if v_campaign is null then raise exception 'WALL_NOT_FOUND'; end if;
-  -- Türen UND Fenster dürfen von Mitgliedern geöffnet/geschlossen werden.
+  -- Türen UND Fenster dürfen von Mitgliedern geöffnet/geschlossen werden —
+  -- außer sie sind verriegelt (player_open = false → nur der DM, der schreibt
+  -- direkt per RLS und braucht diese RPC nicht).
   if v_kind not in ('door', 'window') then raise exception 'NOT_A_DOOR'; end if;
+  if not coalesce(v_player_open, true) then raise exception 'LOCKED'; end if;
   if not public.dnd_is_campaign_member(v_campaign) then raise exception 'NOT_AUTHORIZED'; end if;
   update public.vtt_walls set open = not coalesce(v_open,false) where id = p_wall;
   return not coalesce(v_open,false);

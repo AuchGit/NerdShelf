@@ -97,6 +97,12 @@ export default function WallEditor() {
           Tür offen (blockt nichts)
         </label>
       )}
+      {(wall.kind === 'door' || wall.kind === 'window') && (
+        <label style={S.check2} title="Abgehakt = verriegelt: Spieler-Klick zeigt „verschlossen" statt zu öffnen; nur der DM kann bedienen.">
+          <input type="checkbox" checked={wall.playerOpen !== false} onChange={(e) => apply({ playerOpen: e.target.checked ? null : false })} />
+          Spieler dürfen öffnen
+        </label>
+      )}
 
       {wall.kind === 'window' && (
         <>

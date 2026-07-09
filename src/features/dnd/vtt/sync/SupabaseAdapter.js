@@ -132,8 +132,34 @@ export class SupabaseAdapter {
       case 'journal/set':    return sb.from('vtt_campaign_state').upsert({ campaign_id: cid, journal: op.journal });
       case 'handout/present': return sb.from('vtt_campaign_state').upsert({ campaign_id: cid, presented_handout: op.id });
       case 'session/pause':  return sb.from('vtt_campaign_state').upsert({ campaign_id: cid, paused: op.paused });
+
+      // Würfelprotokoll: eigene Würfe debounced sammeln und per Read-Merge-Write
+      // (Dedupe über entry.id) in campaign_state.roll_log persistieren — so
+      // überschreiben sich DM und Spieler nicht gegenseitig. Fehlende Spalte /
+      // Fehler sind unkritisch (Sitzungs-Log bleibt dann eben nur live).
+      case 'roll/log': {
+        (this._pendingRolls ||= []).push(op.entry);
+        clearTimeout(this._rollLogTimer);
+        this._rollLogTimer = setTimeout(() => this.flushRollLog(), 1500);
+        return Promise.resolve();
+      }
       default: return Promise.resolve();
     }
+  }
+
+  async flushRollLog() {
+    const pending = this._pendingRolls || [];
+    if (!pending.length) return;
+    this._pendingRolls = [];
+    try {
+      const { data, error } = await this.sb.from('vtt_campaign_state')
+        .select('roll_log').eq('campaign_id', this.campaignId).maybeSingle();
+      if (error) return; // Spalte fehlt (Migration nicht gelaufen) → nur live
+      const cur = Array.isArray(data?.roll_log) ? data.roll_log : [];
+      const have = new Set(cur.map((e) => e?.id));
+      const merged = [...cur, ...pending.filter((e) => !have.has(e.id))].slice(-100);
+      await writeResilient(this.sb, 'vtt_campaign_state', { campaign_id: this.campaignId, roll_log: merged });
+    } catch { /* Sitzungs-Log — Verlust unkritisch */ }
   }
 
   async fetchSnapshot() {
@@ -161,6 +187,7 @@ export class SupabaseAdapter {
       journal: meta.data?.journal || [],
       presentedHandout: meta.data?.presented_handout || null,
       paused: !!meta.data?.paused,
+      rollLog: Array.isArray(meta.data?.roll_log) ? meta.data.roll_log : [],
       announcedRelayUrl: meta.data?.relay_url || null,
     };
   }
@@ -357,10 +384,11 @@ function wallToRow(w, cid) {
     ...(w.blockMove != null ? { block_move: w.blockMove } : {}),
     ...(w.blockLight != null ? { block_light: w.blockLight } : {}),
     ...(w.blockSight != null ? { block_sight: w.blockSight } : {}),
-    ...(w.seeFarFt != null ? { see_far_ft: w.seeFarFt } : {}) };
+    ...(w.seeFarFt != null ? { see_far_ft: w.seeFarFt } : {}),
+    ...(w.playerOpen != null ? { player_open: w.playerOpen } : {}) };
 }
 function wallPatchToRow(p) {
-  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells', blockMove: 'block_move', blockLight: 'block_light', blockSight: 'block_sight', seeFarFt: 'see_far_ft' };
+  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells', blockMove: 'block_move', blockLight: 'block_light', blockSight: 'block_sight', seeFarFt: 'see_far_ft', playerOpen: 'player_open' };
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function transitionToRow(t, cid) {
@@ -390,7 +418,7 @@ function rowToZone(r) {
     x: r.x, y: r.y, params: r.params || {}, color: r.color, opacity: r.opacity, losWalls: r.los_walls !== false };
 }
 function rowToWall(r) {
-  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null, blockMove: r.block_move ?? null, blockLight: r.block_light ?? null, blockSight: r.block_sight ?? null, seeFarFt: r.see_far_ft ?? null };
+  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null, blockMove: r.block_move ?? null, blockLight: r.block_light ?? null, blockSight: r.block_sight ?? null, seeFarFt: r.see_far_ft ?? null, playerOpen: r.player_open ?? null };
 }
 function rowToTransition(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [], name: r.name || '' };
