@@ -11,6 +11,7 @@ import { computeSpellSlots } from '../../character-builder/lib/sheetUtils';
 import { CombatEconomy, CombatActionsExplorer, FavoritesSection } from '../../character-builder/components/sheet/OverviewTab';
 import { Pinnable } from './tooltip/Tooltips';
 import Specials from './Specials';
+import ActionsOverlay from './ActionsOverlay';
 
 // Stackable bottom-bar panels (open upward; last-opened sits on top).
 const PANEL_LABELS = { actions: '⚔ Aktionen', specials: '✨ Specials', items: '🎒 Items', favorites: '★ Favoriten' };
@@ -43,6 +44,7 @@ export default function PlayerBottomBar() {
   const myId = useVtt((s) => s.ui.myCharacterId);
   const [dmg, setDmg] = useState('');
   const [openPanels, setOpenPanels] = useState([]); // panel ids in open order (last = top)
+  const [actionsOverlay, setActionsOverlay] = useState(false); // verschiebbares Aktions-Overlay
   const [panelH, setPanelH] = useState({});         // id -> height px
   const [barH, setBarH] = useState(140);
   const [dragging, setDragging] = useState(false);  // 'bar' | { id } | false
@@ -198,6 +200,10 @@ export default function PlayerBottomBar() {
 
   return (
     <div style={barStyle}>
+      {actionsOverlay && (
+        <ActionsOverlay character={character} computed={computed} applyCharacter={applyCharacter}
+          onClose={() => setActionsOverlay(false)} />
+      )}
       {openPanels.length > 0 && (
         <div style={S.panelStack}>
           {/* Reverse so the LAST-opened panel sits on top, first-opened at the bottom. */}
@@ -206,6 +212,11 @@ export default function PlayerBottomBar() {
               <div style={S.panelHead} onMouseDown={(e) => startPanelResize(id, e)} title="Höhe ziehen">
                 <span style={S.panelTitle}>{PANEL_LABELS[id]}</span>
                 <span style={{ flex: 1 }} />
+                {id === 'actions' && (
+                  <span style={S.panelClose} onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => { setActionsOverlay(true); togglePanel(id); }}
+                    title="Als verschiebbares Overlay öffnen">⧉</span>
+                )}
                 <span style={S.panelClose} onMouseDown={(e) => e.stopPropagation()} onClick={() => togglePanel(id)} title="Schließen">✕</span>
               </div>
               {/* Fits its content (no empty space); drag the header to cap the

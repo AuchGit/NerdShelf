@@ -1231,7 +1231,9 @@ const STANDARD_ACTIONS = {
   },
 }
 
-export function CombatActionsExplorer({ character, computed, applyCharacter, embedded = false, columns = false }) {
+// `onlySlots`: optionale Liste von Economy-Buckets (['action'] …) — rendert im
+// columns-Layout nur diese Spalten (fürs verschiebbare Aktions-Overlay im VTT).
+export function CombatActionsExplorer({ character, computed, applyCharacter, embedded = false, columns = false, onlySlots = null }) {
   // Pill-Farbpalette mit den User-Settings-Overrides. Wird bei jeder
   // Änderung in den Settings via custom-event refreshed.
   const pillColors = usePillColors()
@@ -2231,9 +2233,12 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               // Pinned column's own sub-tabs (only the economy slots that
               // actually hold pinned rows); fall back if the active one empties.
               const pinSlots = ['action', 'bonusAction', 'reaction', 'hastedAction'].filter((s) => pinnedByEconomy?.[s]?.length > 0);
+              const defaultSlots = [...(pinnedTotal > 0 ? ['pinned'] : []), 'action', 'bonusAction', 'reaction', ...(hasted && buckets.hastedAction?.length > 0 ? ['hastedAction'] : [])];
+              const colSlots = onlySlots?.length ? onlySlots.filter((s) => defaultSlots.includes(s)) : defaultSlots;
               return (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                {[...(pinnedTotal > 0 ? ['pinned'] : []), 'action', 'bonusAction', 'reaction', ...(hasted && buckets.hastedAction?.length > 0 ? ['hastedAction'] : [])].map((slot) => {
+                {colSlots.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Nichts vorhanden.</span>}
+                {colSlots.map((slot) => {
                   const meta = META[slot];
                   // The colored header dims once that economy action is spent.
                   const spent = meta.spent ? !!economy[meta.spent] : false;
