@@ -1740,13 +1740,13 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     // Trait ins Action-Bucket damit der Spieler die Pille sieht.
     for (const t of (character?.species?.__traits || [])) {
       const fxT = parseFeatureEffect({ ...t, classId: null }, character, profBonus, { classDataMap: character?.__classDataMap })
-      const explicitSlot = detectActionSlot(t.entries)
-      const hasTriggerPill = (fxT?.pills || []).some(p => p.kind === 'trigger')
-      const hasDamagePill  = (fxT?.pills || []).some(p => p.kind === 'damage' || p.kind === 'damage-bonus')
-      // Passive Trigger ohne explizite Action-Economy → ins Action-
-      // Bucket weil er bei einem normalen Attack-Wurf feuert. Statik-Boni
-      // (immer an, nichts zu benutzen) bleiben draußen.
-      const slot = explicitSlot || (((hasTriggerPill || hasDamagePill) && !passiveStaticBonus(flattenEntries(t.entries))) ? 'action' : null)
+      // Species-Traits sind NUR Aktionen, wenn sie eine EXPLIZITE Action-
+      // Economy tragen ("as an action/bonus action/reaction" — Aasimar Healing
+      // Hands & Co.). Trigger-/Schadens-Rider ohne Economy (Surprise Attack,
+      // Long-Limbed, Dreadful Strikes-artige) feuern passiv beim normalen
+      // Angriff — sie gehören in die Specials (VTT) bzw. den Features-Tab,
+      // nicht in die Aktionsliste. Datengetrieben, keine Namensliste.
+      const slot = detectActionSlot(t.entries)
       if (!slot) continue
       b[slot].push({
         id: `race-${t.name}`,
@@ -1756,7 +1756,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         kind: 'species',
         economySlot: slot,
         entries: t.entries || null,
-        sub: explicitSlot ? 'Species' : 'Species · Trigger',
+        sub: 'Species',
         effectPills: fxT?.pills || [],
         notes: '',
       })
