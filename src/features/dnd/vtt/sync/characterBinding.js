@@ -67,6 +67,15 @@ export function spawnMemberToken(characterId) {
   return instance?.spawnMemberToken(characterId);
 }
 
+/**
+ * Charaktere (und Mitglieder) frisch aus der DB ziehen — für Level-ups oder
+ * verpasste Realtime-Events (still gestorbener WS-Kanal in langen Sessions).
+ * DM-Button „Charaktere aktualisieren" ruft das manuell auf.
+ */
+export function refreshCharacters() {
+  return instance?.refreshCharacters();
+}
+
 /** DM: spawn bound tokens for every member who doesn't have one yet. */
 export function spawnAllMemberTokens() {
   return instance?.spawnMemberTokens();
@@ -96,9 +105,7 @@ class CharacterBinding {
 
     // Which character rows may we read? GM sees every member (RLS allows it);
     // a player only their own.
-    const ids = this.isGM
-      ? this.members.map((m) => m.character_id).filter((x) => x != null)
-      : (this.myCharacterId != null ? [this.myCharacterId] : []);
+    const ids = this.readableIds();
 
     if (ids.length) {
       const { data: rows, error } = await this.sb
@@ -110,14 +117,16 @@ class CharacterBinding {
 
     // Live HP / conditions from players (or our own RPC writes). Merge the row
     // (a partial payload mustn't blank the character), then re-project.
-    const idSet = new Set(ids.map(Number));
+    // idSet liegt auf `this`, damit refreshCharacters() ihn nach einem
+    // Mitglieder-Refresh (neuer Spieler) erweitern kann.
+    this.idSet = new Set(ids.map(Number));
     this.channel = this.sb
       .channel(`vtt-chars:${this.campaignId}`)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dnd_characters' },
         (payload) => {
           const row = payload.new;
-          if (!row || !idSet.has(Number(row.id))) return;
+          if (!row || !this.idSet.has(Number(row.id))) return;
           const existing = this.chars[row.id] || {};
           this.chars[row.id] = {
             id: row.id,
@@ -127,7 +136,15 @@ class CharacterBinding {
           this.project();
           this.publishChars();
         })
-      .subscribe();
+      .subscribe((status) => {
+        // Konvergenz-Backstop wie im SupabaseAdapter: sobald der Kanal (wieder)
+        // wirklich LIVE ist, einmal frisch laden — ein still gestorbener WS ließ
+        // Level-ups & Co. sonst dauerhaft veralten.
+        if (status === 'SUBSCRIBED') {
+          if (this._everSubscribed) this.refreshCharacters().catch(() => {});
+          this._everSubscribed = true;
+        }
+      });
 
     // GM gets the campaign roster in the store (local-only) so the TokenPanel
     // can offer "add this player" / "add all". Players don't (RLS: only the GM
@@ -146,6 +163,47 @@ class CharacterBinding {
     // Re-project whenever the store changes — snapshot hydration, the GM adding
     // the map, etc. Projection is diff-guarded so it never loops.
     this.unsubStore = subscribe(() => this.project());
+    this.project();
+  }
+
+  // Welche Charakter-Zeilen darf dieser Viewer lesen? GM alle Member, Spieler
+  // nur den eigenen.
+  readableIds() {
+    return this.isGM
+      ? this.members.map((m) => m.character_id).filter((x) => x != null)
+      : (this.myCharacterId != null ? [this.myCharacterId] : []);
+  }
+
+  // Mitglieder + Charaktere komplett frisch aus der DB (Level-up während der
+  // Session, neu beigetretene Spieler, verpasste Realtime-Events). Aktualisiert
+  // Roster, idSet (Realtime-Filter), HP-Max-Cache, Projektion und Store-Mirror.
+  async refreshCharacters() {
+    this.members = await listMembers(this.campaignId).catch(() => this.members);
+    for (const m of this.members) {
+      if (m.character_id != null) this.cardByChar[m.character_id] = m.card || {};
+    }
+    const mine = this.members.find((m) => m.user_id === this.userId);
+    this.myCharacterId = mine?.character_id ?? this.myCharacterId ?? null;
+    const ids = this.readableIds();
+    this.idSet = new Set(ids.map(Number));
+    if (ids.length) {
+      const { data: rows, error } = await this.sb
+        .from('dnd_characters').select('id, name, data').in('id', ids);
+      if (error) { console.warn('[vtt] refresh characters', error.message); return; }
+      for (const r of rows || []) this.chars[r.id] = r;
+    }
+    this._maxCache.clear(); // neue data-Referenzen → HP-Max neu rechnen
+    if (this.isGM) {
+      const roster = this.members
+        .filter((m) => m.character_id != null)
+        .map((m) => ({
+          characterId: m.character_id,
+          userId: m.user_id || null,
+          name: this.cardByChar[m.character_id]?.name || this.chars[m.character_id]?.name || m.player_name || 'Spieler',
+        }));
+      applyLocal({ type: 'ui/set', ui: { campaignMembers: roster } });
+    }
+    this.publishChars();
     this.project();
   }
 

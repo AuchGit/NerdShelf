@@ -3,7 +3,7 @@
 import { Button } from '../../../../shared/ui';
 import { useVtt, useActiveMap, useIsDM, useSession } from '../state/useVtt';
 import { armTokenPlacement, selectToken, removeToken, updateMap } from '../state/actions';
-import { spawnMemberToken, spawnAllMemberTokens } from '../sync/characterBinding';
+import { spawnMemberToken, spawnAllMemberTokens, refreshCharacters } from '../sync/characterBinding';
 
 const PALETTE = ['#42a5f5', '#ef5350', '#66bb6a', '#ab47bc', '#ffa726', '#26c6da'];
 
@@ -71,6 +71,11 @@ export default function TokenPanel() {
             {members.length === 0 && (
               <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', margin: 0 }}>Noch keine Spieler in der Campaign.</p>
             )}
+            {/* Level-ups / neue Spieler während der Session: alles frisch aus
+                der DB (Charaktere, Roster, HP-Max) — falls Realtime mal hing. */}
+            <Button size="sm" variant="ghost" onClick={() => refreshCharacters()}>
+              ⟳ Charaktere aktualisieren
+            </Button>
           </>
         ) : (
           <Button size="sm" variant="secondary" onClick={() => spawn({ kind: 'player', ownerId: session.userId, name: session.name || 'Ich', hp: 20, hpMax: 20 })}>+ Mein Token</Button>

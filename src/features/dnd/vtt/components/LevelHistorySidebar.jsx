@@ -1,7 +1,11 @@
-// Level-history category — the character's level-up timeline (read-only).
-// Reuses the levelHistory the builder records on each level-up:
+// Level-history category — the character's level-up timeline + Level-Up-Button:
+// springt auf die Level-Up-Seite des Charakters und danach ZURÜCK ins VTT
+// (Return-Hash via sessionStorage, LevelUpPage konsumiert ihn bei Abschluss/
+// Abbruch). Timeline aus der levelHistory des Builders:
 //   { totalLevel, classId, classLevel, timestamp }
 import { useVtt } from '../state/useVtt';
+import { Button } from '../../../../shared/ui';
+import { LEVELUP_RETURN_KEY } from '../../character-builder/pages/LevelUpPage';
 
 export default function LevelHistorySidebar() {
   const myId = useVtt((s) => s.ui.myCharacterId);
@@ -9,10 +13,16 @@ export default function LevelHistorySidebar() {
   const character = myId != null ? chars[myId]?.data : null;
   if (!character) return <div style={S.muted}>Kein Charakter geladen.</div>;
   const history = character.levelHistory || [];
-  if (history.length === 0) return <div style={S.muted}>Keine Level-Historie vorhanden.</div>;
+
+  const startLevelUp = () => {
+    try { sessionStorage.setItem(LEVELUP_RETURN_KEY, window.location.hash.replace(/^#/, '') || '/'); } catch { /* ignore */ }
+    window.location.hash = `/character/${myId}/levelup`;
+  };
 
   return (
     <div style={S.list}>
+      <Button size="sm" fullWidth onClick={startLevelUp}>▲ Level Up</Button>
+      {history.length === 0 && <div style={S.muted}>Keine Level-Historie vorhanden.</div>}
       {[...history].reverse().map((e, i) => (
         <div key={history.length - i} style={S.row}>
           <div style={S.lvl}>{e.totalLevel}</div>

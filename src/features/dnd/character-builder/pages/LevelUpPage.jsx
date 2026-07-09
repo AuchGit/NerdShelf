@@ -1,6 +1,18 @@
 // pages/LevelUpPage.jsx — Step-based level-up wizard
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useParams } from '../lib/hashNav'
+
+// VTT-Rücksprung: die Level-Historie-Sidebar im VTT setzt vor dem Absprung
+// einen Return-Hash (sessionStorage). Nach Abschluss/Abbruch landet der
+// Spieler dann wieder im VTT statt auf dem Charakterbogen.
+export const LEVELUP_RETURN_KEY = 'nerdshelf-levelup-return'
+function consumeLevelUpReturn() {
+  try {
+    const r = sessionStorage.getItem(LEVELUP_RETURN_KEY)
+    if (r) { sessionStorage.removeItem(LEVELUP_RETURN_KEY); return r }
+  } catch { /* sessionStorage gesperrt */ }
+  return null
+}
 import { supabase } from '../lib/supabase'
 import { getTotalLevel } from '../lib/characterModel'
 import { computeAbilityScores, computeProficiencies } from '../lib/rulesEngine'
@@ -420,7 +432,7 @@ export default function LevelUpPage({ session }) {
 
     // Success — clean up backup
     try { localStorage.removeItem(`dndbuilder_backup_${id}`) } catch (_) {}
-    nav(`/character/${id}`)
+    nav(consumeLevelUpReturn() || `/character/${id}`)
   }
 
 async function handleUndo() {
@@ -469,7 +481,7 @@ async function handleUndo() {
   return (
     <div className="dnd-wizard-page" style={S.page}>
       <div className="dnd-wizard-header" data-pwa-target="dnd-wizard-header" style={S.header}>
-        <button style={S.backBtn} onClick={() => stepIdx>0 ? setStepIdx(0) : nav(`/character/${id}`)}>
+        <button style={S.backBtn} onClick={() => stepIdx>0 ? setStepIdx(0) : nav(consumeLevelUpReturn() || `/character/${id}`)}>
           ← {stepIdx>0?'Klassenwahl':'Zurück'}</button>
         <h1 className="dnd-wizard-title" style={S.headerTitle}>{char.info.name} — Level Up</h1>
         <div style={{display:"flex",gap:8,alignItems:"center"}}><span style={S.levelBadge}>Lv. {totalLevel}</span><HeaderButtons session={session} /></div>
