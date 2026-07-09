@@ -258,3 +258,22 @@ export function perpDistance(dx, dy, dirDeg) {
   const d = ((dirDeg || 0) * Math.PI) / 180;
   return dx * -Math.sin(d) + dy * Math.cos(d);
 }
+
+// Begrenzte Durchsicht: sieht ein Beobachter DURCH eine Wand (Durchguck-Nähe
+// erfüllt), aber nur `distPx` weit dahinter, ersetzt diese virtuelle Wand das
+// Original — parallel um distPx auf die vom Beobachter ABGEWANDTE Seite
+// verschoben und an beiden Enden um distPx verlängert (gegen Eck-Leaks).
+export function offsetSightWall(w, o, distPx) {
+  const dx = w.b.x - w.a.x, dy = w.b.y - w.a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  let nx = -uy, ny = ux;
+  const mx = (w.a.x + w.b.x) / 2, my = (w.a.y + w.b.y) / 2;
+  if ((o.x - mx) * nx + (o.y - my) * ny > 0) { nx = -nx; ny = -ny; } // weg vom Beobachter
+  return {
+    ...w,
+    id: w.id + '~far',
+    a: { x: w.a.x + nx * distPx - ux * distPx, y: w.a.y + ny * distPx - uy * distPx },
+    b: { x: w.b.x + nx * distPx + ux * distPx, y: w.b.y + ny * distPx + uy * distPx },
+  };
+}

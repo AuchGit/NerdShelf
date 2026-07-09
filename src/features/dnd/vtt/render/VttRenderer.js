@@ -23,30 +23,44 @@ import { getState, subscribe, undo, redo, versions } from '../state/store';
 import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
-import { WALL_TYPES, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
+import { WALL_TYPES, wallPeekFt } from '../lib/constants';
 import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getDmPingColor, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
 import { relayFullUrl } from '../lib/mapStorage';
-import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance } from '../lib/wallGeometry';
+import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance, offsetSightWall } from '../lib/wallGeometry';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
-// Wall blocking, accounting for doors: an open door blocks neither.
-// Fenster: OFFEN lässt Licht frei durch; GESCHLOSSEN blockt es — außer das
-// Fenster ist milchig (Licht eine Stufe gedimmt) oder farbig (Buntglas,
-// getöntes Licht). Beides handhabt der Licht-Compositor über brightWalls.
+// Wall blocking. Die Wand-KINDS sind nur PRESETS: explizite per-Wand-Overrides
+// (blockMove/blockLight/blockSight, null = Preset-Default) gewinnen. Türen/
+// Fenster behalten ihre Offen-Logik obendrauf: eine offene Tür blockt nie;
+// ein geschlossenes Fenster lässt Licht durch, wenn es milchig/farbig ist
+// (gedimmt/getönt — handhabt der Licht-Compositor über brightWalls).
 const wallBlocksLight = (w) => {
-  if (w.kind === 'door') return !w.open;
-  if (w.kind === 'window') return !w.open && !w.milky && !w.color;
-  return (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksLight;
+  const base = w.blockLight ?? (
+    w.kind === 'door' ? true
+      : w.kind === 'window' ? (!w.milky && !w.color)
+        : (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksLight);
+  if (w.kind === 'door' || w.kind === 'window') return !w.open && base;
+  return base;
 };
-const wallBlocksMovement = (w) => !(w.kind === 'door' && w.open) && (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksMovement;
+const wallBlocksMovement = (w) => {
+  const base = w.blockMove ?? (
+    (w.kind === 'door' || w.kind === 'window') ? true
+      : (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksMovement);
+  // Nur eine offene TÜR gibt den Weg frei — ein offenes Fenster blockt Bewegung
+  // weiterhin (wie bisher; niemand klettert automatisch durch).
+  if (w.kind === 'door') return !w.open && base;
+  return base;
+};
 // Sight ≠ light: a "shadow" wall blocks light but you can still SEE past it, so
 // player vision uses this (not the light-blocking set).
 // Fenster: GESCHLOSSEN blockt die Sicht (trübe/dunkle Scheibe), OFFEN lässt sie
 // durch — analog zu Türen und intuitiv (zum Durchsehen Fenster öffnen).
 const wallBlocksSight = (w) => {
-  if (w.kind === 'door') return !w.open;
-  if (w.kind === 'window') return !w.open;
-  return (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksSight;
+  const base = w.blockSight ?? (
+    (w.kind === 'door' || w.kind === 'window') ? true
+      : (WALL_TYPES[w.kind] || WALL_TYPES.both).blocksSight);
+  if (w.kind === 'door' || w.kind === 'window') return !w.open && base;
+  return base;
 };
 
 const DRAG_BROADCAST_MS = 50; // ~20 Hz peer updates while dragging (budget-aware)
@@ -353,19 +367,26 @@ export class VttRenderer {
       //    loop and the shadow falls only behind it; from inside it bounds normally.
       const sightWallsFor = (o) => {
         const H = terrainHeightAt(map, level, o.x, o.y);
-        return sightWalls.filter((w) => {
-          const def = WALL_TYPES[w.kind] || {};
-          if (def.cover) {
-            const reach = feetToPx(w.seeOutFt || DEFAULT_COVER_SEE_OUT_FT, map.grid.size);
-            if (distPointToSeg(o, w.a, w.b) <= reach) return false;
+        const out = [];
+        for (const w of sightWalls) {
+          // Durchguck-Nähe (jede sicht-blockende Wand, nicht nur Busch): steht
+          // der Beobachter näher als peekFt an der Wand, sieht er hindurch.
+          // Optional begrenzt seeFarFt, WIE WEIT er dahinter sieht (0 = frei):
+          // dann ersetzt eine parallel verschobene virtuelle Wand das Original.
+          const peekFt = wallPeekFt(w);
+          if (peekFt > 0 && distPointToSeg(o, w.a, w.b) <= feetToPx(peekFt, map.grid.size)) {
+            const farFt = w.seeFarFt || 0;
+            if (farFt > 0) out.push(offsetSightWall(w, o, feetToPx(farFt, map.grid.size)));
+            continue;
           }
-          if (w.heightFt > 0 && H >= w.heightFt && (w.noRoof || !loopIds.has(w.id))) return false;
+          if (w.heightFt > 0 && H >= w.heightFt && (w.noRoof || !loopIds.has(w.id))) continue;
           // one-sided see-through loop: drop the near wall (observer & loop centre
           // on opposite sides) so you look INTO the loop — unless this observer is
           // flagged as inside the loop (then it bounds them normally).
-          if (w.seeThrough && stCentroids.has(w.id) && o.inside !== true && !sameSideOfSeg(o, stCentroids.get(w.id), w.a, w.b)) return false;
-          return true;
-        });
+          if (w.seeThrough && stCentroids.has(w.id) && o.inside !== true && !sameSideOfSeg(o, stCentroids.get(w.id), w.a, w.b)) continue;
+          out.push(w);
+        }
+        return out;
       };
       // Per-observer vision polygons, memoized per TOKEN: only the observer that
       // actually moved recomputes; everyone else reuses their cached polygon.

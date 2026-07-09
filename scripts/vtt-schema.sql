@@ -154,6 +154,14 @@ alter table public.vtt_walls add column if not exists see_through boolean not nu
 alter table public.vtt_walls add column if not exists milky boolean not null default false;
 alter table public.vtt_walls add column if not exists width_cells real;  -- door/window icon display width in cells (null = default 0.7)
 alter table public.vtt_walls add column if not exists color text;  -- Buntglas-Fensterfarbe (null = klares Glas: geschlossen blockt Licht)
+-- Block-Overrides pro Wand: die kinds sind nur PRESETS für diese drei Toggles.
+-- NULL = Preset-Default des kinds (bestehende Wände verhalten sich unverändert,
+-- KEIN Backfill nötig). see_far_ft: wie weit man beim Durchgucken (see_out_ft-
+-- Nähe) hinter die Wand sieht; NULL/0 = unbegrenzt.
+alter table public.vtt_walls add column if not exists block_move boolean;
+alter table public.vtt_walls add column if not exists block_light boolean;
+alter table public.vtt_walls add column if not exists block_sight boolean;
+alter table public.vtt_walls add column if not exists see_far_ft int;
 
 create table if not exists public.vtt_transitions (
   id           text primary key,

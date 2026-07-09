@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   fiveEDistanceFt, rulerMoveFt, darkenColor, loopWallIds, planarFaces,
   seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg,
-  climbMapFor, climbStepFt,
+  climbMapFor, climbStepFt, offsetSightWall,
 } from '../wallGeometry';
 
 const GRID = { size: 70, offsetX: 0, offsetY: 0 };
@@ -180,5 +180,30 @@ describe('darkenColor', () => {
   });
   it('ungültige Eingabe → neutrales Grau', () => {
     expect(darkenColor('#abc', 0.5)).toBe(0x888888);
+  });
+});
+
+describe('offsetSightWall (begrenzte Durchsicht hinter einer Wand)', () => {
+  // Horizontale Wand y=100; Beobachter oberhalb (y=50).
+  const w = { id: 'w1', a: { x: 0, y: 100 }, b: { x: 200, y: 100 }, kind: 'cover' };
+  it('verschiebt die Wand vom Beobachter weg (hier: nach unten)', () => {
+    const v = offsetSightWall(w, { x: 100, y: 50 }, 30);
+    expect(v.a.y).toBe(130);
+    expect(v.b.y).toBe(130);
+  });
+  it('Beobachter unterhalb → Verschiebung nach oben', () => {
+    const v = offsetSightWall(w, { x: 100, y: 150 }, 30);
+    expect(v.a.y).toBe(70);
+    expect(v.b.y).toBe(70);
+  });
+  it('Enden werden um die Distanz verlängert (gegen Eck-Leaks)', () => {
+    const v = offsetSightWall(w, { x: 100, y: 50 }, 30);
+    expect(v.a.x).toBe(-30);
+    expect(v.b.x).toBe(230);
+  });
+  it('Original-Wand bleibt unverändert, id bekommt Suffix', () => {
+    const v = offsetSightWall(w, { x: 100, y: 50 }, 30);
+    expect(w.a.y).toBe(100);
+    expect(v.id).toBe('w1~far');
   });
 });

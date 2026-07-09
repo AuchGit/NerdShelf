@@ -82,6 +82,27 @@ export const WALL_TYPES = {
 // Default "see out from inside" distance for a cover/bush wall (ft).
 export const DEFAULT_COVER_SEE_OUT_FT = 5;
 
+// Basis-Blockverhalten einer Wand OHNE explizite Overrides, im GESCHLOSSENEN
+// Zustand (Tür/Fenster offen wird separat behandelt). Das ist die Wahrheit, die
+// die Checkboxen im Wand-Editor anzeigen, wenn kein Override gesetzt ist:
+// die kinds sind nur PRESETS für diese drei Toggles.
+export function wallBaseBlocks(kind) {
+  if (kind === 'door') return { move: true, light: true, sight: true };
+  // Geschlossenes klares Fenster blockt Licht + Sicht (trübe Scheibe); offen
+  // bzw. milchig/farbig wird in den Effektiv-Funktionen behandelt.
+  if (kind === 'window') return { move: true, light: true, sight: true };
+  const def = WALL_TYPES[kind] || WALL_TYPES.both;
+  return { move: def.blocksMovement, light: def.blocksLight, sight: def.blocksSight };
+}
+
+// Effektive Durchguck-Nähe (ft): ab dieser Distanz zur Wand sieht ein Token
+// durch eine sicht-blockende Wand hindurch. 0 = nie. Busch/Deckung hat einen
+// Default, alle anderen nur ein explizit gesetztes seeOutFt.
+export function wallPeekFt(w) {
+  if ((WALL_TYPES[w.kind] || {}).cover) return w.seeOutFt ?? DEFAULT_COVER_SEE_OUT_FT;
+  return w.seeOutFt || 0;
+}
+
 // Fog of war mode per map.
 //   none    — no fog; everyone sees the whole map
 //   manual  — DM reveals rectangles by hand (Fog tool)

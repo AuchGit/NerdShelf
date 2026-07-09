@@ -110,9 +110,9 @@ export class SupabaseAdapter {
       case 'zone/update':   return sb.from('vtt_zones').update(zonePatchToRow(op.patch)).eq('id', op.id);
       case 'zone/remove':   return sb.from('vtt_zones').delete().eq('id', op.id);
 
-      case 'wall/add':      return sb.from('vtt_walls').upsert(wallToRow(op.wall, cid));
-      case 'wall/addMany':  return sb.from('vtt_walls').upsert(op.walls.map((w) => wallToRow(w, cid)));
-      case 'wall/update':   return sb.from('vtt_walls').update(wallPatchToRow(op.patch)).eq('id', op.id);
+      case 'wall/add':      return writeResilient(sb, 'vtt_walls', wallToRow(op.wall, cid));
+      case 'wall/addMany':  return writeResilient(sb, 'vtt_walls', op.walls.map((w) => wallToRow(w, cid)));
+      case 'wall/update':   return writeResilient(sb, 'vtt_walls', wallPatchToRow(op.patch), { id: op.id });
       case 'wall/remove':   return sb.from('vtt_walls').delete().eq('id', op.id);
 
       case 'transition/add':    return sb.from('vtt_transitions').upsert(transitionToRow(op.transition, cid));
@@ -239,8 +239,11 @@ const MISSING_COL_RE = /Could not find the '([^']+)' column/i;
 // Spalte weglässt und erneut versucht — so funktioniert z.B. das neue
 // `combat`-Feld auch OHNE ausgeführte Migration (es wird dann nur nicht
 // persistiert, blockiert aber kein Token-Anlegen/-Update).
-async function writeResilient(supabase, table, row, opts = {}) {
-  const r = { ...row };
+async function writeResilient(supabase, table, rowOrRows, opts = {}) {
+  const many = Array.isArray(rowOrRows);
+  let r = many ? rowOrRows.map((x) => ({ ...x })) : { ...rowOrRows };
+  const hasCol = (c) => (many ? r.some((x) => c in x) : c in r);
+  const dropCol = (c) => { if (many) r.forEach((x) => delete x[c]); else delete r[c]; };
   for (let attempt = 0; attempt < 6; attempt++) {
     if (opts.id != null && Object.keys(r).length === 0) return { error: null }; // nichts mehr zu updaten
     const q = opts.id != null
@@ -249,7 +252,7 @@ async function writeResilient(supabase, table, row, opts = {}) {
     const { error } = await q;
     if (!error) return { error: null };
     const m = MISSING_COL_RE.exec(error.message || '');
-    if (m && m[1] in r) { delete r[m[1]]; continue; }
+    if (m && hasCol(m[1])) { dropCol(m[1]); continue; }
     return { error };
   }
   return { error: new Error('zu viele fehlende Spalten') };
@@ -348,10 +351,16 @@ function zonePatchToRow(p) {
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function wallToRow(w, cid) {
-  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough, milky: !!w.milky, color: w.color || null, width_cells: w.widthCells ?? null };
+  return { id: w.id, campaign_id: cid, map_id: w.mapId, level: w.level || null, a: w.a, b: w.b, kind: w.kind, open: !!w.open, see_out_ft: w.seeOutFt ?? null, height_ft: w.heightFt ?? null, no_roof: !!w.noRoof, see_through: !!w.seeThrough, milky: !!w.milky, color: w.color || null, width_cells: w.widthCells ?? null,
+    // Block-Overrides nur mitsenden wenn gesetzt → Wände funktionieren auch
+    // ohne die neuen Spalten (Migration optional).
+    ...(w.blockMove != null ? { block_move: w.blockMove } : {}),
+    ...(w.blockLight != null ? { block_light: w.blockLight } : {}),
+    ...(w.blockSight != null ? { block_sight: w.blockSight } : {}),
+    ...(w.seeFarFt != null ? { see_far_ft: w.seeFarFt } : {}) };
 }
 function wallPatchToRow(p) {
-  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells' };
+  const map = { mapId: 'map_id', seeOutFt: 'see_out_ft', heightFt: 'height_ft', noRoof: 'no_roof', seeThrough: 'see_through', widthCells: 'width_cells', blockMove: 'block_move', blockLight: 'block_light', blockSight: 'block_sight', seeFarFt: 'see_far_ft' };
   const r = {}; for (const k in p) r[map[k] || k] = p[k]; return r;
 }
 function transitionToRow(t, cid) {
@@ -381,7 +390,7 @@ function rowToZone(r) {
     x: r.x, y: r.y, params: r.params || {}, color: r.color, opacity: r.opacity, losWalls: r.los_walls !== false };
 }
 function rowToWall(r) {
-  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null };
+  return { id: r.id, mapId: r.map_id, level: r.level, a: r.a, b: r.b, kind: r.kind, open: r.open, seeOutFt: r.see_out_ft ?? null, heightFt: r.height_ft ?? null, noRoof: r.no_roof === true, seeThrough: r.see_through === true, milky: r.milky === true, color: r.color || null, widthCells: r.width_cells ?? null, blockMove: r.block_move ?? null, blockLight: r.block_light ?? null, blockSight: r.block_sight ?? null, seeFarFt: r.see_far_ft ?? null };
 }
 function rowToTransition(r) {
   return { id: r.id, mapId: r.map_id, level: r.level, col: r.col, row: r.row, kind: r.kind, exits: r.exits || [], name: r.name || '' };
