@@ -88,9 +88,13 @@ export default function DiceTray() {
   // Dice3D meldet Fallback MIT Grund (string) — wird sichtbar angezeigt,
   // damit "3D geht nicht" diagnostizierbar ist statt still nur Zahlen zu zeigen.
   const [webglBroken, setWebglBroken] = useState(null);
-  // Wer würfelt hier? DM heißt „DM", Spieler nach ihrem gebundenen Charakter.
+  // Wer würfelt hier? DM heißt „DM", Spieler nach ihrem gebundenen Charakter
+  // (Name + Portrait fürs Würfelprotokoll). Rolls mit expliziter Quelle
+  // (Statblock-Token, Initiative) überschreiben das per detail.src.
   const rollerName = useVtt((s) => (s.session.role === 'dm' ? 'DM'
-    : (s.ui.myCharacterId != null ? s.ui.characters?.[s.ui.myCharacterId]?.data?.name : null) || 'Spieler'));
+    : (s.ui.myCharacterId != null ? (s.ui.characters?.[s.ui.myCharacterId]?.data?.info?.name || s.ui.characters?.[s.ui.myCharacterId]?.name) : null) || 'Spieler'));
+  const rollerPortrait = useVtt((s) => (s.session.role === 'dm' ? null
+    : (s.ui.myCharacterId != null ? (s.ui.characters?.[s.ui.myCharacterId]?.data?.appearance?.portrait || null) : null)));
   const [pos, setPos] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
   });
@@ -146,7 +150,7 @@ export default function DiceTray() {
       if (!terms) return;
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f }));
+      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f, src: detail.src || null }));
     };
     const onRoll = (e) => handle(e.detail);
     window.addEventListener('vtt:roll', onRoll);
@@ -191,14 +195,15 @@ export default function DiceTray() {
     loggedRef.current = key;
     const nat = dice.filter((d) => !d.dropped).map((d) => d.value ?? d.result);
     logRoll({
-      name: rollerName,
+      name: roll.src?.name || rollerName,
+      portrait: roll.src ? (roll.src.portrait || null) : rollerPortrait,
       label: roll.label || '',
       formula: roll.formula || '',
       mode: roll.mode || null,
       total: roll.total != null ? roll.total : nat.reduce((s, v) => s + v, 0),
       dice: nat,
     });
-  }, [revealed, dice, roll, rollerName]);
+  }, [revealed, dice, roll, rollerName, rollerPortrait]);
 
   // Prefetch the heavy 3D chunks the moment the tray opens, so the FIRST roll
   // animates instantly instead of waiting on the lazy import.

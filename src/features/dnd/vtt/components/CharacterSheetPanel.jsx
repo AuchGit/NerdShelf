@@ -33,6 +33,8 @@ export default function CharacterSheetPanel() {
   if (!computed) return <div style={S.muted}>Charakter unvollständig (kein Level?).</div>;
 
   const status = character.status || {};
+  // Quelle fürs Würfelprotokoll: eigener Charakter (Name + Portrait).
+  const rollSrc = { name: character.info?.name || ch?.name || 'Spieler', portrait: character.appearance?.portrait || null };
   const max = computed.hp?.max ?? null;
   const cur = status.currentHp ?? max;
   const temp = status.temporaryHp || 0;
@@ -106,10 +108,10 @@ export default function CharacterSheetPanel() {
               <div style={S.abScore}>{score}</div>
               <div role="button" tabIndex={0} style={{ ...S.abMod, cursor: 'pointer' }}
                 title={`${K}-Attributswurf — Shift: Vorteil · Strg: Nachteil`}
-                onClick={(ev) => rollSave(ev, mod, `${K}-Attributswurf`)}>{modStr(mod)}</div>
+                onClick={(ev) => rollSave(ev, mod, `${K}-Attributswurf`, rollSrc)}>{modStr(mod)}</div>
               <div role="button" tabIndex={0} style={{ ...S.abSave, cursor: 'pointer' }}
                 title={`${K}-Rettungswurf — Shift: Vorteil · Strg: Nachteil`}
-                onClick={(ev) => rollSave(ev, save, `${K}-Rettungswurf`)}>{modStr(save)}</div>
+                onClick={(ev) => rollSave(ev, save, `${K}-Rettungswurf`, rollSrc)}>{modStr(save)}</div>
             </div>
           );
         })}
@@ -149,7 +151,7 @@ export default function CharacterSheetPanel() {
               return (
                 <div key={name} role="button" tabIndex={0} style={{ ...S.skillRow, color: txtColor, cursor: 'pointer' }}
                   title={`${name} würfeln${sk?.expertise ? ' (Expertise)' : sk?.proficient ? ' (Übung)' : ''} — Shift: Vorteil · Strg: Nachteil`}
-                  onClick={(ev) => rollSave(ev, total, `${name.charAt(0).toUpperCase()}${name.slice(1)} (Fertigkeit)`)}>
+                  onClick={(ev) => rollSave(ev, total, `${name.charAt(0).toUpperCase()}${name.slice(1)} (Fertigkeit)`, rollSrc)}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, border: '1px solid var(--color-border)', flexShrink: 0 }} />
                   <span style={{ flex: 1, textTransform: 'capitalize', fontWeight: prof ? 700 : 400 }}>{name}</span>
                   <span style={{ fontWeight: 700 }}>{modStr(total)}</span>

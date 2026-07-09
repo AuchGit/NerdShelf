@@ -19,9 +19,12 @@ function rollChannel() {
   return _rollChannel || null;
 }
 
-export function dispatchRoll(formula, label, mode, captureId) {
+// `src` (optional): wer würfelt — { name, portrait } des Tokens/Charakters.
+// Landet im Roll-Log (DM-Sidebar); ohne src fällt der Log auf den Sitzungs-
+// Namen zurück (DM bzw. eigener Charakter) und zeigt kein Bild.
+export function dispatchRoll(formula, label, mode, captureId, src) {
   if (!formula) return;
-  const detail = { formula: String(formula), label: label || '', mode: mode || null, captureId: captureId || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  const detail = { formula: String(formula), label: label || '', mode: mode || null, captureId: captureId || null, src: src || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
   window.dispatchEvent(new CustomEvent('vtt:roll', { detail }));
   try { rollChannel()?.postMessage(detail); } catch { /* channel closed */ }
 }
@@ -49,23 +52,23 @@ function ensureResultListener() {
   const ch = resultChannel();
   if (ch) ch.onmessage = (e) => onResult(e.data);
 }
-function capture(formula, label, mode, pick, fallback) {
+function capture(formula, label, mode, pick, fallback, src) {
   ensureResultListener();
   const captureId = `cap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   return new Promise((resolve) => {
     _resultWaiters.set(captureId, (d) => resolve(pick(d)));
     setTimeout(() => { if (_resultWaiters.has(captureId)) { _resultWaiters.delete(captureId); resolve(fallback); } }, 20000);
-    dispatchRoll(formula, label, mode, captureId);
+    dispatchRoll(formula, label, mode, captureId, src);
   });
 }
 // Resolve with the roll's TOTAL after the animation (single value, e.g. one save).
-export function rollForResult(formula, label, mode) {
-  return capture(formula, label, mode, (d) => d?.total ?? null, null);
+export function rollForResult(formula, label, mode, src) {
+  return capture(formula, label, mode, (d) => d?.total ?? null, null, src);
 }
 // Resolve with the array of INDIVIDUAL natural die results — for rolling many
 // initiatives in ONE throw (e.g. "8d20") and mapping each die to a combatant.
-export function rollForDice(formula, label) {
-  return capture(formula, label, null, (d) => d?.dice || [], []);
+export function rollForDice(formula, label, src) {
+  return capture(formula, label, null, (d) => d?.dice || [], [], src);
 }
 // Called by the DiceTray when a captured roll's animation finishes.
 export function emitRollResult(captureId, total, label, dice) {
@@ -83,20 +86,20 @@ export function rollModeFromEvent(ev) {
 }
 
 // A d20 check/attack: "+7" / "7" / "-1" → "1d20+7". Shift/Ctrl = Vorteil/Nachteil.
-export function rollAttack(ev, bonus, label) {
+export function rollAttack(ev, bonus, label, src) {
   const b = String(bonus ?? '').replace(/[^+\-0-9]/g, '');
   const sign = b === '' || b.startsWith('-') || b.startsWith('+') ? '' : '+';
-  dispatchRoll(`1d20${sign}${b || '+0'}`, label, rollModeFromEvent(ev));
+  dispatchRoll(`1d20${sign}${b || '+0'}`, label, rollModeFromEvent(ev), null, src);
 }
 
 // A damage roll. Robust to labelled strings: "1d8 slashing", "2d6 + 4 fire",
 // "1d8+3 (STR)" → extracts just the dice expression ("1d8", "2d6+4", "1d8+3").
 // Shift = Krit (dice doubled by the tray).
-export function rollDamage(ev, formula, label) {
+export function rollDamage(ev, formula, label, src) {
   const m = String(formula ?? '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i);
   if (!m) return;
-  dispatchRoll(m[0].replace(/\s+/g, ''), label, ev?.shiftKey ? 'crit' : null);
+  dispatchRoll(m[0].replace(/\s+/g, ''), label, ev?.shiftKey ? 'crit' : null, null, src);
 }
 
 // A raw d20 save/check with a numeric modifier, honouring Vorteil/Nachteil.
-export function rollSave(ev, bonus, label) { rollAttack(ev, bonus, label); }
+export function rollSave(ev, bonus, label, src) { rollAttack(ev, bonus, label, src); }

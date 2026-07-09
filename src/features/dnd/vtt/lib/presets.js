@@ -70,7 +70,7 @@ function mergeLightPresets(custom, disabled, edits) {
   }
   for (const p of custom || []) {
     if (!p || !p.id) continue;
-    out.push({ id: p.id, label: p.label || 'Licht', brightFt: p.brightFt ?? 20, dimFt: p.dimFt ?? 40, color: p.color || '#ffd9a0', icon: null, playerSwitch: p.playerSwitch !== false, custom: true });
+    out.push({ id: p.id, label: p.label || 'Licht', brightFt: p.brightFt ?? 20, dimFt: p.dimFt ?? 40, color: p.color || '#ffd9a0', icon: p.icon || null, playerSwitch: p.playerSwitch !== false, custom: true });
   }
   return out;
 }

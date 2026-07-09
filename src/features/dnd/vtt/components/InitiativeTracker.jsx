@@ -34,7 +34,8 @@ export default function InitiativeTracker() {
   // Ergebnis. d20 + korrekter Ini-Bonus (Charakter-Ini bzw. NPC-DEX/2024-Bonus).
   const rollEntryTo = async (e) => {
     const t = tokens[e.tokenId];
-    const total = await rollForResult(`1d20${fmt(initBonus(t))}`, `${e.name}: Initiative`);
+    const total = await rollForResult(`1d20${fmt(initBonus(t))}`, `${e.name}: Initiative`,
+      null, t ? { name: t.name, portrait: t.imageUrl || null } : null);
     if (total != null) setValById(e.id, total);
   };
   const isAutoNpc = (t) => t && t.characterId == null && (t.combat?.initMode || 'auto') !== 'manual';

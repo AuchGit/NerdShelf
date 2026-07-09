@@ -165,7 +165,7 @@ function actionRolls(e) {
 // Beschreibungstext. Badges → klick würfelt in den Würfel-Tray. Aufladbare
 // Fähigkeiten (Aufladen X–6) und begrenzte (N/Tag, N/Zug) sind anklickbar
 // abhakbar (Combat-Tracking, nur solange das Fenster offen ist).
-function ActionEntry({ e, uid, usage, setUsage }) {
+function ActionEntry({ e, uid, usage, setUsage, src }) {
   const r = actionRolls(e);
   const hasBadges = r.atk || r.damages.length || r.dc || r.recharge || r.usesN;
   // Name auflösen (Tags) und den Aufladen-Zusatz raus (steht als Badge).
@@ -195,10 +195,10 @@ function ActionEntry({ e, uid, usage, setUsage }) {
               })}
             </span>
           )}
-          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, r.atk, `${e.name}: Angriff`)}>{r.atk}</button>}
+          {r.atk && <button style={S.badgeAtk} title="Angriffswurf würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, r.atk, `${e.name}: Angriff`, src)}>{r.atk}</button>}
           {r.dc && <span style={S.badgeSave}>DC {r.dc}{r.save ? ` ${r.save}` : ''}</span>}
           {r.damages.map((d, i) => (
-            <button key={i} style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, d.formula, `${e.name}: Schaden`)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
+            <button key={i} style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, d.formula, `${e.name}: Schaden`, src)}>{d.formula}{d.type ? ` ${d.type}` : ''}</button>
           ))}
         </span>
       )}
@@ -221,7 +221,7 @@ function DefRow({ label, val, tone }) {
 // Eine Zauber-Zeile in der NPC-Übersicht: Name + Meta (Grad · Schule · Zeit ·
 // Reichweite) + passende Pills (SG/Zauberangriff aus dem Statblock, Schaden zum
 // Würfeln). Klick auf den Namen klappt die Beschreibung auf.
-function SpellRow({ name, sp, scDc, scAtk }) {
+function SpellRow({ name, sp, scDc, scAtk, src }) {
   const [open, setOpen] = useState(false);
   const clean = cleanSpellName(name);
   const needsSave = Array.isArray(sp?.savingThrow) && sp.savingThrow.length > 0;
@@ -244,8 +244,8 @@ function SpellRow({ name, sp, scDc, scAtk }) {
           {sp?.concentration && <span style={S.pillMini} title="Konzentration">K</span>}
           {sp?.meta?.ritual && <span style={S.pillMini} title="Ritual">R</span>}
           {needsSave && scDc && <span style={S.badgeSave} title="Save DC (aus dem Statblock)">DC {scDc}{sp.savingThrow[0] ? ` ${sp.savingThrow[0].slice(0, 3).toUpperCase()}` : ''}</span>}
-          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, `${clean}: Zauberangriff`)}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
-          {dmg && <button style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, dmg, `${clean}: Schaden`)}>{dmg}</button>}
+          {isAtk && scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, `${clean}: Zauberangriff`, src)}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {dmg && <button style={S.badgeDmg} title="Schaden würfeln — Shift: Kritisch" onClick={(ev) => rollDamage(ev, dmg, `${clean}: Schaden`, src)}>{dmg}</button>}
         </span>
       </div>
       {meta && <div style={S.spMeta}>{meta}</div>}
@@ -265,7 +265,7 @@ function SpellRow({ name, sp, scDc, scAtk }) {
 }
 
 // Zauberwirken-Block eines NPCs als echte Übersicht (Katalogdaten + Pills).
-function NpcSpellcasting({ sc, catalog }) {
+function NpcSpellcasting({ sc, catalog, src }) {
   const scHdr = rawText(sc.headerEntries || []);
   const scDc = /\{@dc (\d+)\}/.exec(scHdr)?.[1];
   const scAtk = /\{@hit ([+-]?\d+)\}/.exec(scHdr)?.[1] || /([+-]?\d+) to hit with spell/i.exec(scHdr)?.[1];
@@ -278,7 +278,7 @@ function NpcSpellcasting({ sc, catalog }) {
         <div style={S.sectionTitle}>{sc.name || 'Spellcasting'}</div>
         <span style={S.badges}>
           {scDc && <span style={S.badgeSave}>{scAbi ? `${scAbi} ` : ''}DC {scDc}</span>}
-          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, 'Zauberangriff')}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
+          {scAtk && <button style={S.badgeAtk} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil" onClick={(ev) => rollAttack(ev, scAtk, 'Zauberangriff', src)}>{scAtk.startsWith('-') ? '' : '+'}{scAtk}</button>}
         </span>
       </div>
       {headerText && <div style={{ ...S.entryText, marginBottom: 4 }}>{headerText}</div>}
@@ -287,7 +287,7 @@ function NpcSpellcasting({ sc, catalog }) {
           <div style={S.spGroupLabel}>{g.label}</div>
           {g.spells.map((nm, si) => (
             <SpellRow key={si} name={nm} sp={catalog ? catalog.get(cleanSpellName(nm).toLowerCase()) : null}
-              scDc={scDc} scAtk={scAtk} />
+              scDc={scDc} scAtk={scAtk} src={src} />
           ))}
         </div>
       ))}
@@ -301,6 +301,8 @@ function NpcSpellcasting({ sc, catalog }) {
 // als Ein-Klick-Würfe. TP liegen AM TOKEN → dieselbe HP wie die Token-Leiste
 // auf der Karte und synchron über alle Clients.
 function NpcBottomBar({ m, token }) {
+  // Quelle fürs Würfelprotokoll: das Token (Name + Bild), sonst der Statblock.
+  const src = { name: token?.name || m?.name || 'NPC', portrait: token?.imageUrl || null };
   const maxHp = token?.hpMax != null ? token.hpMax : (m.hp?.average != null ? m.hp.average : null);
   const hp = token?.hp != null ? token.hp : maxHp;
   const acN = acNum(m.ac);
@@ -331,7 +333,7 @@ function NpcBottomBar({ m, token }) {
           return (
             <button key={a} style={{ ...S.saveBtn, ...(prof ? S.saveBtnProf : null) }}
               title={`${a.toUpperCase()} Save${prof ? ' (proficient)' : ''} — Shift: Vorteil · Strg: Nachteil`}
-              onClick={(ev) => rollSave(ev, clean, `${a.toUpperCase()} Save`)}>
+              onClick={(ev) => rollSave(ev, clean, `${a.toUpperCase()} Save`, src)}>
               <span style={S.saveAb}>{a.toUpperCase()}</span>
               <span style={S.saveVal}>{clean.startsWith('-') ? clean : `+${clean.replace('+', '')}`}</span>
             </button>
@@ -345,6 +347,8 @@ function NpcBottomBar({ m, token }) {
 // ── NPC: render the 5etools statblock compactly ──
 function NpcStatblock({ m, token }) {
   const catalog = useSpellCatalog();
+  // Quelle fürs Würfelprotokoll (wer würfelt): Token-Name + Token-Bild.
+  const src = { name: token?.name || m?.name || 'NPC', portrait: token?.imageUrl || null };
   // Combat-Tracking (Aufladen / N-pro-Tag) liegt AM TOKEN (token.combat.usage)
   // → synchron über alle Ansichten (Token, Statblock, Bottom-Bar) und alle
   // Clients, weil es dieselbe Einheit ist. Kein lokaler ephemerer State mehr.
@@ -406,12 +410,12 @@ function NpcStatblock({ m, token }) {
       {/* Zauberwirken: echte Übersicht mit Katalogdaten (Grad/Schule/Zeit/
           Reichweite/Schaden) + Statblock-Pills (SG/Zauberangriff). */}
       {(Array.isArray(m.spellcasting) ? m.spellcasting : []).map((sc, si) => (
-        <NpcSpellcasting key={`sc${si}`} sc={sc} catalog={catalog} />
+        <NpcSpellcasting key={`sc${si}`} sc={sc} catalog={catalog} src={src} />
       ))}
       {sections.map(([title, arr]) => (arr?.length ? (
         <div key={title} style={S.section}>
           <div style={S.sectionTitle}>{title}</div>
-          {arr.map((e, i) => <ActionEntry key={i} e={e} uid={`${title}:${i}`} usage={usage} setUsage={setUsage} />)}
+          {arr.map((e, i) => <ActionEntry key={i} e={e} uid={`${title}:${i}`} usage={usage} setUsage={setUsage} src={src} />)}
         </div>
       ) : null))}
       {token && (

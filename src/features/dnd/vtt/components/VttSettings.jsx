@@ -15,7 +15,7 @@ import {
   useCustomLightPresets, setCustomLightPresets, useDisabledLightPresets, setDisabledLightPresets,
   useBuiltinWallEdits, setBuiltinWallEdits, useBuiltinLightEdits, setBuiltinLightEdits,
 } from '../lib/vttPrefs';
-import { WALL_TYPES, LIGHT_PRESETS, wallBaseBlocks, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
+import { WALL_TYPES, LIGHT_PRESETS, LIGHT_ICONS, wallBaseBlocks, DEFAULT_COVER_SEE_OUT_FT } from '../lib/constants';
 
 export default function VttSettings({ onClose }) {
   const uiScale = useUiScale();
@@ -253,6 +253,16 @@ function PresetEditor() {
             Spieler dürfen schalten
           </label>
         </div>
+        {/* Karten-Symbol des Lichts (SVG) — Ø = keins (nur der Lichtschein). */}
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 }}>
+          <span style={S.ftLbl}>Symbol</span>
+          <button style={{ ...S.iconBtn, ...(!val.icon ? S.iconOn : null) }} title="Kein Symbol" onClick={() => patch({ icon: null })}>Ø</button>
+          {Object.values(LIGHT_ICONS).map((ic) => (
+            <button key={ic.src} style={{ ...S.iconBtn, ...(val.icon === ic.src ? S.iconOn : null) }} title={ic.label} onClick={() => patch({ icon: ic.src })}>
+              <img src={ic.src} alt={ic.label} style={{ width: 14, height: 14, display: 'block' }} />
+            </button>
+          ))}
+        </div>
       </div>
     );
   };
@@ -305,4 +315,6 @@ const S = {
   textIn: { flex: 1, minWidth: 0, padding: '3px 6px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 },
   ftLbl: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-text-muted)' },
   numIn: { width: 58, padding: '2px 5px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 },
+  iconBtn: { width: 26, height: 24, display: 'grid', placeItems: 'center', padding: 0, fontSize: 11, background: 'var(--color-surface)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' },
+  iconOn: { borderColor: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)' },
 };

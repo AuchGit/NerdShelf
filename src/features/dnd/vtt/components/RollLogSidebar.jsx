@@ -20,7 +20,12 @@ export default function RollLogSidebar() {
       {[...log].reverse().map((e) => (
         <div key={e.id} style={S.row}>
           <div style={S.top}>
-            <span style={S.name}>{e.name || '—'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              {/* Portrait des würfelnden Tokens/Charakters — ohne Quelle KEIN
+                  Platzhalter, einfach kein Bild. */}
+              {e.portrait && <img src={e.portrait} alt="" style={S.portrait} />}
+              <span style={S.name}>{e.name || '—'}</span>
+            </span>
             <span style={S.time}>{timeOf(e.ts)}</span>
           </div>
           <div style={S.mid}>
@@ -42,7 +47,8 @@ export default function RollLogSidebar() {
 const S = {
   row: { padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
   top: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
-  name: { fontSize: 11, fontWeight: 700, color: 'var(--color-accent)' },
+  name: { fontSize: 11, fontWeight: 700, color: 'var(--color-accent)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  portrait: { width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid var(--color-border)' },
   time: { fontSize: 10, color: 'var(--color-text-muted)' },
   mid: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
   what: { fontSize: 'var(--fs-sm)', color: 'var(--color-text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' },

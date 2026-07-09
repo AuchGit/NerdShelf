@@ -33,7 +33,8 @@ export default function InitiativePrompt() {
   const roll = async () => {
     setRolling(true);
     const b = bonus();
-    const total = await rollForResult(`1d20${b >= 0 ? '+' : ''}${b}`, `${t.name}: Initiative`);
+    const total = await rollForResult(`1d20${b >= 0 ? '+' : ''}${b}`, `${t.name}: Initiative`,
+      null, { name: t.name, portrait: t.imageUrl || null });
     setRolling(false);
     if (total != null) setVal(total);
   };
