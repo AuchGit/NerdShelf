@@ -11,7 +11,10 @@ import {
   useInitiativeRollEnabled, setInitiativeRollEnabled,
   usePingScale, setPingScale, usePingDurationS, setPingDurationS, useDmPingColor, setDmPingColor,
   useConnectionMode, setConnectionMode, useRelayUrl, setRelayUrl,
+  useCustomWallPresets, setCustomWallPresets, useDisabledWallPresets, setDisabledWallPresets,
+  useCustomLightPresets, setCustomLightPresets, useDisabledLightPresets, setDisabledLightPresets,
 } from '../lib/vttPrefs';
+import { WALL_TYPES, LIGHT_PRESETS } from '../lib/constants';
 
 export default function VttSettings({ onClose }) {
   const uiScale = useUiScale();
@@ -133,9 +136,101 @@ export default function VttSettings({ onClose }) {
             )}
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>Änderung greift beim nächsten VTT-Start.</div>
           </Row>
+
+          {isDM && <PresetEditor />}
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Wand-/Licht-Preset-Verwaltung (DM/VTT-Setup, lokal) ──
+// Built-ins lassen sich deaktivieren (verschwinden aus allen Pickern), eigene
+// Presets anlegen/bearbeiten/löschen. Eigene Wand-Presets = Block-Toggles
+// (kind 'both' + Overrides), eigene Licht-Presets = hell/dämmer/Farbe.
+function PresetEditor() {
+  const customWalls = useCustomWallPresets();
+  const disabledWalls = useDisabledWallPresets();
+  const customLights = useCustomLightPresets();
+  const disabledLights = useDisabledLightPresets();
+
+  const toggleBuiltin = (list, setList, id) => setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const patchWall = (id, patch) => setCustomWallPresets(customWalls.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const patchLight = (id, patch) => setCustomLightPresets(customLights.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const rid = () => 'p' + Math.random().toString(36).slice(2, 8);
+
+  return (
+    <>
+      <div style={S.section}>Wand-Presets (DM)</div>
+      {Object.entries(WALL_TYPES).map(([id, def]) => (
+        <label key={id} style={S.check} title="Deaktivierte Presets verschwinden aus den Wand-Pickern.">
+          <input type="checkbox" checked={!disabledWalls.includes(id)} onChange={() => toggleBuiltin(disabledWalls, setDisabledWallPresets, id)} />
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: def.color, flexShrink: 0 }} />
+          {def.label}
+        </label>
+      ))}
+      {customWalls.map((p) => (
+        <div key={p.id} style={S.presetRow}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="color" value={p.color || '#8899ff'} onChange={(e) => patchWall(p.id, { color: e.target.value })} style={S.colorIn} />
+            <input value={p.label || ''} onChange={(e) => patchWall(p.id, { label: e.target.value })} placeholder="Name" style={S.textIn} />
+            <button style={S.smallBtn} onClick={() => setCustomWallPresets(customWalls.filter((x) => x.id !== p.id))}>✕</button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+            {[['blockMove', 'Bewegung'], ['blockLight', 'Licht'], ['blockSight', 'Sicht']].map(([k, l]) => (
+              <label key={k} style={{ ...S.check, margin: 0 }}>
+                <input type="checkbox" checked={!!p[k]} onChange={(e) => patchWall(p.id, { [k]: e.target.checked })} />
+                {l}
+              </label>
+            ))}
+          </div>
+          {p.blockSight && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+              <label style={S.ftLbl} title="0 = nie durchsehen">Durchsehen ab (ft)
+                <input type="number" min="0" step="5" value={p.seeOutFt || 0} onChange={(e) => patchWall(p.id, { seeOutFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+              </label>
+              {(p.seeOutFt || 0) > 0 && (
+                <label style={S.ftLbl} title="0 = unbegrenzt">Sichtweite dahinter (ft)
+                  <input type="number" min="0" step="5" value={p.seeFarFt || 0} onChange={(e) => patchWall(p.id, { seeFarFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+      <button style={S.smallBtn} onClick={() => setCustomWallPresets([...customWalls, { id: rid(), label: 'Neues Preset', color: '#8899ff', blockMove: true, blockLight: true, blockSight: true }])}>
+        + Wand-Preset
+      </button>
+
+      <div style={S.section}>Licht-Presets (DM)</div>
+      {Object.entries(LIGHT_PRESETS).map(([id, def]) => (
+        <label key={id} style={S.check} title="Deaktivierte Presets verschwinden aus den Licht-Pickern.">
+          <input type="checkbox" checked={!disabledLights.includes(id)} onChange={() => toggleBuiltin(disabledLights, setDisabledLightPresets, id)} />
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: def.color, flexShrink: 0 }} />
+          {def.label} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>({def.brightFt}/{def.dimFt} ft)</span>
+        </label>
+      ))}
+      {customLights.map((p) => (
+        <div key={p.id} style={S.presetRow}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="color" value={p.color || '#ffd9a0'} onChange={(e) => patchLight(p.id, { color: e.target.value })} style={S.colorIn} />
+            <input value={p.label || ''} onChange={(e) => patchLight(p.id, { label: e.target.value })} placeholder="Name" style={S.textIn} />
+            <button style={S.smallBtn} onClick={() => setCustomLightPresets(customLights.filter((x) => x.id !== p.id))}>✕</button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+            <label style={S.ftLbl}>Hell (ft)
+              <input type="number" min="0" step="5" value={p.brightFt ?? 20} onChange={(e) => patchLight(p.id, { brightFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+            </label>
+            <label style={S.ftLbl}>Dämmer (ft)
+              <input type="number" min="0" step="5" value={p.dimFt ?? 40} onChange={(e) => patchLight(p.id, { dimFt: Math.max(0, +e.target.value || 0) })} style={S.numIn} />
+            </label>
+          </div>
+        </div>
+      ))}
+      <button style={S.smallBtn} onClick={() => setCustomLightPresets([...customLights, { id: rid(), label: 'Neues Licht', color: '#ffd9a0', brightFt: 20, dimFt: 40 }])}>
+        + Licht-Preset
+      </button>
+    </>
   );
 }
 
@@ -160,4 +255,9 @@ const S = {
   segOn: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: '1px solid var(--color-accent)' },
   check: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--fs-sm)', margin: '8px 0' },
   smallBtn: { padding: '4px 8px', fontSize: 11, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' },
+  presetRow: { border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 8px', margin: '6px 0', background: 'var(--color-bg-sunken)' },
+  colorIn: { width: 28, height: 24, padding: 0, border: '1px solid var(--color-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', flexShrink: 0 },
+  textIn: { flex: 1, minWidth: 0, padding: '3px 6px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 },
+  ftLbl: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-text-muted)' },
+  numIn: { width: 58, padding: '2px 5px', fontSize: 'var(--fs-sm)', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6 },
 };

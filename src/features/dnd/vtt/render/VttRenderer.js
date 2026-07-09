@@ -1183,7 +1183,9 @@ export class VttRenderer {
       if (!this.wallChain) {
         this.wallChain = { start: v, last: v };
       } else {
-        A.addWall({ mapId: map.id, a: this.wallChain.last, b: v, kind: s.ui.wallKind });
+        // Eigene Presets (VTT-Einstellungen) liefern Block-Overrides mit —
+        // kind ist dann 'both', das Verhalten steckt in den Overrides.
+        A.addWall({ mapId: map.id, a: this.wallChain.last, b: v, kind: s.ui.wallKind, ...(s.ui.wallOverrides || {}) });
         this.wallChain.last = v;
         // Closed the loop back to the start → finish this chain (so the next
         // click starts a NEW wall) but stay in the wall tool, and flash a brief

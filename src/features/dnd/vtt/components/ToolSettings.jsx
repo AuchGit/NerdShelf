@@ -7,7 +7,8 @@ import {
   setLightMode, setDarkBrush, setLightDefaults, setTransitionTool, updateMap, clearDarkness,
   setTerrainKind, setTerrainHeight, setTerrainVisible, commitTerrain, eraseTerrainCells, clearTerrainSelection,
 } from '../state/actions';
-import { ZONE_TYPES, ZONE_COLORS, WALL_TYPES, LIGHT_PRESETS, FOG_MODES } from '../lib/constants';
+import { ZONE_TYPES, ZONE_COLORS, FOG_MODES } from '../lib/constants';
+import { useWallPresets, useLightPresets } from '../lib/presets';
 
 const PARAM_LABEL = { radiusFt: 'Radius', sideFt: 'Seite', lengthFt: 'Länge', widthFt: 'Breite' };
 import Icon from './Icon';
@@ -24,6 +25,8 @@ const LIGHT_COLOR_PRESETS = [
 export default function ToolSettings({ map }) {
   const tool = useVtt((s) => s.ui.tool);
   const ui = useVtt((s) => s.ui);
+  const wallPresets = useWallPresets();
+  const lightPresets = useLightPresets();
 
   return (
     <div style={S.wrap}>
@@ -60,9 +63,10 @@ export default function ToolSettings({ map }) {
       {tool === 'walls' && (
         <>
           <span style={S.muted}>Wandtyp:</span>
-          {Object.entries(WALL_TYPES).map(([id, w]) => (
-            <button key={id} onClick={() => setWallTool(id)} style={{ ...S.btn, ...(ui.wallKind === id ? S.active : null) }}>
-              <span style={{ width: 12, height: 12, borderRadius: 2, background: w.color, display: 'inline-block' }} /> {w.label}
+          {wallPresets.map((p) => (
+            <button key={p.id} onClick={() => setWallTool(p.kind, p.overrides || null, p.id)}
+              style={{ ...S.btn, ...((ui.wallPresetId || ui.wallKind) === p.id ? S.active : null) }}>
+              <span style={{ width: 12, height: 12, borderRadius: 2, background: p.color, display: 'inline-block' }} /> {p.label}
             </button>
           ))}
           {ui.wallKind === 'door' && (
@@ -101,8 +105,8 @@ export default function ToolSettings({ map }) {
           {(ui.lightMode || 'light') === 'light' && (
             <>
               <div style={S.sep} />
-              {Object.entries(LIGHT_PRESETS).map(([id, p]) => (
-                <button key={id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft`} onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, preset: id, icon: p.icon })}>{p.label}</button>
+              {lightPresets.map((p) => (
+                <button key={p.id} style={S.btn} title={`${p.brightFt}/${p.dimFt} ft`} onClick={() => setLightDefaults({ brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, preset: p.id, icon: p.icon || null })}>{p.label}</button>
               ))}
               <span style={S.muted}>Hell {(ui.lightDefaults || {}).brightFt ?? 20}ft</span>
               <input type="range" min="0" max="120" step="5" value={(ui.lightDefaults || {}).brightFt ?? 20} onChange={(e) => setLightDefaults({ brightFt: +e.target.value })} style={{ width: 90 }} />

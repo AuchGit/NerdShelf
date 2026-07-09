@@ -140,4 +140,36 @@ export function getDifficultStyle() { const v = read(T_DIFF, 'normal'); return [
 export function setDifficultStyle(v) { write(T_DIFF, v); }
 export function useDifficultStyle() { return usePref(getDifficultStyle); }
 
+// ── Eigene Wand-/Licht-Presets + deaktivierte Built-ins (DM/VTT-Setup) ──
+// Persönliches Setup-Werkzeug (localStorage), kein Shared Game State. Eigene
+// Wand-Presets sind kind 'both' + Block-Overrides (blockMove/blockLight/
+// blockSight/seeOutFt/seeFarFt); Licht-Presets {label, brightFt, dimFt, color}.
+function readJson(key, fallback) {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
+}
+function writeJson(key, value) {
+  try { if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+  fire();
+}
+
+const WALL_CUSTOM_KEY = 'nerdshelf:vttCustomWallPresets';
+export function getCustomWallPresets() { const v = readJson(WALL_CUSTOM_KEY, []); return Array.isArray(v) ? v : []; }
+export function setCustomWallPresets(list) { writeJson(WALL_CUSTOM_KEY, list?.length ? list : null); }
+export function useCustomWallPresets() { return usePref(getCustomWallPresets); }
+
+const WALL_DISABLED_KEY = 'nerdshelf:vttDisabledWallPresets';
+export function getDisabledWallPresets() { const v = readJson(WALL_DISABLED_KEY, []); return Array.isArray(v) ? v : []; }
+export function setDisabledWallPresets(ids) { writeJson(WALL_DISABLED_KEY, ids?.length ? ids : null); }
+export function useDisabledWallPresets() { return usePref(getDisabledWallPresets); }
+
+const LIGHT_CUSTOM_KEY = 'nerdshelf:vttCustomLightPresets';
+export function getCustomLightPresets() { const v = readJson(LIGHT_CUSTOM_KEY, []); return Array.isArray(v) ? v : []; }
+export function setCustomLightPresets(list) { writeJson(LIGHT_CUSTOM_KEY, list?.length ? list : null); }
+export function useCustomLightPresets() { return usePref(getCustomLightPresets); }
+
+const LIGHT_DISABLED_KEY = 'nerdshelf:vttDisabledLightPresets';
+export function getDisabledLightPresets() { const v = readJson(LIGHT_DISABLED_KEY, []); return Array.isArray(v) ? v : []; }
+export function setDisabledLightPresets(ids) { writeJson(LIGHT_DISABLED_KEY, ids?.length ? ids : null); }
+export function useDisabledLightPresets() { return usePref(getDisabledLightPresets); }
+
 export const VTT_PREFS_EVENT = EVENT;

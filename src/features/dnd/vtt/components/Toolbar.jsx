@@ -2,7 +2,8 @@
 // canvas click does. Zone tool expands to a shape + color picker.
 import { useTool, useVtt } from '../state/useVtt';
 import { setTool, setZoneTool, setWallTool, setFogBrush, setFogErase } from '../state/actions';
-import { ZONE_TYPES, ZONE_COLORS, WALL_TYPES } from '../lib/constants';
+import { ZONE_TYPES, ZONE_COLORS } from '../lib/constants';
+import { useWallPresets } from '../lib/presets';
 import Icon from './Icon';
 
 // `iconSrc` points at public/Assets/vtt/*.svg; until a file exists the emoji
@@ -25,8 +26,10 @@ export default function Toolbar() {
   const zoneType = useVtt((s) => s.ui.zoneType);
   const zoneColor = useVtt((s) => s.ui.zoneColor);
   const wallKind = useVtt((s) => s.ui.wallKind);
+  const wallPresetId = useVtt((s) => s.ui.wallPresetId);
   const fogErase = useVtt((s) => s.ui.fogErase);
   const fogBrush = useVtt((s) => s.ui.fogBrushCells);
+  const wallPresets = useWallPresets();
 
   return (
     <div style={S.bar}>
@@ -85,10 +88,10 @@ export default function Toolbar() {
         <>
           <div style={S.sep} />
           <span style={S.muted}>Wandtyp:</span>
-          {Object.entries(WALL_TYPES).map(([id, w]) => (
-            <button key={id} onClick={() => setWallTool(id)}
-              style={{ ...S.btn, ...(wallKind === id ? S.active : null) }}>
-              <span style={{ width: 12, height: 12, borderRadius: 2, background: w.color, display: 'inline-block' }} /> {w.label}
+          {wallPresets.map((p) => (
+            <button key={p.id} onClick={() => setWallTool(p.kind, p.overrides || null, p.id)}
+              style={{ ...S.btn, ...((wallPresetId || wallKind) === p.id ? S.active : null) }}>
+              <span style={{ width: 12, height: 12, borderRadius: 2, background: p.color, display: 'inline-block' }} /> {p.label}
             </button>
           ))}
           {wallKind === 'door' && (

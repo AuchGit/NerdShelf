@@ -641,7 +641,14 @@ export const setZoneTool = (zoneType, zoneColor) =>
 // Exact zone dimensions set in the tool settings (used as the placement size).
 export const setZoneParam = (key, val) =>
   applyLocal({ type: 'ui/set', ui: { zoneParams: { ...getState().ui.zoneParams, [key]: val } } });
-export const setWallTool = (wallKind) => applyLocal({ type: 'ui/set', ui: { tool: 'walls', wallKind } });
+// Wand-Werkzeug armen. `overrides` (optional) kommen von EIGENEN Presets aus
+// den VTT-Einstellungen: kind ist dann 'both' + Block-Overrides, die beim
+// Platzieren auf jede neue Wand gespreadet werden. `presetId` markiert den
+// aktiven Preset-Button (mehrere eigene Presets teilen sich kind 'both').
+export const setWallTool = (wallKind, overrides = null, presetId = null) => applyLocal({
+  type: 'ui/set',
+  ui: { tool: 'walls', wallKind, wallOverrides: overrides || null, wallPresetId: presetId || wallKind },
+});
 // Continue/branch FROM a selected wall's endpoint ('a' or 'b'): switch to the
 // walls tool and seed a wall chain at that vertex (renderer reads
 // pendingWallChain). Branching from a junction simply starts another segment

@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useVtt, useIsDM, useSession } from '../state/useVtt';
 import { toggleCondition, applyHpDelta, updateToken, removeToken, selectToken, setHoverToken } from '../state/actions';
-import { CONDITIONS, LIGHT_PRESETS, DEFAULT_LIGHT, DISPOSITIONS } from '../lib/constants';
+import { CONDITIONS, DEFAULT_LIGHT, DISPOSITIONS } from '../lib/constants';
+import { useLightPresets } from '../lib/presets';
 import { openSheetPopout } from '../../character-builder/lib/sheetPopout';
 import { uploadHandoutImage } from '../lib/mapStorage';
 import Icon from './Icon';
@@ -21,6 +22,7 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
   const [tab, setTab] = useState('main');
   const [uploading, setUploading] = useState(false);
   const selectedTokenId = useVtt((s) => s.ui.selectedTokenId);
+  const lightPresets = useLightPresets();
   const ref = useRef(null);
   const fileRef = useRef(null);
   // Draggable position — leicht NEBEN dem Cursor öffnen (nicht direkt darunter),
@@ -176,10 +178,10 @@ export default function TokenContextMenu({ tokenId, x, y, onClose }) {
             <div style={S.label}>Licht{token.light && !token.light.preset ? ` (${token.light.dimFt} ft)` : ''}</div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               <button style={{ ...S.lightBtn, ...(!token.light ? S.lightOn : null) }} onClick={() => updateToken(tokenId, { light: null })}>Aus</button>
-              {Object.entries(LIGHT_PRESETS).map(([key, p]) => (
-                <button key={key} style={{ ...S.lightBtn, ...(token.light?.preset === key ? S.lightOn : null) }}
-                  onClick={() => updateToken(tokenId, { light: { preset: key, ...p } })} title={`${p.brightFt}/${p.dimFt} ft`}>
-                  <Icon src={p.icon} emoji="🔦" size={14} /> {p.label}
+              {lightPresets.map((p) => (
+                <button key={p.id} style={{ ...S.lightBtn, ...(token.light?.preset === p.id ? S.lightOn : null) }}
+                  onClick={() => updateToken(tokenId, { light: { preset: p.id, brightFt: p.brightFt, dimFt: p.dimFt, color: p.color, icon: p.icon || null } })} title={`${p.brightFt}/${p.dimFt} ft`}>
+                  {p.icon ? <Icon src={p.icon} emoji="🔦" size={14} /> : null} {p.label}
                 </button>
               ))}
             </div>

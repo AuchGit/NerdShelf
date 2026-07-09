@@ -8,7 +8,8 @@ import { useState } from 'react';
 import { Panel, Button } from '../../../../shared/ui';
 import { useVtt, useIsDM } from '../state/useVtt';
 import { updateWall, removeWall, selectWall, extendWall } from '../state/actions';
-import { WALL_TYPES, wallBaseBlocks, wallPeekFt } from '../lib/constants';
+import { wallBaseBlocks, wallPeekFt } from '../lib/constants';
+import { useWallPresets } from '../lib/presets';
 
 export default function WallEditor() {
   const isDM = useIsDM();
@@ -16,6 +17,7 @@ export default function WallEditor() {
   const selectedIds = useVtt((s) => s.ui.selectedWallIds || []);
   const wall = useVtt((s) => (id ? s.walls[id] : null));
   const [more, setMore] = useState(false);
+  const presets = useWallPresets();
   if (!isDM || !wall) return null;
 
   // When several walls are selected (double-click a loop/chain), every edit
@@ -41,15 +43,19 @@ export default function WallEditor() {
         <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{multi ? 'Doppelklick = ganzer Loop' : 'Endpunkte ziehen · Entf löscht'}</span>
       </div>
 
-      {/* Presets: setzen kind + löschen alle Overrides (kompaktes Chip-Grid). */}
+      {/* Presets: setzen kind + Overrides (kompaktes Chip-Grid). Built-ins
+          löschen die Overrides (Preset-Default greift); eigene Presets aus den
+          VTT-Einstellungen schreiben ihre Block-Overrides explizit. */}
       <div style={S.lbl}>Preset (setzt die Toggles)</div>
       <div style={S.presetGrid}>
-        {Object.entries(WALL_TYPES).map(([k, def]) => (
-          <button key={k} title={def.label}
-            onClick={() => apply({ kind: k, blockMove: null, blockLight: null, blockSight: null, seeOutFt: null, seeFarFt: null })}
-            style={{ ...S.preset, ...(wall.kind === k ? S.presetOn : null) }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: def.color, flexShrink: 0 }} />
-            <span style={S.presetTxt}>{def.label}</span>
+        {presets.map((p) => (
+          <button key={p.id} title={p.label}
+            onClick={() => apply(p.custom
+              ? { kind: 'both', ...p.overrides }
+              : { kind: p.kind, blockMove: null, blockLight: null, blockSight: null, seeOutFt: null, seeFarFt: null })}
+            style={{ ...S.preset, ...((p.builtin && wall.kind === p.kind && wall.blockMove == null && wall.blockLight == null && wall.blockSight == null) ? S.presetOn : null) }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+            <span style={S.presetTxt}>{p.label}</span>
           </button>
         ))}
       </div>
