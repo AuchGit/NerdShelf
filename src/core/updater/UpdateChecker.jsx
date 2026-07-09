@@ -108,6 +108,19 @@ export default function UpdateChecker() {
       sessionStorage.setItem(DISMISS_KEY, updateInfo.version)
     }
     setUpdateInfo(null)
+    setError(null)
+  }
+
+  // Manueller Ausweg, wenn der In-App-Download scheitert (Netzwerk/Proxy):
+  // Release-Seite im Standardbrowser öffnen, Installer von Hand laden.
+  async function openReleasePage() {
+    const url = 'https://github.com/AuchGit/NerdShelf/releases/latest'
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener')
+      await openUrl(url)
+    } catch {
+      try { window.open(url, '_blank') } catch { /* letzter Versuch gescheitert */ }
+    }
   }
 
   if (!isTauri || !updateInfo) return null
@@ -125,7 +138,11 @@ export default function UpdateChecker() {
             Update verfügbar: <span style={S.version}>v{updateInfo.version}</span>
           </div>
           {error ? (
-            <div style={S.error}>Fehler: {error}</div>
+            <div style={S.error}>
+              Fehler: {error}
+              {'\n'}Der Download ist fehlgeschlagen (Netzwerk/Firewall/Proxy?). Du kannst es
+              erneut versuchen oder den Installer manuell von der Release-Seite laden.
+            </div>
           ) : installing ? (
             <div style={S.subtitle}>
               {progress?.total
@@ -151,6 +168,16 @@ export default function UpdateChecker() {
         <div style={S.actions}>
           <button style={S.btnDismiss} onClick={handleDismiss}>Später</button>
           <button style={S.btnInstall} onClick={handleInstall}>Installieren</button>
+        </div>
+      )}
+
+      {/* Fehlerfall: das Banner darf NIE ohne Ausweg dastehen (vorher gab es
+          hier keine Buttons → "Fehlerfenster geht nicht weg und blockiert"). */}
+      {!installing && error && (
+        <div style={S.actions}>
+          <button style={S.btnDismiss} onClick={handleDismiss}>Schließen</button>
+          <button style={S.btnDismiss} onClick={openReleasePage}>Release-Seite öffnen</button>
+          <button style={S.btnInstall} onClick={handleInstall}>Erneut versuchen</button>
         </div>
       )}
 
@@ -301,6 +328,8 @@ const S = {
     fontSize: 'var(--fs-sm)',
     color: 'var(--color-danger)',
     marginTop: 2,
+    whiteSpace: 'pre-line',
+    lineHeight: 1.4,
   },
   actions: {
     display: 'flex',
