@@ -167,7 +167,10 @@ export default function DiceTray() {
   useEffect(() => {
     if (revealed && roll.captureId && roll.total != null && emittedRef.current !== roll.captureId) {
       emittedRef.current = roll.captureId;
-      emitRollResult(roll.captureId, roll.total, roll.label);
+      // Natürliche Einzelergebnisse mitschicken (ohne verworfene Vorteils-Würfel)
+      // → Batch-Würfe (z.B. „8d20" Initiative) lassen sich pro Würfel zuordnen.
+      const perDie = (roll.dice || []).filter((d) => !d.dropped).map((d) => d.value ?? d.result);
+      emitRollResult(roll.captureId, roll.total, roll.label, perDie);
     }
   }, [revealed, roll]);
 

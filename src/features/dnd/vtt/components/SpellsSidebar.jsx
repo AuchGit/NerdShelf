@@ -31,6 +31,7 @@ export default function SpellsSidebar() {
   const [open, setOpen] = useState({});   // expanded description
   const [upOpen, setUpOpen] = useState({}); // expanded upcast
   const [noteOpen, setNoteOpen] = useState({});
+  const [castPrompt, setCastPrompt] = useState(null); // nach dem Wirken: „Schaden würfeln?"
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +98,10 @@ export default function SpellsSidebar() {
     else if (slotLevel > 0) patch.usedSpellSlots = { ...usedSlots, [slotLevel]: (usedSlots[slotLevel] || 0) + 1 };
     if (conc) patch.concentration = { spell: sp.name, level: usePact ? warlockSlots?.level : slotLevel, since: new Date().toISOString() };
     if (Object.keys(patch).length) patchCombat(myId, patch);
+    // Hat der Zauber würfelbaren Schaden → kurz fragen, ob gewürfelt werden soll
+    // (bei Upcast wird der Basis-Schaden angeboten; die Schaden-Pill bleibt).
+    const dmg = spellDamageFormula(sp);
+    if (dmg) setCastPrompt({ name: sp.name, formula: dmg });
   };
 
   // Castable slot options for a spell row (up-cast + pact slot), like the sheet.
@@ -120,6 +125,16 @@ export default function SpellsSidebar() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {castPrompt && (
+        <div style={S.castPrompt}>
+          <span><b>{castPrompt.name}</b> gewirkt — Schaden würfeln?</span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <button style={S.castRollBtn} onClick={(ev) => { rollDamage(ev, castPrompt.formula, `${castPrompt.name}: Schaden`); setCastPrompt(null); }}
+              title="Schaden würfeln — Shift: Kritisch">{castPrompt.formula} würfeln</button>
+            <button style={S.dropBtn} onClick={() => setCastPrompt(null)}>✕</button>
+          </span>
+        </div>
+      )}
       {concName && (
         <div style={S.concBanner}>
           <span>Konzentration: <b>{concName}</b>{concentration?.level ? ` (G${concentration.level})` : ''}</span>
@@ -185,6 +200,20 @@ export default function SpellsSidebar() {
                             if (!sc) return null;
                             return <span key={cls} style={S.pillDc} title={`${cls}: Angriff ${sc.spellAttackDisplay} · SG ${sc.spellSaveDC}`}>{cls} {sc.spellAttackDisplay}/SG{sc.spellSaveDC}</span>;
                           })}
+                          {(() => {
+                            const atk = (sp._sourceClasses || []).map((c) => spellcasting[c]).find(Boolean)?.spellAttackDisplay;
+                            const dmg = spellDamageFormula(sp);
+                            return <>
+                              {sp.spellAttack?.length > 0 && atk && (
+                                <span role="button" tabIndex={0} style={S.pillRoll} title="Zauberangriff würfeln — Shift: Vorteil · Strg: Nachteil"
+                                  onClick={(ev) => { ev.stopPropagation(); rollAttack(ev, atk, `${sp.name}: Zauberangriff`); }}>{atk}</span>
+                              )}
+                              {dmg && (
+                                <span role="button" tabIndex={0} style={S.pillDmg} title="Schaden würfeln — Shift: Kritisch"
+                                  onClick={(ev) => { ev.stopPropagation(); rollDamage(ev, dmg, `${sp.name}: Schaden`); }}>{dmg}</span>
+                              )}
+                            </>;
+                          })()}
                         </div>
                         <div style={S.meta}>{[components(sp), fmtDuration(sp.duration), sp.school].filter(Boolean).join(' · ')}</div>
                         {/* Cast / up-cast — one button per available slot level (+ pact). */}
@@ -276,6 +305,10 @@ const S = {
   dropBtn: { background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 12 },
   chips: { display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 },
   pillDc: { fontSize: 9, fontWeight: 700, color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 3, padding: '0 4px' },
+  pillRoll: { fontSize: 10, fontWeight: 800, cursor: 'pointer', color: '#e0af68', border: '1px solid color-mix(in srgb, #e0af68 55%, transparent)', background: 'color-mix(in srgb, #e0af68 16%, transparent)', borderRadius: 999, padding: '0 6px' },
+  pillDmg: { fontSize: 10, fontWeight: 700, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', borderRadius: 999, padding: '0 6px' },
+  castPrompt: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: 'var(--fs-sm)' },
+  castRollBtn: { fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 16%, transparent)', borderRadius: 999, padding: '2px 8px' },
   castRow: { display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0 6px' },
   castOpt: { fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 4, cursor: 'pointer' },
   castOptUp: { background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-accent)' },

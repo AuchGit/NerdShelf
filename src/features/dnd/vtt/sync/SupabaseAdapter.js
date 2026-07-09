@@ -102,8 +102,8 @@ export class SupabaseAdapter {
       case 'map/remove':    return sb.from('vtt_maps').delete().eq('id', op.id); // FK cascade clears children
       case 'map/setActive': return sb.from('vtt_campaign_state').upsert({ campaign_id: cid, active_map_id: op.mapId });
 
-      case 'token/add':     return sb.from('vtt_tokens').upsert(tokenToRow(op.token, cid));
-      case 'token/update':  return sb.from('vtt_tokens').update(tokenPatchToRow(op.patch)).eq('id', op.id);
+      case 'token/add':     return writeResilient(sb, 'vtt_tokens', tokenToRow(op.token, cid));
+      case 'token/update':  return writeResilient(sb, 'vtt_tokens', tokenPatchToRow(op.patch), { id: op.id });
       case 'token/remove':  return sb.from('vtt_tokens').delete().eq('id', op.id);
 
       case 'zone/add':      return sb.from('vtt_zones').upsert(zoneToRow(op.zone, cid));
@@ -234,6 +234,27 @@ export class SupabaseAdapter {
 // ohne die neuesten Migrations-Spalten (nur die betroffene Funktion, z.B. der
 // Full-Res-Original-Link, fehlt dann bis zur Migration).
 const MISSING_COL_RE = /Could not find the '([^']+)' column/i;
+
+// Generischer Schreibvorgang, der bei „Spalte fehlt"-Fehlern die betroffene
+// Spalte weglässt und erneut versucht — so funktioniert z.B. das neue
+// `combat`-Feld auch OHNE ausgeführte Migration (es wird dann nur nicht
+// persistiert, blockiert aber kein Token-Anlegen/-Update).
+async function writeResilient(supabase, table, row, opts = {}) {
+  const r = { ...row };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (opts.id != null && Object.keys(r).length === 0) return { error: null }; // nichts mehr zu updaten
+    const q = opts.id != null
+      ? supabase.from(table).update(r).eq('id', opts.id)
+      : supabase.from(table).upsert(r);
+    const { error } = await q;
+    if (!error) return { error: null };
+    const m = MISSING_COL_RE.exec(error.message || '');
+    if (m && m[1] in r) { delete r[m[1]]; continue; }
+    return { error };
+  }
+  return { error: new Error('zu viele fehlende Spalten') };
+}
+
 export async function upsertMapResilient(supabase, row) {
   const r = { ...row };
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -308,7 +329,9 @@ function tokenToRow(t, cid) {
   return { id: t.id, campaign_id: cid, map_id: t.mapId, level: t.level || null, kind: t.kind,
     owner_user_id: t.ownerId || null, character_id: t.characterId || null, name: t.name,
     image_url: t.imageUrl || null, color: t.color, x: t.x, y: t.y, size_cells: t.sizeCells,
-    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [], bloodied: t.bloodied ?? null, combat: t.combat ?? null };
+    hp: t.hp ?? null, hp_max: t.hpMax ?? null, ac: t.ac ?? null, conditions: t.conditions || [], light: t.light || null, statblock: t.statblock || null, visible_to: t.visibleTo || [], auras: t.auras || [], sight_reset_at: t.sightResetAt ?? null, inside: t.inside ?? null, controllers: t.controllers || [], bloodied: t.bloodied ?? null,
+    // Nur mitsenden wenn gesetzt → normale Tokens brauchen die combat-Spalte nicht.
+    ...(t.combat ? { combat: t.combat } : {}) };
 }
 function tokenPatchToRow(p) {
   const map = { mapId: 'map_id', ownerId: 'owner_user_id', characterId: 'character_id', imageUrl: 'image_url', sizeCells: 'size_cells', hpMax: 'hp_max', visibleTo: 'visible_to', sightResetAt: 'sight_reset_at' };

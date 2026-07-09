@@ -10,7 +10,7 @@ import { setInitiative, selectToken, startCombat, endCombat } from '../state/act
 import { getState } from '../state/store';
 import { getBoundCharacter } from '../sync/characterBinding';
 import { useInitiativeRollEnabled } from '../lib/vttPrefs';
-import { rollForResult } from '../lib/rollDice';
+import { rollForResult, rollForDice } from '../lib/rollDice';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 
 export default function InitiativeTracker() {
@@ -38,13 +38,18 @@ export default function InitiativeTracker() {
     if (total != null) setValById(e.id, total);
   };
   const isAutoNpc = (t) => t && t.characterId == null && (t.combat?.initMode || 'auto') !== 'manual';
-  // Alle Auto-NPCs NACHEINANDER automatisch im 3D-Tray würfeln.
+  // Alle Auto-NPCs in EINEM 3D-Wurf gleichzeitig würfeln ("Nd20") und jedem
+  // Würfel + seinem Ini-Bonus einen NPC zuordnen (Reihenfolge bleibt erhalten).
   const rollAutoNpcs = async () => {
     const order = getState().initiative?.order || [];
-    for (const e of order) {
-      if (e.lair || e.tokenId == null) continue;
-      if (isAutoNpc(tokens[e.tokenId])) await rollEntryTo(e);
-    }
+    const autos = order.filter((e) => !e.lair && e.tokenId != null && isAutoNpc(tokens[e.tokenId]));
+    if (!autos.length) return;
+    const nats = await rollForDice(`${autos.length}d20`, 'Initiative (NPCs)');
+    const cur = getState().initiative;
+    if (!cur) return;
+    const byId = new Map();
+    autos.forEach((e, i) => { const nat = nats[i]; if (nat != null) byId.set(e.id, nat + initBonus(tokens[e.tokenId])); });
+    setInitiative({ ...cur, order: cur.order.map((e) => (byId.has(e.id) ? { ...e, value: byId.get(e.id), pending: false } : e)) });
   };
 
   const begin = () => {

@@ -40,7 +40,7 @@ function resultChannel() {
 }
 function onResult(detail) {
   const w = detail?.captureId && _resultWaiters.get(detail.captureId);
-  if (w) { _resultWaiters.delete(detail.captureId); w(detail.total); }
+  if (w) { _resultWaiters.delete(detail.captureId); w(detail); }
 }
 function ensureResultListener() {
   if (_resultListening) return;
@@ -49,19 +49,28 @@ function ensureResultListener() {
   const ch = resultChannel();
   if (ch) ch.onmessage = (e) => onResult(e.data);
 }
-export function rollForResult(formula, label, mode) {
+function capture(formula, label, mode, pick, fallback) {
   ensureResultListener();
   const captureId = `cap-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   return new Promise((resolve) => {
-    _resultWaiters.set(captureId, resolve);
-    setTimeout(() => { if (_resultWaiters.has(captureId)) { _resultWaiters.delete(captureId); resolve(null); } }, 20000);
+    _resultWaiters.set(captureId, (d) => resolve(pick(d)));
+    setTimeout(() => { if (_resultWaiters.has(captureId)) { _resultWaiters.delete(captureId); resolve(fallback); } }, 20000);
     dispatchRoll(formula, label, mode, captureId);
   });
 }
+// Resolve with the roll's TOTAL after the animation (single value, e.g. one save).
+export function rollForResult(formula, label, mode) {
+  return capture(formula, label, mode, (d) => d?.total ?? null, null);
+}
+// Resolve with the array of INDIVIDUAL natural die results — for rolling many
+// initiatives in ONE throw (e.g. "8d20") and mapping each die to a combatant.
+export function rollForDice(formula, label) {
+  return capture(formula, label, null, (d) => d?.dice || [], []);
+}
 // Called by the DiceTray when a captured roll's animation finishes.
-export function emitRollResult(captureId, total, label) {
+export function emitRollResult(captureId, total, label, dice) {
   if (!captureId) return;
-  const detail = { captureId, total, label: label || '' };
+  const detail = { captureId, total, label: label || '', dice: dice || null };
   window.dispatchEvent(new CustomEvent('vtt:roll-result', { detail }));
   try { resultChannel()?.postMessage(detail); } catch { /* ignore */ }
 }
