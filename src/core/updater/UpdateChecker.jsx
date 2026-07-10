@@ -33,7 +33,9 @@ export default function UpdateChecker() {
     if (!isTauri) return
     try {
       const { check } = await import('@tauri-apps/plugin-updater')
-      const update = await check()
+      // Timeout: bei blockiertem/zähem GitHub (Firewall/Proxy/AV) soll der
+      // Check schnell und leise fehlschlagen statt zu hängen.
+      const update = await check({ timeout: 15000 })
       if (!update?.available) return
 
       // Skip if user already dismissed this exact version
