@@ -199,7 +199,7 @@ export class VttRenderer {
     // React to VTT display-pref changes (memory style) live.
     this._onPrefs = () => { this.applyMemoryStyle(); this.reconcile(); };
     window.addEventListener(VTT_PREFS_EVENT, this._onPrefs);
-    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); this.tokens.tickTokens(this.drag?.id || this._tween?.id); this.tickLuminousMotion(); });
+    app.ticker.add(() => { const now = performance.now(); this.pings.tick(now); this.tickFlash(now); this.tickTween(now); this.tokens.tickTokens(this.drag?.id || this._tween?.id); this.tickAuras(); this.tickLuminousMotion(); });
     this.reconcile();
   }
 
@@ -441,7 +441,14 @@ export class VttRenderer {
       // liveLightKey fließt in die Licht-Revision ein, damit der Compositor
       // die Zwischenpositionen auch wirklich sieht (rev basiert sonst nur
       // auf Store-Versionen).
-      let liveLightKey = '';
+      // lumKey = Positionen der RUHENDEN leuchtenden Tokens (Teil der Licht-
+      // Revision — ersetzt den versions.lights-Bump pro token/move). BEWEGTE
+      // leuchtende Tokens (Drag/Tween/Peer-Ease) laufen getrennt (movingRev +
+      // liveMovingIds): der Compositor stempelt sie pro Compose direkt, statt
+      // die gecachten Coverage-Unionen aller Lichter neu zu bauen.
+      let lumKey = '';
+      let movingLightKey = '';
+      const movingLightIds = new Set();
       const lightSources = map.lightingEnabled === false ? [] : [
         ...Object.values(s.lights).filter((l) => l.mapId === map.id && onLevel(l)),
         ...Object.values(levelTokens)
@@ -450,11 +457,12 @@ export class VttRenderer {
             // Light radius is measured from the token's edge (its space), not
             // its center — add the token's half-footprint in feet.
             const halfFt = ((t.sizeCells || 1) * 5) / 2;
-            const live = (this.drag?.id === t.id || this._tween?.id === t.id)
-              ? this.tokens.nodes.get(t.id)?.root?.position : null;
+            const moving = this._isTokenMoving(t.id);
+            const live = moving ? this.tokens.nodes.get(t.id)?.root?.position : null;
             const lx = live ? live.x : t.x;
             const ly = live ? live.y : t.y;
-            if (live) liveLightKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
+            if (moving) { movingLightIds.add('tl_' + t.id); movingLightKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`; }
+            else lumKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
             // A luminous token's light sits at the token's elevation (climb
             // terrain) so it shines over lower walls when the token is raised.
             return { id: 'tl_' + t.id, x: lx, y: ly, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, lx, ly) };
@@ -477,9 +485,11 @@ export class VttRenderer {
       this.lights.setZoom?.(this.viewport.scale); // programmatische Zooms (Fit etc.)
       const lightOpts = {
         renderer: this.app.renderer,
-        // Cheap recompute gate: bumped by every wall/light/map change (incl.
-        // luminous-token moves) — replaces hashing all walls+lights per frame.
-        rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}|${liveLightKey}`,
+        // Cheap recompute gate: bumped by every wall/light/map change; die
+        // Positionen ruhender leuchtender Tokens stehen explizit in lumKey.
+        rev: `${versions.walls}|${versions.lights}|${versions.maps}|${map.id}|${level}|${lumKey}`,
+        liveMovingIds: movingLightIds,
+        movingRev: movingLightKey,
         // Wand-stabile Revision: Polygon-Cache + Welt-Schatten-RT müssen nur
         // bei Wand-/Map-Änderungen invalidieren, nicht bei jedem Licht-Move.
         wallsRev: `${versions.walls}|${versions.maps}|${map.id}|${level}`,
@@ -1691,10 +1701,19 @@ export class VttRenderer {
     } catch { return null; }
   }
 
+  // Bewegt sich dieses Token GERADE auf dem Schirm? Lokaler Drag/WASD-Tween
+  // oder Peer-Ease (Sprite noch nicht am Ziel _tx/_ty). Gemeinsames Prädikat
+  // für Licht-Split (Reconcile + Live-Pfad) und Glide-Erkennung.
+  _isTokenMoving(id) {
+    if (this.drag?.id === id || this._tween?.id === id) return true;
+    const node = this.tokens.nodes.get(id);
+    return !!(node && node._tx != null
+      && (Math.abs(node.root.position.x - node._tx) > 0.5 || Math.abs(node.root.position.y - node._ty) > 0.5));
+  }
+
   // Pro Frame: gleitet gerade ein leuchtendes Token (lokal ODER per Peer-Ease),
   // folgt das Licht per leichtem Live-Refresh — für jeden Client, nicht nur den
-  // Ziehenden. Erkennung: Sprite-Position weicht noch vom Ziel (_tx/_ty) ab,
-  // oder ein lokaler Drag/Tween läuft.
+  // Ziehenden.
   tickLuminousMotion() {
     if (!this._lightEnv) return;
     const s = getState();
@@ -1703,11 +1722,7 @@ export class VttRenderer {
     let moving = false;
     for (const t of Object.values(s.tokens)) {
       if (!t.light || t.mapId !== map.id) continue;
-      if (this.drag?.id === t.id || this._tween?.id === t.id) { moving = true; break; }
-      const node = this.tokens.nodes.get(t.id);
-      if (node && node._tx != null) {
-        if (Math.abs(node.root.position.x - node._tx) > 0.5 || Math.abs(node.root.position.y - node._ty) > 0.5) { moving = true; break; }
-      }
+      if (this._isTokenMoving(t.id)) { moving = true; break; }
     }
     if (moving) this.refreshLightsLive();
   }
@@ -1721,6 +1736,8 @@ export class VttRenderer {
     if (!map || map.lightingEnabled === false) return;
     const { level, base } = env;
     let liveKey = '';
+    let movingKey = '';
+    const movingIds = new Set();
     const sources = [
       ...Object.values(s.lights).filter((l) => l.mapId === map.id && (l.level || base) === level),
       ...Object.values(s.tokens)
@@ -1733,7 +1750,11 @@ export class VttRenderer {
           const rp = this.tokens.nodes.get(t.id)?.root?.position;
           const lx = rp ? rp.x : t.x;
           const ly = rp ? rp.y : t.y;
-          liveKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
+          // Bewegte leuchtende Tokens gehen in movingRev/liveMovingIds: der
+          // Compositor stempelt sie pro Frame direkt, die statischen Coverage-
+          // Unionen (rev aus liveKey) bleiben über die ganze Bewegung gültig.
+          if (this._isTokenMoving(t.id)) { movingIds.add('tl_' + t.id); movingKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`; }
+          else liveKey += `${t.id}:${Math.round(lx)},${Math.round(ly)};`;
           return { id: 'tl_' + t.id, x: lx, y: ly, ...t.light, brightFt: (t.light.brightFt || 0) + halfFt, dimFt: (t.light.dimFt || 0) + halfFt, heightFt: t.light.heightFt ?? terrainHeightAt(map, level, lx, ly) };
         }),
       ...env.ambientSources,
@@ -1743,7 +1764,7 @@ export class VttRenderer {
     const vb = this.visibleMapBounds(map);
     // liveKey mit dem Ausschnitt salzen, damit ein Pan zwischen Frames neu baut.
     const boundsKey = vb ? `|vb:${Math.round(vb.minX)},${Math.round(vb.minY)},${Math.round(vb.maxX)},${Math.round(vb.maxY)}` : '';
-    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey + boundsKey, __live: true });
+    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey + boundsKey, liveMovingIds: movingIds, movingRev: movingKey, __live: true });
   }
 
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-
@@ -1762,16 +1783,36 @@ export class VttRenderer {
   }
 
   // Colored ft range circles attached to tokens (everyone sees them).
+  // Pro Token EIN Aura-Container (Kreise um 0,0), positioniert auf dem Token —
+  // tickAuras() lässt ihn der GERENDERTEN Sprite-Position folgen, damit die
+  // Umkreise beim Drag/Glide am Token kleben statt nur pro Reconcile (20Hz
+  // Store-Position) nachzuziehen.
   drawAuras(tokens, grid) {
     this.auras.removeChildren().forEach((c) => c.destroy({ children: true }));
+    this._auraNodes = new Map();
     for (const t of Object.values(tokens)) {
-      for (const a of (t.auras || [])) {
-        if (!a || !(a.radiusFt > 0)) continue;
+      const list = (t.auras || []).filter((a) => a && a.radiusFt > 0);
+      if (!list.length) continue;
+      const node = new Container();
+      for (const a of list) {
         const r = feetToPx(a.radiusFt, grid.size);
-        this.auras.addChild(new Graphics().circle(t.x, t.y, r)
+        node.addChild(new Graphics().circle(0, 0, r)
           .fill({ color: a.color || '#6c8cff', alpha: 0.1 })
           .stroke({ width: 2, color: a.color || '#6c8cff', alpha: 0.6 }));
       }
+      node.position.set(t.x, t.y);
+      this.auras.addChild(node);
+      this._auraNodes.set(t.id, node);
+    }
+  }
+
+  // Jeden Ticker-Frame: Auren auf die gerenderte Token-Position setzen.
+  tickAuras() {
+    const nodes = this._auraNodes;
+    if (!nodes || !nodes.size) return;
+    for (const [id, c] of nodes) {
+      const p = this.tokens.nodes.get(id)?.root?.position;
+      if (p && (c.position.x !== p.x || c.position.y !== p.y)) c.position.set(p.x, p.y);
     }
   }
 

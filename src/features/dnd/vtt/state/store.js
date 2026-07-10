@@ -277,9 +277,12 @@ function bumpVersions(op) {
   if (t.startsWith('wall/')) { versions.walls++; return; }
   if (t.startsWith('light/')) { versions.lights++; return; }
   if (t.startsWith('map/')) { versions.maps++; return; }
-  // Luminous tokens are light sources: their move/resize/(un)light re-lights.
+  // Luminous tokens are light sources: (un)light/resize/add/remove re-lights.
+  // token/move bumpt bewusst NICHT: die Positionen leuchtender Tokens stehen
+  // explizit in der Licht-Revision des Renderers (lumKey) — so bleibt die
+  // statische Licht-Coverage über einen ganzen Drag/Glide cache-gültig statt
+  // bei jedem 50ms-Move-Op komplett neu zu bauen.
   if (t === 'token/update' && op.patch && ('light' in op.patch || ('sizeCells' in op.patch && state.tokens[op.id]?.light))) versions.lights++;
-  else if (t === 'token/move' && state.tokens[op.id]?.light) versions.lights++;
   else if (t === 'token/add' && op.token?.light) versions.lights++;
   else if (t === 'token/remove' && state.tokens[op.id]?.light) versions.lights++;
 }

@@ -87,6 +87,28 @@ export class LightLayer {
     }
   }
 
+  // Sichtbarkeits-Polygone EINER Quelle (dim + bright getrennt geclippt).
+  // Height-aware shadows: a wall only blocks this light if it's at least as
+  // tall as the light's height (full-height walls = heightFt 0/null always
+  // block). A light raised above a low wall shines over it.
+  // A light placed ON a wall sits exactly on the blocking segment, so the
+  // shadow caster can't tell which side it's on → light leaks through. Nudge
+  // the sample point a few px off any wall it's touching (toward the side it's
+  // already on) so the wall blocks properly.
+  // Dim reach is clipped to `walls`; bright reach to `brightWalls` (which
+  // adds milky/frosted windows). So a milky window passes DIM light but stops
+  // the BRIGHT band — light beyond it is dimmed by one step.
+  _srcPolys(s, walls, brightWalls, bounds) {
+    const lh = s.heightFt || 0;
+    const lightWallsForSrc = walls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt));
+    const origin = nudgeOffWalls(s.x, s.y, lightWallsForSrc);
+    const poly = visibilityPolygon(origin, lightWallsForSrc, bounds);
+    const brightPoly = brightWalls === walls
+      ? poly
+      : visibilityPolygon(origin, brightWalls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt)), bounds);
+    return { poly, brightPoly };
+  }
+
   // opts: { renderer, sources, grid, walls, bounds, style, baseline, darkness, contrast, blur }
   update(opts) {
     const { renderer, sources = [], grid, walls = [], brightWalls = walls, shadowWalls = walls, bounds, style = 'modern', baseline = 'bright', darkness = [], darkPolys = [], worldShadow = null, darkvision = [], contrast = 0.5, blur = 0, rev = null, wallsRev = null } = opts || {};
@@ -140,6 +162,18 @@ export class LightLayer {
     if (!hasDark && valid.length === 0) { this.sprite.visible = false; this._sig = null; return; }
     this.sprite.visible = true;
 
+    // Bewegte Quellen (Drag/Glide leuchtender Tokens): NICHT in die gecachten
+    // Coverage-Unionen — ihr Beitrag wird pro Compose direkt in Dunkel- und
+    // Szenen-Pass gestempelt (nur EIN frisches LOS-Polygon pro Frame). Die
+    // statischen Unionen bleiben so über die ganze Bewegung cache-gültig;
+    // vorher wurden ALLE Lichter jeden Frame neu gebaut (4 RT-Passes mit
+    // Stencil-Maske pro Licht) — genau das ließ das Licht dem Token nachhängen.
+    // Der Final-Pass (__final) nimmt die Quellen wieder in die Unionen auf.
+    const movingIds = (!opts.__final && opts.liveMovingIds && opts.liveMovingIds.size) ? opts.liveMovingIds : null;
+    const movingRev = opts.movingRev || '';
+    const covSrc = movingIds ? valid.filter((s) => !movingIds.has(s.id)) : valid;
+    const movingSrc = movingIds ? valid.filter((s) => movingIds.has(s.id)) : [];
+
     // Skip the expensive 3-RenderTexture recomposition when nothing
     // lighting-relevant changed (e.g. a peer dragging a non-luminous token, or
     // a pure-UI reconcile). Cheap signature over the actual inputs.
@@ -152,7 +186,9 @@ export class LightLayer {
     // wall/light/map change incl. luminous-token moves) the gate is one string
     // compare; the per-wall/per-light hashing below is only the standalone
     // fallback for callers without version tracking.
-    const baseSig = rev != null ? `${w}x${h}|${baseline}|${style}|${contrast}|${rev}` : JSON.stringify([
+    // Ohne Split (Final/ruhender Tisch) gehören die bewegten Positionen mit in
+    // die Coverage-Signatur, damit der Endstand wirklich neu komponiert wird.
+    const baseSig = rev != null ? `${w}x${h}|${baseline}|${style}|${contrast}|${rev}${movingIds ? '' : `|mv:${movingRev}`}` : JSON.stringify([
       w, h, baseline, style, contrast,
       valid.map((s) => [s.id, Math.round(s.x), Math.round(s.y), s.brightFt, s.dimFt, s.color, s.heightFt || 0]),
       walls.map((wl) => [wl.a.x, wl.a.y, wl.b.x, wl.b.y, wl.kind, wl.open, wl.heightFt || 0]),
@@ -185,7 +221,7 @@ export class LightLayer {
     // __live = Aufruf aus dem Licht-only-Drag/Glide-Pfad: IMMER low-res
     // (auch der erste Frame — kein Voll-Auflösungs-Hitch beim Drag-Start).
     const wantLow = !opts.__final && (opts.__live || nowTs - (this._lastCompose || 0) < 110);
-    const sig = `${baseSig}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
+    const sig = `${baseSig}|${movingIds ? `mv:${movingRev}` : ''}|${dvSig}|${wantLow ? 'lo' : 'hi'}`;
     if (sig === this._sig) return;
     clearTimeout(this._finalTimer);
     if (wantLow) {
@@ -239,34 +275,17 @@ export class LightLayer {
     const cdContainer = new Container();
     const ccbContainer = new Container();
     const ccdContainer = new Container();
-    for (const s of valid) {
+    for (const s of covSrc) {
       const dimPx = feetToPx(s.dimFt || 0, grid.size);
       const brightPx = feetToPx(s.brightFt || 0, grid.size);
       const cx = s.x - ox;
       const cy = s.y - oy;
-      // Height-aware shadows: a wall only blocks this light if it's at least as
-      // tall as the light's height (full-height walls = heightFt 0/null always
-      // block). A light raised above a low wall shines over it.
-      const lh = s.heightFt || 0;
-      const lightWallsForSrc = walls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt));
-      // A light placed ON a wall sits exactly on the blocking segment, so the
-      // shadow caster can't tell which side it's on → light leaks through. Nudge
-      // the sample point a few px off any wall it's touching (toward the side it's
-      // already on) so the wall blocks properly.
-      // Dim reach is clipped to `walls`; bright reach to `brightWalls` (which
-      // adds milky/frosted windows). So a milky window passes DIM light but stops
-      // the BRIGHT band — light beyond it is dimmed by one step.
       // Polygone gecacht pro Licht+Position (wallsRev-gültig): nur das
       // BEWEGTE Licht rechnet neu, statische Lichter treffen den Cache.
-      const pcKey = `${s.id}|${Math.round(s.x)}|${Math.round(s.y)}|${lh}`;
+      const pcKey = `${s.id}|${Math.round(s.x)}|${Math.round(s.y)}|${s.heightFt || 0}`;
       let pc = wallsRev != null ? this._polyCache.get(pcKey) : null;
       if (!pc) {
-        const origin = nudgeOffWalls(s.x, s.y, lightWallsForSrc);
-        const poly = visibilityPolygon(origin, lightWallsForSrc, bounds);
-        const brightPoly = brightWalls === walls
-          ? poly
-          : visibilityPolygon(origin, brightWalls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt)), bounds);
-        pc = { poly, brightPoly };
+        pc = this._srcPolys(s, walls, brightWalls, bounds);
         if (wallsRev != null) {
           this._polyCache.set(pcKey, pc);
           if (this._polyCache.size > 256) this._polyCache.delete(this._polyCache.keys().next().value);
@@ -347,6 +366,17 @@ export class LightLayer {
       dvd.destroy({ children: true });
     }
 
+    // Geometrie der bewegten Quellen — jede Compose-Runde frisch (Position und
+    // Schattenpolygon vom aktuellen Frame). Kreuzt der Schein kurzzeitig eine
+    // statische Lichtfläche, hellt die Überlappung minimal doppelt auf — der
+    // Final-Pass nach der Bewegung komponiert wieder exakt über die Unionen.
+    const movingGeom = movingSrc.map((s) => ({
+      s,
+      ...this._srcPolys(s, walls, brightWalls, bounds),
+      dimPx: feetToPx(s.dimFt || 0, grid.size),
+      brightPx: feetToPx(s.brightFt || 0, grid.size),
+    }));
+
     // ── 2. Composite the visible lighting texture ──
     // TWO passes so light interacts correctly with BOTH kinds of darkness:
     //   • baseline pass (scene): the map-wide ambient overlay. Dim light must
@@ -378,6 +408,10 @@ export class LightLayer {
     // darkvision likewise lifts one step within its range.
     dark.addChild(stamp(covD, 'erase', liftToDim));
     dark.addChild(stamp(covB, 'erase', 1));
+    for (const m of movingGeom) {
+      if (m.dimPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', liftToDim));
+      if (m.brightPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
+    }
     if (wantDV && !live) dark.addChild(stamp(covDV, 'erase', liftToDim));
     renderer.render({ container: dark, target: rts.dark, clear: true });
     dark.destroy({ children: true });
@@ -399,6 +433,10 @@ export class LightLayer {
     if (baseA > 0) {
       if (BL < 1) scene.addChild(stamp(covD, 'erase', dimErase));
       scene.addChild(stamp(covB, 'erase', 1));
+      for (const m of movingGeom) {
+        if (BL < 1 && m.dimPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', dimErase));
+        if (m.brightPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
+      }
       if (wantDV && !live && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
     // deep-dark layer (already carved by the lights) composites on top
@@ -413,6 +451,12 @@ export class LightLayer {
       const brightA = style === 'classic' ? 0.16 : 0.22;
       scene.addChild(stamp(covCD, 'add', BL < 1 ? dimA : dimA * 0.5));
       scene.addChild(stamp(covCB, 'add', BL < 2 ? brightA : brightA * 0.5));
+      for (const m of movingGeom) {
+        const col = m.s.color || WARM;
+        const custom = !!m.s.color;
+        if (m.dimPx > 0 && (BL < 1 || custom)) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'add', BL < 1 ? dimA : dimA * 0.5, col));
+        if (m.brightPx > 0 && (BL < 2 || custom)) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'add', BL < 2 ? brightA : brightA * 0.5, col));
+      }
     }
     renderer.render({ container: scene, target: main, clear: true });
     scene.destroy({ children: true });
@@ -427,6 +471,23 @@ function reach(x, y, r, mask, color = 0xffffff) {
   const disc = new Graphics().circle(x, y, r).fill({ color, alpha: 1 });
   c.addChild(disc);
   if (mask) { c.addChild(mask); c.mask = mask; }
+  return c;
+}
+
+// Direkt-Stempel einer BEWEGTEN Quelle: Scheibe (auf ihr LOS-Polygon maskiert)
+// mit Blend + Alpha — 'erase' höhlt die Dunkelheit aus (wie die stamp()-Unionen),
+// 'add' legt den Farb-Schein auf. Blend sitzt auf der Scheibe (Leaf), die Maske
+// wird als Stencil genutzt und nicht mitgezeichnet.
+function reachBlend(x, y, r, maskPoly, ox, oy, blend, alpha, color = 0xffffff) {
+  const c = new Container();
+  const disc = new Graphics().circle(x, y, r).fill({ color, alpha });
+  disc.blendMode = blend;
+  c.addChild(disc);
+  if (maskPoly && maskPoly.length >= 3) {
+    const mask = new Graphics().poly(maskPoly.flatMap((q) => [q.x - ox, q.y - oy])).fill(0xffffff);
+    c.addChild(mask);
+    c.mask = mask;
+  }
   return c;
 }
 
