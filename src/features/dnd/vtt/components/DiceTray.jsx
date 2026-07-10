@@ -77,6 +77,17 @@ function rollFormula(terms, mode) {
   return { dice, total, mode: mode || null };
 }
 
+// Position IMMER im sichtbaren Bereich halten: eine auf dem 2K-Monitor
+// gespeicherte Position lag auf 1080p AUSSERHALB des Screens — das Fenster
+// (inkl. Würfelanimation) war dann unsichtbar. Clamp bei Laden, Ziehen und
+// Fenster-Resize; mindestens die Kopfzeile bleibt greifbar.
+function clampPos(p) {
+  if (!p) return p;
+  const W = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const H = typeof window !== 'undefined' ? window.innerHeight : 800;
+  return { x: Math.max(0, Math.min(p.x, W - 90)), y: Math.max(0, Math.min(p.y, H - 60)) };
+}
+
 export default function DiceTray() {
   const [open, setOpen] = useState(false);
   // One state holds the current roll; randomness lives inside the setState
@@ -97,14 +108,15 @@ export default function DiceTray() {
   const rollerPortrait = useVtt((s) => (s.session.role === 'dm' ? null
     : (s.ui.myCharacterId != null ? (s.ui.characters?.[s.ui.myCharacterId]?.data?.appearance?.portrait || null) : null)));
   const [pos, setPos] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(POS_KEY)) || null; } catch { return null; }
+    try { return clampPos(JSON.parse(localStorage.getItem(POS_KEY))) || null; } catch { return null; }
   });
   const drag = useRef(null);
   useEffect(() => {
-    const move = (e) => { const d = drag.current; if (!d) return; setPos({ x: e.clientX - d.dx, y: e.clientY - d.dy }); };
+    const move = (e) => { const d = drag.current; if (!d) return; setPos(clampPos({ x: e.clientX - d.dx, y: e.clientY - d.dy })); };
     const up = () => { drag.current = null; };
-    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    const onResize = () => setPos((p) => clampPos(p));
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up); window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); window.removeEventListener('resize', onResize); };
   }, []);
   // Persist the tray position whenever it changes (cheap; survives reloads).
   useEffect(() => { if (pos) { try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch { /* ignore */ } } }, [pos]);
