@@ -57,6 +57,7 @@ import { connectCharacterBinding, disconnectCharacterBinding } from './sync/char
 import { useIsDM, useActiveMap, useVtt } from './state/useVtt';
 import { useUiScale, getConnectionMode, getRelayUrl, setConnectionMode, setRelayUrl, useConnectionMode } from './lib/vttPrefs';
 import { setSessionActive } from '../character-builder/lib/campaigns';
+import { setRiderTurnKey } from '../character-builder/lib/riderTurnUse';
 import { startEmbeddedRelay, stopEmbeddedRelay, listLocalIps, probeRelayUrls, classifyIp } from './lib/relayHost';
 
 // Base theme font sizes (theme.css) — scaled by the VTT UI-size preference.
@@ -108,6 +109,11 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   }, [isGM, campaignId]);
   const spectator = !isGM && !campaignLive;
   useEffect(() => { setSpectator(spectator); }, [spectator]);
+  // Zug-Schlüssel für 1x/Zug-Rider im Wurf-Composer (Sneak Attack & Co.):
+  // jeder Initiative-Zugwechsel resettet den Verbrauch — RAW gilt „once per
+  // turn" für JEDEN Zug. localStorage, damit auch Popout-Fenster ihn sehen.
+  const riderTurnKey = useVtt((s) => (s.initiative?.active ? `${s.initiative.round || 1}:${s.initiative.activeIndex || 0}` : null));
+  useEffect(() => { setRiderTurnKey(riderTurnKey); }, [riderTurnKey]);
   const [transportNonce, setTransportNonce] = useState(0);
   const announcedRelayUrl = useVtt((s) => s.ui.announcedRelayUrl);
   const connMode = useConnectionMode();

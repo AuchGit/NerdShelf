@@ -2267,7 +2267,8 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     <div style={embedded ? { marginTop: 0 } : { marginTop: 10 }}>
       {composer && (
         <RollComposer title={composer.title} base={composer.base} riders={actionRiders}
-          attack={composer.attack || null} onClose={() => setComposer(null)} />
+          attack={composer.attack || null} usageKey={character?.id ?? character?.name ?? null}
+          onClose={() => setComposer(null)} />
       )}
       {!embedded && (
         <button type="button" onClick={() => setOpen(o => !o)} style={caeToggle}>

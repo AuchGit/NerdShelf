@@ -3,13 +3,20 @@
 // Schaden + abhakbare Rider werden in EINEM 3D-Wurf gewürfelt; danach zeigt
 // der Tray (und der Roll-Log) den Schaden aufgeschlüsselt pro Typ. Rider mit
 // `active` (aktive Konzentration) sind vorangehakt. Shift beim Würfeln = Krit.
+// 1×/Zug-Rider, die in DIESEM Initiative-Zug schon mitgewürfelt wurden, sind
+// nicht vorangehakt und tragen ein „schon benutzt"-Tag (usageKey = Charakter;
+// bewusst weiter anklickbar — Tischentscheid schlägt die Automatik).
 // Portal in document.body (Bars haben transform/backdropFilter).
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { rollDamageParts, rollAttack } from '../lib/rollDice';
+import { usedRiders, markRidersUsed } from '../../character-builder/lib/riderTurnUse';
 
-export default function RollComposer({ title, base, riders = [], attack = null, src, onClose }) {
-  const [on, setOn] = useState(() => new Set(riders.filter((r) => r.active).map((r) => r.id)));
+export default function RollComposer({ title, base, riders = [], attack = null, src, usageKey = null, onClose }) {
+  const [used] = useState(() => usedRiders(usageKey));
+  const [on, setOn] = useState(() => new Set(
+    riders.filter((r) => r.active && !(r.perTurn && used.has(r.id))).map((r) => r.id),
+  ));
   const toggle = (id) => setOn((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const parts = [
@@ -18,7 +25,13 @@ export default function RollComposer({ title, base, riders = [], attack = null, 
   ];
   const preview = parts.map((p) => p.formula).join(' + ');
 
-  const roll = (ev) => { rollDamageParts(ev, parts, title, src); onClose(); };
+  const roll = (ev) => {
+    rollDamageParts(ev, parts, title, src);
+    // Mitgewürfelte 1x/Zug-Rider für den Rest dieses Zugs als verbraucht
+    // merken (fensterübergreifend; No-op ohne laufenden Kampf).
+    markRidersUsed(usageKey, riders.filter((r) => r.perTurn && on.has(r.id)).map((r) => r.id));
+    onClose();
+  };
   // Bei Angriffs-Aktionen: ERST der Attack-Roll (d20+Bonus, Shift/Strg =
   // Vorteil/Nachteil), der Composer bleibt offen — trifft es, würfelt man
   // danach den Schaden mit den angehakten Ridern.
@@ -40,7 +53,9 @@ export default function RollComposer({ title, base, riders = [], attack = null, 
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <input type="checkbox" checked={on.has(r.id)} onChange={() => toggle(r.id)} />
               <span style={S.riderName}>{r.name}</span>
-              {r.perTurn && <span style={S.perTurn} title="Nur einmal pro Zug">1×/Zug</span>}
+              {r.perTurn && (used.has(r.id)
+                ? <span style={{ ...S.perTurn, ...S.usedTag }} title="In diesem Zug schon benutzt (1x pro Zug) — anhaken übersteuert">schon benutzt</span>
+                : <span style={S.perTurn} title="Nur einmal pro Zug">1×/Zug</span>)}
             </span>
             <span style={S.formula}>{r.formula}{r.type ? ` ${r.type}` : ''}</span>
           </label>
@@ -70,6 +85,7 @@ const S = {
   baseLbl: { fontSize: 'var(--fs-sm)', fontWeight: 700 },
   riderName: { fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   perTurn: { flexShrink: 0, fontSize: 9, fontWeight: 800, padding: '0 5px', borderRadius: 999, color: 'var(--color-text-muted)', border: '1px solid var(--color-border, #3a3f4a)' },
+  usedTag: { color: '#e0af68', borderColor: 'color-mix(in srgb, #e0af68 55%, transparent)' },
   formula: { fontSize: 11, fontWeight: 700, color: '#ff6b6b', flexShrink: 0 },
   foot: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border, #3a3f4a)' },
   preview: { fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
