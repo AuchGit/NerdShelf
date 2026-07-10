@@ -15,6 +15,7 @@ import { Pinnable } from './tooltip/Tooltips';
 import { rollAttack, rollDamage } from '../lib/rollDice';
 import { addZone, setZoneTool, setZoneParam } from '../state/actions';
 import { getSpellcastingInfo } from '../../character-builder/lib/spellcastingRules';
+import { spellDamageFormula, scaledDamage } from '../../character-builder/lib/spellDamage';
 import SpellPrepareModal from '../../character-builder/components/sheet/SpellPrepareModal';
 import { toast } from '../lib/toast';
 
@@ -22,24 +23,6 @@ function setPath(obj, path, value) {
   const keys = path.split('.'); let o = obj;
   for (let i = 0; i < keys.length - 1; i++) { if (o[keys[i]] == null || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
   o[keys[keys.length - 1]] = value;
-}
-
-// Upcast-Schaden: {@scaledamage 8d6|3-9|1d6} aus entriesHigherLevel auf den
-// gewirkten Grad hochrechnen. Gleiche Würfelgröße → zusammengefasste Formel
-// ("10d6"), sonst lesbare Summe. Ohne Skalierung → Basis-Formel.
-function scaledDamage(sp, castLevel) {
-  const base = spellDamageFormula(sp);
-  if (!base) return null;
-  const raw = JSON.stringify(sp?.entriesHigherLevel || []) + JSON.stringify(sp?.entries || []);
-  const m = /\{@scaledamage ([^}|]+)\|(\d+)-\d+\|([^}|]+)\}/.exec(raw);
-  if (!m || !castLevel) return base;
-  const extra = Math.max(0, castLevel - (+m[2]));
-  if (!extra) return base;
-  const step = m[3].replace(/\s+/g, '');
-  const sm = /^(\d*)d(\d+)$/.exec(step);
-  const bm = /^(\d*)d(\d+)(.*)$/.exec(base);
-  if (sm && bm && sm[2] === bm[2]) return `${(+bm[1] || 1) + extra * (+sm[1] || 1)}d${bm[2]}${bm[3] || ''}`;
-  return `${base}+${extra}x${step}`;
 }
 
 // "20 ft. Sphere" / "15 ft. Cone" / "30 ft. Line (5 ft. wide)" (deriveSpellArea)
@@ -70,14 +53,6 @@ function isSelfOrigin(sp) {
   if (!r) return false;
   if (r.type && r.type !== 'point') return true;
   return r.distance?.type === 'self';
-}
-
-// First rollable damage in a spell's entries ({@damage XdY} / {@scaledamage}).
-function spellDamageFormula(sp) {
-  const raw = JSON.stringify(sp?.entries || []);
-  const m = /\{@(?:damage|dice) ([^}|]+)/.exec(raw);
-  if (m) { const f = m[1].replace(/\s+/g, ''); if (/\d*d\d+/.test(f)) return f; }
-  return null;
 }
 
 export default function SpellsSidebar() {

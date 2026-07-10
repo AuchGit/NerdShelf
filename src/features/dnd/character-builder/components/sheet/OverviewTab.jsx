@@ -30,6 +30,7 @@ import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/
 import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
 import { rollAttack, rollDamage } from '../../../vtt/lib/rollDice'
 import { gatherActionRiders } from '../../lib/onHitRiders'
+import { scaledDamage } from '../../lib/spellDamage'
 import RollComposer from '../../../vtt/components/RollComposer'
 
 // Klickbare Würfel-Pills (Angriff/Schaden) — würfeln in den VTT-Würfeltray.
@@ -1343,6 +1344,17 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       if (slotLevel > 0) d.status.economy.leveledCast = true
     })
     setCastingFor(null)
+    // Nach dem Wirken direkt den Wurf-Composer anbieten: Schaden des GEWIRKTEN
+    // Grads ({@scaledamage} hochgerechnet) + aktivierbare Rider — gleiche UX
+    // wie Use-Aktionen. Zauber ohne Würfelschaden prompten nicht.
+    const meta = spell?.spellMeta || spellMap?.get(String(spell?.name || '').toLowerCase()) || spell
+    const dmg = scaledDamage(meta, slotLevel)
+    if (dmg) {
+      setComposer({
+        title: `${spell.name}: Schaden${slotLevel > 0 ? ` (Grad ${slotLevel})` : ''}`,
+        base: { formula: dmg, type: String(meta?.damageType?.[0] || meta?.damageInflict?.[0] || '').toLowerCase(), label: spell.name },
+      })
+    }
   }
   // Homebrew-Item-Charges verbrauchen. Schreibt in
   // character.status.itemCharges[itemId][key] += cost wo key entweder
@@ -1393,6 +1405,26 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     const pb = Math.ceil(((character.classes || []).reduce((sm, c) => sm + (c.level || 0), 0)) / 4) + 1
     try { return gatherActionRiders(character, pb, spellMap) } catch { return [] }
   }, [character, spellMap])
+  // Basis-Schaden einer Row: direktes r.damage (Waffe) oder erste Damage-Pill.
+  const rowDamageOf = (r) => {
+    const direct = (String(r.damage || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0]
+    if (direct) return { formula: direct.replace(/\s+/g, ''), type: (r.damageType || '').toLowerCase() }
+    for (const pl of (r.effectPills || [])) {
+      if (pl.kind === 'damage' || pl.kind === 'damage-bonus') {
+        const m = String(pl.value ?? pl.label).match(/\d*d\d+(?:\s*[+-]\s*\d+)?/)
+        if (m) return { formula: m[0].replace(/\s+/g, ''), type: (pl.damageType || '').toLowerCase() }
+      }
+    }
+    return null
+  }
+  // Beim BENUTZEN einer Aktion (Use-Button, egal ob Bottom-Bar, Popout-Sheet
+  // oder Aktions-Overlay) direkt den Wurf-Composer anbieten: Basis-Schaden +
+  // aktivierbare Specials, ein Klick würfelt alles. Ohne Schaden kein Prompt.
+  const promptRowRoll = (r) => {
+    const base = rowDamageOf(r)
+    if (!base) return
+    setComposer({ title: `${r.name}: Schaden`, base: { ...base, label: r.name } })
+  }
   const openDamageRoll = (ev, name, formula, type) => {
     const dice = (String(formula || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0]
     if (!dice) return
@@ -2253,7 +2285,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               const listBundle = {
                 expanded, setExpanded, slots, usedSlots, usedPact, castingFor, setCastingFor,
                 castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges,
-                applyRowSideEffects, character, applyCharacter, openDamageRoll,
+                applyRowSideEffects, character, applyCharacter, openDamageRoll, promptRowRoll,
               };
               const META = {
                 pinned: { label: 'Pinned', color: 'var(--accent-cyan)' },
@@ -2380,6 +2412,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                       character={character}
                       applyCharacter={applyCharacter}
                       openDamageRoll={openDamageRoll}
+                      promptRowRoll={promptRowRoll}
                       hidePinnedCategory
                     />
                   </div>
@@ -2404,6 +2437,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               character={character}
               applyCharacter={applyCharacter}
               openDamageRoll={openDamageRoll}
+              promptRowRoll={promptRowRoll}
             />
           )}
           </>)}
@@ -2743,7 +2777,7 @@ function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
   castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges, applyRowSideEffects,
-  character, applyCharacter, openDamageRoll,
+  character, applyCharacter, openDamageRoll, promptRowRoll,
   hidePinnedCategory = false,
   orderKey = 'actions', // Spalten-Modus: eigener Key pro Spalte → Sortierung pro Kategorie-Spalte
 }) {
@@ -3352,6 +3386,7 @@ function CombatActionsCategorisedList({
                             if (r.resourceId)     consumeResource(r.resourceId)
                             if (r.itemChargeRef)  consumeItemCharges(r.itemChargeRef)
                             applyRowSideEffects(r)
+                            promptRowRoll?.(r)
                           }}
                         />
                       </div>
