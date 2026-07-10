@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVtt } from '../state/useVtt';
 import { patchCombat, applyOwnCharacter } from '../sync/characterBinding';
-import { useVttComputed } from '../lib/computedCharacter';
+import { useVttComputed, useVttHydrated } from '../lib/computedCharacter';
 import { computeSpellSlots } from '../../character-builder/lib/sheetUtils';
 import { CombatEconomy, CombatActionsExplorer, FavoritesSection } from '../../character-builder/components/sheet/OverviewTab';
 import { Pinnable } from './tooltip/Tooltips';
@@ -75,6 +75,11 @@ export default function PlayerBottomBar() {
   // Feature-Tabellen-Ressourcen wie Superiority/Energy Dice und
   // tabellenskalierte Zähler in der Ressourcen-Leiste.
   const computed = useVttComputed(character);
+  // Hydratisierter Charakter (gleiche Datenlage wie das Sheet): nötig, damit
+  // der Actions-Explorer Klassen-/Species-Aktionen, always-prepared Spells
+  // und Rider sieht. NUR fürs Lesen — Writes (applyCharacter) diffen weiter
+  // gegen den rohen character.
+  const hydrated = useVttHydrated(character);
 
   const slots = useMemo(() => (character ? computeSpellSlots(character) : null), [character]);
   if (!character || !computed) return null;
@@ -184,10 +189,10 @@ export default function PlayerBottomBar() {
 
   // Content for each stackable panel (reuses the sheet's components).
   const renderPanel = (id) => {
-    if (id === 'actions') return <CombatActionsExplorer character={character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
+    if (id === 'actions') return <CombatActionsExplorer character={hydrated || character} computed={computed} applyCharacter={applyCharacter} embedded columns />;
     if (id === 'specials') return <Specials />;
     if (id === 'items') return <ItemsPanel items={quickItems} consume={consumeQuickItem} addOne={addQuickItem} toggleEquip={toggleEquipItem} />;
-    if (id === 'favorites') return <FavoritesSection character={character} computed={computed} applyCharacter={applyCharacter} columns={4} />;
+    if (id === 'favorites') return <FavoritesSection character={hydrated || character} computed={computed} applyCharacter={applyCharacter} columns={4} />;
     return null;
   };
   // Which toggle buttons to offer (Items only when there are quick items).
@@ -201,7 +206,7 @@ export default function PlayerBottomBar() {
   return (
     <div style={barStyle}>
       {actionsOverlay && (
-        <ActionsOverlay character={character} computed={computed} applyCharacter={applyCharacter}
+        <ActionsOverlay character={hydrated || character} computed={computed} applyCharacter={applyCharacter}
           onClose={() => setActionsOverlay(false)} />
       )}
       {openPanels.length > 0 && (

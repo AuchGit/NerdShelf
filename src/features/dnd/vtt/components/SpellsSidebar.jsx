@@ -11,6 +11,7 @@ import { collectCharacterSpells, computeSpellSlots, spellLevelLabel } from '../.
 import { loadSpellList } from '../../character-builder/lib/dataLoader';
 import { deriveSpellArea, DAMAGE_TYPE_COLOR } from '../../character-builder/lib/spellEffectParser';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
+import { useVttHydrated } from '../lib/computedCharacter';
 import { Pinnable } from './tooltip/Tooltips';
 import { rollAttack, rollDamage } from '../lib/rollDice';
 import { addZone, setZoneTool, setZoneParam } from '../state/actions';
@@ -61,7 +62,11 @@ export default function SpellsSidebar() {
   const tokens = useVtt((s) => s.tokens);
   const activeMapId = useVtt((s) => s.activeMapId);
   const userId = useVtt((s) => s.session.userId);
-  const character = myId != null ? chars[myId]?.data : null;
+  const rawCharacter = myId != null ? chars[myId]?.data : null;
+  // Hydratisiert (wie das Sheet): sonst fehlen always-prepared Spells aus
+  // Klassen-/Subclass-Features (Fey Wanderer, Hunter's Mark via Favored
+  // Enemy) — collectCharacterSpells liest __activeFeatures/__grantedSpells.
+  const character = useVttHydrated(rawCharacter);
   const edition = character?.meta?.edition || '5e';
   const [catalog, setCatalog] = useState(null); // lowercase name -> spell
   const [open, setOpen] = useState({});   // expanded description
