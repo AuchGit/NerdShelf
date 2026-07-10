@@ -50,7 +50,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import { openSheetPopout } from '../character-builder/lib/sheetPopout';
 import { TooltipProvider, TooltipLayer } from './components/tooltip/Tooltips';
 import { connectSync, getState, persistSnapshot } from './state/store';
-import { setSession, presentHandout, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap } from './state/actions';
+import { setSession, presentHandout, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap, setSpectator } from './state/actions';
 import { SupabaseAdapter } from './sync/SupabaseAdapter';
 import { RelayAdapter } from './sync/RelayAdapter';
 import { connectCharacterBinding, disconnectCharacterBinding } from './sync/characterBinding';
@@ -90,6 +90,24 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const [sessionLive, setSessionLive] = useState(false);
+  // Spieler dürfen die gespeicherte Karte auch OHNE laufende Session öffnen —
+  // dann als Zuschauer (nichts bewegen/ändern). session_active wird live
+  // verfolgt: startet der DM die Session, schaltet der Client ohne Reload frei.
+  const [campaignLive, setCampaignLive] = useState(true);
+  useEffect(() => {
+    if (isGM || !campaignId) return undefined;
+    let cancelled = false;
+    supabase.from('dnd_campaigns').select('session_active').eq('id', campaignId).single()
+      .then(({ data }) => { if (!cancelled) setCampaignLive(!!data?.session_active); })
+      .catch(() => {});
+    const ch = supabase.channel(`vtt-live:${campaignId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'dnd_campaigns', filter: `id=eq.${campaignId}` },
+        (payload) => setCampaignLive(!!payload.new?.session_active))
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(ch); };
+  }, [isGM, campaignId]);
+  const spectator = !isGM && !campaignLive;
+  useEffect(() => { setSpectator(spectator); }, [spectator]);
   const [transportNonce, setTransportNonce] = useState(0);
   const announcedRelayUrl = useVtt((s) => s.ui.announcedRelayUrl);
   const connMode = useConnectionMode();
@@ -442,6 +460,11 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
           {/* Spieler-Kartenwahl: zwischen allen DM-sichtbaren Karten wechseln;
               die aktive ist markiert. Nur in der Spieler-Ansicht. */}
           {(!isDM || viewAsPlayer) && <PlayerMapSwitcher />}
+          {spectator && (
+            <span style={S.spectatorPill} title="Keine laufende Session — du kannst die Karte ansehen, aber nichts bewegen oder ändern. Startet der DM die Session, wird automatisch freigeschaltet.">
+              Zuschauer — keine Session aktiv
+            </span>
+          )}
           {isGM && (
             <button style={S.viewToggle} onClick={() => setViewAsPlayer((v) => !v)}
               title="Zwischen DM-Werkzeugen und Spieler-Ansicht wechseln">
@@ -592,6 +615,7 @@ const S = {
   back: { background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '4px 10px', cursor: 'pointer', fontSize: 'var(--fs-sm)' },
   iconBtn: { background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', width: 30, height: 30, cursor: 'pointer', fontSize: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
   sessionOn: { background: 'color-mix(in srgb, var(--accent-green,#4ade80) 22%, transparent)', borderColor: 'var(--accent-green,#4ade80)', color: 'var(--accent-green,#4ade80)' },
+  spectatorPill: { padding: '3px 10px', borderRadius: 999, fontSize: 'var(--fs-xs)', fontWeight: 700, background: 'color-mix(in srgb, #e0af68 14%, transparent)', border: '1px solid color-mix(in srgb, #e0af68 55%, transparent)', color: '#e0af68', whiteSpace: 'nowrap' },
   joinDirect: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 'var(--radius-md)', padding: '5px 10px', cursor: 'pointer', fontSize: 'var(--fs-sm)', fontWeight: 700 },
   directOn: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: 'var(--accent-green,#4ade80)', border: '1px solid var(--accent-green,#4ade80)', borderRadius: 'var(--radius-md)', padding: '3px 8px' },
   directProbing: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '3px 8px' },

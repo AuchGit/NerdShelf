@@ -296,8 +296,15 @@ export default function CampaignDetailPage({ session, campaignId }) {
           </>
         ) : (
           <>
-            {campaign.session_active && (
+            {/* Ohne laufende Session dürfen Spieler die gespeicherte Karte als
+                Zuschauer öffnen (nur ansehen); mit Session treten sie bei. */}
+            {campaign.session_active ? (
               <Button onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}>▶ Session beitreten</Button>
+            ) : (
+              <Button variant="secondary" onClick={() => navigate(`/campaign/${campaign.id}/vtt`)}
+                title="Karte ansehen — solange keine Session läuft, kannst du nichts bewegen oder ändern">
+                Karte ansehen
+              </Button>
             )}
             <Button variant="secondary" onClick={handleLeave}>Verlassen</Button>
           </>

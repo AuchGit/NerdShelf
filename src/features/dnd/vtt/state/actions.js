@@ -207,6 +207,9 @@ export function applyHpDelta(id, delta, token) {
 
 // ---- zones ----
 export function addZone(zone) {
+  // Zuschauer (Spieler ohne laufende Session) platzieren nichts — fängt auch
+  // AoE-Templates aus der Zauber-Sidebar ab, nicht nur das Zonen-Werkzeug.
+  if (getState().ui.spectator) { toast('Keine laufende Session — nur ansehen.', 'info'); return null; }
   const z = { id: uid('zone_'), mapId: getState().activeMapId, createdBy: null, color: '#ff5252', opacity: 0.35, level: creationLevel(), ...zone };
   apply({ type: 'zone/add', zone: z });
   return z.id;
@@ -239,6 +242,7 @@ export function toggleDoor(id) {
   if (!toggleCooled(`d:${id}`)) return;
   const w = getState().walls[id];
   if (!w) return;
+  if (getState().ui.spectator) { toast('Keine laufende Session — nur ansehen.', 'info'); return; }
   // Verriegelt: „Spieler dürfen öffnen" ist am Segment abgehakt → nur der DM
   // kann sie bedienen; Spieler sehen einen Hinweis statt eines Toggles.
   const sess0 = getState().session;
@@ -338,6 +342,7 @@ export const updateLight = (id, patch) => apply({ type: 'light/update', id, patc
 // (instant for everyone); a non-GM also calls the security-definer RPC so the
 // change persists (the normal light table write is GM-only under RLS).
 export function toggleLight(id) {
+  if (getState().ui.spectator) { toast('Keine laufende Session — nur ansehen.', 'info'); return; }
   if (!toggleCooled(`l:${id}`)) return;
   const lt = getState().lights[id];
   if (!lt) return;
@@ -493,6 +498,12 @@ export function removeJournalEntry(id) {
   if (getState().presentedHandout === id) presentHandout(null);
 }
 export const presentHandout = (id) => apply({ type: 'handout/present', id: id || null });
+
+// Zuschauer-Modus (lokal): Spieler ohne laufende Session dürfen die Karte
+// ANSEHEN (pan/zoom/messen), aber nichts am Tisch ändern — kein Bewegen,
+// keine Türen/Lichter/Zonen. VttApp schaltet das live über
+// dnd_campaigns.session_active um.
+export const setSpectator = (spectator) => applyLocal({ type: 'ui/set', ui: { spectator: !!spectator } });
 
 // Freeze the session: players can't move/act while paused (synced + persisted).
 export const setPaused = (paused) => apply({ type: 'session/pause', paused: !!paused });

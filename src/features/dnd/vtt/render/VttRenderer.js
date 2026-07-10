@@ -883,6 +883,7 @@ export class VttRenderer {
     const s = getState();
     if (s.session.role === 'dm') return true;
     if (s.paused) return false; // frozen session: players can't move
+    if (s.ui.spectator) return false; // Zuschauer (keine Session): nur ansehen
     if (!this.canControl(token)) return false;
     // During combat a player may only move a combatant on ITS turn. Tokens not
     // in the initiative order (out of combat) are unrestricted.
@@ -1183,6 +1184,7 @@ export class VttRenderer {
       }
       this.walls.drawPreview(this.wallChain.last, v, s.ui.wallKind);
     } else if (tool === 'zone') {
+      if (s.ui.spectator) return; // Zuschauer: keine Flächen platzieren
       // Snap the zone origin to the nearest grid intersection (Ctrl = free), so
       // shapes line up with tokens consistently.
       const from = this.keys.ctrl ? pos : snapPointToGrid(pos, map.grid);
