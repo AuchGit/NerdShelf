@@ -9,10 +9,42 @@ import { useVtt } from '../state/useVtt';
 import { patchCombat, applyOwnCharacter } from '../sync/characterBinding';
 import { collectCharacterSpells, computeSpellSlots, spellLevelLabel } from '../../character-builder/lib/sheetUtils';
 import { loadSpellList } from '../../character-builder/lib/dataLoader';
-import { deriveSpellArea } from '../../character-builder/lib/spellEffectParser';
+import { deriveSpellArea, DAMAGE_TYPE_COLOR } from '../../character-builder/lib/spellEffectParser';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { Pinnable } from './tooltip/Tooltips';
 import { rollAttack, rollDamage } from '../lib/rollDice';
+import { addZone, setZoneTool, setZoneParam } from '../state/actions';
+import { toast } from '../lib/toast';
+
+// "20 ft. Sphere" / "15 ft. Cone" / "30 ft. Line (5 ft. wide)" (deriveSpellArea)
+// → platzierbare Zonen-Definition { type, params }. Datengetrieben aus dem
+// Area-String; unbekannte/größenlose Shapes → null (kein Button).
+function zoneFromArea(area) {
+  const m = /^(\d+) ft\. (\w+)/.exec(area || '');
+  if (!m) return null;
+  const n = +m[1];
+  switch (m[2]) {
+    case 'Sphere': case 'Radius': case 'Cylinder': case 'Hemisphere':
+      return { type: 'circle', params: { radiusFt: n } };
+    case 'Cone':
+      return { type: 'cone', params: { lengthFt: n } };
+    case 'Cube': case 'Square':
+      return { type: 'square', params: { sideFt: n } };
+    case 'Line': {
+      const w = /\((\d+) ft\. wide\)/.exec(area);
+      return { type: 'line', params: { lengthFt: n, widthFt: w ? +w[1] : 5 } };
+    }
+    default: return null;
+  }
+}
+// Selbst-Ursprung: 5etools kodiert Kegel/Linie/Würfel VOM Zaubernden aus als
+// range.type (cone/line/cube/sphere/…) statt 'point'; dazu distance 'self'.
+function isSelfOrigin(sp) {
+  const r = sp?.range;
+  if (!r) return false;
+  if (r.type && r.type !== 'point') return true;
+  return r.distance?.type === 'self';
+}
 
 // First rollable damage in a spell's entries ({@damage XdY} / {@scaledamage}).
 function spellDamageFormula(sp) {
@@ -25,6 +57,9 @@ function spellDamageFormula(sp) {
 export default function SpellsSidebar() {
   const myId = useVtt((s) => s.ui.myCharacterId);
   const chars = useVtt((s) => s.ui.characters || {});
+  const tokens = useVtt((s) => s.tokens);
+  const activeMapId = useVtt((s) => s.activeMapId);
+  const userId = useVtt((s) => s.session.userId);
   const character = myId != null ? chars[myId]?.data : null;
   const edition = character?.meta?.edition || '5e';
   const [catalog, setCatalog] = useState(null); // lowercase name -> spell
@@ -98,10 +133,35 @@ export default function SpellsSidebar() {
     else if (slotLevel > 0) patch.usedSpellSlots = { ...usedSlots, [slotLevel]: (usedSlots[slotLevel] || 0) + 1 };
     if (conc) patch.concentration = { spell: sp.name, level: usePact ? warlockSlots?.level : slotLevel, since: new Date().toISOString() };
     if (Object.keys(patch).length) patchCombat(myId, patch);
-    // Hat der Zauber würfelbaren Schaden → kurz fragen, ob gewürfelt werden soll
-    // (bei Upcast wird der Basis-Schaden angeboten; die Schaden-Pill bleibt).
+    // Nach dem Wirken kurz anbieten: Schaden würfeln (Basis-Schaden; Shift =
+    // Krit) und/oder das passende AoE-Template platzieren (aus areaTags +
+    // Text abgeleitet — Kegel/Würfel mit Selbst-Ursprung starten am Token).
     const dmg = spellDamageFormula(sp);
-    if (dmg) setCastPrompt({ name: sp.name, formula: dmg });
+    const zone = zoneFromArea(deriveSpellArea(sp));
+    if (dmg || zone) setCastPrompt({ name: sp.name, formula: dmg, zone, self: isSelfOrigin(sp), dmgType: (sp.damageType?.[0] || sp.damageInflict?.[0] || '').toLowerCase() });
+  };
+
+  // AoE-Template des gewirkten Zaubers platzieren. Selbst-Ursprung (Kegel,
+  // Thunderwave-Würfel, …) hängt direkt am eigenen Token (exakte Position,
+  // kein Grid-Snap; Richtung/Position danach per Auswahl-Tool anpassbar);
+  // Fern-Flächen (Fireball & Co.) platziert man wie gewohnt per Klick.
+  const placeArea = () => {
+    const p = castPrompt;
+    if (!p?.zone) return;
+    const color = DAMAGE_TYPE_COLOR[p.dmgType] || 'var(--color-accent)';
+    const hex = /^#/.test(color) ? color : '#42a5f5';
+    const myToken = Object.values(tokens).find((t) => String(t.characterId) === String(myId) && t.mapId === activeMapId);
+    if (p.self && myToken) {
+      // createdBy = eigener User: die RLS erlaubt Mitgliedern nur das Verwalten
+      // EIGENER Zonen — ohne das würde der Insert für Spieler abgelehnt.
+      addZone({ type: p.zone.type, x: myToken.x, y: myToken.y, params: { directionDeg: 0, ...p.zone.params }, color: hex, createdBy: userId, level: myToken.level || undefined });
+      toast(`${p.name}: Fläche am Token platziert — mit dem Auswahl-Tool drehen/verschieben.`, 'info');
+    } else {
+      setZoneTool(p.zone.type, hex);
+      for (const [k, v] of Object.entries(p.zone.params)) setZoneParam(k, v);
+      toast(`${p.name}: Klicke auf die Karte, um die Fläche zu platzieren.`, 'info');
+    }
+    setCastPrompt(null);
   };
 
   // Castable slot options for a spell row (up-cast + pact slot), like the sheet.
@@ -127,10 +187,18 @@ export default function SpellsSidebar() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {castPrompt && (
         <div style={S.castPrompt}>
-          <span><b>{castPrompt.name}</b> gewirkt — Schaden würfeln?</span>
-          <span style={{ display: 'flex', gap: 6 }}>
-            <button style={S.castRollBtn} onClick={(ev) => { rollDamage(ev, castPrompt.formula, `${castPrompt.name}: Schaden`); setCastPrompt(null); }}
-              title="Schaden würfeln — Shift: Kritisch">{castPrompt.formula} würfeln</button>
+          <span><b>{castPrompt.name}</b> gewirkt</span>
+          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {castPrompt.formula && (
+              <button style={S.castRollBtn} onClick={(ev) => { rollDamage(ev, castPrompt.formula, `${castPrompt.name}: Schaden`); setCastPrompt(null); }}
+                title="Schaden würfeln — Shift: Kritisch">{castPrompt.formula} würfeln</button>
+            )}
+            {castPrompt.zone && (
+              <button style={S.castAreaBtn} onClick={placeArea}
+                title={castPrompt.self ? 'Fläche startet am eigenen Token' : 'Fläche per Klick auf der Karte platzieren'}>
+                Fläche {castPrompt.self ? 'am Token' : 'platzieren'}
+              </button>
+            )}
             <button style={S.dropBtn} onClick={() => setCastPrompt(null)}>✕</button>
           </span>
         </div>
@@ -309,6 +377,7 @@ const S = {
   pillDmg: { fontSize: 10, fontWeight: 700, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', borderRadius: 999, padding: '0 6px' },
   castPrompt: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: 'var(--fs-sm)' },
   castRollBtn: { fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 16%, transparent)', borderRadius: 999, padding: '2px 8px' },
+  castAreaBtn: { fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#7dcfff', border: '1px solid color-mix(in srgb, #7dcfff 55%, transparent)', background: 'color-mix(in srgb, #7dcfff 16%, transparent)', borderRadius: 999, padding: '2px 8px' },
   castRow: { display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0 6px' },
   castOpt: { fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 4, cursor: 'pointer' },
   castOptUp: { background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-accent)' },
