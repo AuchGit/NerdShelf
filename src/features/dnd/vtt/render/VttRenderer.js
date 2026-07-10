@@ -508,7 +508,16 @@ export class VttRenderer {
         contrast: map.lightContrast ?? 0.5,
         blur: map.lightBlur ?? 0,
       };
-      this.lights.update(lightOpts);
+      // Solange ein leuchtendes Token in Bewegung ist, komponieren auch die
+      // Op-Reconciles (50ms-Broadcasts) über den SICHTBAREN Ausschnitt — exakt
+      // wie der Live-Pfad. Vorher wechselten sich volle Map und Ausschnitt ab,
+      // und jeder Wechsel zerstörte den Low-Res-RT-Satz samt Coverage-Cache
+      // (Realloc + Neuaufbau ALLER Lichter bis zu 40×/s → der Drag-Lag).
+      // _lightEnv behält die vollen Bounds: Final-Pass + Live-Fallback
+      // komponieren nach der Bewegung wieder die ganze Map.
+      this.lights.update(movingLightIds.size
+        ? { ...lightOpts, bounds: this.visibleMapBounds(map) || bounds, fullBounds: bounds }
+        : lightOpts);
       // Umgebung für den leichten Licht-only-Refresh (refreshLightsLive):
       // beim Drag/Glide eines leuchtenden Tokens ändern sich NUR die
       // Quellpositionen — alles andere (Wände, Ambients, Darkness, …)
@@ -1761,10 +1770,12 @@ export class VttRenderer {
     ];
     // Live: nur den sichtbaren Ausschnitt komponieren; fullBounds trägt die
     // volle Map-Größe, damit der Final-Pass (in Ruhe) wieder alles komponiert.
+    // KEIN bounds-Salz im rev: das Compose-Fenster steckt im Compositor selbst
+    // in der Signatur (winSig) — so ergeben Live-Frames und Op-Reconciles
+    // während der Bewegung IDENTISCHE Coverage-Signaturen und teilen sich den
+    // gecachten statischen Licht-Aufbau, statt ihn sich gegenseitig zu nullen.
     const vb = this.visibleMapBounds(map);
-    // liveKey mit dem Ausschnitt salzen, damit ein Pan zwischen Frames neu baut.
-    const boundsKey = vb ? `|vb:${Math.round(vb.minX)},${Math.round(vb.minY)},${Math.round(vb.maxX)},${Math.round(vb.maxY)}` : '';
-    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey + boundsKey, liveMovingIds: movingIds, movingRev: movingKey, __live: true });
+    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey, liveMovingIds: movingIds, movingRev: movingKey, __live: true });
   }
 
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-

@@ -18,6 +18,7 @@
 import { Container, Graphics, Sprite, Texture, RenderTexture, BlurFilter } from 'pixi.js';
 import { feetToPx } from '../../lib/geometry';
 import { visibilityPolygon, nudgeOffWalls } from '../../lib/visibility';
+import { distPointToSeg } from '../../lib/wallGeometry';
 
 const BASELINE_ALPHA = { bright: 0, dim: 0.5, dark: 0.9 };
 const DARKNESS_ALPHA = 0.9;   // a placed darkness region
@@ -98,14 +99,26 @@ export class LightLayer {
   // Dim reach is clipped to `walls`; bright reach to `brightWalls` (which
   // adds milky/frosted windows). So a milky window passes DIM light but stops
   // the BRIGHT band — light beyond it is dimmed by one step.
-  _srcPolys(s, walls, brightWalls, bounds) {
+  _srcPolys(s, walls, brightWalls, bounds, rangePx = 0) {
     const lh = s.heightFt || 0;
-    const lightWallsForSrc = walls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt));
+    // Reichweiten-Culling: das Polygon maskiert nur eine Scheibe mit Radius
+    // rangePx — Wände außerhalb der Reichweite können den beleuchteten Bereich
+    // nicht beeinflussen und fliegen VOR dem O(n²)-Winkel-Sweep raus; die
+    // Rand-Segmente schrumpfen auf die Licht-Box (unabhängig vom Compose-
+    // Fenster, damit gecachte Polygone für jedes Fenster gültig bleiben).
+    // Auf wandreichen Maps (UVTT-Import) macht das aus hunderten Segmenten
+    // eine Handvoll — der Sweep pro Frame wird von ~10-50ms zu <1ms.
+    const R = rangePx + 12; // kleiner Rand: Nudge-Versatz + tangentiale Scheibenkante
+    const b = rangePx > 0
+      ? { minX: s.x - R, minY: s.y - R, maxX: s.x + R, maxY: s.y + R }
+      : bounds;
+    const inReach = rangePx > 0 ? (wl) => distPointToSeg(s, wl.a, wl.b) <= R : () => true;
+    const lightWallsForSrc = walls.filter((wl) => inReach(wl) && !(wl.heightFt > 0 && lh >= wl.heightFt));
     const origin = nudgeOffWalls(s.x, s.y, lightWallsForSrc);
-    const poly = visibilityPolygon(origin, lightWallsForSrc, bounds);
+    const poly = visibilityPolygon(origin, lightWallsForSrc, b);
     const brightPoly = brightWalls === walls
       ? poly
-      : visibilityPolygon(origin, brightWalls.filter((wl) => !(wl.heightFt > 0 && lh >= wl.heightFt)), bounds);
+      : visibilityPolygon(origin, brightWalls.filter((wl) => inReach(wl) && !(wl.heightFt > 0 && lh >= wl.heightFt)), b);
     return { poly, brightPoly };
   }
 
@@ -182,14 +195,18 @@ export class LightLayer {
     // moving token — recomputing the whole light field every WASD step caused the
     // reconcile to lag and the token to stutter back-and-forth. When only
     // darkvision changes we reuse the cached coverage and just recomposite.
-    // With a caller-provided `rev` (store version counters — bumped by every
-    // wall/light/map change incl. luminous-token moves) the gate is one string
-    // compare; the per-wall/per-light hashing below is only the standalone
-    // fallback for callers without version tracking.
+    // With a caller-provided `rev` (store version counters für Wände/Lichter/
+    // Maps + explizite Positionen ruhender leuchtender Tokens) the gate is one
+    // string compare; the per-wall/per-light hashing below is only the
+    // standalone fallback for callers without version tracking.
     // Ohne Split (Final/ruhender Tisch) gehören die bewegten Positionen mit in
     // die Coverage-Signatur, damit der Endstand wirklich neu komponiert wird.
-    const baseSig = rev != null ? `${w}x${h}|${baseline}|${style}|${contrast}|${rev}${movingIds ? '' : `|mv:${movingRev}`}` : JSON.stringify([
-      w, h, baseline, style, contrast,
+    // Das Compose-Fenster (Größe UND Offset) steckt mit in der Signatur —
+    // Reconcile- und Live-Pfad komponieren während einer Bewegung über
+    // DASSELBE Fenster und teilen sich so RT-Satz + Coverage-Cache.
+    const winSig = `${w}x${h}@${Math.round(ox)},${Math.round(oy)}`;
+    const baseSig = rev != null ? `${winSig}|${baseline}|${style}|${contrast}|${rev}${movingIds ? '' : `|mv:${movingRev}`}` : JSON.stringify([
+      winSig, baseline, style, contrast,
       valid.map((s) => [s.id, Math.round(s.x), Math.round(s.y), s.brightFt, s.dimFt, s.color, s.heightFt || 0]),
       walls.map((wl) => [wl.a.x, wl.a.y, wl.b.x, wl.b.y, wl.kind, wl.open, wl.heightFt || 0]),
       brightWalls.map((wl) => [wl.a.x, wl.a.y, wl.b.x, wl.b.y, wl.kind, wl.open, wl.heightFt || 0]),
@@ -238,13 +255,12 @@ export class LightLayer {
     }
     this._sig = sig;
 
-    // Live-Frame (Drag/Glide): NUR die weißen Erase-Unionen (covB/covD)
-    // werden neu gebaut, damit sich der Lichtpool sichtbar mitbewegt. Die
-    // FARB-Unionen (covCB/covCD) und die Darkvision-Wäsche (covDV/covDVD)
-    // werden weder neu gerechnet NOCH gestempelt — sonst entstehen aus
-    // veralteten Farb-/DV-Flächen gemischt mit der neuen Lichtposition die
-    // farbigen Sichel-Streifen. Farbe + DV schnappen im Final-Pass sauber
-    // zurück. Spart zusätzlich mehrere RT-Passes pro Frame.
+    // Live-Frame (Drag/Glide): die Coverage-Unionen bleiben komplett gecacht
+    // (bewegte Quellen sind ausgeklammert und werden unten direkt gestempelt).
+    // Nur die Darkvision-Wäsche (covDV/covDVD) wird im Live-Frame weder neu
+    // gerechnet noch gestempelt — aus der veralteten DV-Fläche gemischt mit
+    // der neuen Lichtposition entstünden blaue Sichel-Streifen. DV schnappt
+    // im Final-/Op-Reconcile-Compose sauber nach.
     const live = !!opts.__live;
 
     const rts = this._getRtSet(w, h, wantLow ? resLow : 1, wantLow);
@@ -280,12 +296,13 @@ export class LightLayer {
       const brightPx = feetToPx(s.brightFt || 0, grid.size);
       const cx = s.x - ox;
       const cy = s.y - oy;
-      // Polygone gecacht pro Licht+Position (wallsRev-gültig): nur das
-      // BEWEGTE Licht rechnet neu, statische Lichter treffen den Cache.
-      const pcKey = `${s.id}|${Math.round(s.x)}|${Math.round(s.y)}|${s.heightFt || 0}`;
+      // Polygone gecacht pro Licht+Position+Reichweite (wallsRev-gültig): nur
+      // das BEWEGTE Licht rechnet neu, statische Lichter treffen den Cache.
+      const rangePx = Math.max(dimPx, brightPx);
+      const pcKey = `${s.id}|${Math.round(s.x)}|${Math.round(s.y)}|${s.heightFt || 0}|${Math.round(rangePx)}`;
       let pc = wallsRev != null ? this._polyCache.get(pcKey) : null;
       if (!pc) {
-        pc = this._srcPolys(s, walls, brightWalls, bounds);
+        pc = this._srcPolys(s, walls, brightWalls, bounds, rangePx);
         if (wallsRev != null) {
           this._polyCache.set(pcKey, pc);
           if (this._polyCache.size > 256) this._polyCache.delete(this._polyCache.keys().next().value);
@@ -322,7 +339,7 @@ export class LightLayer {
     // sun-away direction (a wall parallel to the sun naturally casts a sliver).
     // Hängt NUR an Wänden + Sonnenrichtung — nicht bei jedem Licht-/Token-
     // Move neu rendern (eigene Signatur statt coverageChanged).
-    const shadowSig = wantShadow ? `${wallsRev ?? 'x'}|${Math.round(worldShadow.dir ?? 135)}|${w}x${h}` : 'off';
+    const shadowSig = wantShadow ? `${wallsRev ?? 'x'}|${Math.round(worldShadow.dir ?? 135)}|${winSig}` : 'off';
     if (wantShadow && shadowSig !== rts.__shadowSig) {
       const ang = ((worldShadow.dir ?? 135) * Math.PI) / 180;
       const dx = Math.cos(ang); const dy = Math.sin(ang);
@@ -370,12 +387,11 @@ export class LightLayer {
     // Schattenpolygon vom aktuellen Frame). Kreuzt der Schein kurzzeitig eine
     // statische Lichtfläche, hellt die Überlappung minimal doppelt auf — der
     // Final-Pass nach der Bewegung komponiert wieder exakt über die Unionen.
-    const movingGeom = movingSrc.map((s) => ({
-      s,
-      ...this._srcPolys(s, walls, brightWalls, bounds),
-      dimPx: feetToPx(s.dimFt || 0, grid.size),
-      brightPx: feetToPx(s.brightFt || 0, grid.size),
-    }));
+    const movingGeom = movingSrc.map((s) => {
+      const dimPx = feetToPx(s.dimFt || 0, grid.size);
+      const brightPx = feetToPx(s.brightFt || 0, grid.size);
+      return { s, dimPx, brightPx, ...this._srcPolys(s, walls, brightWalls, bounds, Math.max(dimPx, brightPx)) };
+    });
 
     // ── 2. Composite the visible lighting texture ──
     // TWO passes so light interacts correctly with BOTH kinds of darkness:
