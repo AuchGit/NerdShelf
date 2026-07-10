@@ -50,12 +50,6 @@ export class LightLayer {
     // rechnen — nur das bewegte misst neu. Invalidiert über wallsRev.
     this._polyCache = new Map();
     this._polyCacheRev = null;
-    // Persistente Darkvision-Knoten (offscreen, nur für RT-Renders): die
-    // LOS-Masken-Graphics (Earcut über potenziell hunderte Polygon-Ecken)
-    // werden nur bei Polygon-Wechsel neu gebaut; pro Frame wandert bloß die
-    // Scheiben-Position — so folgt die Dunkelsicht der Bewegung live.
-    this._dvRoot = new Container();
-    this._dvNodes = new Map();
   }
 
   // RT-Satz (voll oder low-res) lazy anlegen/beschaffen. Jeder Satz trägt
@@ -383,43 +377,20 @@ export class LightLayer {
     // its line of sight (so it can't see through walls). Läuft auch im
     // Live-Frame (Aufhellung + Wäsche verschwinden beim Bewegen nicht mehr):
     // die Scheibe folgt der Live-Position, das LOS-Polygon bleibt bis zum
-    // nächsten Reconcile stehen (Maske wird nur bei Polygon-Wechsel neu
-    // gebaut — kein Earcut pro Frame).
+    // nächsten Reconcile stehen.
     if (wantDV) {
-      // Alle Geometrien liegen in MAP-Koordinaten; der Fenster-Versatz sitzt
-      // als Position auf Scheibe/Maske (pro Compose gesetzt) — die Maske wird
-      // nur bei Polygon-Wechsel neu gebaut, nicht pro Fenster/Frame.
-      const root = this._dvRoot;
-      const seen = new Set();
-      for (let i = 0; i < darkvision.length; i++) {
-        const d = darkvision[i];
+      // Frisch pro Compose, mit dem Fenster-Versatz in die Geometrie gebacken —
+      // exakt das bewährte Muster der Coverage-Renders (keine retained Nodes,
+      // keine .position-Transforms in Detached-RT-Renders). Earcut über die
+      // Polygon-Ecken ist bei 1-2 Beobachtern pro Frame unkritisch.
+      const dv = new Container();
+      for (const d of darkvision) {
         if (!d || !(d.radiusPx > 0)) continue;
-        const key = d.id != null ? String(d.id) : `i${i}`;
-        seen.add(key);
-        let n = this._dvNodes.get(key);
-        if (!n) {
-          n = { c: new Container(), disc: new Graphics(), mask: null, poly: null, r: 0 };
-          n.c.addChild(n.disc);
-          root.addChild(n.c);
-          this._dvNodes.set(key, n);
-        }
-        if (n.r !== d.radiusPx) { n.r = d.radiusPx; n.disc.clear().circle(0, 0, d.radiusPx).fill(0xffffff); }
-        n.disc.position.set(d.x - ox, d.y - oy);
-        if (n.poly !== d.poly) {
-          n.poly = d.poly;
-          if (n.mask) { n.c.mask = null; n.mask.destroy(); n.mask = null; }
-          if (d.poly && d.poly.length >= 3) {
-            n.mask = new Graphics().poly(d.poly.flatMap((p) => [p.x, p.y])).fill(0xffffff);
-            n.c.addChild(n.mask);
-            n.c.mask = n.mask;
-          }
-        }
-        if (n.mask) n.mask.position.set(-ox, -oy);
+        const mask = (d.poly && d.poly.length >= 3) ? new Graphics().poly(d.poly.flatMap((p) => [p.x - ox, p.y - oy])).fill(0xffffff) : null;
+        dv.addChild(reach(d.x - ox, d.y - oy, d.radiusPx, mask));
       }
-      for (const [key, n] of this._dvNodes) {
-        if (!seen.has(key)) { n.c.destroy({ children: true }); this._dvNodes.delete(key); }
-      }
-      renderer.render({ container: root, target: covDV, clear: true });
+      renderer.render({ container: dv, target: covDV, clear: true });
+      dv.destroy({ children: true });
       // "World-dark within darkvision" = the DV reach MINUS everything actually
       // lit (bright or dim by real lights, inkl. der BEWEGTEN Quellen). That
       // area gets a cool desaturating wash below so a darkvision user still
