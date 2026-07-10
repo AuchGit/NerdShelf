@@ -14,7 +14,33 @@ import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { Pinnable } from './tooltip/Tooltips';
 import { rollAttack, rollDamage } from '../lib/rollDice';
 import { addZone, setZoneTool, setZoneParam } from '../state/actions';
+import { getSpellcastingInfo } from '../../character-builder/lib/spellcastingRules';
+import SpellPrepareModal from '../../character-builder/components/sheet/SpellPrepareModal';
 import { toast } from '../lib/toast';
+
+function setPath(obj, path, value) {
+  const keys = path.split('.'); let o = obj;
+  for (let i = 0; i < keys.length - 1; i++) { if (o[keys[i]] == null || typeof o[keys[i]] !== 'object') o[keys[i]] = {}; o = o[keys[i]]; }
+  o[keys[keys.length - 1]] = value;
+}
+
+// Upcast-Schaden: {@scaledamage 8d6|3-9|1d6} aus entriesHigherLevel auf den
+// gewirkten Grad hochrechnen. Gleiche Würfelgröße → zusammengefasste Formel
+// ("10d6"), sonst lesbare Summe. Ohne Skalierung → Basis-Formel.
+function scaledDamage(sp, castLevel) {
+  const base = spellDamageFormula(sp);
+  if (!base) return null;
+  const raw = JSON.stringify(sp?.entriesHigherLevel || []) + JSON.stringify(sp?.entries || []);
+  const m = /\{@scaledamage ([^}|]+)\|(\d+)-\d+\|([^}|]+)\}/.exec(raw);
+  if (!m || !castLevel) return base;
+  const extra = Math.max(0, castLevel - (+m[2]));
+  if (!extra) return base;
+  const step = m[3].replace(/\s+/g, '');
+  const sm = /^(\d*)d(\d+)$/.exec(step);
+  const bm = /^(\d*)d(\d+)(.*)$/.exec(base);
+  if (sm && bm && sm[2] === bm[2]) return `${(+bm[1] || 1) + extra * (+sm[1] || 1)}d${bm[2]}${bm[3] || ''}`;
+  return `${base}+${extra}x${step}`;
+}
 
 // "20 ft. Sphere" / "15 ft. Cone" / "30 ft. Line (5 ft. wide)" (deriveSpellArea)
 // → platzierbare Zonen-Definition { type, params }. Datengetrieben aus dem
@@ -67,6 +93,7 @@ export default function SpellsSidebar() {
   const [upOpen, setUpOpen] = useState({}); // expanded upcast
   const [noteOpen, setNoteOpen] = useState({});
   const [castPrompt, setCastPrompt] = useState(null); // nach dem Wirken: „Schaden würfeln?"
+  const [prepClass, setPrepClass] = useState(null); // Vorbereiten-Modal (classId)
 
   useEffect(() => {
     let cancelled = false;
@@ -133,12 +160,13 @@ export default function SpellsSidebar() {
     else if (slotLevel > 0) patch.usedSpellSlots = { ...usedSlots, [slotLevel]: (usedSlots[slotLevel] || 0) + 1 };
     if (conc) patch.concentration = { spell: sp.name, level: usePact ? warlockSlots?.level : slotLevel, since: new Date().toISOString() };
     if (Object.keys(patch).length) patchCombat(myId, patch);
-    // Nach dem Wirken kurz anbieten: Schaden würfeln (Basis-Schaden; Shift =
-    // Krit) und/oder das passende AoE-Template platzieren (aus areaTags +
-    // Text abgeleitet — Kegel/Würfel mit Selbst-Ursprung starten am Token).
-    const dmg = spellDamageFormula(sp);
+    // Nach dem Wirken kurz anbieten: Schaden würfeln (auf den GEWIRKTEN Grad
+    // hochskaliert — {@scaledamage}; Shift = Krit) und/oder das passende
+    // AoE-Template platzieren (Kegel/Würfel mit Selbst-Ursprung starten am Token).
+    const effLevel = usePact ? (warlockSlots?.level || slotLevel) : slotLevel;
+    const dmg = scaledDamage(sp, effLevel);
     const zone = zoneFromArea(deriveSpellArea(sp));
-    if (dmg || zone) setCastPrompt({ name: sp.name, formula: dmg, zone, self: isSelfOrigin(sp), dmgType: (sp.damageType?.[0] || sp.damageInflict?.[0] || '').toLowerCase() });
+    if (dmg || zone) setCastPrompt({ name: sp.name, level: effLevel, formula: dmg, zone, self: isSelfOrigin(sp), dmgType: (sp.damageType?.[0] || sp.damageInflict?.[0] || '').toLowerCase() });
   };
 
   // AoE-Template des gewirkten Zaubers platzieren. Selbst-Ursprung (Kegel,
@@ -171,10 +199,13 @@ export default function SpellsSidebar() {
     const opts = [];
     for (let L = lvl; L <= 9; L++) {
       const rem = slotRemaining(L);
-      if (rem > 0) opts.push({ key: 'l' + L, label: `Grad ${L} (${rem})`, up: L > lvl, fn: () => castSpell(sp, L, false) });
+      if (rem > 0) {
+        const dmgAt = scaledDamage(sp, L);
+        opts.push({ key: 'l' + L, label: `Grad ${L} (${rem})`, up: L > lvl, title: dmgAt ? `Schaden bei Grad ${L}: ${dmgAt}` : undefined, fn: () => castSpell(sp, L, false) });
+      }
     }
     if (warlockSlots && warlockSlots.level >= lvl && pactRemaining() > 0) {
-      opts.push({ key: 'pact', label: `Pakt G${warlockSlots.level} (${pactRemaining()})`, pact: true, fn: () => castSpell(sp, warlockSlots.level, true) });
+      opts.push({ key: 'pact', label: `Pakt G${warlockSlots.level} (${pactRemaining()})`, pact: true, title: scaledDamage(sp, warlockSlots.level) ? `Schaden: ${scaledDamage(sp, warlockSlots.level)}` : undefined, fn: () => castSpell(sp, warlockSlots.level, true) });
     }
     return opts;
   };
@@ -183,11 +214,69 @@ export default function SpellsSidebar() {
     d.status.spellNotes = { ...(d.status.spellNotes || {}), [name.toLowerCase()]: v };
   });
 
+  // ── Vorbereiten direkt aus der Sidebar: gleiche Modal wie das Sheet ──
+  const casterClasses = (character.classes || []).map((cls) => {
+    const sub = cls.subclassId?.split('__')[0] || null;
+    const mod = computed?.spellcasting?.[cls.classId]?.modifier ?? 0;
+    const info = getSpellcastingInfo(cls.classId, cls.level, mod, sub, character?.meta?.edition || '5e');
+    return info ? { classId: cls.classId, info, ritualCasting: !!info.ritualCasting } : null;
+  }).filter(Boolean);
+  const classAbbr = Object.fromEntries(casterClasses.map((c) => [c.classId, c.classId.slice(0, 2).toUpperCase()]));
+  const preparedByClass = character?.status?.preparedSpells || {};
+  const maxSpellLvl = (() => { let mx = 0; for (let i = 0; i < 9; i++) if ((slotArr?.[i] || 0) > 0) mx = i + 1; if (warlockSlots && warlockSlots.level > mx) mx = warlockSlots.level; return mx; })();
+  const updateCharacter = (path, value) => applyOwnCharacter(myId, (d) => setPath(d, path, value));
+  // Spiegel der Sheet-Logik: Pille der Zielklasse togglet, andere Klassen
+  // werden konsolidiert (kein Doppel-Prep desselben Zaubers).
+  const prepWithClass = (row, classId) => {
+    if (!classId || row.spell.level === 0) return;
+    const listOfTarget = preparedByClass[classId] || [];
+    if (listOfTarget.some((n) => n.toLowerCase() === row.key)) {
+      updateCharacter(`status.preparedSpells.${classId}`, listOfTarget.filter((n) => n.toLowerCase() !== row.key));
+      return;
+    }
+    for (const cc of casterClasses) {
+      if (cc.classId === classId) continue;
+      const list = preparedByClass[cc.classId] || [];
+      if (list.some((n) => n.toLowerCase() === row.key)) {
+        updateCharacter(`status.preparedSpells.${cc.classId}`, list.filter((n) => n.toLowerCase() !== row.key));
+      }
+    }
+    updateCharacter(`status.preparedSpells.${classId}`, [...listOfTarget, row.spell.name]);
+  };
+  const prepCasters = casterClasses.filter((c) => (c.info?.maxPrepared || 0) > 0);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Vorbereiten direkt aus der Sidebar (gleiche Modal wie das Sheet). */}
+      {prepCasters.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {prepCasters.map((c) => (
+            <button key={c.classId} style={S.prepBtn} onClick={() => setPrepClass(c.classId)}
+              title={`Zauber für ${c.classId} vorbereiten`}>
+              Vorbereiten: {c.classId} ({(preparedByClass[c.classId] || []).length}/{c.info.maxPrepared})
+            </button>
+          ))}
+        </div>
+      )}
+      {prepClass && (
+        <SpellPrepareModal
+          open={!!prepClass}
+          onClose={() => setPrepClass(null)}
+          character={character}
+          computed={computed}
+          classId={prepClass}
+          casterClasses={casterClasses}
+          classAbbr={classAbbr}
+          preparedByClass={preparedByClass}
+          maxSpellLvl={maxSpellLvl}
+          updateCharacter={updateCharacter}
+          applyCharacter={(mutator) => applyOwnCharacter(myId, mutator)}
+          prepWithClass={prepWithClass}
+        />
+      )}
       {castPrompt && (
         <div style={S.castPrompt}>
-          <span><b>{castPrompt.name}</b> gewirkt</span>
+          <span><b>{castPrompt.name}</b> gewirkt{castPrompt.level ? ` (Grad ${castPrompt.level})` : ''}</span>
           <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {castPrompt.formula && (
               <button style={S.castRollBtn} onClick={(ev) => { rollDamage(ev, castPrompt.formula, `${castPrompt.name}: Schaden`); setCastPrompt(null); }}
@@ -288,7 +377,7 @@ export default function SpellsSidebar() {
                         <div style={S.castRow}>
                           {(() => { const opts = castOptions(sp); return opts.length === 0
                             ? <span style={{ fontSize: 10, color: 'var(--color-danger)' }}>Keine Slots frei.</span>
-                            : opts.map((o) => <button key={o.key} style={{ ...S.castOpt, ...(o.up ? S.castOptUp : null), ...(o.pact ? S.castOptPact : null) }} onClick={o.fn}>{o.label}</button>); })()}
+                            : opts.map((o) => <button key={o.key} title={o.title} style={{ ...S.castOpt, ...(o.up ? S.castOptUp : null), ...(o.pact ? S.castOptPact : null) }} onClick={o.fn}>{o.label}</button>); })()}
                         </div>
                         <div style={S.desc}>{flatten(sp.entries)}</div>
                         {(sp.entriesHigherLevel?.length > 0) && (
@@ -377,6 +466,7 @@ const S = {
   pillDmg: { fontSize: 10, fontWeight: 700, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 14%, transparent)', borderRadius: 999, padding: '0 6px' },
   castPrompt: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)', padding: '5px 8px', fontSize: 'var(--fs-sm)' },
   castRollBtn: { fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#ff6b6b', border: '1px solid color-mix(in srgb, #ff6b6b 55%, transparent)', background: 'color-mix(in srgb, #ff6b6b 16%, transparent)', borderRadius: 999, padding: '2px 8px' },
+  prepBtn: { fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', color: 'var(--color-accent)', border: '1px solid color-mix(in srgb, var(--color-accent) 45%, transparent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' },
   castAreaBtn: { fontSize: 11, fontWeight: 800, cursor: 'pointer', color: '#7dcfff', border: '1px solid color-mix(in srgb, #7dcfff 55%, transparent)', background: 'color-mix(in srgb, #7dcfff 16%, transparent)', borderRadius: 999, padding: '2px 8px' },
   castRow: { display: 'flex', flexWrap: 'wrap', gap: 4, margin: '4px 0 6px' },
   castOpt: { fontSize: 10, fontWeight: 700, padding: '2px 8px', background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 4, cursor: 'pointer' },
