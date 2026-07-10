@@ -101,6 +101,14 @@ export function getRelayUrl() { return read(RELAY_KEY, '') || ''; }
 export function setRelayUrl(v) { write(RELAY_KEY, v || null); }
 export function useRelayUrl() { return usePref(getRelayUrl); }
 
+// ── Dunkelsicht-Färbung (pro Client): Tönung der Fläche, die man nur dank
+//    Darkvision sieht (eine Stufe heller + kühle Wäsche). Default kühles Blau.
+const DV_TINT_KEY = 'nerdshelf:vttDarkvisionTint';
+export const DARKVISION_TINT_DEFAULT = '#2e4370';
+export function getDarkvisionTint() { return read(DV_TINT_KEY, DARKVISION_TINT_DEFAULT); }
+export function setDarkvisionTint(v) { write(DV_TINT_KEY, v || null); }
+export function useDarkvisionTint() { return usePref(getDarkvisionTint); }
+
 // ── show player-switchable light switches on the map (player choice) ──
 const LSW_KEY = 'nerdshelf:vttShowLightSwitches';
 export function getShowLightSwitches() { return read(LSW_KEY, '1') !== '0'; }

@@ -24,7 +24,7 @@ import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
 import { WALL_TYPES, wallPeekFt } from '../lib/constants';
-import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getDmPingColor, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
+import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getDmPingColor, getDarkvisionTint, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
 import { relayFullUrl } from '../lib/mapStorage';
 import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance, offsetSightWall } from '../lib/wallGeometry';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
@@ -418,18 +418,20 @@ export class VttRenderer {
       //  • A player: each of their OWN controlled tokens that has darkvision.
       //    A player whose character has none gets nothing (never others' DV).
       //  • The DM: only the SELECTED token, and only if it has darkvision.
+      // `id` = Token-Id des Beobachters: der Licht-Live-Pfad lässt die
+      // DV-Scheibe damit der GERENDERTEN Token-Position folgen (Drag/Glide).
       let darkvision = [];
       if (playerDynamic) {
         darkvision = observers.map((o, i) => {
           const ft = this.tokenDarkvisionFt(s.tokens[o.id]);
-          return ft > 0 ? { x: o.x, y: o.y, radiusPx: feetToPx(ft, map.grid.size), poly: visiblePolys[i] } : null;
+          return ft > 0 ? { id: o.id, x: o.x, y: o.y, radiusPx: feetToPx(ft, map.grid.size), poly: visiblePolys[i] } : null;
         }).filter(Boolean);
       } else if (isDM && s.ui.selectedTokenId) {
         const tok = levelTokens[s.ui.selectedTokenId];
         const ft = tok ? this.tokenDarkvisionFt(tok) : 0;
         if (ft > 0) {
           const poly = (dmPreviewPolys && dmPreviewPolys[0]) || polyFor({ id: tok.id, x: tok.x, y: tok.y, inside: tok.inside });
-          darkvision = [{ x: tok.x, y: tok.y, radiusPx: feetToPx(ft, map.grid.size), poly }];
+          darkvision = [{ id: tok.id, x: tok.x, y: tok.y, radiusPx: feetToPx(ft, map.grid.size), poly }];
         }
       }
 
@@ -505,17 +507,21 @@ export class VttRenderer {
         darkPolys,
         worldShadow: lightingOn ? { dir: map.worldShadowDir ?? 135, strength: map.worldShadowStrength ?? 0 } : null,
         darkvision: lightingOn ? darkvision : [],
+        dvTint: getDarkvisionTint(), // clientseitige Dunkelsicht-Färbung
         contrast: map.lightContrast ?? 0.5,
         blur: map.lightBlur ?? 0,
       };
-      // Solange ein leuchtendes Token in Bewegung ist, komponieren auch die
-      // Op-Reconciles (50ms-Broadcasts) über den SICHTBAREN Ausschnitt — exakt
-      // wie der Live-Pfad. Vorher wechselten sich volle Map und Ausschnitt ab,
-      // und jeder Wechsel zerstörte den Low-Res-RT-Satz samt Coverage-Cache
-      // (Realloc + Neuaufbau ALLER Lichter bis zu 40×/s → der Drag-Lag).
+      // Solange ein leuchtendes Token ODER ein Dunkelsicht-Beobachter in
+      // Bewegung ist, komponieren auch die Op-Reconciles (50ms-Broadcasts)
+      // über den SICHTBAREN Ausschnitt — exakt wie der Live-Pfad. Vorher
+      // wechselten sich volle Map und Ausschnitt ab, und jeder Wechsel
+      // zerstörte den Low-Res-RT-Satz samt Coverage-Cache (Realloc +
+      // Neuaufbau ALLER Lichter bis zu 40×/s → der Drag-Lag).
       // _lightEnv behält die vollen Bounds: Final-Pass + Live-Fallback
       // komponieren nach der Bewegung wieder die ganze Map.
-      this.lights.update(movingLightIds.size
+      const lightsInMotion = movingLightIds.size > 0
+        || darkvision.some((d) => d.id != null && this._isTokenMoving(d.id));
+      this.lights.update(lightsInMotion
         ? { ...lightOpts, bounds: this.visibleMapBounds(map) || bounds, fullBounds: bounds }
         : lightOpts);
       // Umgebung für den leichten Licht-only-Refresh (refreshLightsLive):
@@ -1733,6 +1739,13 @@ export class VttRenderer {
       if (!t.light || t.mapId !== map.id) continue;
       if (this._isTokenMoving(t.id)) { moving = true; break; }
     }
+    // Auch reine Dunkelsicht-Beobachter (ohne eigenes Licht) triggern den
+    // Live-Refresh — die DV-Scheibe folgt sonst nur im 50ms-Op-Takt.
+    if (!moving) {
+      for (const d of (this._lightEnv.opts.darkvision || [])) {
+        if (d.id != null && this._isTokenMoving(d.id)) { moving = true; break; }
+      }
+    }
     if (moving) this.refreshLightsLive();
   }
 
@@ -1774,8 +1787,14 @@ export class VttRenderer {
     // in der Signatur (winSig) — so ergeben Live-Frames und Op-Reconciles
     // während der Bewegung IDENTISCHE Coverage-Signaturen und teilen sich den
     // gecachten statischen Licht-Aufbau, statt ihn sich gegenseitig zu nullen.
+    // Dunkelsicht folgt der gerenderten Token-Position live (die Scheibe
+    // wandert mit; ihr LOS-Polygon bleibt bis zum nächsten Reconcile stehen).
+    const dvLive = (env.opts.darkvision || []).map((d) => {
+      const rp = d.id != null ? this.tokens.nodes.get(d.id)?.root?.position : null;
+      return rp && (Math.abs(rp.x - d.x) > 0.5 || Math.abs(rp.y - d.y) > 0.5) ? { ...d, x: rp.x, y: rp.y } : d;
+    });
     const vb = this.visibleMapBounds(map);
-    this.lights.update({ ...env.opts, sources, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey, liveMovingIds: movingIds, movingRev: movingKey, __live: true });
+    this.lights.update({ ...env.opts, sources, darkvision: dvLive, bounds: vb || env.opts.bounds, fullBounds: env.opts.bounds, rev: env.revPrefix + liveKey, liveMovingIds: movingIds, movingRev: movingKey, __live: true });
   }
 
   // Alt-„Vollhelligkeits-Kreis" des DM an/aus: inverse Maske auf dem Licht-

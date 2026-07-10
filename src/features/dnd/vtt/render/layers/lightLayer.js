@@ -23,6 +23,14 @@ import { distPointToSeg } from '../../lib/wallGeometry';
 const BASELINE_ALPHA = { bright: 0, dim: 0.5, dark: 0.9 };
 const DARKNESS_ALPHA = 0.9;   // a placed darkness region
 const WARM = 0xffd9a0;        // flat warm tint colour for lit area (modern)
+const DV_TINT = 0x2e4370;     // Default-Färbung der Nur-Dunkelsicht-Fläche
+
+// '#rrggbb' (VTT-Einstellung) oder Zahl → Pixi-Tint-Zahl; sonst Default.
+function tintNum(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') { const m = /^#?([0-9a-f]{6})$/i.exec(v.trim()); if (m) return parseInt(m[1], 16); }
+  return DV_TINT;
+}
 
 export class LightLayer {
   constructor() {
@@ -42,6 +50,12 @@ export class LightLayer {
     // rechnen — nur das bewegte misst neu. Invalidiert über wallsRev.
     this._polyCache = new Map();
     this._polyCacheRev = null;
+    // Persistente Darkvision-Knoten (offscreen, nur für RT-Renders): die
+    // LOS-Masken-Graphics (Earcut über potenziell hunderte Polygon-Ecken)
+    // werden nur bei Polygon-Wechsel neu gebaut; pro Frame wandert bloß die
+    // Scheiben-Position — so folgt die Dunkelsicht der Bewegung live.
+    this._dvRoot = new Container();
+    this._dvNodes = new Map();
   }
 
   // RT-Satz (voll oder low-res) lazy anlegen/beschaffen. Jeder Satz trägt
@@ -214,7 +228,10 @@ export class LightLayer {
       darkPolys.map((p) => p.length),
       wantShadow ? [Math.round(worldShadow.dir ?? 135), Math.round(shadowA * 100)] : 0,
     ]);
-    const dvSig = JSON.stringify(darkvision.map((d) => [Math.round(d.x), Math.round(d.y), Math.round(d.radiusPx)]));
+    // Dunkelsicht-Färbung (clientseitige Einstellung) — Teil der Signatur,
+    // damit ein Farbwechsel in den VTT-Einstellungen sofort neu komponiert.
+    const dvTint = tintNum(opts.dvTint);
+    const dvSig = JSON.stringify(darkvision.map((d) => [Math.round(d.x), Math.round(d.y), Math.round(d.radiusPx)])) + `|t:${dvTint}`;
     // Zwei Qualitätsstufen — Snappiness OHNE Qualitätsverlust: Folge-Composes
     // innerhalb von 200ms (Token-Drag/WASD mit Licht) rendern SOFORT in einen
     // Low-Res-Satz (in Bewegung nicht unterscheidbar, 4-16× weniger GPU-Fill,
@@ -256,13 +273,8 @@ export class LightLayer {
     this._sig = sig;
 
     // Live-Frame (Drag/Glide): die Coverage-Unionen bleiben komplett gecacht
-    // (bewegte Quellen sind ausgeklammert und werden unten direkt gestempelt).
-    // Nur die Darkvision-Wäsche (covDV/covDVD) wird im Live-Frame weder neu
-    // gerechnet noch gestempelt — aus der veralteten DV-Fläche gemischt mit
-    // der neuen Lichtposition entstünden blaue Sichel-Streifen. DV schnappt
-    // im Final-/Op-Reconcile-Compose sauber nach.
-    const live = !!opts.__live;
-
+    // (bewegte Quellen sind ausgeklammert und werden unten direkt gestempelt);
+    // Darkvision folgt der Live-Position über die persistenten DV-Knoten.
     const rts = this._getRtSet(w, h, wantLow ? resLow : 1, wantLow);
     if (this.sprite.texture !== rts.main) this.sprite.texture = rts.main;
     this.sprite.position.set(ox, oy);
@@ -357,32 +369,6 @@ export class LightLayer {
     }
     } // end coverageChanged
 
-    // Darkvision coverage: union of each viewer-token's reach disc, clipped to
-    // its line of sight (so it can't see through walls). Im Live-Frame NICHT
-    // neu gebaut — die DV-Position steht auf dem Stand des letzten vollen
-    // Reconciles, gemischt mit der neuen Lichtposition ergäbe das die blauen
-    // Sichel-Streifen. DV schnappt im Final-/nächsten-Op-Reconcile sauber nach.
-    if (wantDV && !live) {
-      const dv = new Container();
-      for (const d of darkvision) {
-        if (!d || !(d.radiusPx > 0)) continue;
-        const mask = (d.poly && d.poly.length >= 3) ? new Graphics().poly(d.poly.flatMap((p) => [p.x - ox, p.y - oy])).fill(0xffffff) : null;
-        dv.addChild(reach(d.x - ox, d.y - oy, d.radiusPx, mask));
-      }
-      renderer.render({ container: dv, target: covDV, clear: true });
-      dv.destroy({ children: true });
-      // "World-dark within darkvision" = the DV reach MINUS everything actually
-      // lit (bright or dim by real lights). That area gets a cool desaturating
-      // wash below so a darkvision user still SEES that it's dark there (wo man
-      // schleichen kann) even though they can see.
-      const dvd = new Container();
-      dvd.addChild(stamp(covDV, 'normal', 1));
-      dvd.addChild(stamp(covB, 'erase', 1));
-      dvd.addChild(stamp(covD, 'erase', 1));
-      renderer.render({ container: dvd, target: covDVD, clear: true });
-      dvd.destroy({ children: true });
-    }
-
     // Geometrie der bewegten Quellen — jede Compose-Runde frisch (Position und
     // Schattenpolygon vom aktuellen Frame). Kreuzt der Schein kurzzeitig eine
     // statische Lichtfläche, hellt die Überlappung minimal doppelt auf — der
@@ -392,6 +378,64 @@ export class LightLayer {
       const brightPx = feetToPx(s.brightFt || 0, grid.size);
       return { s, dimPx, brightPx, ...this._srcPolys(s, walls, brightWalls, bounds, Math.max(dimPx, brightPx)) };
     });
+
+    // Darkvision coverage: union of each viewer-token's reach disc, clipped to
+    // its line of sight (so it can't see through walls). Läuft auch im
+    // Live-Frame (Aufhellung + Wäsche verschwinden beim Bewegen nicht mehr):
+    // die Scheibe folgt der Live-Position, das LOS-Polygon bleibt bis zum
+    // nächsten Reconcile stehen (Maske wird nur bei Polygon-Wechsel neu
+    // gebaut — kein Earcut pro Frame).
+    if (wantDV) {
+      // Alle Geometrien liegen in MAP-Koordinaten; der Fenster-Versatz sitzt
+      // als Position auf Scheibe/Maske (pro Compose gesetzt) — die Maske wird
+      // nur bei Polygon-Wechsel neu gebaut, nicht pro Fenster/Frame.
+      const root = this._dvRoot;
+      const seen = new Set();
+      for (let i = 0; i < darkvision.length; i++) {
+        const d = darkvision[i];
+        if (!d || !(d.radiusPx > 0)) continue;
+        const key = d.id != null ? String(d.id) : `i${i}`;
+        seen.add(key);
+        let n = this._dvNodes.get(key);
+        if (!n) {
+          n = { c: new Container(), disc: new Graphics(), mask: null, poly: null, r: 0 };
+          n.c.addChild(n.disc);
+          root.addChild(n.c);
+          this._dvNodes.set(key, n);
+        }
+        if (n.r !== d.radiusPx) { n.r = d.radiusPx; n.disc.clear().circle(0, 0, d.radiusPx).fill(0xffffff); }
+        n.disc.position.set(d.x - ox, d.y - oy);
+        if (n.poly !== d.poly) {
+          n.poly = d.poly;
+          if (n.mask) { n.c.mask = null; n.mask.destroy(); n.mask = null; }
+          if (d.poly && d.poly.length >= 3) {
+            n.mask = new Graphics().poly(d.poly.flatMap((p) => [p.x, p.y])).fill(0xffffff);
+            n.c.addChild(n.mask);
+            n.c.mask = n.mask;
+          }
+        }
+        if (n.mask) n.mask.position.set(-ox, -oy);
+      }
+      for (const [key, n] of this._dvNodes) {
+        if (!seen.has(key)) { n.c.destroy({ children: true }); this._dvNodes.delete(key); }
+      }
+      renderer.render({ container: root, target: covDV, clear: true });
+      // "World-dark within darkvision" = the DV reach MINUS everything actually
+      // lit (bright or dim by real lights, inkl. der BEWEGTEN Quellen). That
+      // area gets a cool desaturating wash below so a darkvision user still
+      // SEES that it's dark there (wo man schleichen kann) even though they
+      // can see.
+      const dvd = new Container();
+      dvd.addChild(stamp(covDV, 'normal', 1));
+      dvd.addChild(stamp(covB, 'erase', 1));
+      dvd.addChild(stamp(covD, 'erase', 1));
+      for (const m of movingGeom) {
+        if (m.dimPx > 0) dvd.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', 1));
+        if (m.brightPx > 0) dvd.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
+      }
+      renderer.render({ container: dvd, target: covDVD, clear: true });
+      dvd.destroy({ children: true });
+    }
 
     // ── 2. Composite the visible lighting texture ──
     // TWO passes so light interacts correctly with BOTH kinds of darkness:
@@ -428,7 +472,7 @@ export class LightLayer {
       if (m.dimPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', liftToDim));
       if (m.brightPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
     }
-    if (wantDV && !live) dark.addChild(stamp(covDV, 'erase', liftToDim));
+    if (wantDV) dark.addChild(stamp(covDV, 'erase', liftToDim));
     renderer.render({ container: dark, target: rts.dark, clear: true });
     dark.destroy({ children: true });
 
@@ -453,15 +497,14 @@ export class LightLayer {
         if (BL < 1 && m.dimPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', dimErase));
         if (m.brightPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
       }
-      if (wantDV && !live && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
+      if (wantDV && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
     // deep-dark layer (already carved by the lights) composites on top
     scene.addChild(stamp(rts.dark, 'normal', 1));
-    // Darkvision-Wäsche NUR im vollen Compose (die stale DV-Position mischt
-    // sich sonst mit der neuen Lichtposition zu blauen Sicheln). Der warme
-    // Farb-Schein wird jeden Frame FRISCH gebaut → auch live gestempelt, damit
-    // die Fackel beim Bewegen nicht bläulich/neutral wirkt.
-    if (wantDV && !live) scene.addChild(stamp(covDVD, 'normal', 0.42, 0x2e4370));
+    // Darkvision-Wäsche — auch im Live-Frame (covDVD wird oben jede Compose-
+    // Runde frisch kombiniert, inkl. Subtraktion der bewegten Quellen: keine
+    // blauen Sicheln mehr). Farbe pro Client einstellbar (VTT-Einstellungen).
+    if (wantDV) scene.addChild(stamp(covDVD, 'normal', 0.42, dvTint));
     {
       const dimA = style === 'classic' ? 0.10 : 0.14;
       const brightA = style === 'classic' ? 0.16 : 0.22;

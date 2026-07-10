@@ -10,6 +10,7 @@ import {
   useTerrainColor, setTerrainColor, useClimbHeightStyle, setClimbHeightStyle, useDifficultStyle, setDifficultStyle,
   useInitiativeRollEnabled, setInitiativeRollEnabled,
   usePingScale, setPingScale, usePingDurationS, setPingDurationS, useDmPingColor, setDmPingColor,
+  useDarkvisionTint, setDarkvisionTint, DARKVISION_TINT_DEFAULT,
   useCustomWallPresets, setCustomWallPresets, useDisabledWallPresets, setDisabledWallPresets,
   useCustomLightPresets, setCustomLightPresets, useDisabledLightPresets, setDisabledLightPresets,
   useBuiltinWallEdits, setBuiltinWallEdits, useBuiltinLightEdits, setBuiltinLightEdits,
@@ -33,6 +34,7 @@ export default function VttSettings({ onClose }) {
   const pingScale = usePingScale();
   const pingDur = usePingDurationS();
   const dmPingColor = useDmPingColor();
+  const dvTint = useDarkvisionTint();
   const isDM = useIsDM();
 
   return (
@@ -63,6 +65,12 @@ export default function VttSettings({ onClose }) {
               <input type="color" value={dmPingColor} onChange={(e) => setDmPingColor(e.target.value)} style={{ width: 44, height: 28, background: 'none', border: 'none', cursor: 'pointer' }} />
             </Row>
           )}
+          <Row label="Dunkelsicht-Färbung — Tönung der Fläche, die nur dank Dunkelsicht sichtbar ist">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="color" value={dvTint} onChange={(e) => setDarkvisionTint(e.target.value)} style={{ width: 44, height: 28, background: 'none', border: 'none', cursor: 'pointer' }} />
+              {dvTint !== DARKVISION_TINT_DEFAULT && <button style={S.smallBtn} onClick={() => setDarkvisionTint('')}>Zurücksetzen</button>}
+            </div>
+          </Row>
 
           <div style={S.section}>Erkundeter Bereich (erinnert, nicht sichtbar)</div>
           <Row label="Darstellung">
