@@ -43,7 +43,10 @@ export function gatherActionRiders(character, profBonus = 0, spellMap = null) {
     const m = String(pill.label).match(DICE_RE)
     if (!m) return
     seen.add(key)
-    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase() })
+    // "Once per turn"-Rider (Sneak Attack, Dreadful Strikes) bekommen einen
+    // 1x/Zug-Hinweis im Composer — Erkennung rein über die Formulierung.
+    const perTurn = /once (?:per|on each of your) turn/i.test(text)
+    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase(), perTurn })
   }
   for (const f of (character?.__activeFeatures || [])) consider(f.name, f.entries, f.classId)
   for (const t of (character?.species?.__traits || [])) consider(t.name, t.entries, null)

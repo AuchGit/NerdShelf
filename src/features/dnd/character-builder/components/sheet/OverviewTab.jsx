@@ -1423,13 +1423,13 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   const promptRowRoll = (r) => {
     const base = rowDamageOf(r)
     if (!base) return
-    setComposer({ title: `${r.name}: Schaden`, base: { ...base, label: r.name } })
+    setComposer({ title: `${r.name}: Schaden`, base: { ...base, label: r.name }, attack: r.attack ? { bonus: r.attack, label: r.name } : null })
   }
-  const openDamageRoll = (ev, name, formula, type) => {
+  const openDamageRoll = (ev, name, formula, type, atkBonus = null) => {
     const dice = (String(formula || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0]
     if (!dice) return
-    if (!actionRiders.length) { rollDamage(ev, dice, `${name}: Schaden`); return }
-    setComposer({ title: `${name}: Schaden`, base: { formula: dice.replace(/\s+/g, ''), type: (type || '').toLowerCase(), label: name } })
+    if (!actionRiders.length && !atkBonus) { rollDamage(ev, dice, `${name}: Schaden`); return }
+    setComposer({ title: `${name}: Schaden`, base: { formula: dice.replace(/\s+/g, ''), type: (type || '').toLowerCase(), label: name }, attack: atkBonus ? { bonus: atkBonus, label: name } : null })
   }
   useEffect(() => {
     if (!open) return
@@ -2267,7 +2267,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     <div style={embedded ? { marginTop: 0 } : { marginTop: 10 }}>
       {composer && (
         <RollComposer title={composer.title} base={composer.base} riders={actionRiders}
-          onClose={() => setComposer(null)} />
+          attack={composer.attack || null} onClose={() => setComposer(null)} />
       )}
       {!embedded && (
         <button type="button" onClick={() => setOpen(o => !o)} style={caeToggle}>
@@ -3202,7 +3202,7 @@ function CombatActionsCategorisedList({
                   const dmgRollable = /\d*d\d+/.test(String(r.damage))
                   leftPills.push(
                     <span key="dmg-legacy" role={dmgRollable ? 'button' : undefined} tabIndex={dmgRollable ? 0 : undefined}
-                      onClick={dmgRollable ? (ev) => { ev.stopPropagation(); if (openDamageRoll) openDamageRoll(ev, r.name, r.damage, r.damageType); else rollDamage(ev, r.damage, `${r.name}: Schaden`) } : undefined}
+                      onClick={dmgRollable ? (ev) => { ev.stopPropagation(); if (openDamageRoll) openDamageRoll(ev, r.name, r.damage, r.damageType, r.attack || null); else rollDamage(ev, r.damage, `${r.name}: Schaden`) } : undefined}
                       title={dmgRollable ? 'Schaden würfeln — Shift: Kritisch' : (tip || undefined)}
                       style={{
                         ...caePill, border: `1px solid ${color}`, color,

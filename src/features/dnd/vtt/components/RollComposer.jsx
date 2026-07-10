@@ -6,9 +6,9 @@
 // Portal in document.body (Bars haben transform/backdropFilter).
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { rollDamageParts } from '../lib/rollDice';
+import { rollDamageParts, rollAttack } from '../lib/rollDice';
 
-export default function RollComposer({ title, base, riders = [], src, onClose }) {
+export default function RollComposer({ title, base, riders = [], attack = null, src, onClose }) {
   const [on, setOn] = useState(() => new Set(riders.filter((r) => r.active).map((r) => r.id)));
   const toggle = (id) => setOn((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -19,6 +19,10 @@ export default function RollComposer({ title, base, riders = [], src, onClose })
   const preview = parts.map((p) => p.formula).join(' + ');
 
   const roll = (ev) => { rollDamageParts(ev, parts, title, src); onClose(); };
+  // Bei Angriffs-Aktionen: ERST der Attack-Roll (d20+Bonus, Shift/Strg =
+  // Vorteil/Nachteil), der Composer bleibt offen — trifft es, würfelt man
+  // danach den Schaden mit den angehakten Ridern.
+  const atk = (ev) => { rollAttack(ev, attack.bonus, `${attack.label || title}: Angriff`, src); };
 
   return createPortal(
     <div style={S.backdrop} onClick={onClose}>
@@ -36,13 +40,19 @@ export default function RollComposer({ title, base, riders = [], src, onClose })
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <input type="checkbox" checked={on.has(r.id)} onChange={() => toggle(r.id)} />
               <span style={S.riderName}>{r.name}</span>
+              {r.perTurn && <span style={S.perTurn} title="Nur einmal pro Zug">1×/Zug</span>}
             </span>
             <span style={S.formula}>{r.formula}{r.type ? ` ${r.type}` : ''}</span>
           </label>
         ))}
         <div style={S.foot}>
           <span style={S.preview}>{preview}</span>
-          <button style={S.rollBtn} title="Shift: Kritisch (Würfel verdoppelt)" onClick={roll}>Würfeln</button>
+          <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {attack?.bonus != null && (
+              <button style={S.atkBtn} title="Angriffswurf zuerst — Shift: Vorteil · Strg: Nachteil" onClick={atk}>Angriff {attack.bonus}</button>
+            )}
+            <button style={S.rollBtn} title="Shift: Kritisch (Würfel verdoppelt)" onClick={roll}>{attack ? 'Schaden' : 'Würfeln'}</button>
+          </span>
         </div>
       </div>
     </div>,
@@ -59,8 +69,10 @@ const S = {
   row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' },
   baseLbl: { fontSize: 'var(--fs-sm)', fontWeight: 700 },
   riderName: { fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  perTurn: { flexShrink: 0, fontSize: 9, fontWeight: 800, padding: '0 5px', borderRadius: 999, color: 'var(--color-text-muted)', border: '1px solid var(--color-border, #3a3f4a)' },
   formula: { fontSize: 11, fontWeight: 700, color: '#ff6b6b', flexShrink: 0 },
   foot: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border, #3a3f4a)' },
   preview: { fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  atkBtn: { padding: '4px 12px', fontSize: 'var(--fs-sm)', fontWeight: 800, background: 'color-mix(in srgb, #e0af68 16%, transparent)', color: '#e0af68', border: '1px solid color-mix(in srgb, #e0af68 55%, transparent)', borderRadius: 999, cursor: 'pointer', flexShrink: 0 },
   rollBtn: { padding: '4px 14px', fontSize: 'var(--fs-sm)', fontWeight: 800, background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none', borderRadius: 999, cursor: 'pointer', flexShrink: 0 },
 };

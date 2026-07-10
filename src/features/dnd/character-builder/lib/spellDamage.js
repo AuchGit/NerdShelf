@@ -2,11 +2,25 @@
 // Actions-Explorer und Statblock. Datengetrieben aus den 5etools-Entries
 // ({@damage}/{@dice}) bzw. scalingLevelDice; Upcast über {@scaledamage}.
 
-// Erster würfelbarer Basis-Schaden ("8d6", "1d8+3").
+// Erster würfelbarer CAST-Schaden ("8d6", "1d8+3"). On-Hit-Rider-Schaden
+// ("deal an EXTRA {@damage 1d6} … whenever you hit" — Hunter's Mark, Hex,
+// Divine Favor) zählt NICHT: beim Wirken wird nichts gewürfelt, der Schaden
+// feuert später als Rider im Wurf-Composer (aktive Konzentration).
+// Erkennung rein über das "extra"-Phrasing direkt vor dem Damage-Tag —
+// Angriffszauber wie Fire Bolt ("the target takes 1d10 fire damage")
+// bleiben unberührt.
 export function spellDamageFormula(sp) {
   const raw = JSON.stringify(sp?.entries || [])
-  const m = /\{@(?:damage|dice) ([^}|]+)/.exec(raw)
-  if (m) { const f = m[1].replace(/\s+/g, ''); if (/\d*d\d+/.test(f)) return f }
+  const re = /\{@(?:damage|dice) ([^}|]+)/g
+  let m
+  while ((m = re.exec(raw))) {
+    const f = m[1].replace(/\s+/g, '')
+    if (!/\d*d\d+/.test(f)) continue
+    const before = raw.slice(Math.max(0, m.index - 40), m.index)
+      .replace(/[^a-zA-Z ]/g, ' ').replace(/\s+/g, ' ')
+    if (/\bextra ?$/i.test(before)) continue // Rider, kein Cast-Schaden
+    return f
+  }
   const scale = sp?.scalingLevelDice
   const sc = Array.isArray(scale) ? scale[0] : scale
   const first = sc?.scaling && Object.values(sc.scaling)[0]

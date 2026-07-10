@@ -9,6 +9,7 @@ import Dice3D from './Dice3D';
 import { emitRollResult } from '../lib/rollDice';
 import { useVtt } from '../state/useVtt';
 import { logRoll } from '../state/actions';
+import { toast } from '../lib/toast';
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const POS_KEY = 'nerdshelf:vttDicePos';
@@ -147,7 +148,9 @@ export default function DiceTray() {
       lastRollId.current = detail.id || null;
       const f = String(detail.formula || '').trim();
       const terms = parseFormula(f);
-      if (!terms) return;
+      // Unlesbare Formel NIE stumm verwerfen — sonst wirkt der Klick wie
+      // "nichts passiert" und der Fehler ist unauffindbar.
+      if (!terms) { console.warn('[vtt] Wurf-Formel unlesbar:', f, detail); toast(`Wurf-Formel unlesbar: ${f || '(leer)'}`, 'warning'); return; }
       setOpen(true);
       setFormula(f);
       setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f, src: detail.src || null, parts: detail.parts || null }));
