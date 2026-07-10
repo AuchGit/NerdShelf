@@ -16,7 +16,7 @@ import { Pinnable } from './tooltip/Tooltips';
 import { rollAttack, rollDamage } from '../lib/rollDice';
 import { addZone, setZoneTool, setZoneParam } from '../state/actions';
 import { getSpellcastingInfo } from '../../character-builder/lib/spellcastingRules';
-import { spellDamageFormula, scaledDamage } from '../../character-builder/lib/spellDamage';
+import { spellDamageFormula, scaledDamage, spellDamageAddsMod } from '../../character-builder/lib/spellDamage';
 import SpellPrepareModal from '../../character-builder/components/sheet/SpellPrepareModal';
 import { toast } from '../lib/toast';
 
@@ -144,7 +144,12 @@ export default function SpellsSidebar() {
     // hochskaliert — {@scaledamage}; Shift = Krit) und/oder das passende
     // AoE-Template platzieren (Kegel/Würfel mit Selbst-Ursprung starten am Token).
     const effLevel = usePact ? (warlockSlots?.level || slotLevel) : slotLevel;
-    const dmg = scaledDamage(sp, effLevel);
+    // „+ your spellcasting ability modifier" (Cure Wounds & Co.): Zaubermod
+    // anhängen — höchster Mod unter den Caster-Klassen des Charakters.
+    const scMods = Object.values(spellcasting).map((sc) => sc.modifier || 0);
+    const castMod = spellDamageAddsMod(sp) && scMods.length ? Math.max(...scMods) : 0;
+    const dmgDice = scaledDamage(sp, effLevel);
+    const dmg = dmgDice && castMod ? `${dmgDice}+${castMod}` : dmgDice;
     const zone = zoneFromArea(deriveSpellArea(sp));
     if (dmg || zone) setCastPrompt({ name: sp.name, level: effLevel, formula: dmg, zone, self: isSelfOrigin(sp), dmgType: (sp.damageType?.[0] || sp.damageInflict?.[0] || '').toLowerCase() });
   };

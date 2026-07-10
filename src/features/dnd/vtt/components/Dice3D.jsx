@@ -453,6 +453,29 @@ export default function Dice3D({ dice, onFallback, onStatus, onDone }) {
       addRim(2 * AREA_X + 2 * t, sideH, t, 0, -AREA_Z - t / 2);          // back
       addRim(2 * AREA_X + 2 * t, frontH, t, 0, AREA_Z + t / 2);          // front (low)
 
+      // Kamera-Distanz automatisch so wählen, dass das GANZE Tray (inkl.
+      // aller Holzränder) mit etwas Rand im Canvas liegt — die handgetunte
+      // Distanz oben ist nur der Startwert; je nach Seitenverhältnis wurden
+      // sonst Ränder beschnitten.
+      {
+        const lookTarget = new THREE.Vector3(0, 0, 0.05);
+        const dir = camera.position.clone().normalize();
+        const corners = [];
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const y of [0, sideH]) {
+          corners.push(new THREE.Vector3(sx * (AREA_X + t), y, sz * (AREA_Z + t)));
+        }
+        for (let d = camera.position.length(); d < 30; d += 0.1) {
+          camera.position.copy(dir).multiplyScalar(d);
+          camera.lookAt(lookTarget);
+          camera.updateMatrixWorld(true);
+          const fits = corners.every((c) => {
+            const p = c.clone().project(camera);
+            return Math.abs(p.x) <= 0.94 && Math.abs(p.y) <= 0.94;
+          });
+          if (fits) break;
+        }
+      }
+
       // ── physics world: floor + 4 walls (dice bounce off the tray edges) ──
       const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -26, 0) });
       world.allowSleep = true;

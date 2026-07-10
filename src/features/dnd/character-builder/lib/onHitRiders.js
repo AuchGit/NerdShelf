@@ -46,7 +46,16 @@ export function gatherActionRiders(character, profBonus = 0, spellMap = null) {
     // "Once per turn"-Rider (Sneak Attack, Dreadful Strikes) bekommen einen
     // 1x/Zug-Hinweis im Composer — Erkennung rein über die Formulierung.
     const perTurn = /once (?:per|on each of your) turn/i.test(text)
-    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase(), perTurn })
+    // Waffengebundene Rider: erwähnt der Feature-Text eine Waffe (Sneak
+    // Attack "uses a Finesse or a Ranged weapon", Dreadful Strikes "hit a
+    // creature with a weapon"), gilt der Rider nur für Waffen-Aktionen —
+    // nicht für Zauber-Prompts (Cure Wounds zeigte sonst Sneak Attack an).
+    // Rider ohne Waffen-Bezug (Hex: "with an attack") bleiben auch für
+    // Angriffszauber verfügbar. Bewusst simpel statt Phrasen-Listen —
+    // headless gegen PHB+XPHB verifiziert (Sneak/Dreadful/Divine Favor/
+    // 2014-Hunter's-Mark → weaponOnly; Hex/2024-Hunter's-Mark → frei).
+    const weaponOnly = /\bweapons?\b/i.test(text)
+    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase(), perTurn, weaponOnly })
   }
   for (const f of (character?.__activeFeatures || [])) consider(f.name, f.entries, f.classId)
   for (const t of (character?.species?.__traits || [])) consider(t.name, t.entries, null)
@@ -61,7 +70,8 @@ export function gatherActionRiders(character, profBonus = 0, spellMap = null) {
       const text = flat(sp.entries)
       const dm = text.match(/extra (\d*d\d+)(?: (\w+))? damage/i)
       if (dm && HIT_RE.test(text) && !seen.has(String(concName).toLowerCase())) {
-        out.push({ id: 'conc:' + concName.toLowerCase(), name: `${concName} (aktiv)`, formula: dm[1], type: (dm[2] || '').toLowerCase(), active: true })
+        const weaponOnly = /\bweapons?\b/i.test(text)
+        out.push({ id: 'conc:' + concName.toLowerCase(), name: `${concName} (aktiv)`, formula: dm[1], type: (dm[2] || '').toLowerCase(), active: true, weaponOnly })
       }
     }
   }

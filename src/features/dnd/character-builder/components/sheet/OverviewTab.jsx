@@ -30,7 +30,7 @@ import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/
 import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
 import { rollAttack, rollDamage } from '../../../vtt/lib/rollDice'
 import { gatherActionRiders } from '../../lib/onHitRiders'
-import { scaledDamage } from '../../lib/spellDamage'
+import { scaledDamage, spellDamageAddsMod } from '../../lib/spellDamage'
 import RollComposer from '../../../vtt/components/RollComposer'
 
 // Klickbare Würfel-Pills (Angriff/Schaden) — würfeln in den VTT-Würfeltray.
@@ -1266,11 +1266,21 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   // concentration. Mirrors the existing castSpell logic in
   // SpellsTab; kept inline so the explorer doesn't have to depend
   // on the spells tab's internals.
-  function markActionUsed(slot) {
+  function markActionUsed(slot, row = null) {
     if (!applyCharacter || !slot) return
     applyCharacter(d => {
       if (!d.status) d.status = {}
       if (!d.status.economy) d.status.economy = {}
+      // Extra Attack: die Attack-Action erlaubt N Angriffe — die Action-Pille
+      // wird erst nach dem N-ten bestätigten Angriff als verbraucht markiert
+      // (Zähler in economy.attackUses; „Neue Runde" wischt economy komplett).
+      const per = row?.attacksPerAction || 1
+      if (slot === 'action' && per > 1) {
+        const usedN = (d.status.economy.attackUses || 0) + 1
+        if (usedN >= per) { d.status.economy.action = true; d.status.economy.attackUses = 0 }
+        else d.status.economy.attackUses = usedN
+        return
+      }
       d.status.economy[slot] = true
     })
   }
@@ -1325,23 +1335,27 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         + 'Trotzdem wirken?'
       )) return
     }
-    applyCharacter(d => {
+    // Verbrauch (Slot + Konzentration + Economy) auf den GEWÄHLTEN Grad —
+    // läuft erst beim Bestätigen im Wurf-Prompt (Schadenswurf/„Benutzt"),
+    // damit man sich noch umentscheiden kann. Zauber ohne Würfelschaden
+    // verbrauchen sofort wie bisher.
+    const applyCastAt = (lv) => applyCharacter(d => {
       if (!d.status) d.status = {}
       if (opts.usePact) {
         d.status.usedPactSlots = (d.status.usedPactSlots || 0) + 1
-      } else if (slotLevel > 0) {
+      } else if (lv > 0) {
         if (!d.status.usedSpellSlots) d.status.usedSpellSlots = {}
-        d.status.usedSpellSlots[slotLevel] = (d.status.usedSpellSlots[slotLevel] || 0) + 1
+        d.status.usedSpellSlots[lv] = (d.status.usedSpellSlots[lv] || 0) + 1
       }
       if (spell.concentration) {
         d.status.concentration = {
-          spell: spell.name, level: slotLevel,
+          spell: spell.name, level: lv,
           since: new Date().toISOString(),
         }
       }
       if (!d.status.economy) d.status.economy = {}
       if (slotName) d.status.economy[slotName] = true
-      if (slotLevel > 0) d.status.economy.leveledCast = true
+      if (lv > 0) d.status.economy.leveledCast = true
     })
     setCastingFor(null)
     // Nach dem Wirken direkt den Wurf-Composer anbieten: Schaden des GEWIRKTEN
@@ -1349,12 +1363,56 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     // wie Use-Aktionen. Zauber ohne Würfelschaden prompten nicht.
     const meta = spell?.spellMeta || spellMap?.get(String(spell?.name || '').toLowerCase()) || spell
     const dmg = scaledDamage(meta, slotLevel)
-    if (dmg) {
-      setComposer({
-        title: `${spell.name}: Schaden${slotLevel > 0 ? ` (Grad ${slotLevel})` : ''}`,
-        base: { formula: dmg, type: String(meta?.damageType?.[0] || meta?.damageInflict?.[0] || '').toLowerCase(), label: spell.name },
-      })
+    if (!dmg) { applyCastAt(slotLevel); return }
+    // „+ your spellcasting ability modifier" (Cure Wounds & Co.): Zaubermod
+    // des Charakters anhängen — höchster Mod unter den Caster-Klassen.
+    const scList = Object.values(computed?.spellcasting || {})
+    const castMod = spellDamageAddsMod(meta) && scList.length
+      ? Math.max(...scList.map(sc => sc.modifier || 0)) : 0
+    const mkBase = (lv) => {
+      const f = scaledDamage(meta, lv) || dmg
+      return {
+        formula: castMod ? `${f}+${castMod}` : f,
+        type: String(meta?.damageType?.[0] || meta?.damageInflict?.[0] || '').toLowerCase(),
+        label: spell.name,
+      }
     }
+    // Slot-Wahl direkt im Prompt (alle Grade ab Basisgrad mit Slots) — die
+    // Würfel passen sich live an; verbraucht wird der bestätigte Grad.
+    let slotOptions = null
+    if (slotLevel > 0 && !opts.usePact) {
+      slotOptions = []
+      for (let lv = spell.level || 1; lv <= 9; lv++) {
+        const max = slots?.slots?.[lv - 1] || 0
+        if (!max) continue
+        slotOptions.push({ level: lv, remaining: Math.max(0, max - (usedSlots[lv] || 0)) })
+      }
+      if (!slotOptions.length) slotOptions = null
+    }
+    // On-Hit-Rider nur bei ANGRIFFS-Zaubern — und dort nur die nicht
+    // waffengebundenen (Cure Wounds zeigte sonst Sneak Attack an). Lokal
+    // berechnet (läuft nur beim Klick) statt das actionRiders-Memo zu
+    // fangen — das ließe den React-Compiler die Memoisierung verwerfen.
+    const isAtkSpell = Array.isArray(meta?.spellAttack) && meta.spellAttack.length > 0
+    let spellRiders = []
+    if (isAtkSpell) {
+      try {
+        const pb = Math.ceil(((character?.classes || []).reduce((sm, c) => sm + (c.level || 0), 0)) / 4) + 1
+        spellRiders = gatherActionRiders(character, pb, spellMap).filter(rd => !rd.weaponOnly)
+      } catch { spellRiders = [] }
+    }
+    const atkBonus = isAtkSpell && scList.length
+      ? Math.max(...scList.map(sc => sc.spellAttackBonus ?? 0)) : null
+    setComposer({
+      title: `${spell.name}: Schaden`,
+      base: mkBase(slotLevel),
+      baseAt: mkBase,
+      slotOptions,
+      initialLevel: slotLevel,
+      riders: spellRiders,
+      attack: atkBonus != null ? { bonus: `${atkBonus >= 0 ? '+' : ''}${atkBonus}`, label: spell.name } : null,
+      onConfirm: ({ level }) => applyCastAt(level ?? slotLevel),
+    })
   }
   // Homebrew-Item-Charges verbrauchen. Schreibt in
   // character.status.itemCharges[itemId][key] += cost wo key entweder
@@ -1419,11 +1477,22 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   }
   // Beim BENUTZEN einer Aktion (Use-Button, egal ob Bottom-Bar, Popout-Sheet
   // oder Aktions-Overlay) direkt den Wurf-Composer anbieten: Basis-Schaden +
-  // aktivierbare Specials, ein Klick würfelt alles. Ohne Schaden kein Prompt.
-  const promptRowRoll = (r) => {
+  // aktivierbare Specials, ein Klick würfelt alles. Ohne Schaden kein Prompt
+  // (return false → Aufrufer verbraucht sofort). `onConfirm` = verzögertes
+  // Verbrauchen: erst beim Schadenswurf oder „Benutzt"-Button, Schließen
+  // über ✕ verbraucht nichts (Umentscheiden erlaubt).
+  const promptRowRoll = (r, onConfirm = null) => {
     const base = rowDamageOf(r)
-    if (!base) return
-    setComposer({ title: `${r.name}: Schaden`, base: { ...base, label: r.name }, attack: r.attack ? { bonus: r.attack, label: r.name } : null })
+    if (!base) return false
+    setComposer({
+      title: `${r.name}: Schaden`,
+      base: { ...base, label: r.name },
+      attack: r.attack ? { bonus: r.attack, label: r.name } : null,
+      // Thrown Weapon Fighting: Wurf-Schalter, solange die Waffe werfbar ist.
+      thrown: r.thrownDamageBonus ? { bonus: r.thrownDamageBonus } : null,
+      onConfirm,
+    })
+    return true
   }
   const openDamageRoll = (ev, name, formula, type, atkBonus = null) => {
     const dice = (String(formula || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0]
@@ -1513,6 +1582,9 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         weaponId: atk.id,
         attacksPerAction: atk.attacksPerAction || 1,
         properties: atk.properties || [],
+        // Thrown Weapon Fighting: Wurf-Bonus für den „Geworfen"-Schalter
+        // im Wurf-Composer (gilt RAW nur beim Werfen).
+        thrownDamageBonus: atk.thrownDamageBonus || null,
         markedAs: atk.markedAs || null,
         // Per-Roll-Advisory aus aktiver Konzentration (Hex / Hunter's
         // Mark / Bless / Divine Favor) — wird als Pille auf der Row
@@ -2266,8 +2338,11 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   return (
     <div style={embedded ? { marginTop: 0 } : { marginTop: 10 }}>
       {composer && (
-        <RollComposer title={composer.title} base={composer.base} riders={actionRiders}
+        <RollComposer title={composer.title} base={composer.base} baseAt={composer.baseAt || null}
+          slotOptions={composer.slotOptions || null} initialLevel={composer.initialLevel ?? null}
+          riders={composer.riders ?? actionRiders} thrown={composer.thrown || null}
           attack={composer.attack || null} usageKey={character?.id ?? character?.name ?? null}
+          onConfirm={composer.onConfirm || null}
           onClose={() => setComposer(null)} />
       )}
       {!embedded && (
@@ -3383,11 +3458,17 @@ function CombatActionsCategorisedList({
                           castingFor={castingFor} setCastingFor={setCastingFor}
                           onCastSpell={castSpellFromExplorer}
                           onUseAction={() => {
-                            if (r.economySlot)    markActionUsed(r.economySlot)
-                            if (r.resourceId)     consumeResource(r.resourceId)
-                            if (r.itemChargeRef)  consumeItemCharges(r.itemChargeRef)
-                            applyRowSideEffects(r)
-                            promptRowRoll?.(r)
+                            // Mit Wurf-Prompt wird ERST beim Bestätigen
+                            // (Schadenswurf/„Benutzt") verbraucht — Schließen
+                            // über ✕ verbraucht nichts. Ohne würfelbaren
+                            // Schaden sofort wie bisher.
+                            const consume = () => {
+                              if (r.economySlot)    markActionUsed(r.economySlot, r)
+                              if (r.resourceId)     consumeResource(r.resourceId)
+                              if (r.itemChargeRef)  consumeItemCharges(r.itemChargeRef)
+                              applyRowSideEffects(r)
+                            }
+                            if (!promptRowRoll?.(r, consume)) consume()
                           }}
                         />
                       </div>

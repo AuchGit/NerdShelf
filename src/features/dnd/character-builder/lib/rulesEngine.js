@@ -1138,8 +1138,14 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       const MAP = { F: 'Finesse', V: 'Versatile', L: 'Light', H: 'Heavy', '2H': 'Two-Handed', T: 'Thrown', A: 'Ammunition', R: 'Reach', LD: 'Loading', S: 'Special' }
       return MAP[code] || p.split('|')[0]
     })
-    const isFinesse = props.includes('Finesse')
-    const isRanged = props.includes('Ammunition') || props.includes('Thrown')
+    // Property-Checks case-insensitiv: je nach Quelle/Alter des Charakters
+    // stehen die Properties als 'Finesse', 'finesse' oder Code 'F' im Item —
+    // ein case-sensitiver Vergleich ließ z.B. einen Dagger seine Finesse
+    // verlieren (falscher Schadens-Mod, STR statt DEX).
+    const propsLC = props.map(p => String(p).toLowerCase())
+    const hasProp = (name) => propsLC.includes(name)
+    const isFinesse = hasProp('finesse')
+    const isRanged = hasProp('ammunition') || hasProp('thrown')
 
     // Weapon-marking rules (Hex Warrior, Pact Weapon, Improved Pact
     // Weapon, …). Effects are data-driven via WEAPON_MARKING_RULES —
@@ -1212,11 +1218,13 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     let featDmg = 0
     if (isRanged && fb.rangedAttackBonus) featAtk += fb.rangedAttackBonus
     if (!isRanged && fb.meleeAttackBonus) featAtk += fb.meleeAttackBonus
-    if (fb.thrownDamageBonus && props.includes('Thrown')) featDmg += fb.thrownDamageBonus
+    // Thrown Weapon Fighting gilt RAW nur, wenn die Waffe GEWORFEN wird —
+    // nicht in die Basis-Schadenszeile backen. Der Wurf-Composer bietet bei
+    // werfbaren Waffen einen „Geworfen"-Schalter an (thrownDamageBonus am Row).
     if (fb.oneHandedMeleeDamageBonus
         && !isRanged
-        && !props.includes('Two-Handed')
-        && !props.includes('Heavy')
+        && !hasProp('two-handed')
+        && !hasProp('heavy')
     ) {
       // "no other weapons" — wir gucken ob noch eine ANDERE Waffe
       // equipped ist (Off-Hand-Two-Weapon-Fighting würde Dueling
@@ -1248,7 +1256,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     // 5e- und 5.5e-Datendateien, ohne Whitelist.
     const computedRange = weapon.range
       ? weapon.range
-      : (props.includes('Reach') ? '10 ft.' : '5 ft.')
+      : (hasProp('reach') ? '10 ft.' : '5 ft.')
     attacks.push({
       id: weapon.id,
       name: weapon.customName || weapon.name,
@@ -1266,6 +1274,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       attacksPerAction,
       range: computedRange,
       properties: props,
+      // Thrown Weapon Fighting: Bonus greift nur beim WERFEN — der
+      // Wurf-Composer bietet ihn als „Geworfen"-Schalter an.
+      thrownDamageBonus: (fb.thrownDamageBonus && hasProp('thrown')) ? fb.thrownDamageBonus : undefined,
       // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann
       // daraus eine "Hex +1d6 necrotic"-Pille auf der Attack-Row
       // bauen. Kein Effekt auf attackBonus / damage — der Player

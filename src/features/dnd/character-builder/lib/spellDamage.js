@@ -28,6 +28,14 @@ export function spellDamageFormula(sp) {
   return null
 }
 
+// „… + your spellcasting ability modifier“ direkt hinter dem Würfelwert
+// (Cure Wounds, Healing Word, …): der Wurf-Prompt hängt dann den Zaubermod
+// des Charakters an die Formel an. Rein textbasiert, keine Namenslisten.
+export function spellDamageAddsMod(sp) {
+  const raw = JSON.stringify(sp?.entries || []) + JSON.stringify(sp?.entriesHigherLevel || [])
+  return /\{@(?:damage|dice) [^}]+\}[^.{]{0,40}(?:\+|plus) your spellcasting ability modifier/i.test(raw)
+}
+
 // Upcast-Schaden: {@scaledamage 8d6|3-9|1d6} auf den gewirkten Grad
 // hochrechnen. Gleiche Würfelgröße → zusammengefasste Formel ("10d6"),
 // sonst lesbare Summe. Ohne Skalierung → Basis-Formel.
@@ -35,7 +43,9 @@ export function scaledDamage(sp, castLevel) {
   const base = spellDamageFormula(sp)
   if (!base) return null
   const raw = JSON.stringify(sp?.entriesHigherLevel || []) + JSON.stringify(sp?.entries || [])
-  const m = /\{@scaledamage ([^}|]+)\|(\d+)-\d+\|([^}|]+)\}/.exec(raw)
+  // {@scaledamage} für Schaden, {@scaledice} für Heilung (Cure Wounds) und
+  // andere skalierende Würfel — identisches Format base|from-to|step.
+  const m = /\{@scale(?:damage|dice) ([^}|]+)\|(\d+)-\d+\|([^}|]+)\}/.exec(raw)
   if (!m || !castLevel) return base
   const extra = Math.max(0, castLevel - (+m[2]))
   if (!extra) return base
