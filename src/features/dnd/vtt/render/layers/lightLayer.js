@@ -72,6 +72,23 @@ export class LightLayer {
     return this[slot];
   }
 
+  // Arbeitskopien der Unionstexturen für BEWEGTE Quellen — lazy und nur für
+  // die Fenstergröße, die sie braucht (praktisch der Low-Res-Interaktionssatz;
+  // Final-/Ruhe-Composes haben nie bewegte Quellen). Bewegte Lichter werden
+  // pro Compose OPAK in diese Kopien eingeblendet: die Flat-Union-Eigenschaft
+  // bleibt erhalten und alle Downstream-Stempel rechnen mit exakt derselben
+  // Mathematik wie im Stand — keine Doppel-Erases/-Farben beim Bewegen mehr.
+  _getWorkRts(w, h, res) {
+    const key = `${w}x${h}@${res.toFixed(2)}`;
+    if (this._workKey !== key) {
+      if (this._work) for (const rt of Object.values(this._work)) rt?.destroy?.(true);
+      const mk = () => RenderTexture.create({ width: w, height: h, resolution: res });
+      this._work = { covBW: mk(), covDW: mk(), covCBW: mk(), covCDW: mk() };
+      this._workKey = key;
+    }
+    return this._work;
+  }
+
   // Pixi-BlurFilter arbeitet in SCREEN-Pixeln: beim Rauszoomen frisst ein
   // fixer Blur ganze Schatten-/Dunkelflächen auf (sie wirken kleiner als sie
   // sind). Wir skalieren die Stärke mit dem Zoom, damit der Blur in
@@ -373,6 +390,35 @@ export class LightLayer {
       return { s, dimPx, brightPx, ...this._srcPolys(s, walls, brightWalls, bounds, Math.max(dimPx, brightPx)) };
     });
 
+    // Effektive Unionstexturen: mit bewegten Quellen = Arbeitskopien, in die
+    // die bewegten Reaches OPAK eingeblendet werden (Union bleibt flach —
+    // Überlappungen mit statischem Licht addieren sich NICHT auf; das war die
+    // „wird beim Bewegen heller"-Aufhellung der früheren Direkt-Stempel).
+    let eB = covB; let eD = covD; let eCB = covCB; let eCD = covCD;
+    if (movingGeom.length) {
+      const work = this._getWorkRts(w, h, wantLow ? resLow : 1);
+      const mkMask = (poly) => ((poly && poly.length >= 3)
+        ? new Graphics().poly(poly.flatMap((q) => [q.x - ox, q.y - oy])).fill(0xffffff)
+        : null);
+      const blend = (baseTex, target, items) => {
+        const c = new Container();
+        c.addChild(stamp(baseTex, 'normal', 1));
+        for (const it of items) c.addChild(it);
+        renderer.render({ container: c, target, clear: true });
+        c.destroy({ children: true });
+      };
+      blend(covB, work.covBW, movingGeom.filter((m) => m.brightPx > 0)
+        .map((m) => reach(m.s.x - ox, m.s.y - oy, m.brightPx, mkMask(m.brightPoly))));
+      blend(covD, work.covDW, movingGeom.filter((m) => m.dimPx > 0)
+        .map((m) => reach(m.s.x - ox, m.s.y - oy, m.dimPx, mkMask(m.poly))));
+      // Farb-Unionen mit denselben Gates wie im Coverage-Aufbau.
+      blend(covCB, work.covCBW, movingGeom.filter((m) => m.brightPx > 0 && (BL < 2 || m.s.color))
+        .map((m) => reach(m.s.x - ox, m.s.y - oy, m.brightPx, mkMask(m.brightPoly), m.s.color || WARM)));
+      blend(covCD, work.covCDW, movingGeom.filter((m) => m.dimPx > 0 && (BL < 1 || m.s.color))
+        .map((m) => reach(m.s.x - ox, m.s.y - oy, m.dimPx, mkMask(m.poly), m.s.color || WARM)));
+      eB = work.covBW; eD = work.covDW; eCB = work.covCBW; eCD = work.covCDW;
+    }
+
     // Darkvision coverage: union of each viewer-token's reach disc, clipped to
     // its line of sight (so it can't see through walls). Läuft auch im
     // Live-Frame (Aufhellung + Wäsche verschwinden beim Bewegen nicht mehr):
@@ -398,12 +444,8 @@ export class LightLayer {
       // can see.
       const dvd = new Container();
       dvd.addChild(stamp(covDV, 'normal', 1));
-      dvd.addChild(stamp(covB, 'erase', 1));
-      dvd.addChild(stamp(covD, 'erase', 1));
-      for (const m of movingGeom) {
-        if (m.dimPx > 0) dvd.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', 1));
-        if (m.brightPx > 0) dvd.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
-      }
+      dvd.addChild(stamp(eB, 'erase', 1));
+      dvd.addChild(stamp(eD, 'erase', 1));
       renderer.render({ container: dvd, target: covDVD, clear: true });
       dvd.destroy({ children: true });
     }
@@ -437,12 +479,8 @@ export class LightLayer {
     if (wantShadow && shadowA > 0) dark.addChild(stamp(covShadow, 'normal', shadowA, 0x000000));
     // Lights carve the deep dark: dim reach down to ~the dim level, bright fully;
     // darkvision likewise lifts one step within its range.
-    dark.addChild(stamp(covD, 'erase', liftToDim));
-    dark.addChild(stamp(covB, 'erase', 1));
-    for (const m of movingGeom) {
-      if (m.dimPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', liftToDim));
-      if (m.brightPx > 0) dark.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
-    }
+    dark.addChild(stamp(eD, 'erase', liftToDim));
+    dark.addChild(stamp(eB, 'erase', 1));
     if (wantDV) dark.addChild(stamp(covDV, 'erase', liftToDim));
     renderer.render({ container: dark, target: rts.dark, clear: true });
     dark.destroy({ children: true });
@@ -462,12 +500,8 @@ export class LightLayer {
     // bright union always (a torch lifts a dim/dark baseline to bright).
     const dimErase = Math.max(0.2, Math.min(0.8, (style === 'classic' ? 0.7 : 0.75) - c * 0.45));
     if (baseA > 0) {
-      if (BL < 1) scene.addChild(stamp(covD, 'erase', dimErase));
-      scene.addChild(stamp(covB, 'erase', 1));
-      for (const m of movingGeom) {
-        if (BL < 1 && m.dimPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'erase', dimErase));
-        if (m.brightPx > 0) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'erase', 1));
-      }
+      if (BL < 1) scene.addChild(stamp(eD, 'erase', dimErase));
+      scene.addChild(stamp(eB, 'erase', 1));
       if (wantDV && BL < 1) scene.addChild(stamp(covDV, 'erase', liftToDim));
     }
     // deep-dark layer (already carved by the lights) composites on top
@@ -479,14 +513,8 @@ export class LightLayer {
     {
       const dimA = style === 'classic' ? 0.10 : 0.14;
       const brightA = style === 'classic' ? 0.16 : 0.22;
-      scene.addChild(stamp(covCD, 'add', BL < 1 ? dimA : dimA * 0.5));
-      scene.addChild(stamp(covCB, 'add', BL < 2 ? brightA : brightA * 0.5));
-      for (const m of movingGeom) {
-        const col = m.s.color || WARM;
-        const custom = !!m.s.color;
-        if (m.dimPx > 0 && (BL < 1 || custom)) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.dimPx, m.poly, ox, oy, 'add', BL < 1 ? dimA : dimA * 0.5, col));
-        if (m.brightPx > 0 && (BL < 2 || custom)) scene.addChild(reachBlend(m.s.x - ox, m.s.y - oy, m.brightPx, m.brightPoly, ox, oy, 'add', BL < 2 ? brightA : brightA * 0.5, col));
-      }
+      scene.addChild(stamp(eCD, 'add', BL < 1 ? dimA : dimA * 0.5));
+      scene.addChild(stamp(eCB, 'add', BL < 2 ? brightA : brightA * 0.5));
     }
     renderer.render({ container: scene, target: main, clear: true });
     scene.destroy({ children: true });
@@ -501,23 +529,6 @@ function reach(x, y, r, mask, color = 0xffffff) {
   const disc = new Graphics().circle(x, y, r).fill({ color, alpha: 1 });
   c.addChild(disc);
   if (mask) { c.addChild(mask); c.mask = mask; }
-  return c;
-}
-
-// Direkt-Stempel einer BEWEGTEN Quelle: Scheibe (auf ihr LOS-Polygon maskiert)
-// mit Blend + Alpha — 'erase' höhlt die Dunkelheit aus (wie die stamp()-Unionen),
-// 'add' legt den Farb-Schein auf. Blend sitzt auf der Scheibe (Leaf), die Maske
-// wird als Stencil genutzt und nicht mitgezeichnet.
-function reachBlend(x, y, r, maskPoly, ox, oy, blend, alpha, color = 0xffffff) {
-  const c = new Container();
-  const disc = new Graphics().circle(x, y, r).fill({ color, alpha });
-  disc.blendMode = blend;
-  c.addChild(disc);
-  if (maskPoly && maskPoly.length >= 3) {
-    const mask = new Graphics().poly(maskPoly.flatMap((q) => [q.x - ox, q.y - oy])).fill(0xffffff);
-    c.addChild(mask);
-    c.mask = mask;
-  }
   return c;
 }
 
