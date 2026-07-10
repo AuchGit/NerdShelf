@@ -29,6 +29,8 @@ import usePwaMobile from '../../../../../shared/hooks/usePwaMobile'
 import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/usePersistedState'
 import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
 import { rollAttack, rollDamage } from '../../../vtt/lib/rollDice'
+import { gatherActionRiders } from '../../lib/onHitRiders'
+import RollComposer from '../../../vtt/components/RollComposer'
 
 // Klickbare Würfel-Pills (Angriff/Schaden) — würfeln in den VTT-Würfeltray.
 const ROLL_PILL = {
@@ -1382,6 +1384,21 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   // time and metadata. Without this, prepared spells fall through
   // when `character.spellMetadata` doesn't have them.
   const [spellMap, setSpellMap] = useState(null)
+  // Wurf-Composer: öffnet sich beim Klick auf eine Schadens-Pill, wenn der
+  // Charakter aktivierbare Rider hat (Sneak Attack, aktives Hunter's Mark,
+  // Manöver …) — Basis + angehakte Rider werden in EINEM Wurf gewürfelt.
+  const [composer, setComposer] = useState(null)
+  const actionRiders = useMemo(() => {
+    if (!character) return []
+    const pb = Math.ceil(((character.classes || []).reduce((sm, c) => sm + (c.level || 0), 0)) / 4) + 1
+    try { return gatherActionRiders(character, pb, spellMap) } catch { return [] }
+  }, [character, spellMap])
+  const openDamageRoll = (ev, name, formula, type) => {
+    const dice = (String(formula || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0]
+    if (!dice) return
+    if (!actionRiders.length) { rollDamage(ev, dice, `${name}: Schaden`); return }
+    setComposer({ title: `${name}: Schaden`, base: { formula: dice.replace(/\s+/g, ''), type: (type || '').toLowerCase(), label: name } })
+  }
   useEffect(() => {
     if (!open) return
     const edition = character?.meta?.edition || '5e'
@@ -2216,6 +2233,10 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
 
   return (
     <div style={embedded ? { marginTop: 0 } : { marginTop: 10 }}>
+      {composer && (
+        <RollComposer title={composer.title} base={composer.base} riders={actionRiders}
+          onClose={() => setComposer(null)} />
+      )}
       {!embedded && (
         <button type="button" onClick={() => setOpen(o => !o)} style={caeToggle}>
           {open ? '▼' : '▶'} Actions ({total})
@@ -2232,7 +2253,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               const listBundle = {
                 expanded, setExpanded, slots, usedSlots, usedPact, castingFor, setCastingFor,
                 castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges,
-                applyRowSideEffects, character, applyCharacter,
+                applyRowSideEffects, character, applyCharacter, openDamageRoll,
               };
               const META = {
                 pinned: { label: 'Pinned', color: 'var(--accent-cyan)' },
@@ -2358,6 +2379,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                       applyRowSideEffects={applyRowSideEffects}
                       character={character}
                       applyCharacter={applyCharacter}
+                      openDamageRoll={openDamageRoll}
                       hidePinnedCategory
                     />
                   </div>
@@ -2381,6 +2403,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               applyRowSideEffects={applyRowSideEffects}
               character={character}
               applyCharacter={applyCharacter}
+              openDamageRoll={openDamageRoll}
             />
           )}
           </>)}
@@ -2720,7 +2743,7 @@ function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
   castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges, applyRowSideEffects,
-  character, applyCharacter,
+  character, applyCharacter, openDamageRoll,
   hidePinnedCategory = false,
   orderKey = 'actions', // Spalten-Modus: eigener Key pro Spalte → Sortierung pro Kategorie-Spalte
 }) {
@@ -3145,7 +3168,7 @@ function CombatActionsCategorisedList({
                   const dmgRollable = /\d*d\d+/.test(String(r.damage))
                   leftPills.push(
                     <span key="dmg-legacy" role={dmgRollable ? 'button' : undefined} tabIndex={dmgRollable ? 0 : undefined}
-                      onClick={dmgRollable ? (ev) => { ev.stopPropagation(); rollDamage(ev, r.damage, `${r.name}: Schaden`) } : undefined}
+                      onClick={dmgRollable ? (ev) => { ev.stopPropagation(); if (openDamageRoll) openDamageRoll(ev, r.name, r.damage, r.damageType); else rollDamage(ev, r.damage, `${r.name}: Schaden`) } : undefined}
                       title={dmgRollable ? 'Schaden würfeln — Shift: Kritisch' : (tip || undefined)}
                       style={{
                         ...caePill, border: `1px solid ${color}`, color,
