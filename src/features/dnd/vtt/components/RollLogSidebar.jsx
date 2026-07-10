@@ -39,6 +39,9 @@ export default function RollLogSidebar() {
             </span>
             <span style={S.total}>{e.total}</span>
           </div>
+          {Array.isArray(e.types) && e.types.length > 0 && (
+            <div style={S.dice}>{e.types.map((t) => `${t.total}${t.type ? ` ${t.type}` : ''}`).join(' · ')}</div>
+          )}
           {Array.isArray(e.dice) && e.dice.length > 1 && (
             <div style={S.dice}>[{e.dice.join(', ')}]</div>
           )}

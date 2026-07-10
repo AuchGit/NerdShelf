@@ -150,7 +150,7 @@ export default function DiceTray() {
       if (!terms) return;
       setOpen(true);
       setFormula(f);
-      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f, src: detail.src || null }));
+      setRevealed(false); setRoll(() => ({ ...rollFormula(terms, detail.mode || null), captureId: detail.captureId || null, label: detail.label || '', formula: f, src: detail.src || null, parts: detail.parts || null }));
     };
     const onRoll = (e) => handle(e.detail);
     window.addEventListener('vtt:roll', onRoll);
@@ -202,6 +202,7 @@ export default function DiceTray() {
       mode: roll.mode || null,
       total: roll.total != null ? roll.total : nat.reduce((s, v) => s + v, 0),
       dice: nat,
+      types: partTotals(roll.parts, nat, roll.mode) || undefined,
     });
   }, [revealed, dice, roll, rollerName, rollerPortrait]);
 
@@ -273,6 +274,10 @@ export default function DiceTray() {
         <div style={S.total}>
           {mode && <span style={S.modeTag}>{MODE_LABEL[mode]}</span>}
           {total != null ? <>Ergebnis: <b>{total}</b></> : <>Summe: <b>{sum}</b></>}
+          {(() => {
+            const bt = partTotals(roll.parts, dice.filter((d) => !d.dropped).map((d) => d.value ?? d.result), mode);
+            return bt ? <div style={S.typeLine}>{bt.map((b) => `${b.total}${b.type ? ` ${b.type}` : ''}`).join(' · ')}</div> : null;
+          })()}
         </div>
       )}
     </div>
@@ -284,6 +289,30 @@ export default function DiceTray() {
 function faceText(faceSet, v) {
   if (faceSet === 'd100tens') return String(v).padStart(2, '0');
   return String(v);
+}
+
+// Mehrteilige Würfe: die natürlichen Würfel in Formel-Reihenfolge den Teilen
+// zuordnen → Subtotal pro Teil, gruppiert nach Schadenstyp. Krit verdoppelt
+// die Würfelzahl jedes Teils (rollFormula macht dasselbe). d100-Teile (zwei
+// Würfel pro Wurf) wären mehrdeutig → dann kein Breakdown.
+function partTotals(parts, nat, mode) {
+  if (!Array.isArray(parts) || parts.length < 2) return null;
+  let i = 0;
+  const byType = new Map();
+  for (const p of parts) {
+    const terms = parseFormula(p.formula);
+    if (!terms) return null;
+    let sub = 0;
+    for (const t of terms) {
+      if (t.kind === 'mod') { sub += t.value; continue; }
+      if (t.sides === 100) return null;
+      const n = mode === 'crit' ? t.count * 2 : t.count;
+      for (let k = 0; k < n; k++) sub += t.sign * (nat[i++] ?? 0);
+    }
+    const key = p.type || '';
+    byType.set(key, (byType.get(key) || 0) + sub);
+  }
+  return [...byType.entries()].map(([type, total]) => ({ type, total }));
 }
 
 const DIE_COLOR = { 4: '#ef5da8', 6: '#4ade80', 8: '#38bdf8', 10: '#a78bfa', 12: '#fb923c', 20: '#facc15', 100: '#f87171' };
@@ -307,6 +336,7 @@ const S = {
   plainRow: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
   plainDie: { fontSize: 22, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' },
   total: { padding: '0 10px 10px', textAlign: 'right', fontSize: 'var(--fs-sm)' },
+  typeLine: { fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 },
   modeTag: { display: 'inline-block', marginRight: 6, padding: '0 6px', borderRadius: 999, fontSize: 10, fontWeight: 800, color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--color-accent) 40%, transparent)' },
   fallbackNote: { padding: '0 10px 8px', fontSize: 10, lineHeight: 1.5, color: 'var(--color-warning,#e0af68)' },
 };

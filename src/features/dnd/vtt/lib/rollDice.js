@@ -22,11 +22,24 @@ function rollChannel() {
 // `src` (optional): wer würfelt — { name, portrait } des Tokens/Charakters.
 // Landet im Roll-Log (DM-Sidebar); ohne src fällt der Log auf den Sitzungs-
 // Namen zurück (DM bzw. eigener Charakter) und zeigt kein Bild.
-export function dispatchRoll(formula, label, mode, captureId, src) {
+// `parts` (optional): mehrteiliger Wurf [{formula, type, label}] — Waffe +
+// On-Hit-Rider in EINEM Wurf; der Tray zeigt danach den Schadens-Breakdown
+// pro Typ ("12 fire · 5 psychic").
+export function dispatchRoll(formula, label, mode, captureId, src, parts) {
   if (!formula) return;
-  const detail = { formula: String(formula), label: label || '', mode: mode || null, captureId: captureId || null, src: src || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  const detail = { formula: String(formula), label: label || '', mode: mode || null, captureId: captureId || null, src: src || null, parts: parts || null, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
   window.dispatchEvent(new CustomEvent('vtt:roll', { detail }));
   try { rollChannel()?.postMessage(detail); } catch { /* channel closed */ }
+}
+
+// Mehrteiliger Schadenswurf (Basis + aktivierte Rider). Shift = Krit.
+export function rollDamageParts(ev, parts, label, src) {
+  const clean = (parts || [])
+    .map((p) => ({ ...p, formula: (String(p.formula || '').match(/\d*d\d+(?:\s*[+-]\s*\d+)*/i) || [''])[0].replace(/\s+/g, '') }))
+    .filter((p) => p.formula);
+  if (!clean.length) return;
+  const combined = clean.map((p) => p.formula).join('+');
+  dispatchRoll(combined, label, ev?.shiftKey ? 'crit' : null, null, src, clean);
 }
 
 // Result round-trip: dispatch a roll and RESOLVE with the tray's total once the
