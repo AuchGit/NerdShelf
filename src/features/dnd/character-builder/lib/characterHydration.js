@@ -4,9 +4,54 @@
 // Overlay, Zauber-Sidebar) EXAKT dieselbe Datenlage bekommt wie das Sheet —
 // eine Quelle, nichts dupliziert. Die Kataloge (optionalFeatureMap/featMap)
 // injiziert der Aufrufer; ohne sie degradieren die Sammler sanft.
-import { loadRaceList } from './dataLoader'
+import { loadRaceList, normalizeWeaponProperties } from './dataLoader'
 import { findOptionBlocks, optionValueKey } from './optionBlockResolver'
 import { isVariantEnabled } from './optionalFeatureVariants'
+
+// Waffen-Daten aus dem Item-Katalog nachfüllen: manche Charaktere haben
+// Waffen mit LEEREM properties-Array (z.B. über Startausrüstung/alten
+// Import angelegt) → rulesEngine erkennt dann keine Finesse/Thrown und
+// nutzt STR statt DEX (Dagger +2 statt +7, kein „Geworfen"-Schalter). Wir
+// mappen fehlende Felder (properties/weaponCategory/dmg1/dmgType) über den
+// Waffennamen aus dem Katalog nach. `itemIndex` = loadItemIndex(edition).
+// Rein transient — nichts wird persistiert; Charaktere mit vollständigen
+// Daten bleiben unverändert.
+export function backfillWeaponData(character, itemIndex) {
+  if (!character || !Array.isArray(itemIndex) || !itemIndex.length) return character
+  const byName = new Map()
+  for (const it of itemIndex) {
+    if (it?.name) byName.set(String(it.name).toLowerCase(), it)
+  }
+  const enrich = (list) => {
+    let changed = false
+    const out = (list || []).map((w) => {
+      if (!w?.isWeapon && !w?.dmg1 && !w?.weaponCategory) return w
+      const hasProps = Array.isArray(w.properties) && w.properties.length > 0
+      if (hasProps && w.weaponCategory) return w
+      const base = byName.get(String(w.customName || w.name || '').toLowerCase())
+      if (!base) return w
+      const next = { ...w }
+      if (!hasProps) {
+        const bp = base.property || base.properties || []
+        if (bp.length) next.properties = normalizeWeaponProperties(bp)
+      }
+      if (!next.weaponCategory && base.weaponCategory) next.weaponCategory = base.weaponCategory
+      if (!next.dmg1 && base.dmg1) next.dmg1 = base.dmg1
+      if (!next.dmgType && base.dmgType) next.dmgType = base.dmgType
+      changed = changed || next !== w
+      return next
+    })
+    return changed ? out : list
+  }
+  const inv = enrich(character.inventory?.items)
+  const cust = enrich(character.custom?.items)
+  if (inv === character.inventory?.items && cust === character.custom?.items) return character
+  return {
+    ...character,
+    inventory: { ...(character.inventory || {}), items: inv },
+    custom: { ...(character.custom || {}), items: cust },
+  }
+}
 
 export function collectActiveClassFeatures(charData, classDataMap, catalogs = {}) {
 const { optionalFeatureMap = null, featMap = null } = catalogs

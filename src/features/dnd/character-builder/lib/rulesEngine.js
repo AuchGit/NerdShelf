@@ -1024,6 +1024,46 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // Feld NICHT (sie sind eine separate Action-Economy-Phase).
   const _attacksPerActionTop = computeAttacksPerAction(character)
 
+  // Pro Angriff WÄHLBARE Boni (Wurf-Composer-Schalter): einmal aus allen
+  // aktiven Features + Feats extrahiert (Thrown Weapon Fighting, Power-
+  // Attack −5/+10, …), unten pro Waffe gegen deren Properties gematcht.
+  // Vorn definiert, damit AUCH Feature-Attacks (Psychic Blades) sie kriegen.
+  const attackChoicesRaw = []
+  for (const f of [
+    ...(character.__activeFeatures || []),
+    ...(character.__featFeatures || []),
+    ...(character.feats || []),
+    ...(character.custom?.feats || []),
+  ]) {
+    for (const c of extractAttackChoices(f)) attackChoicesRaw.push({ ...c, label: f.name || 'Bonus' })
+  }
+  // Angriffs-Optionen für EINE Waffe: die rohen Choices gegen ihre Fähig-
+  // keiten filtern (Thrown-Bonus nur bei werfbaren Waffen, Power-Attack nur
+  // bei passender Gattung). `canThrow` erlaubt auch Feature-Waffen ohne
+  // explizite Thrown-Property (Psychic Blades: 60/120-ft-Wurf) den Schalter.
+  const attackOptionsFor = ({ hasProp, isRanged, canThrow }) => {
+    const opts = attackChoicesRaw.filter((c) => {
+      const w = c.when || {}
+      if (w.thrown && !(canThrow ?? hasProp('thrown'))) return false
+      if (w.heavy && !hasProp('heavy')) return false
+      if (w.twoHanded && !hasProp('two-handed')) return false
+      if (w.ranged && !isRanged) return false
+      if (w.melee && isRanged) return false
+      return true
+    }).map((c, i) => ({
+      id: `${String(c.label).toLowerCase()}:${i}`,
+      label: c.label,
+      atkDelta: c.atkDelta || 0,
+      dmgBonus: c.dmgBonus || 0,
+      note: c.note,
+    }))
+    return opts.length ? opts : undefined
+  }
+  const hasPropIn = (list) => {
+    const lc = (list || []).map((p) => String(p).toLowerCase())
+    return (name) => lc.includes(name)
+  }
+
   // Unarmed Strike (immer verfügbar)
   const strMod = modifiers.str || 0
   attacks.push({
@@ -1085,13 +1125,18 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       damage: `${bladeDie} + ${dex}`,
       damageType: 'psychic',
       range: psychicBladeRange,
-      properties: ['Finesse'],
+      // Psychic Blades können geworfen werden (60/120-ft-Fernkampf) → als
+      // Thrown markiert, damit Thrown Weapon Fighting greifen kann.
+      properties: ['Finesse', 'Thrown'],
       isProficient: true,
       abilityUsed: 'dex',
       // Psychic Blades have the Vex mastery built in and the Soulknife
       // knows it automatically — no slot from cls.weaponMasteries used.
       mastery: ['Vex'],
       attacksPerAction: _attacksPerActionTop,
+      // Wurf-Composer-Schalter (Thrown Weapon Fighting „Geworfen", …):
+      // canThrow=true, da die Klinge geworfen werden kann.
+      attackOptions: attackOptionsFor({ hasProp: hasPropIn(['Finesse', 'Thrown']), isRanged: false, canThrow: true }),
     })
     // Bonus-action blade: 1d4 + DEX. Unlike regular TWF, the Soulknife
     // feature explicitly adds your ability modifier to this damage —
@@ -1104,10 +1149,11 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       damage: `1d4 + ${dex}`,
       damageType: 'psychic',
       range: psychicBladeRange,
-      properties: ['Finesse', 'Bonus Action'],
+      properties: ['Finesse', 'Thrown', 'Bonus Action'],
       isProficient: true,
       abilityUsed: 'dex',
       mastery: [],
+      attackOptions: attackOptionsFor({ hasProp: hasPropIn(['Finesse', 'Thrown']), isRanged: false, canThrow: true }),
     })
   }
 
@@ -1125,15 +1171,6 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // Pro Angriff WÄHLBARE Boni (Wurf-Composer-Schalter): einmal aus allen
   // aktiven Features + Feats extrahiert (Thrown Weapon Fighting, Power-
   // Attack −5/+10, …), unten pro Waffe gegen deren Properties gematcht.
-  const attackChoicesRaw = []
-  for (const f of [
-    ...(character.__activeFeatures || []),
-    ...(character.__featFeatures || []),
-    ...(character.feats || []),
-    ...(character.custom?.feats || []),
-  ]) {
-    for (const c of extractAttackChoices(f)) attackChoicesRaw.push({ ...c, label: f.name || 'Bonus' })
-  }
   // Aliased für die weapon-loop unten (war oben schon einmal als
   // _attacksPerActionTop berechnet).
   const attacksPerAction = _attacksPerActionTop
@@ -1294,24 +1331,7 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       // Wählbare Angriffs-Boni für den Wurf-Composer, auf DIESE Waffe
       // gefiltert (Thrown Weapon Fighting nur bei werfbaren Waffen,
       // Power-Attack −5/+10 nur bei passender Waffengattung, …).
-      attackOptions: (() => {
-        const opts = attackChoicesRaw.filter((c) => {
-          const w = c.when || {}
-          if (w.thrown && !hasProp('thrown')) return false
-          if (w.heavy && !hasProp('heavy')) return false
-          if (w.twoHanded && !hasProp('two-handed')) return false
-          if (w.ranged && !isRanged) return false
-          if (w.melee && isRanged) return false
-          return true
-        }).map((c, i) => ({
-          id: `${String(c.label).toLowerCase()}:${i}`,
-          label: c.label,
-          atkDelta: c.atkDelta || 0,
-          dmgBonus: c.dmgBonus || 0,
-          note: c.note,
-        }))
-        return opts.length ? opts : undefined
-      })(),
+      attackOptions: attackOptionsFor({ hasProp, isRanged }),
       // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann
       // daraus eine "Hex +1d6 necrotic"-Pille auf der Attack-Row
       // bauen. Kein Effekt auf attackBonus / damage — der Player

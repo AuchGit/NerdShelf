@@ -10,8 +10,8 @@
 // rechnet computeCharacter darauf.
 import { useEffect, useMemo, useState } from 'react';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
-import { loadClassData, loadFeatList, loadOptionalFeatureList } from '../../character-builder/lib/dataLoader';
-import { collectActiveClassFeatures, collectClassGrantedSpells, loadRaceTraits } from '../../character-builder/lib/characterHydration';
+import { loadClassData, loadFeatList, loadOptionalFeatureList, loadItemIndex } from '../../character-builder/lib/dataLoader';
+import { collectActiveClassFeatures, collectClassGrantedSpells, loadRaceTraits, backfillWeaponData } from '../../character-builder/lib/characterHydration';
 
 // Feats mit Entries aus dem Katalog — als SEPARATES transient-Feld
 // (__featFeatures), damit Feat-Texte nur in den Prosa-Resource-
@@ -46,7 +46,8 @@ function useHydrationData(character) {
       loadFeatList(edition).catch(() => []),
       loadOptionalFeatureList(edition).catch(() => []),
       loadRaceTraits(edition, character).catch(() => ({ names: [], traits: [], fixedSkills: [] })),
-    ]).then(([loaded, featList, ofList, raceTraits]) => {
+      loadItemIndex(edition).catch(() => []),
+    ]).then(([loaded, featList, ofList, raceTraits, itemIndex]) => {
       if (cancelled) return;
       const classMap = {};
       ids.forEach((id, i) => { if (loaded[i]) classMap[id] = loaded[i]; });
@@ -54,7 +55,7 @@ function useHydrationData(character) {
       for (const f of (featList || [])) if (f?.name) featMap.set(String(f.name).toLowerCase(), f);
       const optionalFeatureMap = new Map();
       for (const f of (ofList || [])) if (f?.name) optionalFeatureMap.set(String(f.name).toLowerCase(), f);
-      setData({ classMap, featMap, optionalFeatureMap, raceTraits });
+      setData({ classMap, featMap, optionalFeatureMap, raceTraits, itemIndex });
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,10 +72,13 @@ export function useVttHydrated(character) {
     if (!character) return null;
     if (!data) return character;
     try {
-      const activeFeatures = collectActiveClassFeatures(character, data.classMap, {
+      // Leere Waffen-Properties aus dem Katalog nachfüllen (Dagger-Finesse/
+      // Thrown), bevor Features gesammelt + gerechnet wird.
+      const ch = backfillWeaponData(character, data.itemIndex);
+      const activeFeatures = collectActiveClassFeatures(ch, data.classMap, {
         optionalFeatureMap: data.optionalFeatureMap, featMap: data.featMap,
       });
-      const grantedSpells = collectClassGrantedSpells(character, data.classMap, activeFeatures);
+      const grantedSpells = collectClassGrantedSpells(ch, data.classMap, activeFeatures);
       const speciesPatch = {};
       if (data.raceTraits?.names?.length) {
         speciesPatch.__traitNames = data.raceTraits.names;
@@ -82,8 +86,8 @@ export function useVttHydrated(character) {
       }
       if (data.raceTraits?.fixedSkills?.length) speciesPatch.__fixedSkills = data.raceTraits.fixedSkills;
       return {
-        ...character,
-        species: { ...(character.species || {}), ...speciesPatch },
+        ...ch,
+        species: { ...(ch.species || {}), ...speciesPatch },
         __activeFeatures: activeFeatures.length ? activeFeatures : (character.__activeFeatures || []),
         __featFeatures: collectFeatFeatures(character, data.featMap),
         __grantedSpells: grantedSpells,

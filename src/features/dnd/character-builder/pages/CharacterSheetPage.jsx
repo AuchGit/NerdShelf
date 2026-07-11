@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLanguage } from '../lib/i18n'
 import { computeCharacter, computeAbilityScores, computeModifiers } from '../lib/rulesEngine'
 import { getProficiencyBonus, getTotalLevel, getModifier } from '../lib/characterModel'
-import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList, loadFeatList } from '../lib/dataLoader'
+import { loadClassData, loadItemIndex, loadRaceList, loadOptionalFeatureList, loadFeatList, normalizeWeaponProperties } from '../lib/dataLoader'
 import { findOptionBlocks, optionValueKey, buildNameSourceMap } from '../lib/optionBlockResolver'
 import { isVariantEnabled } from '../lib/optionalFeatureVariants'
 import { collectActiveClassFeatures as collectActiveClassFeaturesShared, collectClassGrantedSpells, loadRaceTraits } from '../lib/characterHydration'
@@ -514,7 +514,13 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           && !(Array.isArray(w.mastery) && w.mastery.length > 0)
         const wantsEntries = Array.isArray(ref.entries) && ref.entries.length > 0
           && !(Array.isArray(w.entries) && w.entries.length > 0)
-        if (wantsMastery || wantsEntries || needsAttuneFlag(w, ref)) {
+        // Leere Waffen-Properties (Finesse/Thrown/… fehlen) → aus dem
+        // Katalog nachfüllen. Ohne das nutzt rulesEngine STR statt DEX
+        // (Dagger +2 statt +7, kein „Geworfen"-Schalter).
+        const refProps = ref.property || ref.properties || []
+        const wantsProps = (ref.isWeapon || ['M','R'].includes(String(ref.type || '').split('|')[0]))
+          && refProps.length > 0 && !(Array.isArray(w.properties) && w.properties.length > 0)
+        if (wantsMastery || wantsEntries || wantsProps || needsAttuneFlag(w, ref)) {
           needsPatch = true
           break outer
         }
@@ -537,6 +543,12 @@ export default function CharacterSheetPage({ session, readOnly = false, characte
           if (Array.isArray(ref.entries) && ref.entries.length > 0
               && !(Array.isArray(w.entries) && w.entries.length > 0)) {
             w.entries = ref.entries
+          }
+          const refProps = ref.property || ref.properties || []
+          if ((ref.isWeapon || ['M','R'].includes(String(ref.type || '').split('|')[0]))
+              && refProps.length > 0 && !(Array.isArray(w.properties) && w.properties.length > 0)) {
+            w.properties = normalizeWeaponProperties(refProps)
+            if (!w.weaponCategory && ref.weaponCategory) w.weaponCategory = ref.weaponCategory
           }
           if (needsAttuneFlag(w, ref)) w.reqAttune = ref.reqAttune
         }
