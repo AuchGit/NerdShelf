@@ -1143,12 +1143,17 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
     // common codes to their English label here so Finesse / Thrown /
     // Ammunition detection works without forcing the user to re-add
     // the weapon.
-    const propsRaw = weapon.properties || []
+    // Beide Feldnamen (properties/property) und beide Formen: String
+    // ("F|XPHB" / "Finesse") ODER 5etools-Objekt ({uid:'F|XPHB'} /
+    // {name:'Finesse'}) — URL-Imports/Brew speichern die Rohform, und ein
+    // verworfenes Objekt ließ z.B. einen Dagger Finesse/Thrown verlieren.
+    const propsRaw = weapon.properties || weapon.property || []
     const props = propsRaw.map(p => {
-      if (typeof p !== 'string') return ''
-      const code = p.split('|')[0].toUpperCase()
+      const rawP = typeof p === 'string' ? p : String(p?.name || p?.uid || '')
+      if (!rawP) return ''
+      const code = rawP.split('|')[0]
       const MAP = { F: 'Finesse', V: 'Versatile', L: 'Light', H: 'Heavy', '2H': 'Two-Handed', T: 'Thrown', A: 'Ammunition', R: 'Reach', LD: 'Loading', S: 'Special' }
-      return MAP[code] || p.split('|')[0]
+      return MAP[code.toUpperCase()] || code
     })
     // Property-Checks case-insensitiv: je nach Quelle/Alter des Charakters
     // stehen die Properties als 'Finesse', 'finesse' oder Code 'F' im Item —
@@ -1382,9 +1387,10 @@ function checkWeaponProficiency(character, weapon, proficiencies) {
   // "martial (light/finesse)". Decode that into { cat, props[] } so the
   // check passes only when both the category AND at least one listed
   // property are present on the weapon.
-  const weaponProps = (weapon.properties || []).map(p => {
-    if (typeof p !== 'string') return ''
-    return p.split('|')[0].toUpperCase()
+  // Beide Feldnamen + String-/Objekt-Form (siehe Waffen-Loop oben).
+  const weaponProps = (weapon.properties || weapon.property || []).map(p => {
+    const rawP = typeof p === 'string' ? p : String(p?.name || p?.uid || '')
+    return rawP.split('|')[0].toUpperCase()
   })
   const PROP_LABEL = { F: 'finesse', L: 'light', H: 'heavy', '2H': 'two-handed', T: 'thrown', A: 'ammunition', R: 'reach', LD: 'loading', S: 'special', V: 'versatile' }
   const weaponPropNames = weaponProps.map(c => (PROP_LABEL[c] || c).toLowerCase())
