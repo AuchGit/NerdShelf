@@ -731,8 +731,13 @@ function renderStat(id, computed, character, prefs) {
     case 'initiative': return { label, value: modStr(computed?.initiative ?? 0) }
     case 'hitDice': {
       const total = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
-      const used = character?.status?.hitDiceUsed || 0
       if (total <= 0) return null
+      // Pro Klasse gespeichert ({Fighter:1, …}) → aufsummieren (Legacy-Zahl
+      // ebenso); sonst ergäbe `total - {objekt}` NaN (Multiclass „NaN/8").
+      const hdu = character?.status?.hitDiceUsed
+      const used = hdu && typeof hdu === 'object'
+        ? Object.values(hdu).reduce((s, n) => s + (Number(n) || 0), 0)
+        : (Number(hdu) || 0)
       return { label, value: `${total - used}/${total}` }
     }
     case 'spellSave': {

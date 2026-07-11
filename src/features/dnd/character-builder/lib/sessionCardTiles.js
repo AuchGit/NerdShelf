@@ -57,7 +57,13 @@ export function simpleStatTile(id, computed, character, prefs) {
     case 'hitDice': {
       const total = (character?.classes || []).reduce((s, c) => s + (c.level || 0), 0)
       if (total <= 0) return null
-      const used = character?.status?.hitDiceUsed || 0
+      // hitDiceUsed ist pro Klasse gespeichert ({Fighter:1, Wizard:0}) —
+      // aufsummieren. Legacy-Zahl-Form wird ebenfalls unterstützt; sonst
+      // ergäbe `total - {objekt}` NaN (Multiclass-Bug „NaN/8").
+      const hdu = character?.status?.hitDiceUsed
+      const used = hdu && typeof hdu === 'object'
+        ? Object.values(hdu).reduce((s, n) => s + (Number(n) || 0), 0)
+        : (Number(hdu) || 0)
       return { label, value: `${total - used}/${total}` }
     }
     case 'spellSave': {
