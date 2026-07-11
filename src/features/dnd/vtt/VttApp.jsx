@@ -389,18 +389,23 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
   const handleTokenActivate = (tokenId) => {
     const t = getState().tokens[tokenId];
     if (!t || !(t.statblock || t.characterId != null)) return;
-    // Charakter-Token (eigenes ODER fremdes): Sheet als Popout-Fenster.
-    //  • eigenes → editierbar. • DM auf fremdes → schreibgeschützt
+    // Doppelklick-Regeln:
+    //  • Spieler: NUR das EIGENE Token öffnet das (editierbare) Popout-Sheet.
+    //    Fremde Tokens (andere Spieler / NPCs) tun nichts — Spieler sollen
+    //    keine fremden Blätter oder Statblocks aufmachen.
+    //  • DM: eigenes/fremdes Spieler-Token → schreibgeschütztes Popout-Sheet
     //    (`#/campaign/<id>/character/<charId>`, campaignId aus dem Prop —
-    //    zuverlässig, session.campaignId war teils leer → Kampagnenseite).
-    // Nur NPC-Statblock-Token öffnen das In-App-Overlay.
+    //    zuverlässig, session.campaignId war teils leer). NPC-Token → das
+    //    In-App-Statblock-Overlay.
+    const mine = myCharacterId != null && String(t.characterId) === String(myCharacterId);
     if (t.characterId != null) {
-      if (t.characterId === myCharacterId) openSheetPopout(t.characterId);
+      if (mine) openSheetPopout(t.characterId);
       else if (isGM) openSheetPopout(t.characterId, { route: `#/campaign/${campaignId}/character/${t.characterId}` });
-      else setStatTokenIds((ids) => (ids.includes(tokenId) ? ids : [...ids, tokenId]));
+      // Spieler auf fremdes Charakter-Token: nichts.
       return;
     }
-    setStatTokenIds((ids) => (ids.includes(tokenId) ? ids : [...ids, tokenId]));
+    // NPC-Token (Statblock): nur der DM öffnet das Overlay.
+    if (isGM) setStatTokenIds((ids) => (ids.includes(tokenId) ? ids : [...ids, tokenId]));
   };
 
   return (

@@ -42,7 +42,12 @@ class ErrorBoundary extends Component {
 // Liest #/foo/bar aus der URL
 function useHashRoute() {
   const getRoute = () => {
-    const h = window.location.hash.replace(/^#/, '')
+    // Query-Teil im Hash abschneiden: Popout-Fenster laden
+    // `#/character/<id>?popout=1` — ohne Strip landet das `?popout=1` in der
+    // gecaptureten id (`<id>?popout=1`), der Charakter wird nicht gefunden und
+    // das Sheet fällt auf die Kampagnenseite zurück. Die popout=1-Erkennung
+    // (usePwaMobile.readPopout) liest die Hash-Query separat, bleibt intakt.
+    const h = window.location.hash.replace(/^#/, '').split('?')[0]
     return h || '/'
   }
   const [route, setRoute] = useState(getRoute)

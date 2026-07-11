@@ -29,6 +29,7 @@ export function addMap({ name, imageUrl, imageUrlFull, imageFullName, imagePath,
     height,
     grid: { ...DEFAULT_GRID, ...grid },
     levels: [baseLevel],
+    fogMode: 'dynamic', // Standard: dynamischer Fog (Sichtlinie), bis der DM umstellt
     ...(extra || {}),
   };
   apply({ type: 'map/add', map });

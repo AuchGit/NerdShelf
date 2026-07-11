@@ -1,7 +1,7 @@
 // Tool palette. Drives store.ui.tool which the renderer reads to decide what a
 // canvas click does. Zone tool expands to a shape + color picker.
 import { useTool, useVtt } from '../state/useVtt';
-import { setTool, setZoneTool, setWallTool, setFogBrush, setFogErase } from '../state/actions';
+import { setTool, setZoneTool, setWallTool } from '../state/actions';
 import { ZONE_TYPES, ZONE_COLORS } from '../lib/constants';
 import { useWallPresets } from '../lib/presets';
 import Icon from './Icon';
@@ -12,7 +12,6 @@ const TOOLS = [
   { id: 'select', label: 'Auswahl', icon: '🖱', iconSrc: '/Assets/vtt/select.svg', hint: 'Auswählen & Tokens ziehen (Shift = frei) · WASD bewegt feldweise' },
   { id: 'ruler', label: 'Messen', icon: '📏', iconSrc: '/Assets/vtt/ruler.svg', hint: 'Distanz in ft messen' },
   { id: 'ping', label: 'Ping', icon: '📍', iconSrc: '/Assets/vtt/ping.svg', hint: 'Stelle markieren (auch Alt+Klick)' },
-  { id: 'fog', label: 'Fog', icon: '🌫', iconSrc: '/Assets/vtt/fog.svg', hint: 'Aufdecken (DM) — Kreis-Pinsel: klicken/ziehen zum Malen', dmOnly: true },
   { id: 'walls', label: 'Wände', icon: '🧱', iconSrc: '/Assets/vtt/wall.svg', hint: 'Wände: klicken für Eckpunkte (zusammenhängend) · Rechtsklick/Esc/Enter beendet · Shift = frei', dmOnly: true },
   { id: 'light', label: 'Licht', icon: '💡', iconSrc: '/Assets/vtt/light.svg', hint: 'Lichtquelle setzen (klicken). Auswählen/verschieben/bearbeiten nur in diesem Tool; Spieler sehen nur den Schein.', dmOnly: true },
   { id: 'terrain', label: 'Gelände', icon: '⛰', iconSrc: '/Assets/vtt/terrain.svg', hint: 'Felder wählen (Box ziehen, Shift erweitert / Shift-Klick einzeln) und Höhe (Klettern) oder schwieriges Gelände zuweisen.', dmOnly: true },
@@ -27,8 +26,6 @@ export default function Toolbar() {
   const zoneColor = useVtt((s) => s.ui.zoneColor);
   const wallKind = useVtt((s) => s.ui.wallKind);
   const wallPresetId = useVtt((s) => s.ui.wallPresetId);
-  const fogErase = useVtt((s) => s.ui.fogErase);
-  const fogBrush = useVtt((s) => s.ui.fogBrushCells);
   const wallPresets = useWallPresets();
 
   return (
@@ -66,23 +63,6 @@ export default function Toolbar() {
           />
         ))}
       </div>
-
-      {isDM && tool === 'fog' && (
-        <>
-          <div style={S.sep} />
-          <span style={S.muted}>Fog:</span>
-          <button onClick={() => setFogErase(false)} style={{ ...S.btn, ...(!fogErase ? S.active : null) }} title="Aufdecken (Fog entfernen)"><Icon src="/Assets/vtt/fog-reveal.svg" emoji="☀" size={14} /> Aufdecken</button>
-          <button onClick={() => setFogErase(true)} style={{ ...S.btn, ...(fogErase ? S.active : null) }} title="Verbergen (Fog malen)"><Icon src="/Assets/vtt/fog-hide.svg" emoji="🌑" size={14} /> Verbergen</button>
-          <span style={S.muted}>Größe</span>
-          <input
-            type="range" min="0.5" max="6" step="0.5"
-            value={fogBrush ?? 1.5}
-            onChange={(e) => setFogBrush(+e.target.value)}
-            style={{ width: 90 }}
-            title={`Pinselgröße: ${fogBrush ?? 1.5} Felder`}
-          />
-        </>
-      )}
 
       {isDM && tool === 'walls' && (
         <>

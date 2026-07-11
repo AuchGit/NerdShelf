@@ -23,7 +23,7 @@ import { getState, subscribe, undo, redo, versions } from '../state/store';
 import * as A from '../state/actions';
 import { snapToGrid, pointToCell, feetToPx, cellCenter } from '../lib/geometry';
 import { segmentsIntersect, visibilityPolygon, pointInAnyPolygon } from '../lib/visibility';
-import { WALL_TYPES, wallPeekFt } from '../lib/constants';
+import { WALL_TYPES, wallPeekFt, fogModeOf } from '../lib/constants';
 import { getMemoryStyle, getMemoryBrightness, getShowLightSwitches, getTerrainOpacity, getTerrainPattern, getTerrainColor, getClimbHeightStyle, getDifficultStyle, getTokenBadgeScale, getAcBadgeScale, getDmCursorLight, getDmPingColor, getDarkvisionTint, getConnectionMode, getRelayUrl, VTT_PREFS_EVENT } from '../lib/vttPrefs';
 import { relayFullUrl } from '../lib/mapStorage';
 import { fiveEDistanceFt, rulerMoveFt, climbMapFor, climbStepFt, darkenColor, loopWallIds, planarFaces, seeThroughCentroids, sameSideOfSeg, terrainHeightAt, projectOnSeg, distPointToSeg, perpDistance, offsetSightWall } from '../lib/wallGeometry';
@@ -310,7 +310,7 @@ export class VttRenderer {
 
     if (map) {
       const isDM = s.session.role === 'dm';
-      const mode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
+      const mode = fogModeOf(map);
       const base = map.levels?.[0]?.id || null;
       // Keep the DM's active level valid when maps change. activeLevel is a
       // single global UI value, but levels are per-map — switching to a map that
@@ -935,7 +935,7 @@ export class VttRenderer {
   // tokens' vision; with one of their tokens selected → only that token's view
   // (explored memory still accumulates across all of them over time = shared).
   fogObservers(s, map, level, base) {
-    if ((map.fogMode || (map.fogEnabled ? 'manual' : 'none')) !== 'dynamic') return [];
+    if (fogModeOf(map) !== 'dynamic') return [];
     if (s.session.role === 'dm') return [];
     const onMap = Object.values(s.tokens).filter((t) => t.mapId === map.id && (t.level || base) === level);
     let controlled = onMap.filter((t) => this.canControl(t));
@@ -1628,7 +1628,7 @@ export class VttRenderer {
     const s = getState();
     if (!this._switchNodes) this._switchNodes = new Map();
     const size = (map.grid.size || 70) * 0.38;
-    const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
+    const fogMode = fogModeOf(map);
     const gateUnseen = s.session.role !== 'dm' && fogMode === 'dynamic';
     const show = !(s.session.role !== 'dm' && !getShowLightSwitches());
     const wanted = new Map();

@@ -3,7 +3,7 @@
 // The Toolbar stays a pure tool PICKER; everything tool-specific lives here.
 import { useVtt } from '../state/useVtt';
 import {
-  setZoneTool, setZoneParam, setWallTool, setDoorDouble, setFogBrush, setFogErase, setFogMode,
+  setZoneTool, setZoneParam, setWallTool, setDoorDouble, setFogMode,
   setLightMode, setDarkBrush, setLightDefaults, setTransitionTool, updateMap, clearDarkness,
   setTerrainKind, setTerrainHeight, setTerrainVisible, commitTerrain, eraseTerrainCells, clearTerrainSelection,
 } from '../state/actions';
@@ -79,26 +79,18 @@ export default function ToolSettings({ map }) {
         </>
       )}
 
-      {tool === 'fog' && (
+      {tool === 'light' && (
         <>
           {map && (
             <>
               <span style={S.muted}>Fog:</span>
-              <select value={map.fogMode || (map.fogEnabled ? 'manual' : 'none')} onChange={(e) => setFogMode(map.id, e.target.value)} style={S.select}>
+              <select value={map.fogMode === 'none' ? 'none' : 'dynamic'} onChange={(e) => setFogMode(map.id, e.target.value)} style={S.select}
+                title="Dynamisch = Spieler sehen nur ihre Sichtlinie. Kein Fog = ganze Karte sichtbar.">
                 {Object.entries(FOG_MODES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
               </select>
               <div style={S.sep} />
             </>
           )}
-          <button onClick={() => setFogErase(false)} style={{ ...S.btn, ...(!ui.fogErase ? S.active : null) }} title="Aufdecken"><Icon src="/Assets/vtt/fog-reveal.svg" emoji="☀" size={14} /> Aufdecken</button>
-          <button onClick={() => setFogErase(true)} style={{ ...S.btn, ...(ui.fogErase ? S.active : null) }} title="Verbergen"><Icon src="/Assets/vtt/fog-hide.svg" emoji="🌑" size={14} /> Verbergen</button>
-          <span style={S.muted}>Größe</span>
-          <input type="range" min="0.5" max="6" step="0.5" value={ui.fogBrushCells ?? 1.5} onChange={(e) => setFogBrush(+e.target.value)} style={{ width: 110 }} title={`Pinsel: ${ui.fogBrushCells ?? 1.5} Felder`} />
-        </>
-      )}
-
-      {tool === 'light' && (
-        <>
           <button onClick={() => setLightMode('light')} style={{ ...S.btn, ...((ui.lightMode || 'light') === 'light' ? S.active : null) }}>💡 Lichtpunkt</button>
           <button onClick={() => setLightMode('darkness')} style={{ ...S.btn, ...(ui.lightMode === 'darkness' ? S.active : null) }}>■ Dunkel malen</button>
           <button onClick={() => setLightMode('darkness-erase')} style={{ ...S.btn, ...(ui.lightMode === 'darkness-erase' ? S.active : null) }}>⌫ Radierer</button>

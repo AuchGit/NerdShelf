@@ -10,6 +10,8 @@ import { applyHpDelta, setRollRequest } from '../state/actions';
 import { patchCombat } from '../sync/characterBinding';
 import { ABILITY_KEYS, modStr } from '../../character-builder/lib/sheetUtils';
 import { getModifier } from '../../character-builder/lib/characterModel';
+import { useSessionPrefs } from '../../character-builder/lib/useSessionPrefs';
+import { cardTiles } from '../../character-builder/lib/sessionCardTiles';
 import ToolSettings from './ToolSettings';
 
 export default function DMBottomBar() {
@@ -179,6 +181,10 @@ function TokenDetail({ token, characters, campaignId }) {
 function PartyCard({ entry, campaignId, onRequest }) {
   const ch = entry.data;
   const computed = useMemo(() => { try { return computeCharacter(ch); } catch { return null; } }, [ch]);
+  // Dieselben GM-Session-Prefs wie die Session-Karten steuern, welche
+  // Stat-/Passive-Kacheln hier erscheinen (AC/Passives/Init/…).
+  const { prefs } = useSessionPrefs();
+  const tiles = useMemo(() => (computed ? cardTiles(computed, ch, prefs) : []), [computed, ch, prefs]);
   if (!computed) return null;
   const status = ch.status || {};
   const max = computed.hp?.max ?? 0;
@@ -220,12 +226,11 @@ function PartyCard({ entry, campaignId, onRequest }) {
           </div>
         </div>
       </div>
-      <div style={S.stats}>
-        <Stat label="AC" value={computed.ac?.total ?? '—'} icon="🛡" />
-        <Stat label="WN" value={computed.passivePerception} title="Passive Wahrnehmung" />
-        <Stat label="NF" value={computed.passiveInvestigation} title="Passive Nachforschung" />
-        <Stat label="EB" value={computed.passiveInsight} title="Passive Einsicht" />
-      </div>
+      {tiles.length > 0 && (
+        <div style={S.stats}>
+          {tiles.map((t) => <Stat key={t.label} label={t.label} value={t.value} title={t.title} icon={t.label === 'AC' ? '🛡' : undefined} />)}
+        </div>
+      )}
       {conds.length > 0 && (
         <div style={S.conds}>{conds.map((c) => <span key={c} style={S.cond}>{c}</span>)}</div>
       )}
@@ -253,8 +258,8 @@ const S = {
   name: { fontWeight: 700, fontSize: 'var(--fs-md)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   subtitle: { fontSize: 10, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 },
   hpRow: { display: 'flex', alignItems: 'center', gap: 4 },
-  stats: { display: 'flex', gap: 6, justifyContent: 'space-between' },
-  stat: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, padding: '4px 2px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
+  stats: { display: 'flex', gap: 6, flexWrap: 'wrap' },
+  stat: { flex: '1 1 40px', minWidth: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, padding: '4px 2px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg-sunken)', border: '1px solid var(--color-border)' },
   statLbl: { fontSize: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, whiteSpace: 'nowrap' },
   track: { flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginLeft: 4 },
   fill: { height: '100%', transition: 'width 150ms' },

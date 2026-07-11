@@ -124,11 +124,17 @@ export const TRANSITION_ICONS = {
 };
 export const TRANSITION_KINDS = { stairs: 'Treppe', ladder: 'Leiter', portal: 'Portal' };
 
+// Fog: „Dynamisch" (Sichtlinie) ist der Standard; manuelles Fog-Malen wurde
+// entfernt (nicht benötigt). „Kein Fog" deckt die ganze Karte auf.
 export const FOG_MODES = {
-  none:    'Kein Fog',
-  manual:  'Manuell (Rechtecke)',
   dynamic: 'Dynamisch (Sichtlinie)',
+  none:    'Kein Fog',
 };
+
+// Effektiver Fog-Modus einer Karte. Standard = 'dynamic' (bis der DM auf
+// „Kein Fog" stellt). Alt-Werte 'manual'/fogEnabled (manuelles Malen, ent-
+// fernt) werden auf 'dynamic' gehoben — nur 'none' schaltet Fog ganz aus.
+export const fogModeOf = (map) => (map?.fogMode === 'none' ? 'none' : 'dynamic');
 
 // ── Dynamic light ─────────────────────────────────────────────────────
 // A light source emits bright light out to `brightFt`, then dim light out to

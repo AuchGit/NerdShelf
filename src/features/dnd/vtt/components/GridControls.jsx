@@ -1,7 +1,7 @@
 // DM grid + fog controls for the active map. All edits go through setGrid /
 // updateMap and sync to every client.
 import { useState } from 'react';
-import { setGrid, updateLevel, resetFog, setFogMode, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
+import { setGrid, updateLevel, updateMap, setLightMode, setTool, clearDarkness } from '../state/actions';
 import { useVtt } from '../state/useVtt';
 import { GRID_STYLES } from '../lib/constants';
 import { fitGridToMap } from '../lib/geometry';
@@ -23,7 +23,6 @@ export default function GridControls({ map }) {
   map = floorLvl ? { ...map, width: floorLvl.width || map.width, height: floorLvl.height || map.height, grid: g } : map;
   // Eingabe-Methode (lokal): Default abgeleitet — snap-Maps sind Slider-Maps.
   const [gridMode, setGridMode] = useState(g.snapMapToGrid ? 'slider' : 'slider');
-  const fogMode = map.fogMode || (map.fogEnabled ? 'manual' : 'none');
 
   // When "Karte auf volle Felder" is on, derive size/offset so an integer
   // number of cells covers the map exactly; the slider then tunes cell count.
@@ -150,10 +149,6 @@ export default function GridControls({ map }) {
       <Row label="Farbe">
         <input type="color" value={g.color} onChange={(e) => patch({ color: e.target.value })} style={{ width: 40, height: 28, background: 'none', border: 'none' }} />
       </Row>
-
-      {fogMode === 'manual' && (
-        <button style={S.reset} onClick={() => resetFog(map.id)}>Fog zurücksetzen (alles verbergen)</button>
-      )}
 
       <div style={{ borderTop: '1px solid var(--color-border)', margin: '10px 0 8px' }} />
       <div style={{ fontWeight: 600, marginBottom: 6 }}>Beleuchtung</div>
