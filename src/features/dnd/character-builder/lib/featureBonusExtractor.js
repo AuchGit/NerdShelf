@@ -172,6 +172,41 @@ export function extractFeatureBonuses(feature) {
   return out
 }
 
+// ── Pro Angriff WÄHLBARE Boni (Wurf-Composer-Schalter) ───────────────
+// Konditionale Boni, deren Bedingung der SPIELER pro Angriff entscheidet
+// statt dass sie automatisch aus dem Waffenzustand ableitbar wäre:
+//   • "+N bonus to the damage roll" bei Thrown-Waffen NUR beim Wurf
+//     (Thrown Weapon Fighting) → Schalter „Geworfen"
+//   • "take a -5 penalty to the attack roll … +10 to the damage"
+//     (Great Weapon Master / Sharpshooter 2014) → Power-Attack-Schalter
+// Bedingungs-Keywords rund um den Treffer-Satz (thrown/heavy/two-handed/
+// ranged/melee) landen als `when`-Flags; rulesEngine matcht sie gegen die
+// Properties der konkreten Waffe. Kein Feature-Name-Hardcode — rein Text.
+export function extractAttackChoices(feature) {
+  if (!feature?.entries) return []
+  const raw = stripTags(flattenEntries(feature.entries))
+  const out = []
+  const scanWhen = (ctx) => {
+    const when = {}
+    if (/\bthrown\b/i.test(ctx)) when.thrown = true
+    if (/\bheavy\b/i.test(ctx)) when.heavy = true
+    if (/\btwo-handed\b/i.test(ctx)) when.twoHanded = true
+    if (/\branged\s+(?:weapon|attack)/i.test(ctx)) when.ranged = true
+    else if (/\bmelee\s+(?:weapon|attack)/i.test(ctx)) when.melee = true
+    return when
+  }
+  // Power-Attack: −N auf den Angriff gegen +M Schaden — die beiden Teile
+  // stehen oft in ZWEI Sätzen ("…take a -5 penalty to the attack roll.
+  // If the attack hits, you add +10 to the attack's damage.").
+  const pa = /[-−](\d+)\s+penalty\s+to\s+(?:the\s+|your\s+)?attack\s+roll[\s\S]{0,140}?\+(\d+)\s+(?:bonus\s+)?to\s+(?:the\s+)?(?:attack'?s\s+)?damage/i.exec(raw)
+  if (pa) out.push({ atkDelta: -toInt(pa[1]), dmgBonus: toInt(pa[2]), when: scanWhen(raw.slice(Math.max(0, pa.index - 200), pa.index + pa[0].length)) })
+  // Wähl-Bonus nur auf Schaden mit Wurf-Bedingung (Thrown Weapon Fighting).
+  const tw = /\bthrown\s+weapons?[^.]*?\+(\d+)\s+(?:bonus\s+(?:to\s+)?)?(?:the\s+)?damage/i.exec(raw)
+    || /\+(\d+)\s+(?:bonus\s+(?:to\s+)?)?damage[^.]*?\bthrown\s+(?:property\s+)?weapons?/i.exec(raw)
+  if (tw) out.push({ dmgBonus: toInt(tw[1]), when: { thrown: true }, note: 'Geworfen' })
+  return out
+}
+
 /**
  * Aggregiert die Boni über ALLE aktiv-gewählten Features die der
  * Caller liefert (typisch: chosen optfeatures + chosen sub-features

@@ -6,6 +6,7 @@
 // change during a session.
 
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../../lib/supabase'
 import { getModifier } from '../../lib/characterModel'
 import { modStr, masteryShortDesc, collectCharacterSpells, computeSpellSlots, COIN_TYPES, totalGoldValue } from '../../lib/sheetUtils'
@@ -30,6 +31,7 @@ import usePersistedState, { usePersistedSet } from '../../../../../shared/hooks/
 import { parseSpellEffect, DAMAGE_TYPE_COLOR, deriveSpellArea } from '../../lib/spellEffectParser'
 import { rollAttack, rollDamage } from '../../../vtt/lib/rollDice'
 import { gatherActionRiders } from '../../lib/onHitRiders'
+import { detectReactionSpellCast } from '../../lib/reactionSpellCast'
 import { scaledDamage, spellDamageAddsMod } from '../../lib/spellDamage'
 import RollComposer from '../../../vtt/components/RollComposer'
 
@@ -1475,6 +1477,49 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
     }
     return null
   }
+  // „Zauber als Reaktion" (War Caster & Co.): statt direktem Verbrauch einen
+  // regelkonform gefilterten Zauber wählen lassen (Wirkzeit 1 Aktion /
+  // Einzelziel — aus dem Feature-Text extrahiert); der Cast läuft dann durch
+  // den NORMALEN Prompt (Slot-Wahl + Würfeln + verzögerter Verbrauch, inkl.
+  // Reaktions-Pille über economySlot).
+  const [reactionPick, setReactionPick] = useState(null) // { row, spells }
+  const openReactionSpellPick = (row, constraints) => {
+    const seen = new Set()
+    const list = []
+    for (const c of (collectCharacterSpells(character) || [])) {
+      const key = String(c.name || '').toLowerCase()
+      if (!key || seen.has(key)) continue
+      const meta = spellMap?.get(key)
+      if (!meta) continue
+      const t0 = Array.isArray(meta.time) ? meta.time[0] : null
+      if (constraints.actionTimeOnly && !(t0 && t0.unit === 'action' && (t0.number == null || t0.number === 1))) continue
+      if (constraints.singleTarget) {
+        // Einzelziel: kein Flächeneffekt, Ziel ist ein Punkt (nicht Selbst).
+        if (deriveSpellArea(meta)) continue
+        if (meta.range?.type !== 'point' || meta.range?.distance?.type === 'self') continue
+      }
+      const lvl = meta.level || 0
+      // Wirkbar: Cantrip immer; sonst niedrigster freier Slot ≥ Grad, oder Pakt.
+      let castLevel = 0
+      let usePact = false
+      let castable = lvl === 0
+      if (!castable) {
+        for (let L = lvl; L <= 9; L++) {
+          const max = slots?.slots?.[L - 1] || 0
+          if (max && (usedSlots[L] || 0) < max) { castable = true; castLevel = L; break }
+        }
+        const pact = slots?.warlockSlots
+        if (!castable && pact && pact.level >= lvl && (pact.slots - usedPact) > 0) {
+          castable = true; usePact = true; castLevel = pact.level
+        }
+      }
+      if (!castable) continue
+      seen.add(key)
+      list.push({ meta, level: lvl, castLevel, usePact })
+    }
+    list.sort((a, b) => (a.level - b.level) || String(a.meta.name).localeCompare(String(b.meta.name)))
+    setReactionPick({ row, spells: list })
+  }
   // Beim BENUTZEN einer Aktion (Use-Button, egal ob Bottom-Bar, Popout-Sheet
   // oder Aktions-Overlay) direkt den Wurf-Composer anbieten: Basis-Schaden +
   // aktivierbare Specials, ein Klick würfelt alles. Ohne Schaden kein Prompt
@@ -1488,8 +1533,9 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       title: `${r.name}: Schaden`,
       base: { ...base, label: r.name },
       attack: r.attack ? { bonus: r.attack, label: r.name } : null,
-      // Thrown Weapon Fighting: Wurf-Schalter, solange die Waffe werfbar ist.
-      thrown: r.thrownDamageBonus ? { bonus: r.thrownDamageBonus } : null,
+      // Wählbare Angriffs-Boni (Thrown Weapon Fighting „Geworfen",
+      // Power-Attack −5/+10, …) — Schalter im Composer.
+      options: r.attackOptions || null,
       onConfirm,
     })
     return true
@@ -1582,9 +1628,9 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         weaponId: atk.id,
         attacksPerAction: atk.attacksPerAction || 1,
         properties: atk.properties || [],
-        // Thrown Weapon Fighting: Wurf-Bonus für den „Geworfen"-Schalter
-        // im Wurf-Composer (gilt RAW nur beim Werfen).
-        thrownDamageBonus: atk.thrownDamageBonus || null,
+        // Wählbare Angriffs-Boni (Thrown Weapon Fighting, Power-Attack, …)
+        // für die Schalter im Wurf-Composer.
+        attackOptions: atk.attackOptions || null,
         markedAs: atk.markedAs || null,
         // Per-Roll-Advisory aus aktiver Konzentration (Hex / Hunter's
         // Mark / Bless / Divine Favor) — wird als Pille auf der Row
@@ -2340,10 +2386,21 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       {composer && (
         <RollComposer title={composer.title} base={composer.base} baseAt={composer.baseAt || null}
           slotOptions={composer.slotOptions || null} initialLevel={composer.initialLevel ?? null}
-          riders={composer.riders ?? actionRiders} thrown={composer.thrown || null}
+          riders={composer.riders ?? actionRiders} options={composer.options || null}
           attack={composer.attack || null} usageKey={character?.id ?? character?.name ?? null}
           onConfirm={composer.onConfirm || null}
           onClose={() => setComposer(null)} />
+      )}
+      {reactionPick && (
+        <ReactionSpellPickModal
+          title={`${reactionPick.row.name}: Zauber wählen`}
+          spells={reactionPick.spells}
+          onPick={(s) => {
+            setReactionPick(null)
+            castSpellFromExplorer(s.meta, s.castLevel, { economySlot: reactionPick.row.economySlot, usePact: s.usePact })
+          }}
+          onClose={() => setReactionPick(null)}
+        />
       )}
       {!embedded && (
         <button type="button" onClick={() => setOpen(o => !o)} style={caeToggle}>
@@ -2362,6 +2419,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                 expanded, setExpanded, slots, usedSlots, usedPact, castingFor, setCastingFor,
                 castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges,
                 applyRowSideEffects, character, applyCharacter, openDamageRoll, promptRowRoll,
+                openReactionSpellPick,
               };
               const META = {
                 pinned: { label: 'Pinned', color: 'var(--accent-cyan)' },
@@ -2489,6 +2547,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
                       applyCharacter={applyCharacter}
                       openDamageRoll={openDamageRoll}
                       promptRowRoll={promptRowRoll}
+                      openReactionSpellPick={openReactionSpellPick}
                       hidePinnedCategory
                     />
                   </div>
@@ -2514,6 +2573,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
               applyCharacter={applyCharacter}
               openDamageRoll={openDamageRoll}
               promptRowRoll={promptRowRoll}
+              openReactionSpellPick={openReactionSpellPick}
             />
           )}
           </>)}
@@ -2853,7 +2913,7 @@ function CombatActionsCategorisedList({
   rows, expanded, setExpanded,
   slots, usedSlots, usedPact, castingFor, setCastingFor,
   castSpellFromExplorer, markActionUsed, consumeResource, consumeItemCharges, applyRowSideEffects,
-  character, applyCharacter, openDamageRoll, promptRowRoll,
+  character, applyCharacter, openDamageRoll, promptRowRoll, openReactionSpellPick,
   hidePinnedCategory = false,
   orderKey = 'actions', // Spalten-Modus: eigener Key pro Spalte → Sortierung pro Kategorie-Spalte
 }) {
@@ -3458,6 +3518,13 @@ function CombatActionsCategorisedList({
                           castingFor={castingFor} setCastingFor={setCastingFor}
                           onCastSpell={castSpellFromExplorer}
                           onUseAction={() => {
+                            // „Zauber als Reaktion" (War Caster): Zauberwahl-
+                            // Prompt statt Verbrauch — der Cast selbst läuft
+                            // durch den normalen Prompt und bucht dort ab.
+                            if (r.kind === 'feature' && r.entries && openReactionSpellPick) {
+                              const rc = detectReactionSpellCast(r.entries)
+                              if (rc) { openReactionSpellPick(r, rc); return }
+                            }
                             // Mit Wurf-Prompt wird ERST beim Bestätigen
                             // (Schadenswurf/„Benutzt") verbraucht — Schließen
                             // über ✕ verbraucht nichts. Ohne würfelbaren
@@ -3736,6 +3803,48 @@ const chipPill = {
 }
 const chipPillLabel = { color: 'var(--text-muted)', fontWeight: 600 }
 const chipPillValue = { color: 'var(--text-primary)' }
+
+// „Zauber als Reaktion"-Auswahl (War Caster & Co.): Liste der regelkonform
+// gefilterten, aktuell wirkbaren Zauber — ein Klick startet den normalen
+// Cast-Flow (Slot-Wahl + Wurf-Prompt + verzögerter Verbrauch). Schließen
+// ohne Wahl verbraucht nichts. Portal wie der Wurf-Composer.
+function ReactionSpellPickModal({ title, spells, onPick, onClose }) {
+  return createPortal(
+    <div style={rspStyles.backdrop} onClick={onClose}>
+      <div style={rspStyles.panel} onClick={(e) => e.stopPropagation()}>
+        <div style={rspStyles.head}>
+          <span style={rspStyles.title}>{title}</span>
+          <button style={rspStyles.x} onClick={onClose} title="Abbrechen — nichts wird verbraucht">✕</button>
+        </div>
+        {spells.length === 0 && (
+          <div style={rspStyles.empty}>Kein Zauber erfüllt die Bedingungen (Wirkzeit 1 Aktion, Einzelziel, freier Slot).</div>
+        )}
+        <div style={rspStyles.list}>
+          {spells.map((s) => (
+            <button key={s.meta.name} style={rspStyles.spell} onClick={() => onPick(s)}
+              title={s.level > 0 ? `Wirken mit Grad-${s.castLevel}-Slot${s.usePact ? ' (Pakt)' : ''}` : 'Cantrip wirken'}>
+              <span style={rspStyles.spellName}>{s.meta.name}</span>
+              <span style={rspStyles.spellLvl}>{s.level === 0 ? 'Cantrip' : `Grad ${s.level}${s.usePact ? ' · Pakt' : ''}`}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+const rspStyles = {
+  backdrop: { position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  panel: { width: 'min(360px, 92vw)', maxHeight: '70vh', overflowY: 'auto', background: 'var(--color-bg-elevated, #1c1f26)', color: 'var(--color-text, #e6e6e6)', border: '1px solid var(--color-border, #3a3f4a)', borderRadius: 'var(--radius-lg,10px)', boxShadow: '0 12px 40px #000b', padding: 12 },
+  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  title: { fontWeight: 700, fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  x: { background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 },
+  empty: { fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', padding: '6px 0' },
+  list: { display: 'flex', flexDirection: 'column', gap: 4 },
+  spell: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-surface, #232733)', color: 'var(--color-text, #e6e6e6)', border: '1px solid var(--color-border, #3a3f4a)', borderRadius: 8, cursor: 'pointer', textAlign: 'left' },
+  spellName: { fontSize: 'var(--fs-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  spellLvl: { fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0 },
+}
 
 // Inline Cast/Use button cluster on each explorer row. Three modes:
 //   • spell cantrip   → single "Cast" button (no slot picker)

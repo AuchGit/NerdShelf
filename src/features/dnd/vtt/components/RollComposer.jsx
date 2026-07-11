@@ -10,8 +10,9 @@
 // • `slotOptions`/`initialLevel`/`baseAt(level)`: Slot-Wahl bei Zaubern —
 //   die Grad-Chips rechnen die Formel live um ({@scaledamage}), verbraucht
 //   wird der beim Bestätigen gewählte Grad.
-// • `thrown {bonus}`: „Geworfen"-Schalter (Thrown Weapon Fighting) — der
-//   flache Bonus wandert in die BASIS-Formel (ist Waffenschaden).
+// • `options`: wählbare Angriffs-Boni (Thrown Weapon Fighting „Geworfen",
+//   Power-Attack −5/+10, …) — Schadens-Boni wandern in die BASIS-Formel
+//   (Waffenschaden), Angriffs-Deltas verschieben den Attack-Button.
 // • Rider ohne expliziten Schadenstyp erben den Typ der Basis (Sneak Attack
 //   & Co. machen RAW Schaden vom Typ der Waffe).
 // • 1×/Zug-Rider, die in DIESEM Initiative-Zug schon mitgewürfelt wurden,
@@ -24,7 +25,7 @@ import { rollDamageParts, rollAttack } from '../lib/rollDice';
 import { usedRiders, markRidersUsed } from '../../character-builder/lib/riderTurnUse';
 
 export default function RollComposer({
-  title, base, baseAt = null, riders = [], attack = null, thrown = null,
+  title, base, baseAt = null, riders = [], attack = null, options = null,
   slotOptions = null, initialLevel = null, src, usageKey = null,
   onConfirm = null, onClose,
 }) {
@@ -33,14 +34,24 @@ export default function RollComposer({
     riders.filter((r) => r.active && !(r.perTurn && used.has(r.id))).map((r) => r.id),
   ));
   const [level, setLevel] = useState(initialLevel);
-  const [thrownOn, setThrownOn] = useState(false);
+  // Wählbare Angriffs-Boni (Thrown Weapon Fighting, Power-Attack −5/+10, …)
+  const [optOn, setOptOn] = useState(() => new Set());
+  const toggleOpt = (id) => setOptOn((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggle = (id) => setOn((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Verbrauch genau EINMAL — egal ob über Schadenswurf oder „Benutzt".
   const confirmed = useRef(false);
   const confirm = () => { if (confirmed.current) return; confirmed.current = true; onConfirm?.({ level }); };
 
   const effBase = (baseAt && level != null) ? baseAt(level) : base;
-  const baseFormula = (thrownOn && thrown?.bonus) ? `${effBase.formula}+${thrown.bonus}` : effBase.formula;
+  // Aktive Options-Boni: Schaden wandert in die BASIS-Formel (ist Waffen-
+  // schaden), Angriffs-Deltas verschieben den Attack-Button-Bonus.
+  const activeOpts = (options || []).filter((o) => optOn.has(o.id));
+  const optDmg = activeOpts.reduce((sm, o) => sm + (o.dmgBonus || 0), 0);
+  const optAtk = activeOpts.reduce((sm, o) => sm + (o.atkDelta || 0), 0);
+  const baseFormula = optDmg ? `${effBase.formula}${optDmg > 0 ? '+' : ''}${optDmg}` : effBase.formula;
+  const atkBase = attack?.bonus != null ? (parseInt(String(attack.bonus).replace(/[^-+0-9]/g, ''), 10) || 0) : null;
+  const atkEff = atkBase != null ? atkBase + optAtk : null;
+  const atkLabel = atkEff != null ? `${atkEff >= 0 ? '+' : ''}${atkEff}` : null;
   const parts = [
     { formula: baseFormula, type: effBase.type || '', label: effBase.label || 'Basis' },
     ...riders.filter((r) => on.has(r.id)).map((r) => ({ formula: r.formula, type: r.type || effBase.type || '', label: r.name })),
@@ -59,7 +70,7 @@ export default function RollComposer({
   // Vorteil/Nachteil), der Composer bleibt offen — trifft es, würfelt man
   // danach den Schaden mit den angehakten Ridern. Der Attack-Roll allein
   // verbraucht noch nichts (Fehlschlag → „Benutzt" klicken oder abbrechen).
-  const atk = (ev) => { rollAttack(ev, attack.bonus, `${attack.label || title}: Angriff`, src); };
+  const atk = (ev) => { rollAttack(ev, atkLabel ?? attack.bonus, `${attack.label || title}: Angriff`, src); };
   const useOnly = () => { confirm(); onClose(); };
 
   return createPortal(
@@ -89,16 +100,19 @@ export default function RollComposer({
           <span style={S.baseLbl}>{effBase.label || 'Schaden'}</span>
           <span style={S.formula}>{baseFormula}{effBase.type ? ` ${effBase.type}` : ''}</span>
         </div>
-        {thrown?.bonus != null && (
-          <label style={S.row}>
+        {(options || []).map((o) => (
+          <label key={o.id} style={S.row}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <input type="checkbox" checked={thrownOn} onChange={() => setThrownOn((v) => !v)} />
-              <span style={S.riderName}>Geworfen</span>
-              <span style={S.perTurn} title="Thrown Weapon Fighting — Bonus nur beim Wurf">Wurfbonus</span>
+              <input type="checkbox" checked={optOn.has(o.id)} onChange={() => toggleOpt(o.id)} />
+              <span style={S.riderName}>{o.label}</span>
+              {o.note && <span style={S.perTurn}>{o.note}</span>}
             </span>
-            <span style={S.formula}>+{thrown.bonus}</span>
+            <span style={S.formula}>
+              {o.atkDelta ? `${o.atkDelta > 0 ? '+' : ''}${o.atkDelta} Angriff · ` : ''}
+              {o.dmgBonus ? `${o.dmgBonus > 0 ? '+' : ''}${o.dmgBonus} Schaden` : ''}
+            </span>
           </label>
-        )}
+        ))}
         {riders.map((r) => (
           <label key={r.id} style={S.row}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -118,7 +132,7 @@ export default function RollComposer({
               <button style={S.useBtn} title="Aktion/Slot verbrauchen und schließen — ohne (weiteren) Wurf" onClick={useOnly}>Benutzt</button>
             )}
             {attack?.bonus != null && (
-              <button style={S.atkBtn} title="Angriffswurf zuerst — Shift: Vorteil · Strg: Nachteil" onClick={atk}>Angriff {attack.bonus}</button>
+              <button style={S.atkBtn} title="Angriffswurf zuerst — Shift: Vorteil · Strg: Nachteil" onClick={atk}>Angriff {atkLabel ?? attack.bonus}</button>
             )}
             <button style={S.rollBtn} title="Shift: Kritisch (Würfel verdoppelt)" onClick={roll}>{attack ? 'Schaden' : 'Würfeln'}</button>
           </span>

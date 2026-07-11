@@ -5,7 +5,7 @@ import { FEATURE_PROFICIENCY_GRANTS } from './featureGrants'
 import { activeConcentrationEffects, activeVariableDamageEffect } from './concentrationEffects'
 import { getMechanicalEffects } from './featureEffects'
 import { sumEquippedBonuses, getWeaponBonus, collectPassiveGrants } from './itemBonuses'
-import { aggregateFeatureBonuses } from './featureBonusExtractor'
+import { aggregateFeatureBonuses, extractAttackChoices } from './featureBonusExtractor'
 import { getEffectsForWeapon } from './activeEffects'
 import { getClassTableValue as _gcTableValue, getClassTableDie as _gcTableDie, getClassTableCell as _gcTableCell } from './classTableLookup'
 import { RESOURCE_TEMPLATES } from './resourceTemplates'
@@ -1122,6 +1122,18 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
   // Feature-Boni: Fighting-Style-Effekte etc. werden hier pro Waffe
   // konditional addiert (ranged vs. melee, einhändig vs. thrown).
   const fb = _featureBonusesFor(character)
+  // Pro Angriff WÄHLBARE Boni (Wurf-Composer-Schalter): einmal aus allen
+  // aktiven Features + Feats extrahiert (Thrown Weapon Fighting, Power-
+  // Attack −5/+10, …), unten pro Waffe gegen deren Properties gematcht.
+  const attackChoicesRaw = []
+  for (const f of [
+    ...(character.__activeFeatures || []),
+    ...(character.__featFeatures || []),
+    ...(character.feats || []),
+    ...(character.custom?.feats || []),
+  ]) {
+    for (const c of extractAttackChoices(f)) attackChoicesRaw.push({ ...c, label: f.name || 'Bonus' })
+  }
   // Aliased für die weapon-loop unten (war oben schon einmal als
   // _attacksPerActionTop berechnet).
   const attacksPerAction = _attacksPerActionTop
@@ -1274,9 +1286,27 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       attacksPerAction,
       range: computedRange,
       properties: props,
-      // Thrown Weapon Fighting: Bonus greift nur beim WERFEN — der
-      // Wurf-Composer bietet ihn als „Geworfen"-Schalter an.
-      thrownDamageBonus: (fb.thrownDamageBonus && hasProp('thrown')) ? fb.thrownDamageBonus : undefined,
+      // Wählbare Angriffs-Boni für den Wurf-Composer, auf DIESE Waffe
+      // gefiltert (Thrown Weapon Fighting nur bei werfbaren Waffen,
+      // Power-Attack −5/+10 nur bei passender Waffengattung, …).
+      attackOptions: (() => {
+        const opts = attackChoicesRaw.filter((c) => {
+          const w = c.when || {}
+          if (w.thrown && !hasProp('thrown')) return false
+          if (w.heavy && !hasProp('heavy')) return false
+          if (w.twoHanded && !hasProp('two-handed')) return false
+          if (w.ranged && !isRanged) return false
+          if (w.melee && isRanged) return false
+          return true
+        }).map((c, i) => ({
+          id: `${String(c.label).toLowerCase()}:${i}`,
+          label: c.label,
+          atkDelta: c.atkDelta || 0,
+          dmgBonus: c.dmgBonus || 0,
+          note: c.note,
+        }))
+        return opts.length ? opts : undefined
+      })(),
       // Per-Roll-Advisory aus aktiver Konzentration. Renderer kann
       // daraus eine "Hex +1d6 necrotic"-Pille auf der Attack-Row
       // bauen. Kein Effekt auf attackBonus / damage — der Player
