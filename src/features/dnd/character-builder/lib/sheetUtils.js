@@ -176,6 +176,16 @@ export function collectCharacterSpells(character) {
         if (name) add(name, 'class', f.classId || null, true)
       }
     }
+    // At-will / slotfrei wirkbare Zauber aus Feature-Text — Eldritch
+    // Invocations ("You can cast {@spell disguise self} … without
+    // expending a spell slot", Mask of Many Faces / Misty Visions) und
+    // Trait-Grants ("you can cast X at will"). Slotfrei → granted, damit
+    // sie in der Zauberliste/Sidebar erscheinen statt nur im Feature-Text.
+    const atWill = raw.matchAll(/you\s+can\s+cast\s+(?:the\s+)?\{@spell\s+([^|}]+)(?:\|[^}]*)?\}[^.]*?(?:without\s+(?:expending|using)\s+a\s+spell\s+slot|at\s+will)/gi)
+    for (const m of atWill) {
+      const name = String(m[1] || '').trim()
+      if (name) add(name, 'class', f.classId || null, true)
+    }
   }
 
   // Structured class-feature spell grants (5etools

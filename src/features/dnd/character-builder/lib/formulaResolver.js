@@ -1,4 +1,5 @@
 // formulaResolver.js
+import { computeAbilityScores } from './rulesEngine'
 //
 // Generic formula evaluation for homebrew item / feature fields that
 // reference the wielder's stats. Lets the user write `8 + PB + WIS`
@@ -31,20 +32,15 @@ const ABILITY_TOKENS = {
 }
 
 function abilityMod(character, key) {
-  // Character-Schema speichert die Score-Base bei character.abilityScores.base
-  // + Modifikatoren (racial / background / feats) — die richtige Source of
-  // Truth ist getAllAbilityScores. Wir importieren lazy um circular-imports
-  // zu vermeiden.
+  // VOLLSTÄNDIGE Score-Berechnung aus der rulesEngine (Basis + Rasse +
+  // Background + Feats + Level-Up-ASI + custom.asi + choices-ASI) — die
+  // frühere Inline-Rechnung ließ Level-Up-ASI/custom.asi aus, wodurch
+  // Formeln (z.B. „CHA_MOD Nutzungen") nach einer Steigerung mit dem
+  // alten Mod rechneten. Kein Import-Zyklus: rulesEngine importiert
+  // formulaResolver nicht.
   let score
   if (character?.abilityScores?.base) {
-    const base = character.abilityScores.base[key] || 8
-    const racial = character.species?.abilityScoreImprovements?.[key] || 0
-    const bg = character.background?.abilityScoreImprovements?.[key] || 0
-    let featBonus = 0
-    for (const feat of (character.feats || [])) {
-      featBonus += feat?.abilityBonus?.[key] || 0
-    }
-    score = base + racial + bg + featBonus
+    score = computeAbilityScores(character)[key] ?? 10
   } else {
     // Fallback für legacy/test-character-shapes
     score = character?.abilities?.[key]?.score ?? character?.abilities?.[key] ?? 10

@@ -18,6 +18,7 @@ import {
   SKILL_MAP,          // { acrobatics: 'dex', animalHandling: 'wis', … }
 } from './rulesEngine'
 import { getProficiencyBonus, getTotalLevel } from './characterModel'
+import { getMechanicalEffects } from './featureEffects'
 import { parseTags } from './tagParser'
 import { isContainerItem } from './sheetUtils'
 import { loadClassData, loadRaceList } from './dataLoader'
@@ -2790,6 +2791,25 @@ export async function exportToFoundry(character) {
     tools[tid]   = { value: lvl === 'expertise' ? 2 : 1, ability: 'int' }
   }
 
+  // ── Schadens-Resistenzen / -Immunitäten / -Verwundbarkeiten ─────
+  // Aus den datengetriebenen Feature-Effekten (Rassen-Traits wie Tiefling
+  // fire resistance, Klassen-Features) — dieselbe Quelle wie die Pills im
+  // Sheet. Foundry-dnd5e erwartet lowercase Damage-Type-IDs; unbekannte
+  // Typen wandern nach custom, damit nichts stumm verschluckt wird.
+  const FOUNDRY_DMG_TYPES = new Set([
+    'acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic',
+    'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
+  ])
+  const mech = getMechanicalEffects(character)
+  const splitDmg = (set) => {
+    const value = []; const custom = []
+    for (const t of (set || [])) (FOUNDRY_DMG_TYPES.has(t) ? value : custom).push(t)
+    return { value, custom: custom.join(';') }
+  }
+  const drTrait = splitDmg(mech.damageResistance)
+  const diTrait = splitDmg(mech.damageImmunity)
+  const dvTrait = splitDmg(mech.damageVulnerability)
+
   // ── Speed ─────────────────────────────────────────────
   const speed = computed.speed || {}
 
@@ -3425,9 +3445,9 @@ export async function exportToFoundry(character) {
       // Traits & Proficiencies
       traits: {
         size: sizeCode,
-        di: { value: [], custom: '', bypasses: [] },   // damage immunity
-        dr: { value: [], custom: '', bypasses: [] },   // damage resistance
-        dv: { value: [], custom: '', bypasses: [] },   // damage vulnerability
+        di: { value: diTrait.value, custom: diTrait.custom, bypasses: [] },   // damage immunity
+        dr: { value: drTrait.value, custom: drTrait.custom, bypasses: [] },   // damage resistance
+        dv: { value: dvTrait.value, custom: dvTrait.custom, bypasses: [] },   // damage vulnerability
         dm: { amount: {}, bypasses: [] },              // damage modification (v5 neu)
         ci: { value: [], custom: '' },                 // condition immunity
         languages: {
