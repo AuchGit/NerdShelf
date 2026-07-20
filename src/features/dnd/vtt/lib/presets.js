@@ -13,6 +13,7 @@ import {
   getCustomWallPresets, getDisabledWallPresets, useCustomWallPresets, useDisabledWallPresets,
   getCustomLightPresets, getDisabledLightPresets, useCustomLightPresets, useDisabledLightPresets,
   getBuiltinWallEdits, useBuiltinWallEdits, getBuiltinLightEdits, useBuiltinLightEdits,
+  getWallComboColors, VTT_PREFS_EVENT,
 } from './vttPrefs';
 
 // Ein eigenes Wand-Preset (oder ein Built-in-Edit mit Verhaltens-Feldern) →
@@ -76,6 +77,39 @@ function mergeLightPresets(custom, disabled, edits) {
 }
 
 export function getWallPresets() { return mergeWallPresets(getCustomWallPresets(), getDisabledWallPresets(), getBuiltinWallEdits()); }
+
+// ── Kombi-Farben ─────────────────────────────────────────────────────
+// Die EFFEKTIVE Blockier-Kombination einer Wand (Override ?? kind-Default)
+// als kompakte Signatur "MLS" (Move/Licht/Sicht je 0/1) — Schlüssel für die
+// vom DM vergebenen Kombi-Farben und fürs Preset-Matching.
+export function wallBlockSignature(w) {
+  const base = wallBaseBlocks(w.kind);
+  const eff = (ov, b) => (ov == null ? !!b : !!ov);
+  return `${eff(w.blockMove, base.move) ? 1 : 0}${eff(w.blockLight, base.light) ? 1 : 0}${eff(w.blockSight, base.sight) ? 1 : 0}`;
+}
+
+// Anzeige-Farbe pro Signatur: Preset-Farben (built-in vor custom) als Basis,
+// die vom DM vergebenen Kombi-Farben überschreiben. Gecacht — Prefs-Events
+// invalidieren (localStorage-Reads + Merge nicht pro Wand pro Frame).
+let _wallColorCache = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener(VTT_PREFS_EVENT, () => { _wallColorCache = null; });
+  window.addEventListener('storage', () => { _wallColorCache = null; });
+}
+export function wallColorForSig(sig, kind) {
+  if (kind === 'door' || kind === 'window') return (WALL_TYPES[kind] || WALL_TYPES.both).color;
+  if (!_wallColorCache) {
+    const m = {};
+    for (const p of getWallPresets()) {
+      if (p.kind === 'door' || p.kind === 'window') continue;
+      const s = wallBlockSignature({ kind: p.kind, ...(p.overrides || {}) });
+      if (m[s] == null) m[s] = p.color;
+    }
+    for (const [s, c] of Object.entries(getWallComboColors())) m[s] = c;
+    _wallColorCache = m;
+  }
+  return _wallColorCache[sig] || (WALL_TYPES[kind] || WALL_TYPES.both).color;
+}
 export function getLightPresets() { return mergeLightPresets(getCustomLightPresets(), getDisabledLightPresets(), getBuiltinLightEdits()); }
 
 export function useWallPresets() {

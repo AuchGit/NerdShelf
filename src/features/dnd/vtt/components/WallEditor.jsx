@@ -8,8 +8,9 @@ import { useState } from 'react';
 import { Panel, Button } from '../../../../shared/ui';
 import { useVtt, useIsDM } from '../state/useVtt';
 import { updateWall, removeWall, selectWall, extendWall } from '../state/actions';
-import { wallBaseBlocks, wallPeekFt } from '../lib/constants';
-import { useWallPresets } from '../lib/presets';
+import { wallBaseBlocks, wallPeekFt, WALL_TYPES } from '../lib/constants';
+import { useWallPresets, wallBlockSignature } from '../lib/presets';
+import { useWallComboColors, setWallComboColor } from '../lib/vttPrefs';
 
 export default function WallEditor() {
   const isDM = useIsDM();
@@ -18,6 +19,7 @@ export default function WallEditor() {
   const wall = useVtt((s) => (id ? s.walls[id] : null));
   const [more, setMore] = useState(false);
   const presets = useWallPresets();
+  const comboColors = useWallComboColors();
   if (!isDM || !wall) return null;
 
   // When several walls are selected (double-click a loop/chain), every edit
@@ -33,6 +35,16 @@ export default function WallEditor() {
   const effSight = wall.blockSight ?? base.sight;
   const peek = wallPeekFt(wall);
   const far = wall.seeFarFt || 0;
+
+  // Kombi-Farbe: entspricht die aktuelle Checkbox-Kombination KEINEM Preset,
+  // darf der DM ihr eine Farbe geben — ALLE Wände mit derselben Kombination
+  // rendern dann in dieser Farbe (Auflösung in wallColorForSig). Türen/
+  // Fenster haben feste Darstellung.
+  const isOpening = wall.kind === 'door' || wall.kind === 'window';
+  const sig = wallBlockSignature(wall);
+  const presetMatch = isOpening || presets.some((p) => p.kind !== 'door' && p.kind !== 'window'
+    && wallBlockSignature({ kind: p.kind, ...(p.overrides || {}) }) === sig);
+  const comboColor = comboColors[sig] || null;
 
   const num = (v) => Math.max(0, Math.round(+v || 0));
 
@@ -89,6 +101,21 @@ export default function WallEditor() {
             </label>
           )}
         </div>
+      )}
+
+      {!presetMatch && (
+        <label style={{ ...S.ftRow, marginTop: 6 }}
+          title='Diese Kombination entspricht keinem Preset — ALLE Wände mit derselben Kombination werden in dieser Farbe angezeigt (nur für dich als DM, lokal gespeichert).'>
+          <span style={S.ftLbl}>Farbe dieser Kombination</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="color" value={comboColor || (WALL_TYPES[wall.kind] || WALL_TYPES.both).color}
+              onChange={(e) => setWallComboColor(sig, e.target.value)}
+              style={{ width: 34, height: 24, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }} />
+            {comboColor && (
+              <button style={S.miniBtn} title="Zurück zur kind-Standardfarbe" onClick={() => setWallComboColor(sig, null)}>↺</button>
+            )}
+          </span>
+        </label>
       )}
 
       {wall.kind === 'door' && (

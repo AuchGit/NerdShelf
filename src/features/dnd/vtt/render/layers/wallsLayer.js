@@ -4,6 +4,7 @@
 // Players never see walls, only their effects.
 import { Container, Graphics, Sprite, Texture, ColorMatrixFilter } from 'pixi.js';
 import { WALL_TYPES, DOOR_ICONS } from '../../lib/constants';
+import { wallBlockSignature, wallColorForSig } from '../../lib/presets';
 import { loadIcon } from '../textures';
 
 const WINDOW_ICON = '/Assets/map/window.svg';
@@ -91,7 +92,11 @@ export class WallsLayer {
     const isDoor = w.kind === 'door';
     const isWindow = w.kind === 'window';
     const open = (isDoor || isWindow) && w.open;
-    const col = def.color;
+    // Farbe über die Blockier-KOMBINATION aufgelöst: Preset-Farbe der
+    // passenden Kombination bzw. die vom DM vergebene Kombi-Farbe — alle
+    // Wände mit derselben Checkbox-Kombination rendern gleich. Türen/
+    // Fenster behalten ihre feste Darstellung.
+    const col = (isDoor || isWindow) ? def.color : wallColorForSig(wallBlockSignature(w), w.kind);
     node._wall = w; // latest wall data for the hover handlers
     if (node._hover && (isDoor || isWindow)) drawHoverGlow(node.hover, w); else node.hover.clear();
 

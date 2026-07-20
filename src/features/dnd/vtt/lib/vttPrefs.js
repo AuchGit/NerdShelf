@@ -178,6 +178,19 @@ export function useDisabledLightPresets() { return usePref(getDisabledLightPrese
 // Leeres Objekt = unverändert; ein „Zurücksetzen" löscht den Eintrag.
 const WALL_EDITS_KEY = 'nerdshelf:vttBuiltinWallEdits';
 export function getBuiltinWallEdits() { const v = readJson(WALL_EDITS_KEY, {}); return v && typeof v === 'object' ? v : {}; }
+
+// ── Kombi-Farben für Wände (DM, pro Client): eine Checkbox-Kombination
+//    (Signatur aus wallBlockSignature) → Anzeige-Farbe. Für Kombinationen,
+//    die keinem Preset entsprechen; alle Wände derselben Kombination rendern
+//    in dieser Farbe. ──
+const WALL_COMBO_KEY = 'nerdshelf:vttWallComboColors';
+export function getWallComboColors() { const v = readJson(WALL_COMBO_KEY, {}); return v && typeof v === 'object' ? v : {}; }
+export function setWallComboColor(sig, color) {
+  const cur = { ...getWallComboColors() };
+  if (color) cur[sig] = color; else delete cur[sig];
+  writeJson(WALL_COMBO_KEY, Object.keys(cur).length ? cur : null);
+}
+export function useWallComboColors() { return usePref(getWallComboColors); }
 export function setBuiltinWallEdits(map) { writeJson(WALL_EDITS_KEY, map && Object.keys(map).length ? map : null); }
 export function useBuiltinWallEdits() { return usePref(getBuiltinWallEdits); }
 
