@@ -1,21 +1,51 @@
 // A floating image handout window over the map: draggable by its title bar,
 // resizable, with the image fit inside. Used both for the DM's "shown to all"
 // handout (synced) and for a player viewing a journal entry locally.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderMarkdown } from '../lib/miniMarkdown';
 import { sanitizeHtml, ensureHandoutStyles } from '../lib/sanitizeHtml';
+import { transformHandoutHtml } from '../lib/fantasyLanguage';
+import { useVtt, useIsDM } from '../state/useVtt';
+import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { relayFullUrl } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
 
 // Rich-text handouts store sanitized HTML; legacy/imported ones may be markdown
 // or plain text — render those through the markdown converter.
 const bodyHtml = (body) => (/<[a-z][\s\S]*>/i.test(body || '') ? sanitizeHtml(body) : renderMarkdown(body));
+
+// Ingame-Sprachen des BETRACHTERS: der DM liest alles; Spieler lesen nur
+// Sprachen, die ihr eigener Charakter beherrscht (computed.proficiencies.
+// languages) — der Rest wird unten in Fantasieschrift transformiert.
+function useViewerLanguages() {
+  const isDM = useIsDM();
+  const myId = useVtt((s) => s.ui.myCharacterId);
+  const character = useVtt((s) => (myId != null ? s.ui.characters?.[myId]?.data : null));
+  return useMemo(() => {
+    if (isDM) return null; // null = alles lesbar
+    try { return computeCharacter(character)?.proficiencies?.languages || []; }
+    catch { return []; }
+  }, [isDM, character]);
+}
 // Live full-res URL for a direct connection (else the legacy baked one / null).
 const handoutFullSrc = (e) => (getConnectionMode() === 'relay' && getRelayUrl()
   ? (relayFullUrl(getRelayUrl(), e.imageFullName) || e.imageUrlFull) : e.imageUrlFull) || null;
 
 export default function HandoutOverlay({ entry, onClose, footer, initial }) {
   useEffect(() => { ensureHandoutStyles(); }, []);
+  const viewerLangs = useViewerLanguages();
+  // Body für den Betrachter: erst sanitisieren/rendern, dann Passagen (und
+  // ggf. die Gesamt-Sprache des Handouts) in Fantasieschrift wandeln, wenn
+  // der Betrachter die Sprache nicht kennt. DM (viewerLangs === null) liest
+  // alles im Original.
+  const body = entry?.body || '';
+  const entryLang = entry?.language || null;
+  const renderedBody = useMemo(() => {
+    if (!body) return '';
+    const html = bodyHtml(body);
+    if (viewerLangs === null) return html;
+    return transformHandoutHtml(html, viewerLangs, entryLang);
+  }, [body, entryLang, viewerLangs]);
   const [box, setBox] = useState(() => ({
     x: initial?.x ?? Math.max(40, (window.innerWidth - 520) / 2),
     y: initial?.y ?? Math.max(40, (window.innerHeight - 460) / 2),
@@ -50,7 +80,7 @@ export default function HandoutOverlay({ entry, onClose, footer, initial }) {
           <img src={handoutFullSrc(entry) || entry.imageUrl} alt={entry.title || ''} style={S.img} draggable={false}
             onError={(ev) => { if (ev.target.src !== entry.imageUrl) ev.target.src = entry.imageUrl; }} />
         )}
-        {entry.body && <div style={S.text} className="vtt-md" dangerouslySetInnerHTML={{ __html: bodyHtml(entry.body) }} />}
+        {entry.body && <div style={S.text} className="vtt-md" dangerouslySetInnerHTML={{ __html: renderedBody }} />}
       </div>
       {footer && <div style={S.footer}>{footer}</div>}
       <div style={S.resize} onMouseDown={onResizeDown} title="Größe ziehen" />

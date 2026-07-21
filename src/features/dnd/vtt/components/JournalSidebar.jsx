@@ -4,7 +4,8 @@
 //   • Players: browse past handouts and open any one locally ("Ansehen").
 import { useState } from 'react';
 import { useVtt, useIsDM } from '../state/useVtt';
-import { addJournalEntry, removeJournalEntry, presentHandout } from '../state/actions';
+import { addJournalEntry, updateJournalEntry, removeJournalEntry, presentHandout } from '../state/actions';
+import { INGAME_LANGUAGES, languageLabel } from '../lib/fantasyLanguage';
 import { uploadHandoutImage, uploadMapToRelay, saveMapOriginalLocal } from '../lib/mapStorage';
 import { getConnectionMode, getRelayUrl } from '../lib/vttPrefs';
 import { renderMarkdown } from '../lib/miniMarkdown';
@@ -20,6 +21,7 @@ export default function JournalSidebar() {
   const campaignId = useVtt((s) => s.session.campaignId);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [language, setLanguage] = useState(''); // Ingame-Sprache des GANZEN Handouts ('' = Common/lesbar)
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState(null); // locally-opened entry
@@ -51,8 +53,8 @@ export default function JournalSidebar() {
           try { await uploadMapToRelay(getRelayUrl(), name, file); } catch (e3) { console.warn('[vtt] relay handout PUT failed', e3?.message); }
         }
       }
-      addJournalEntry({ title: title.trim() || file?.name || 'Handout', body: body.trim(), ...img });
-      setTitle(''); setBody(''); setFile(null);
+      addJournalEntry({ title: title.trim() || file?.name || 'Handout', body: body.trim(), ...(language ? { language } : {}), ...img });
+      setTitle(''); setBody(''); setLanguage(''); setFile(null);
     } catch (e) {
       console.error('[vtt] handout upload failed', e);
       toast('Handout-Upload fehlgeschlagen: ' + (e?.message || e));
@@ -72,6 +74,14 @@ export default function JournalSidebar() {
             </label>
           </div>
           <RichTextEditor value={body} onChange={setBody} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-text-muted)' }}
+            title="Ingame-Sprache des GANZEN Handouts — Spieler, deren Charakter sie nicht beherrscht, sehen unlesbare Fantasieschrift. Einzelne Passagen markierst du im Editor über das Sprach-Dropdown.">
+            Sprache:
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} style={S.langSel}>
+              <option value="">Lesbar (keine)</option>
+              {INGAME_LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </label>
           <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Bild (optional):
             <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={S.file} />
           </label>
@@ -92,12 +102,23 @@ export default function JournalSidebar() {
                       onError={(ev) => { if (e.imageUrlFull && ev.target.src !== e.imageUrl) ev.target.src = e.imageUrl; }} />
                   : <div style={{ ...S.thumb, display: 'grid', placeItems: 'center' }}>📜</div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={S.rowTitle}>{e.title}</div>
+                  <div style={S.rowTitle}>
+                    {e.title}
+                    {e.language && <span style={S.langTag} title={`Handout auf ${languageLabel(e.language)} — nur mit dieser Sprache lesbar`}>{languageLabel(e.language)}</span>}
+                  </div>
                   <div style={S.actions}>
                     <button style={S.act} onClick={() => setView(e)}>Ansehen</button>
                     {isDM && (shown
                       ? <button style={{ ...S.act, ...S.actStop }} onClick={() => presentHandout(null)}>Stoppen</button>
                       : <button style={{ ...S.act, ...S.actShow }} onClick={() => presentHandout(e.id)}>Allen zeigen</button>)}
+                    {isDM && (
+                      <select style={{ ...S.act, padding: '2px 4px' }} value={e.language || ''}
+                        title="Ingame-Sprache dieses Handouts ändern"
+                        onChange={(ev) => updateJournalEntry(e.id, { language: ev.target.value || null })}>
+                        <option value="">Lesbar</option>
+                        {INGAME_LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                      </select>
+                    )}
                     {isDM && <button style={S.act} onClick={() => { if (confirm('Eintrag löschen?')) removeJournalEntry(e.id); }}>✕</button>}
                   </div>
                 </div>
@@ -127,6 +148,8 @@ const S = {
   rowTitle: { fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 4 },
   actions: { display: 'flex', gap: 4, flexWrap: 'wrap' },
   act: { padding: '2px 8px', fontSize: 11, background: 'var(--color-bg-sunken)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' },
+  langSel: { padding: '3px 6px', fontSize: 11, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' },
+  langTag: { marginLeft: 6, padding: '0 6px', fontSize: 9, fontWeight: 800, borderRadius: 999, color: 'var(--color-accent)', border: '1px solid color-mix(in srgb, var(--color-accent) 55%, transparent)', verticalAlign: 'middle' },
   actShow: { background: 'var(--color-accent)', color: 'var(--color-accent-contrast)', border: 'none' },
   actStop: { background: 'var(--color-danger)', color: '#fff', border: 'none' },
 };
