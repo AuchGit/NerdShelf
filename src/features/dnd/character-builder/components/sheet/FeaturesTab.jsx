@@ -508,6 +508,28 @@ export default function FeaturesTab({ character, computed, updateCharacter, appl
         </Section>
       )}
 
+      {/* ── Klassen-Feature-Wahlen (Favored Enemy / Favored Terrain, 2014-
+          Ranger): der Level-Up speichert sie flach auf der Klasse — hier
+          werden sie sichtbar (über ALLE Klassen, Multiclass-sicher). */}
+      {(character.classes || []).some(c => (c.favoredEnemies?.length || 0) + (c.favoredTerrains?.length || 0) > 0) && (
+        <Section title="Klassen-Wahlen">
+          {(character.classes || []).map(c => {
+            const fe = c.favoredEnemies || []
+            const ft = c.favoredTerrains || []
+            if (!fe.length && !ft.length) return null
+            return (
+              <div key={c.classId} style={S.traitLine}>
+                <span style={S.traitLineLabel}>{c.classId}:</span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  {fe.map((v, i) => <span key={`fe${i}`} style={S.skillBadge} title="Favored Enemy">Erzfeind: {v}</span>)}
+                  {ft.map((v, i) => <span key={`ft${i}`} style={S.skillBadge} title="Favored Terrain">Gelände: {v}</span>)}
+                </div>
+              </div>
+            )
+          })}
+        </Section>
+      )}
+
       {/* ── Class & Subclass Features ── */}
       {/* Hydrated into character.__activeFeatures by CharacterSheetPage's
           collectActiveClassFeatures pass (XPHB-preferred for 5.5e). One

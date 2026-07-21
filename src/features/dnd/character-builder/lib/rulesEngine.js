@@ -117,10 +117,20 @@ export function computeCharacter(character, classDataMap = {}) {
   const weaponMastery = computeWeaponMastery(character, classDataMap)
   const attacks = computeAttacks(character, modifiers, profBonus, proficiencies, weaponMastery)
   const resources = computeResources(character, modifiers, profBonus, totalLevel, classDataMap)
+  // Schadens-Resistenzen/-Immunitäten/-Verwundbarkeiten aus dem daten-
+  // getriebenen Feature-Effekt-Katalog (Rassen-Traits, Klassen-Features) —
+  // als Teil des computed-Outputs, damit Sheet/VTT/Export EINE Quelle haben.
+  const mechFx = getMechanicalEffects(character)
+  const resistances = {
+    resistance: [...mechFx.damageResistance],
+    immunity: [...mechFx.damageImmunity],
+    vulnerability: [...mechFx.damageVulnerability],
+  }
 
   return {
     totalLevel,
     proficiencyBonus: profBonus,
+    resistances,
     abilityScores,
     modifiers,
     proficiencies,

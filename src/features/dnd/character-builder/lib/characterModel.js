@@ -286,21 +286,35 @@ export function getLevel1HP(character) {
   return hitDie + conMod
 }
 
-// Alle Ability Scores nach Boni
+// Alle Ability Scores nach Boni — VOLLSTÄNDIG (Basis + Rasse + Background +
+// Feats + custom-Feats + Level-Up-ASI + custom.asi + choices-ASI). Spiegelt
+// rulesEngine.computeAbilityScores; hier lokal, weil characterModel von der
+// rulesEngine importiert wird (Zyklus). Die frühere Version ließ Level-Up-
+// ASI/custom.asi/choices aus — Formeln und Level-1-HP rechneten dann mit
+// veralteten Scores (z.B. Variant Human +1 CON via choices).
 export function getAllAbilityScores(character) {
-  const base = { ...character.abilityScores.base }
-  const racial = character.species?.abilityScoreImprovements || {}
-  const bg = character.background?.abilityScoreImprovements || {}
-  const featBonus = {}
-  for (const feat of (character.feats || [])) {
-    for (const [k, v] of Object.entries(feat.abilityBonus || {})) {
-      featBonus[k] = (featBonus[k] || 0) + v
+  const base = character.abilityScores?.base || {}
+  const totals = {}
+  for (const key of ['str', 'dex', 'con', 'int', 'wis', 'cha']) totals[key] = base[key] || 8
+  const bump = (obj) => { for (const [k, v] of Object.entries(obj || {})) if (totals[k] !== undefined) totals[k] += (v || 0) }
+  bump(character.species?.abilityScoreImprovements)
+  bump(character.background?.abilityScoreImprovements)
+  for (const cls of (character.classes || [])) {
+    for (const choice of Object.values(cls.levelChoices || {})) {
+      if (choice?.type === 'asi') bump(choice.improvements)
     }
   }
-
-  const result = {}
-  for (const key of ['str','dex','con','int','wis','cha']) {
-    result[key] = (base[key] || 8) + (racial[key] || 0) + (bg[key] || 0) + (featBonus[key] || 0)
+  for (const feat of (character.feats || [])) bump(feat.abilityBonus)
+  for (const feat of (character.custom?.feats || [])) bump(feat.abilityBonus)
+  bump(character.custom?.asi)
+  // Choice-basierte ASI (Variant Human etc.): keys mit ':ability:' = +1 je
+  // Pick; background:-Keys sind schon über abilityScoreImprovements drin.
+  for (const [key, val] of Object.entries(character.choices || {})) {
+    if (!key.includes(':ability:') || key.startsWith('background:')) continue
+    for (const ability of (Array.isArray(val) ? val : [val])) {
+      if (totals[ability] !== undefined) totals[ability] += 1
+    }
   }
-  return result
+  for (const k of Object.keys(totals)) totals[k] = Math.min(totals[k], 30)
+  return totals
 }
