@@ -12,6 +12,7 @@ import { DEFAULT_PILL_COLORS } from '../../lib/pillColors'
 import { S } from './sheetStyles'
 import { formatToolName, formatSkillName, STANDARD_LANGUAGES, STANDARD_TOOLS } from '../../lib/sheetUtils'
 import { parseFeatureChoices } from '../../lib/choiceParser'
+import { listAvailableVariants, setVariantEnabled } from '../../lib/optionalFeatureVariants'
 import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
 import { parseFeatureEffect } from '../../lib/featureEffectParser'
@@ -529,6 +530,51 @@ export default function FeaturesTab({ character, computed, updateCharacter, appl
           })}
         </Section>
       )}
+
+      {/* ── Optionale Klassen-Features (TCE-Varianten) ──
+          IMMER wählbar (nicht nur bei Erstellung/Level-Up) — RAW sind sie
+          opt-in mit DM-Erlaubnis, auch rückwirkend. Wahl landet in
+          character.optionalClassFeatures; die Hydration nimmt gewählte
+          Varianten in __activeFeatures auf (Sheet UND VTT). */}
+      {(() => {
+        const variants = listAvailableVariants(character, character?.__classDataMap || {})
+        if (!variants.length) return null
+        return (
+          <Section title="Optionale Klassen-Features">
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
+              Optionale Features (u.a. Tasha's Cauldron) — jederzeit wählbar, brauchen aber die
+              Erlaubnis deines DM. Sagt der Text „replaces …", ersetzt das Feature das genannte
+              reguläre Feature (dieses gilt dann am Tisch nicht mehr).
+            </p>
+            {variants.map(v => {
+              const key = `ocf-${v.classId}-${v.name}-${v.level}`
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <label
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 10, flexShrink: 0, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: v.enabled ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+                    title={v.enabled ? 'Abwählen' : 'Dieses optionale Feature wählen — mit DM-Erlaubnis'}>
+                    <input type="checkbox" checked={v.enabled}
+                      onChange={(e) => updateCharacter('optionalClassFeatures', setVariantEnabled(character, v.classId, v.name, e.target.checked))} />
+                    {v.enabled ? 'Gewählt' : 'Wählen'}
+                  </label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <ExpandableEntryCard
+                      title={v.name}
+                      entries={v.entries}
+                      badge={`${v.classId} · Lv ${v.level}`}
+                      character={character}
+                      applyCharacter={applyCharacter}
+                      classId={v.classId}
+                      level={v.level}
+                      expandKey={key} isExpanded={expandedSet.has(key)} onToggle={toggleExpand}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </Section>
+        )
+      })()}
 
       {/* ── Class & Subclass Features ── */}
       {/* Hydrated into character.__activeFeatures by CharacterSheetPage's
