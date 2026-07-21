@@ -79,6 +79,20 @@ const { optionalFeatureMap = null, featMap = null } = catalogs
     }
   }
   const is55e = (charData?.meta?.edition || '5e') === '5.5e'
+  // „Replaces …"-Semantik (TCE-Varianten, reines 2014-5e-Thema): eine
+  // AKTIVIERTE Variante, deren Text „replaces the X feature" sagt, ersetzt
+  // das reguläre Feature X — RAW ist X dann weg. Targets werden beim
+  // Durchlaufen der aktivierten Varianten gesammelt (datengetrieben aus dem
+  // Text, keine Namensliste) und am Ende aus der Ausgabe gefiltert.
+  const replacedByVariant = new Set() // `${classId}|${feature-name lowercase}`
+  const collectReplacements = (feature, classId) => {
+    if (!feature?.isClassFeatureVariant || !feature?.entries) return
+    const raw = JSON.stringify(feature.entries).replace(/\{@\w+ ([^|}]+)(?:\|[^}]*)?\}/g, '$1')
+    for (const m of raw.matchAll(/replaces the ([^.,{"]+?) feature/gi)) {
+      const target = String(m[1] || '').trim().toLowerCase()
+      if (target) replacedByVariant.add(`${classId}|${target}`)
+    }
+  }
   // ── Option-Block-Vorscan ────────────────────────────────────
   // Bevor wir Features pushen, ermitteln wir welche Class-Feature-
   // Namen Sub-Optionen anderer Features sind (z.B. Magician /
@@ -245,6 +259,7 @@ const { optionalFeatureMap = null, featMap = null } = catalogs
       // skippen wenn der Spieler die Variante NICHT aktiviert hat.
       // Variants leben in character.optionalClassFeatures[cls.id].
       if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
+      collectReplacements(f, cls.classId)
       // 5.5e filter: skip features tagged with a classSource that
       // belongs to a different edition (PHB feature for an XPHB
       // class entry). Both versions show up in classFeature[]
@@ -292,6 +307,7 @@ const { optionalFeatureMap = null, featMap = null } = catalogs
       // skippen wenn der Spieler die Variante NICHT aktiviert hat.
       // Variants leben in character.optionalClassFeatures[cls.id].
       if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
+        collectReplacements(f, cls.classId)
         if (optionTargetKeys.has(`${cls.classId}|sub|${f.name}|${lvl}`)) continue
         push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
       }
@@ -302,6 +318,8 @@ const { optionalFeatureMap = null, featMap = null } = catalogs
         if (!Number.isFinite(lvl) || lvl > cls.level) continue
         for (const f of (feats || [])) {
           if (!f?.name) continue
+          if (f.isClassFeatureVariant && !isVariantEnabled(charData, cls.classId, f.name)) continue
+          collectReplacements(f, cls.classId)
           if (optionTargetKeys.has(`${cls.classId}|sub|${f.name}|${lvl}`)) continue
           push({ classId: cls.classId, source: 'subclass', subclassId: subId, name: f.name, level: lvl, entries: f.entries || [] }, f.source)
         }
@@ -419,7 +437,14 @@ const { optionalFeatureMap = null, featMap = null } = catalogs
       }
     }
   }
-  for (const v of byKey.values()) out.push(v.entry)
+  // „Replaces …"-Filter: von aktivierten TCE-Varianten ersetzte reguläre
+  // Features fliegen raus (Favored Foe ersetzt Favored Enemy, Deft Explorer
+  // ersetzt Natural Explorer, Blessed Strikes ersetzt Divine Strike, …).
+  for (const v of byKey.values()) {
+    const e = v.entry
+    if (replacedByVariant.has(`${e.classId}|${String(e.name).toLowerCase()}`)) continue
+    out.push(e)
+  }
   return out
 }
 
