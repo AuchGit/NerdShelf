@@ -102,6 +102,31 @@ function getProgTotal(progression, level) {
  *     EITHER `featureTypes` (5e optional features) or `featCategories`
  *     (5.5e feats); the picker switches its source accordingly.
  */
+// RAW-Tauschregel aus dem TEXT des zugehörigen Class-Features ermitteln:
+// „when you gain a level in this class … replace" (2014 Eldritch
+// Invocations) bzw. „Whenever you gain a <Class> level, you can replace"
+// (XPHB Invocations / Metamagic / Fighting Style) ⇒ Tausch bei JEDEM
+// Level-Up dieser Klasse erlaubt. Battle-Master-Phrasing („Whenever you
+// learn new maneuvers, you can also replace …") bleibt beim bestehenden
+// newCount>0-Fenster. Rein datengetrieben — keine Klassen-/Feature-Liste.
+function detectSwapEveryLevel(progName, classData, subclassData) {
+  const name = String(progName || '').toLowerCase()
+  if (!name) return false
+  const pool = [
+    ...(classData?.features || []),
+    ...(subclassData?.features || []),
+    ...(subclassData?.featuresPerLevel
+      ? Object.values(subclassData.featuresPerLevel).flat()
+      : []),
+  ]
+  for (const f of pool) {
+    if (String(f?.name || '').toLowerCase() !== name || !f?.entries) continue
+    const txt = JSON.stringify(f.entries)
+    if (/gain a (?:\w+ )?level(?: in this class)?[^."]*?\breplace\b/i.test(txt)) return true
+  }
+  return false
+}
+
 export function computeOptionalFeatureGains(classData, subclassData, level) {
   const results = []
   const optionalProgs = [
@@ -114,13 +139,15 @@ export function computeOptionalFeatureGains(classData, subclassData, level) {
     const totalAtPrev  = getProgTotal(prog.progression, level - 1)
     const newCount = totalAtLevel - totalAtPrev
     if (totalAtLevel > 0) {
+      const swapEveryLevel = detectSwapEveryLevel(prog.name, classData, subclassData)
       results.push({
         name: prog.name || 'Optional Feature',
         source: 'optionalfeature',
         featureTypes: prog.featureType || [],
         newCount,
         totalCount: totalAtLevel,
-        canReplace: newCount > 0,
+        canReplace: newCount > 0 || swapEveryLevel,
+        swapEveryLevel,
       })
     }
   }
@@ -140,13 +167,15 @@ export function computeOptionalFeatureGains(classData, subclassData, level) {
       const cats = Array.isArray(prog.category)
         ? prog.category.map(c => String(c).toUpperCase())
         : prog.category ? [String(prog.category).toUpperCase()] : []
+      const swapEveryLevel = detectSwapEveryLevel(prog.name, classData, subclassData)
       results.push({
         name: prog.name || 'Feat',
         source: 'feat',
         featCategories: cats,
         newCount,
         totalCount: totalAtLevel,
-        canReplace: newCount > 0,
+        canReplace: newCount > 0 || swapEveryLevel,
+        swapEveryLevel,
       })
     }
   }

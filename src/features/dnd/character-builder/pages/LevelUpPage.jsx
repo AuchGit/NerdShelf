@@ -132,15 +132,20 @@ function computeNewFeatureTextChoices(draft, info) {
   return out
 }
 
-function getActiveSteps(info, draft, featMap = null) {
+function getActiveSteps(info, draft, featMap = null, char = null) {
   if (!info) return [STEPS[0]]
   const a = [STEPS[0], STEPS[1]]
   if (info.needsSubclass) a.push(STEPS[2])
   if (info.hasASI) a.push(STEPS[3])
-  // Optional features at this level
+  // Optional features at this level: neue Picks ODER reine Tausch-
+  // Gelegenheit (Invocations & Co. erlauben RAW einen Tausch bei jedem
+  // Level-Up — nur relevant, wenn schon Picks existieren).
   const subD = draft.subclassId && draft.classData
     ? (draft.classData.subclasses||[]).find(s => s.name === draft.subclassId) : null
-  const ofGains = computeOptionalFeatureGains(draft.classData, subD, info.nextLevel).filter(g => g.newCount > 0)
+  const ceForOF = char?.classes?.find(c => c.classId === info.classId)
+  const hasExistingOF = ceForOF ? getExistingOptionalFeatures(ceForOF).length > 0 : false
+  const ofGains = computeOptionalFeatureGains(draft.classData, subD, info.nextLevel)
+    .filter(g => g.newCount > 0 || (g.swapEveryLevel && hasExistingOF))
   // Also check for class features that need choices (Ranger Favored Enemy/Terrain, etc.)
   const featureNames = info.features.map(f => f.toLowerCase())
   const hasClassFeatureChoices = featureNames.some(f => f.includes('favored enemy') || f.includes('natural explorer'))
@@ -209,6 +214,7 @@ export default function LevelUpPage({ session }) {
     existingSpellAbility:null, existingCasterProg:null,
     asiMode:'asi', asiPicks:{}, featEntry:null, featAB:{}, featCh:{},
     optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{},
+    optSwaps:{},
     cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
     preparedSpellPool:null, preparedCantripPool:null,
     // 5.5e prepared-caster pick at level-up: the new prepared spells
@@ -222,7 +228,7 @@ export default function LevelUpPage({ session }) {
   // Epic Boon = Feat-Kategorien) — gleiche Doppel-Key-Konvention wie
   // optionalFeatureMap.
   const featMap = useMemo(() => buildNameSourceMap(feats), [feats])
-  const activeSteps = useMemo(() => getActiveSteps(info, draft, featMap), [info, draft, featMap])
+  const activeSteps = useMemo(() => getActiveSteps(info, draft, featMap, char), [info, draft, featMap, char])
   const currentStep = activeSteps[stepIdx] || STEPS[0]
 
   useEffect(() => { loadData() }, [id])
@@ -253,6 +259,7 @@ export default function LevelUpPage({ session }) {
       existingSpellAbility: existSpellAb, existingCasterProg: existCasterProg,
       asiMode:'asi', asiPicks:{}, featEntry:null, featAB:{}, featCh:{},
       optPicks:{}, optFeatureSpells:{}, classFeatureChoices:{}, featureOptionPicks:{}, featureTextPicks:{},
+      optSwaps:{},
       cantrips:[], spells:[], swapOld:null, swapNew:null, wantSwap:false,
       preparedSpellPool:null, preparedCantripPool:null,
       // 5.5e prepared-caster pick — MUSS initialisiert sein, sonst
@@ -383,6 +390,45 @@ export default function LevelUpPage({ session }) {
         next[cid] = { ...(cur[cid] || {}), ...perCls }
       }
       updated.optionalClassFeatures = next
+    }
+    // Optfeature-Tausch (RAW „when you gain a level … replace"): den als
+    // „abgeben" markierten Pick aus dem levelChoices-Bucket entfernen, in
+    // dem er ursprünglich gewählt wurde — der Ersatz kam als zusätzlicher
+    // optPick rein. Nur anwenden, wenn über das Level-Soll hinaus wirklich
+    // ein Ersatz gewählt wurde (sonst würde der Tausch ersatzlos löschen).
+    const swapOuts = []
+    if (draft.optSwaps && Object.keys(draft.optSwaps).length > 0) {
+      const subDataForGains = draft.subclassId && draft.classData
+        ? (draft.classData.subclasses || []).find(s => s.name === draft.subclassId) : null
+      const gainsByName = {}
+      for (const g of computeOptionalFeatureGains(draft.classData, subDataForGains, info.nextLevel)) gainsByName[g.name] = g
+      for (const [group, swp] of Object.entries(draft.optSwaps)) {
+        if (!swp?.want || !swp?.old) continue
+        const picked = (draft.optPicks[group] || []).length
+        const need = gainsByName[group]?.newCount ?? 0
+        if (picked > need) swapOuts.push(swp.old)
+      }
+    }
+    if (swapOuts.length > 0) {
+      updated.classes = (updated.classes || []).map(ce => {
+        if (ce.classId !== info.classId) return ce
+        const lcs = {}
+        for (const [lv, lc] of Object.entries(ce.levelChoices || {})) {
+          let next = lc
+          if (Array.isArray(lc.optionalFeatures)) {
+            const nf = lc.optionalFeatures.filter(f =>
+              !swapOuts.includes(typeof f === 'string' ? f : f?.name))
+            if (nf.length !== lc.optionalFeatures.length) next = { ...next, optionalFeatures: nf }
+          }
+          if (next.optFeatureSpells && swapOuts.some(n => next.optFeatureSpells[n])) {
+            const nfs = { ...next.optFeatureSpells }
+            for (const n of swapOuts) delete nfs[n]
+            next = { ...next, optFeatureSpells: nfs }
+          }
+          lcs[lv] = next
+        }
+        return { ...ce, levelChoices: lcs }
+      })
     }
 
     // Safety: backup both old and new state to localStorage before writing
@@ -747,11 +793,14 @@ function StepASI({ info, draft, setDraft, abScores, feats, optF, edition, allSp 
 
 function StepFeatures({ info, draft, setDraft, optF, feats, char }) {
   const subD = draft.subclassId && draft.classData ? (draft.classData.subclasses||[]).find(s=>s.name===draft.subclassId) : null
-  const gains = computeOptionalFeatureGains(draft.classData, subD, info.nextLevel).filter(g=>g.newCount>0)
   const existOF = useMemo(() => {
     const ce = char.classes.find(c=>c.classId===info.classId)
     return ce ? getExistingOptionalFeatures(ce) : []
   }, [char, info.classId])
+  // Neue Picks auf diesem Level ODER reine Tausch-Gelegenheit (RAW „when
+  // you gain a level … replace") — Letzteres nur mit vorhandenen Picks.
+  const gains = computeOptionalFeatureGains(draft.classData, subD, info.nextLevel)
+    .filter(g => g.newCount > 0 || (g.swapEveryLevel && existOF.length > 0))
 
   // Optional Class Feature Variants (TCE-Erweiterungen) die auf
   // DIESER neuen Stufe verfügbar werden. Data-driven aus
@@ -1284,6 +1333,7 @@ function StepSummary({ info, draft }) {
     if (fs.length > 0) rows.push(['Feat Spells', fs.join(', ')])
   }
   for(const[g,ns]of Object.entries(draft.optPicks))if(ns.length>0)rows.push([g,ns.join(', ')])
+  for(const[g,swp]of Object.entries(draft.optSwaps||{}))if(swp?.want&&swp?.old)rows.push([`Tausch (${g})`,`${swp.old} abgegeben`])
   if(draft.cantrips.length>0)rows.push(['Cantrips',draft.cantrips.join(', ')])
   if(draft.spells.length>0)rows.push(['Zauber',draft.spells.join(', ')])
   if(draft.wantSwap&&draft.swapOld&&draft.swapNew)rows.push(['Tausch',`${draft.swapOld} → ${draft.swapNew}`])
@@ -1332,14 +1382,91 @@ function OptFeatPicker({ gain, optF, feats = [], existOF, draft, setDraft, char,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[sourcePool,gain.featureTypes,gain.featCategories,search,alreadyChosen,picks,char,classId,classLevel])
 
-  const isFull=picks.length>=gain.newCount
+  // ── Optfeature-Tausch (RAW aus dem Feature-Text erkannt) ──
+  // gain.canReplace: „replace"-Erlaubnis (bei jedem Level-Up ODER beim
+  // Dazulernen). Der abzugebende Pick wird hier markiert; der Ersatz wird
+  // regulär als ZUSÄTZLICHER Pick gewählt (maxPicks steigt um 1).
+  const swapState = (draft.optSwaps || {})[gain.name] || null
+  const wantSwap = !!swapState?.want
+  const swapOld = swapState?.old || null
+  // XPHB-Regel: eine Option, die Voraussetzung einer anderen gewählten
+  // Option ist, kann nicht abgegeben werden — datengetrieben über die
+  // prerequisite.optionalfeature-Verweise der bekannten Picks.
+  const lockedAsPrereq = (() => {
+    const locked = new Set()
+    const known = [...alreadyChosen]
+    for (const n of known) {
+      const item = sourcePool.find(o => o.name === n)
+      for (const p of (item?.prerequisite || [])) {
+        for (const ref of (p?.optionalfeature || [])) {
+          const raw = typeof ref === 'string' ? ref : (ref?.name || ref?.uid || '')
+          const nm = String(raw).split('|')[0].trim().toLowerCase()
+          const hit = known.find(k => k.toLowerCase() === nm)
+          if (hit) locked.add(hit)
+        }
+      }
+    }
+    return locked
+  })()
+  const maxPicks = gain.newCount + (wantSwap && swapOld ? 1 : 0)
+  const isFull = picks.length >= maxPicks
   function toggle(name){const next=picks.includes(name)?picks.filter(n=>n!==name):(!isFull?[...picks,name]:picks);setDraft(d=>({...d,optPicks:{...d.optPicks,[gain.name]:next}}))}
+  function setWantSwap(on){
+    setDraft(d=>{
+      const cur = d.optPicks[gain.name] || []
+      // Beim Abwählen den Extra-Pick wieder kappen, damit picks ≤ newCount.
+      const trimmed = !on && cur.length > gain.newCount ? cur.slice(0, gain.newCount) : cur
+      return {
+        ...d,
+        optPicks: { ...d.optPicks, [gain.name]: trimmed },
+        optSwaps: { ...(d.optSwaps || {}), [gain.name]: { want: on, old: null } },
+      }
+    })
+  }
+  function setSwapOld(name){
+    setDraft(d=>{
+      const cur = d.optPicks[gain.name] || []
+      const nextOld = swapOld === name ? null : name
+      // Ohne Abgabe-Wahl schrumpft maxPicks — Extra-Pick kappen.
+      const trimmed = !nextOld && cur.length > gain.newCount ? cur.slice(0, gain.newCount) : cur
+      return {
+        ...d,
+        optPicks: { ...d.optPicks, [gain.name]: trimmed },
+        optSwaps: { ...(d.optSwaps || {}), [gain.name]: { want: true, old: nextOld } },
+      }
+    })
+  }
 
   return (
     <div style={S.card}>
-      <div style={S.cardTitle}>{gain.name} <span style={{color:'var(--accent-green)',fontWeight:'normal',fontSize:12,marginLeft:8}}>({picks.length}/{gain.newCount})</span></div>
+      <div style={S.cardTitle}>{gain.name} <span style={{color:'var(--accent-green)',fontWeight:'normal',fontSize:12,marginLeft:8}}>({picks.length}/{maxPicks})</span></div>
       {alreadyChosen.size>0&&<div style={{marginBottom:10}}><div style={{color:'var(--text-muted)',fontSize:11,marginBottom:4}}>Bereits gewählt:</div>
         <div style={{display:'flex',flexWrap:'wrap',gap:4}}>{[...alreadyChosen].map(n=><span key={n} style={{...S.featureTag,background: 'var(--bg-highlight)',borderColor:'var(--accent-green)',color:'var(--accent-green)'}}>{n}</span>)}</div></div>}
+      {gain.canReplace && alreadyChosen.size>0 && (
+        <div style={{marginBottom:10,padding:'8px 12px',background:'var(--bg-inset)',borderRadius:8,border:'1px solid var(--border)'}}>
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',color:'var(--text-secondary)',fontSize:13}}>
+            <input type="checkbox" checked={wantSwap} onChange={e=>setWantSwap(e.target.checked)} />
+            Eine bekannte Option tauschen (optional)</label>
+          {wantSwap && (
+            <div style={{marginTop:8}}>
+              <div style={{color:'var(--accent-red)',fontSize:11,fontWeight:'bold',marginBottom:4}}>Abgeben:</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                {[...alreadyChosen].map(n=>{
+                  const locked = lockedAsPrereq.has(n)
+                  return <button key={n} disabled={locked}
+                    title={locked?'Voraussetzung für eine andere gewählte Option — kann nicht abgegeben werden':undefined}
+                    onClick={()=>!locked&&setSwapOld(n)} style={{
+                      padding:'4px 10px',borderRadius:6,fontSize:11,cursor:locked?'not-allowed':'pointer',opacity:locked?0.4:1,
+                      border:swapOld===n?'1px solid #ff8888':'1px solid #2a4a6a',background:'var(--bg-card)',
+                      color:swapOld===n?'var(--accent-red)':'var(--text-muted)',
+                    }}>{swapOld===n&&'✗ '}{n}</button>
+                })}</div>
+              {swapOld&&<div style={{marginTop:6,color:picks.length>gain.newCount?'var(--accent-green)':'var(--text-dim)',fontSize:12}}>
+                {picks.length>gain.newCount?'Ersatz gewählt.':'Wähle unten eine zusätzliche Option als Ersatz.'}</div>}
+            </div>
+          )}
+        </div>
+      )}
       <div style={fS.layout}>
         <div style={fS.left}>
           <input style={fS.search} placeholder="Suchen…" value={search} onChange={e=>setSearch(e.target.value)} />

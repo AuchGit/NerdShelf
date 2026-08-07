@@ -24,6 +24,22 @@ function flat(entries) {
 
 const DICE_RE = /\d*d\d+(?:\s*[+-]\s*\d+)?/
 
+// Waffen-ANFORDERUNG aus den Sätzen, die „weapon" erwähnen (Sneak Attack:
+// "must use a finesse or a ranged weapon", Improved Divine Smite: "with a
+// melee weapon attack"): Eigenschafts-/Kategorie-Wörter direkt aus dem
+// Text, kein Feature-Katalog. Leer = jede Waffe. Der Composer matcht die
+// Tokens gegen Properties + Kategorie der konkreten Waffen-Row.
+export function extractWeaponReq(text) {
+  const req = new Set()
+  for (const sentence of String(text || '').split(/(?<=\.)\s+/)) {
+    if (!/\bweapons?\b/i.test(sentence)) continue
+    for (const wm of sentence.matchAll(/\b(finesse|ranged|melee|thrown|light|heavy|reach|versatile|simple|martial)\b(?=[^.]*\bweapons?\b)/gi)) {
+      req.add(wm[1].toLowerCase())
+    }
+  }
+  return [...req]
+}
+
 /**
  * Alle Aktions-Rider eines Charakters: [{ id, name, formula, type, active? }].
  * `spellMap` (optional, Map name→spell) liefert zusätzlich den aktiven
@@ -55,7 +71,8 @@ export function gatherActionRiders(character, profBonus = 0, spellMap = null) {
     // headless gegen PHB+XPHB verifiziert (Sneak/Dreadful/Divine Favor/
     // 2014-Hunter's-Mark → weaponOnly; Hex/2024-Hunter's-Mark → frei).
     const weaponOnly = /\bweapons?\b/i.test(text)
-    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase(), perTurn, weaponOnly })
+    const weaponReq = weaponOnly ? extractWeaponReq(text) : []
+    out.push({ id: key, name, formula: m[0].replace(/\s+/g, ''), type: (pill.damageType || '').toLowerCase(), perTurn, weaponOnly, weaponReq })
   }
   for (const f of (character?.__activeFeatures || [])) consider(f.name, f.entries, f.classId)
   for (const t of (character?.species?.__traits || [])) consider(t.name, t.entries, null)
@@ -71,7 +88,8 @@ export function gatherActionRiders(character, profBonus = 0, spellMap = null) {
       const dm = text.match(/extra (\d*d\d+)(?: (\w+))? damage/i)
       if (dm && HIT_RE.test(text) && !seen.has(String(concName).toLowerCase())) {
         const weaponOnly = /\bweapons?\b/i.test(text)
-        out.push({ id: 'conc:' + concName.toLowerCase(), name: `${concName} (aktiv)`, formula: dm[1], type: (dm[2] || '').toLowerCase(), active: true, weaponOnly })
+        const weaponReq = weaponOnly ? extractWeaponReq(text) : []
+        out.push({ id: 'conc:' + concName.toLowerCase(), name: `${concName} (aktiv)`, formula: dm[1], type: (dm[2] || '').toLowerCase(), active: true, weaponOnly, weaponReq })
       }
     }
   }

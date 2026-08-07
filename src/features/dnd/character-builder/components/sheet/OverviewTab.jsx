@@ -1526,6 +1526,26 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
   // (return false → Aufrufer verbraucht sofort). `onConfirm` = verzögertes
   // Verbrauchen: erst beim Schadenswurf oder „Benutzt"-Button, Schließen
   // über ✕ verbraucht nichts (Umentscheiden erlaubt).
+  // Rider pro Row gaten: waffengebundene Rider (weaponOnly) nur auf
+  // Waffen-Rows, und dort nur wenn die Waffe die aus dem Feature-Text
+  // extrahierte Anforderung erfüllt (Sneak Attack „finesse or ranged" —
+  // nicht auf der Greataxe). Tokens matchen gegen die lowercase-Properties
+  // der Waffe plus abgeleitete Kategorie (melee/ranged; thrown zählt beim
+  // Wurf als ranged). Rider ohne Anforderung bleiben auf jeder Waffe.
+  const ridersForRow = (r) => {
+    if (r?.kind !== 'attack') return actionRiders.filter((rd) => !rd.weaponOnly)
+    const tags = new Set()
+    for (const p of (r.properties || [])) {
+      const n = String(typeof p === 'string' ? p : p?.name || '').toLowerCase().split('(')[0].trim()
+      if (n) tags.add(n)
+    }
+    tags.add(r.isRanged ? 'ranged' : 'melee')
+    if (tags.has('thrown')) tags.add('ranged')
+    return actionRiders.filter((rd) => {
+      if (!rd.weaponOnly || !rd.weaponReq?.length) return true
+      return rd.weaponReq.some((t) => tags.has(t))
+    })
+  }
   const promptRowRoll = (r, onConfirm = null) => {
     const base = rowDamageOf(r)
     if (!base) return false
@@ -1533,6 +1553,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
       title: `${r.name}: Schaden`,
       base: { ...base, label: r.name },
       attack: r.attack ? { bonus: r.attack, label: r.name } : null,
+      riders: ridersForRow(r),
       // Wählbare Angriffs-Boni (Thrown Weapon Fighting „Geworfen",
       // Power-Attack −5/+10, …) — Schalter im Composer.
       options: r.attackOptions || null,
@@ -1628,6 +1649,7 @@ export function CombatActionsExplorer({ character, computed, applyCharacter, emb
         weaponId: atk.id,
         attacksPerAction: atk.attacksPerAction || 1,
         properties: atk.properties || [],
+        isRanged: atk.isRanged === true,
         // Wählbare Angriffs-Boni (Thrown Weapon Fighting, Power-Attack, …)
         // für die Schalter im Wurf-Composer.
         attackOptions: atk.attackOptions || null,

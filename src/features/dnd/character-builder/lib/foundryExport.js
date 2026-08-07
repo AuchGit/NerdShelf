@@ -21,216 +21,78 @@ import { getProficiencyBonus, getTotalLevel } from './characterModel'
 import { getMechanicalEffects } from './featureEffects'
 import { parseTags } from './tagParser'
 import { isContainerItem } from './sheetUtils'
-import { loadClassData, loadRaceList } from './dataLoader'
+import { loadClassData, loadOptionalFeatureList, loadFeatList, loadItemIndex } from './dataLoader'
+import { collectActiveClassFeatures, collectClassGrantedSpells, loadRaceTraits, backfillWeaponData } from './characterHydration'
 
-// ─── Minimal-Hydration für den Export ────────────────────────────
-// Im Live-Sheet befüllt CharacterSheetPage.hydrateClassDataAndRecompute
-// das `character`-Object mit transient-fields wie __fixedSkills (für race-
-// granted Skills wie Half-Orc Menacing oder Elf Keen Senses) und einer
-// classDataMap. Beim Bulk-Export werden die Charaktere direkt aus
-// Supabase geladen — ohne diese Felder bleibt z.B. eine race-fixed
-// Skill-Proficiency unsichtbar UND Expertise-Picks darauf greifen nicht.
-//
-// hydrateForExport macht denselben Aufruf-Pfad async ein einziges Mal,
-// fügt die Hilfsfelder an und liefert den klassDataMap zurück damit
-// computeCharacter ihn korrekt nutzt.
+// ─── Hydration für den Export ────────────────────────────────────
+// Beim Bulk-Export kommen die Charaktere roh aus Supabase — ohne die
+// transient-Felder, die das Live-Sheet auf `character` stasht. Statt die
+// Sammler-Logik hier zu duplizieren (die alte Kopie kannte weder TCE-
+// Varianten-Skip noch „replaces …"-Filter noch Edition-Match), läuft der
+// Export über EXAKT dieselbe geteilte Hydration wie Sheet und VTT:
+// characterHydration.collectActiveClassFeatures / collectClassGrantedSpells /
+// loadRaceTraits / backfillWeaponData — eine Quelle, nichts dupliziert.
 async function hydrateForExport(character) {
   const edition = character?.meta?.edition || '5e'
-  const out = { ...character }
-  // ── classDataMap (subclass + level-table lookups) ──
   const classes = (character.classes || []).map(c => c.classId).filter(Boolean)
   const unique = [...new Set(classes)]
-  const loaded = await Promise.all(unique.map(id => loadClassData(edition, id).catch(() => null)))
+  const [loaded, ofList, featList, itemIndex, raceTraits] = await Promise.all([
+    Promise.all(unique.map(id => loadClassData(edition, id).catch(() => null))),
+    loadOptionalFeatureList(edition).catch(() => []),
+    loadFeatList(edition).catch(() => []),
+    loadItemIndex(edition).catch(() => []),
+    loadRaceTraits(edition, character).catch(() => ({ names: [], traits: [], fixedSkills: [] })),
+  ])
   const classDataMap = {}
   unique.forEach((cid, i) => { if (loaded[i]) classDataMap[cid] = loaded[i] })
+  // Kataloge im selben Shape wie die Sheet-Hydration (name + name|SOURCE).
+  const optionalFeatureMap = new Map()
+  for (const f of (ofList || [])) {
+    if (!f?.name) continue
+    const lower = String(f.name).toLowerCase()
+    optionalFeatureMap.set(lower, f)
+    const src = String(f.source || '').toUpperCase()
+    if (src) optionalFeatureMap.set(`${lower}|${src}`, f)
+  }
+  const featMap = new Map()
+  for (const f of (featList || [])) {
+    if (!f?.name) continue
+    const lower = String(f.name).toLowerCase()
+    featMap.set(lower, f)
+    const src = String(f.source || '').toUpperCase()
+    if (src) featMap.set(`${lower}|${src}`, f)
+  }
 
-  // ── Race-derived __fixedSkills ──
-  try {
-    const raceId = character?.species?.raceId
-    if (raceId) {
-      const races = await loadRaceList(edition).catch(() => [])
-      const race = races.find(r => r.id === raceId || r.name === raceId)
-      if (race) {
-        const sub = (race.subraces || []).find(s =>
-          s.id === character.species.subraceId || s.name === character.species.subraceId
-        )
-        const skillBlocks = [
-          ...(race.skillProficiencies || []),
-          ...(sub?.skillProficiencies || []),
-        ]
-        const fixedSkills = []
-        for (const block of skillBlocks) {
-          if (!block || typeof block !== 'object') continue
-          if (block.choose || typeof block.any === 'number') continue
-          for (const [k, v] of Object.entries(block)) {
-            if (v === true && k !== 'choose' && k !== 'any') fixedSkills.push(k)
-          }
-        }
-        if (fixedSkills.length > 0) {
-          out.species = { ...(out.species || {}), __fixedSkills: fixedSkills }
-        }
-      }
-    }
-  } catch (e) { console.warn('[Export] race hydration failed:', e?.message || e) }
-
-  // ── __activeFeatures (class + subclass features ≤ level) ──
-  // Used by Zeile 2697 für spell-resource-matching ("Favored Enemy"
-  // grants Hunter's Mark → 2x kostenlos → Resource-Counter im Actor).
-  // Vollständige Sub-Feature-Option-Logik (PrimalOrder/etc.) brauchen wir
-  // hier nicht — Top-Level-Features reichen für die Always-Prepared-Scans.
-  const activeFeatures = []
-  for (const cls of (character.classes || [])) {
-    const cd = classDataMap[cls.classId]
-    if (!cd) continue
-    const subId = cls.subclassId
-    const cleanSubId = subId ? String(subId).split(/__|\|/)[0].trim() : null
-    const sub = cleanSubId
-      ? (cd.subclasses || []).find(s =>
-          s.id === subId || s.name === subId
-          || s.id === cleanSubId || s.name === cleanSubId
-          || s.shortName === cleanSubId)
-      : null
-
-    // Top-level class features
-    for (const f of (cd.classFeature || cd.features || [])) {
-      if (!f?.name) continue
-      const lvl = f.level || 1
-      if (lvl > cls.level) continue
-      // Edition-Match: 5.5e bevorzugt XPHB/XDMG/XMM
-      activeFeatures.push({
-        classId: cls.classId,
-        source: 'class',
-        name: f.name,
-        level: lvl,
-        entries: f.entries || [],
-      })
-    }
-    // Subclass features at ≤ cls.level
-    if (sub) {
-      const subFeats = [
-        ...(Array.isArray(sub.features) ? sub.features : []),
-        ...(sub.featuresPerLevel
-          ? Object.entries(sub.featuresPerLevel).flatMap(([lvl, fs]) =>
-              (fs || []).map(f => ({ ...f, level: parseInt(lvl, 10) || 1 })))
-          : []),
-        // 5etools subclassFeature[] (flat structure)
-        ...(Array.isArray(cd.subclassFeature)
-          ? cd.subclassFeature.filter(f =>
-              f.className === cd.name
-              && (f.subclassShortName === sub.shortName || f.subclassShortName === sub.name))
-          : []),
-      ]
-      for (const f of subFeats) {
-        if (!f?.name) continue
-        const lvl = f.level || 1
-        if (lvl > cls.level) continue
-        activeFeatures.push({
-          classId: cls.classId,
-          source: 'subclass',
-          subclassId: subId,
-          name: f.name,
-          level: lvl,
-          entries: f.entries || [],
-        })
-      }
-    }
+  // Waffen mit leeren Katalog-Feldern nachfüllen (Finesse/Thrown-Erkennung
+  // für Attack-Bonus), dann Race-Traits + Features + Granted Spells über
+  // die geteilten Sammler.
+  const out = backfillWeaponData({ ...character }, itemIndex)
+  const speciesPatch = {}
+  if (raceTraits.names?.length) {
+    speciesPatch.__traitNames = raceTraits.names
+    speciesPatch.__traits = raceTraits.traits
   }
-  // Dedup nach (classId, name, level)
-  const seenAf = new Set()
-  out.__activeFeatures = activeFeatures.filter(f => {
-    const k = `${f.classId}|${f.name}|${f.level}`
-    if (seenAf.has(k)) return false
-    seenAf.add(k)
-    return true
-  })
-
-  // ── __grantedSpells (additionalSpells.prepared scans) ──
-  // Cleric Domain Spells, Paladin Oath Spells, Sorcerer Origin Spells,
-  // Warlock Patron Spells, etc. — collectCharacterSpells (sheetUtils)
-  // liest character.__grantedSpells als zusätzliche always-prepared
-  // Spells. Ohne diesen Feed fehlt z.B. einem Cleric L1 alle Domain-
-  // Spells im Foundry-Actor.
-  const grantedSpells = []
-  const seenGs = new Set()
-  const pushGranted = (name, classId, sourceFeature) => {
-    if (!name) return
-    const key = `${classId}|${String(name).toLowerCase()}`
-    if (seenGs.has(key)) return
-    seenGs.add(key)
-    grantedSpells.push({ name: String(name), classId, sourceFeature })
+  if (raceTraits.fixedSkills?.length) speciesPatch.__fixedSkills = raceTraits.fixedSkills
+  if (Object.keys(speciesPatch).length) {
+    out.species = { ...(out.species || {}), ...speciesPatch }
   }
-  const consumeAdditional = (additionalSpells, level, classId, sourceFeature) => {
-    for (const block of (additionalSpells || [])) {
-      if (!block || typeof block !== 'object') continue
-      const prep = block.prepared
-      if (!prep || typeof prep !== 'object') continue
-      for (const [lvlKey, arr] of Object.entries(prep)) {
-        const lv = parseInt(lvlKey, 10)
-        if (!Number.isFinite(lv) || lv > level) continue
-        for (const raw of (Array.isArray(arr) ? arr : [])) {
-          const name = typeof raw === 'string'
-            ? raw.split('|')[0].replace(/\b\w/g, c => c.toUpperCase()).trim()
-            : null
-          if (name) pushGranted(name, classId, sourceFeature)
-        }
-      }
-    }
+  out.__activeFeatures = collectActiveClassFeatures(out, classDataMap, { optionalFeatureMap, featMap })
+  out.__grantedSpells = collectClassGrantedSpells(out, classDataMap, out.__activeFeatures)
+  // Feats mit Katalog-Entries als separates transient-Feld — nur der
+  // Prosa-Resource-Synthesizer liest es (Parität zum Sheet, z.B.
+  // Metamagic Adept +2 Sorcery Points).
+  const featFeatures = []
+  const pushFeat = (nm, inline) => {
+    const entries = Array.isArray(inline) ? inline : featMap.get(String(nm || '').toLowerCase())?.entries
+    if (nm && Array.isArray(entries)) featFeatures.push({ classId: null, name: nm, level: 1, entries })
   }
-  for (const cls of (character.classes || [])) {
-    const cd = classDataMap[cls.classId]
-    if (!cd) continue
-    consumeAdditional(cd.additionalSpells, cls.level, cls.classId, cls.classId)
-    const subId = cls.subclassId
-    if (!subId) continue
-    const cleanSubId = String(subId).split(/__|\|/)[0].trim()
-    const sub = (cd.subclasses || []).find(s =>
-      s.id === subId || s.name === subId
-      || s.id === cleanSubId || s.name === cleanSubId
-      || s.shortName === cleanSubId
-    )
-    if (sub) consumeAdditional(sub.additionalSpells, cls.level, cls.classId, subId)
-  }
-  // 5.5e XPHB-Pattern: subclasses encoden Always-Prepared via inline
-  // {type:'table'} mit colLabels ["<Class> Level", "Spells"]. Wir scannen
-  // jedes activeFeature auf solche Tabellen.
-  const SPELL_TAG_RE = /\{@spell\s+([^|}]+)(?:\|[^}]*)?\}/g
-  const scanForSpellTables = (feature, classId, classLevel) => {
-    if (!feature?.entries) return
-    const walk = (node) => {
-      if (!node || typeof node !== 'object') return
-      if (Array.isArray(node)) { for (const x of node) walk(x); return }
-      if (node.type === 'table' && Array.isArray(node.colLabels) && Array.isArray(node.rows)) {
-        const isLevelCol = /\blevel\b/i.test(node.colLabels[0] || '')
-        const isSpellCol = /\bspell/i.test(node.colLabels[1] || '')
-        if (isLevelCol && isSpellCol) {
-          for (const row of node.rows) {
-            const lvCell = row?.[0]
-            const spCell = row?.[1]
-            const lv = parseInt(typeof lvCell === 'string' ? lvCell : (lvCell?.roll?.exact ?? lvCell), 10)
-            if (!Number.isFinite(lv) || lv > classLevel) continue
-            const cellText = typeof spCell === 'string' ? spCell : JSON.stringify(spCell || '')
-            for (const m of cellText.matchAll(SPELL_TAG_RE)) {
-              const name = String(m[1] || '').trim()
-              if (name) pushGranted(name, classId, feature.name)
-            }
-          }
-        }
-      }
-      if (Array.isArray(node.entries)) walk(node.entries)
-      if (Array.isArray(node.items))   walk(node.items)
-    }
-    walk(feature.entries)
-  }
-  for (const f of out.__activeFeatures) {
-    if (!f?.classId) continue
-    const cls = (character.classes || []).find(c => c.classId === f.classId)
-    if (!cls) continue
-    scanForSpellTables(f, f.classId, cls.level)
-  }
-  out.__grantedSpells = grantedSpells
-
+  for (const ft of (character.feats || [])) pushFeat(ft.name || ft.featId, ft.entries)
+  for (const ft of (character.custom?.feats || [])) pushFeat(ft.name, ft.entries)
+  out.__featFeatures = featFeatures
+  out.__classDataMap = classDataMap
   return { hydrated: out, classDataMap }
 }
+
 // JSON-Daten aus dem public/-Ordner werden zur Laufzeit per fetch() geladen.
 // Vite erlaubt keine statischen imports aus public/ — fetch() ist der korrekte Weg.
 let CLASS_INDEX = null
@@ -447,24 +309,25 @@ async function ensureIndexes(edition = '5e') {
         subclassIdentityNames.add(sub.name + '||' + sn)   // "War Magic||War", "Eldritch Knight||Eldritch Knight"
       }
 
-      // Class features: skip ASI and class-feature-variants.
-      // `entries` is kept so the feature item gets a real description even
-      // when the class-feature-desc index misses it.
+      // Class features: skip ASI. TCE-Varianten bleiben als METADATEN drin
+      // (Source/Entries-Lookup) — ob ein Feature exportiert wird, entscheidet
+      // die geteilte Hydration über character.__activeFeatures (Variant-Skip,
+      // „replaces …", Edition-Match, Option-Block-Filter). Das Flag wird
+      // mitgeführt, damit die Description-Builder Varianten ausblenden.
       const classFeatures = (data.classFeature || [])
-        .filter(f => f.className === cls.name && !f.isClassFeatureVariant)
+        .filter(f => f.className === cls.name)
         .filter(f => !f.name.startsWith('Ability Score Improvement'))
         .sort((a, b) => a.level - b.level)
-        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', entries: f.entries || [] }))
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', entries: f.entries || [], isClassFeatureVariant: !!f.isClassFeatureVariant }))
 
-      // Subclass features: skip ASI, variants, and identity entries
+      // Subclass features: skip ASI and identity entries
       const subclassFeatures = (data.subclassFeature || [])
-        .filter(f => !f.isClassFeatureVariant)
         .filter(f => !f.name.startsWith('Ability Score Improvement'))
         .filter(f => !subclassIdentityNames.has(f.name + '||' + f.subclassShortName))
         .sort((a, b) => a.level - b.level)
-        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', subclassShortName: f.subclassShortName, entries: f.entries || [] }))
+        .map(f => ({ name: f.name, level: f.level, source: f.source || 'PHB', subclassShortName: f.subclassShortName, entries: f.entries || [], isClassFeatureVariant: !!f.isClassFeatureVariant }))
 
-      CLASS_FEATURES_MAP.set(cls.name, { classFeatures, subclassFeatures, subclassShortNames })
+      CLASS_FEATURES_MAP.set(cls.name, { classFeatures, subclassFeatures, subclassShortNames, subclassIdentityNames })
     }
   }
 
@@ -1657,7 +1520,7 @@ function buildClassDescription(cls) {
     lines.push(`<p><strong>Spellcasting Ability:</strong> ${cls.spellcastingAbility.toUpperCase()}</p>`)
   }
   const feats = (CLASS_FEATURES_MAP?.get(cls.classId)?.classFeatures || [])
-    .filter(f => f.level <= (cls.level || 1))
+    .filter(f => f.level <= (cls.level || 1) && !f.isClassFeatureVariant)
   if (feats.length) {
     lines.push('<h3>Class Features</h3><ul>')
     for (const f of feats) lines.push(`<li><strong>Level ${f.level}:</strong> ${f.name}</li>`)
@@ -1869,7 +1732,7 @@ function buildSubclassDescription(cls, subclassName) {
   if (!fmap) return ''
   const short = fmap.subclassShortNames?.get(subclassName) || subclassName
   const feats = (fmap.subclassFeatures || [])
-    .filter(f => f.subclassShortName === short && f.level <= (cls.level || 1))
+    .filter(f => f.subclassShortName === short && f.level <= (cls.level || 1) && !f.isClassFeatureVariant)
   if (!feats.length) return ''
   const lines = ['<h3>Subclass Features</h3><ul>']
   for (const f of feats) lines.push(`<li><strong>Level ${f.level}:</strong> ${f.name}</li>`)
@@ -2850,9 +2713,11 @@ export async function exportToFoundry(character) {
     cls => makeSubclassItem(cls, character), 'subclass')
 
   // 3. Klassen-Features
-  // Source of truth: CLASS_FEATURES_MAP (5etools) — all features per class/subclass.
-  // CLASS_INDEX patches provide rich data (activities, effects, img) where available;
-  // features not in the patch index still get a basic item with description from CF_DESC.
+  // Source of truth: character.__activeFeatures (geteilte Hydration — gleiche
+  // Feature-Menge wie Sheet/VTT). CLASS_FEATURES_MAP liefert nur Metadaten
+  // (Source, Entries-Fallback, subclassShortName); CLASS_INDEX patches provide
+  // rich data (activities, effects, img) where available; features not in the
+  // patch index still get a basic item with description from CF_DESC.
   const classFeatureItems = []
   const seenFeatures = new Set()
 
@@ -2881,28 +2746,49 @@ export async function exportToFoundry(character) {
     }
     for (const p of allPatches) { if (p?.name) patchMap.set(p.name, p) }
 
-    // All features for this class up to the character's level
-    const allFeatures = [
-      ...(clsFeatData?.classFeatures || []),
-      ...(clsFeatData?.subclassFeatures || []).filter(f => f.subclassShortName === subShortName),
-    ]
+    // Metadaten-Lookup (Source/Entries/subclassShortName) aus den 5etools-
+    // Listen — Edition-bevorzugt, weil die 5.5e-Dateien PHB- UND XPHB-Zeilen
+    // enthalten. WAS exportiert wird, bestimmt die geteilte Hydration:
+    // character.__activeFeatures ist bereits Variant-/„replaces …"-/Edition-/
+    // Option-Block-gefiltert (aktivierte TCE-Varianten inklusive, von ihnen
+    // ersetzte Features und nicht gewählte Option-Targets draußen).
+    const is55e = edition === '5.5e'
+    const metaRank = (src) => {
+      const isX = ['XPHB', 'XDMG', 'XMM'].includes(String(src || '').toUpperCase())
+      return (is55e ? isX : !isX) ? 0 : 1
+    }
+    const metaByName = new Map()
+    for (const m of [...(clsFeatData?.classFeatures || []), ...(clsFeatData?.subclassFeatures || [])]) {
+      const k = String(m.name).toLowerCase()
+      const prev = metaByName.get(k)
+      if (!prev || metaRank(m.source) < metaRank(prev.source)) metaByName.set(k, m)
+    }
+    const identityNames = clsFeatData?.subclassIdentityNames || new Set()
 
-    for (const feat of allFeatures) {
-      if (feat.level > cls.level) continue
+    for (const feat of (character.__activeFeatures || [])) {
+      if (feat.classId !== cls.classId) continue
+      // Optfeature-Picks (Invocations, Maneuvers, Fighting Styles, …)
+      // exportiert der dedizierte Block unten mit OPTFEAT-Patches.
+      if (feat.isOptionalFeature) continue
+      if (String(feat.name).startsWith('Ability Score Improvement')) continue
+      // Subclass-Identity-Features (Feature heißt wie die Subclass) sind
+      // redundant zum Subclass-Item.
+      if (feat.source === 'subclass' && identityNames.has(`${feat.name}||${subShortName}`)) continue
 
       const dedupKey = `${cls.classId}|${feat.name}|${feat.level}`
       if (seenFeatures.has(dedupKey)) continue
       seenFeatures.add(dedupKey)
 
+      const meta = metaByName.get(String(feat.name).toLowerCase()) || {}
       const patch = patchMap.get(feat.name) || {}
       try {
         classFeatureItems.push(makeClassFeatureItem({
           name:              feat.name,
           level:             feat.level,
-          source:            feat.source,
+          source:            meta.source || 'PHB',
           className:         cls.classId,
-          subclassShortName: feat.subclassShortName || null,
-          entries:           feat.entries     || [],
+          subclassShortName: feat.source === 'subclass' ? (meta.subclassShortName || subShortName) : null,
+          entries:           (Array.isArray(feat.entries) && feat.entries.length ? feat.entries : meta.entries) || [],
           img:               patch.img        || null,
           effects:           patch.effects    || [],
           activities:        patch.activities || [],
@@ -3019,12 +2905,17 @@ export async function exportToFoundry(character) {
     const computedRes = (computed?.resources || [])
     const usedRes = character?.status?.usedResources || {}
     const out = new Map()
-    const findRes = (spellName) => {
-      const lower = String(spellName).toLowerCase()
-      if (/hunter's\s*mark/.test(lower)) {
-        return computedRes.find(r => /favored\s*(?:enemy|foe)/i.test(r.name))
+    const findRes = (spellName, featureName) => {
+      // Ressource des GEWÄHRENDEN Features zuerst (Favored Enemy gewährt
+      // Hunter's Mark, die Uses hängen am Feature-Namen) — datengetrieben
+      // über den Feature-Kontext statt einer Spell-Namensliste.
+      const feat = String(featureName || '').toLowerCase()
+      if (feat) {
+        const own = computedRes.find(r => String(r.name || '').toLowerCase() === feat)
+        if (own) return own
       }
       // Generic substring match against resource names.
+      const lower = String(spellName).toLowerCase()
       return computedRes.find(r => r.name && lower.includes(String(r.name).toLowerCase()))
     }
     for (const f of (character?.__activeFeatures || [])) {
@@ -3034,7 +2925,7 @@ export async function exportToFoundry(character) {
       for (const m of grants) {
         const spellName = String(m[1] || '').trim()
         if (!spellName) continue
-        const res = findRes(spellName)
+        const res = findRes(spellName, f.name)
         if (!res || !res.max) continue
         out.set(spellName.toLowerCase(), {
           max: res.max,

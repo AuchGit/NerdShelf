@@ -51,10 +51,19 @@ function useHydrationData(character) {
       if (cancelled) return;
       const classMap = {};
       ids.forEach((id, i) => { if (loaded[i]) classMap[id] = loaded[i]; });
+      // Beide Keys (name + name|SOURCE) wie die Sheet-Hydration, damit der
+      // Option-Block-Resolver source-disambiguierte Refs identisch auflöst.
+      const addKeyed = (map, f) => {
+        if (!f?.name) return;
+        const lower = String(f.name).toLowerCase();
+        map.set(lower, f);
+        const src = String(f.source || '').toUpperCase();
+        if (src) map.set(`${lower}|${src}`, f);
+      };
       const featMap = new Map();
-      for (const f of (featList || [])) if (f?.name) featMap.set(String(f.name).toLowerCase(), f);
+      for (const f of (featList || [])) addKeyed(featMap, f);
       const optionalFeatureMap = new Map();
-      for (const f of (ofList || [])) if (f?.name) optionalFeatureMap.set(String(f.name).toLowerCase(), f);
+      for (const f of (ofList || [])) addKeyed(optionalFeatureMap, f);
       setData({ classMap, featMap, optionalFeatureMap, raceTraits, itemIndex });
     });
     return () => { cancelled = true; };

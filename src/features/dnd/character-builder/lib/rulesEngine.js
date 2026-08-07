@@ -1338,6 +1338,9 @@ export function computeAttacks(character, modifiers, profBonus, proficiencies, w
       attacksPerAction,
       range: computedRange,
       properties: props,
+      // Fernkampf-Flag (Ammunition/Thrown) — der Wurf-Composer gated damit
+      // waffengebundene Rider mit Anforderung ("finesse or ranged weapon").
+      isRanged,
       // Wählbare Angriffs-Boni für den Wurf-Composer, auf DIESE Waffe
       // gefiltert (Thrown Weapon Fighting nur bei werfbaren Waffen,
       // Power-Attack −5/+10 nur bei passender Waffengattung, …).
