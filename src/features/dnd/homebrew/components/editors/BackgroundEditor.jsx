@@ -213,7 +213,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </div>
 
       {/* Skill Proficiencies */}
-      <Section title="Skill Proficiencies" icon="◆" accent="#7aa2f7"
+      <Section title="Skill Proficiencies" accent="#7aa2f7"
         subtitle="Fixed grants und optional Wahl-Block">
         <Field label="Fest gewährt">
           <ChipMulti options={SKILL_OPTS} selected={draft.skills}
@@ -246,7 +246,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Tool Proficiencies */}
-      <Section title="Tool Proficiencies" icon="🔧" accent="#4dd0e1"
+      <Section title="Tool Proficiencies" accent="#4dd0e1"
         subtitle="Fest gewährte Werkzeuge / Kits">
         <Field label="Fest gewährt">
           <ChipMulti options={TOOL_OPTS} selected={draft.tools}
@@ -279,7 +279,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Languages */}
-      <Section title="Sprachen" icon="🌐" accent="#9ece6a"
+      <Section title="Sprachen" accent="#9ece6a"
         subtitle="Fest gewährt oder per Spieler-Wahl (anyStandard = irgendeine Standard-Sprache)">
         <Field label="Fest gewährt">
           <FreeChips items={draft.languages}
@@ -309,7 +309,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Ability Bonus */}
-      <Section title="Ability Score Bonus" icon="✦" accent="#ff9533"
+      <Section title="Ability Score Bonus" accent="#ff9533"
         subtitle="5.5e-Style: Spieler verteilt X Punkte auf bestimmte Abilities">
         <label style={ek.checkRow}>
           <input type="checkbox" checked={draft.abilityChoice.enabled}
@@ -339,7 +339,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Feats */}
-      <Section title="Origin Feat(s)" icon="★" accent="#b07afe"
+      <Section title="Origin Feat(s)" accent="#b07afe"
         subtitle="Feats die der Background mitgibt (z.B. 'Magic Initiate: Cleric')">
         <FreeChips items={draft.feats}
           placeholder="Feat-Name eintippen (z.B. Magic Initiate; Cleric)"
@@ -347,7 +347,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Description */}
-      <Section title="Beschreibung" icon="✎" accent="#9aa3b4"
+      <Section title="Beschreibung" accent="#9aa3b4"
         subtitle="Flavor-Text. Absätze mit Leerzeile trennen.">
         <textarea value={draft.description} onChange={e => set('description', e.target.value)}
           rows={6} placeholder="Background-Story, Persönlichkeitstreiber, …"

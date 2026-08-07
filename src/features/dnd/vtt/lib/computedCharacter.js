@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { computeCharacter } from '../../character-builder/lib/rulesEngine';
 import { loadClassData, loadFeatList, loadOptionalFeatureList, loadItemIndex } from '../../character-builder/lib/dataLoader';
 import { collectActiveClassFeatures, collectClassGrantedSpells, loadRaceTraits, backfillWeaponData } from '../../character-builder/lib/characterHydration';
+import { listHomebrew } from '../../homebrew/lib/homebrewStore';
 
 // Feats mit Entries aus dem Katalog — als SEPARATES transient-Feld
 // (__featFeatures), damit Feat-Texte nur in den Prosa-Resource-
@@ -47,7 +48,11 @@ function useHydrationData(character) {
       loadOptionalFeatureList(edition).catch(() => []),
       loadRaceTraits(edition, character).catch(() => ({ names: [], traits: [], fixedSkills: [] })),
       loadItemIndex(edition).catch(() => []),
-    ]).then(([loaded, featList, ofList, raceTraits, itemIndex]) => {
+      // Homebrew-Features (Cloud-Store): das Sheet lädt sie in seiner
+      // Hydration — ohne diesen Feed fehlten sie im VTT (Bottom-Bar,
+      // Aktions-Overlay, Rider) komplett.
+      listHomebrew('features').catch(() => []),
+    ]).then(([loaded, featList, ofList, raceTraits, itemIndex, homebrewFeatures]) => {
       if (cancelled) return;
       const classMap = {};
       ids.forEach((id, i) => { if (loaded[i]) classMap[id] = loaded[i]; });
@@ -64,7 +69,7 @@ function useHydrationData(character) {
       for (const f of (featList || [])) addKeyed(featMap, f);
       const optionalFeatureMap = new Map();
       for (const f of (ofList || [])) addKeyed(optionalFeatureMap, f);
-      setData({ classMap, featMap, optionalFeatureMap, raceTraits, itemIndex });
+      setData({ classMap, featMap, optionalFeatureMap, raceTraits, itemIndex, homebrewFeatures });
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,7 +88,13 @@ export function useVttHydrated(character) {
     try {
       // Leere Waffen-Properties aus dem Katalog nachfüllen (Dagger-Finesse/
       // Thrown), bevor Features gesammelt + gerechnet wird.
-      const ch = backfillWeaponData(character, data.itemIndex);
+      const chBase = backfillWeaponData(character, data.itemIndex);
+      // Homebrew-Features an den transient-Char hängen — der geteilte
+      // Sammler nimmt sie über charData.__homebrewFeatures auf (gleicher
+      // Pfad wie CharacterSheetPage.hydrateClassDataAndRecompute).
+      const ch = data.homebrewFeatures?.length
+        ? { ...chBase, __homebrewFeatures: data.homebrewFeatures }
+        : chBase;
       const activeFeatures = collectActiveClassFeatures(ch, data.classMap, {
         optionalFeatureMap: data.optionalFeatureMap, featMap: data.featMap,
       });

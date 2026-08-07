@@ -223,7 +223,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </div>
 
       {/* Basics */}
-      <Section title="Basics" icon="◆" accent="#7aa2f7"
+      <Section title="Basics" accent="#7aa2f7"
         subtitle="Größe, Typ, Alignment, CR">
         <div style={ek.grid}>
           <Field label="Größe">
@@ -260,7 +260,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* HP / AC / Speed */}
-      <Section title="HP · AC · Speed" icon="❤" accent="#f7768e">
+      <Section title="HP · AC · Speed" accent="#f7768e">
         <div style={ek.grid}>
           <Field label="AC">
             <input type="number" min="0" value={draft.ac}
@@ -290,7 +290,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Abilities */}
-      <Section title="Ability Scores" icon="◇" accent="#ff9533">
+      <Section title="Ability Scores" accent="#ff9533">
         <div style={{ ...ek.grid, gridTemplateColumns: 'repeat(6, 1fr)' }}>
           {ABILITY_KEYS.map(ab => (
             <Field key={ab} label={ab.toUpperCase()}>
@@ -303,7 +303,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Saves + Skills */}
-      <Section title="Saves & Skills" icon="✦" accent="#9ece6a"
+      <Section title="Saves & Skills" accent="#9ece6a"
         subtitle="Manuell — z.B. dex +4. Format: '+N' oder '-N'">
         <Field label="Saving Throw Bonuses">
           <div style={{ ...ek.grid, gridTemplateColumns: 'repeat(6, 1fr)' }}>
@@ -342,7 +342,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Senses + Languages */}
-      <Section title="Senses & Sprachen" icon="👁" accent="#4dd0e1">
+      <Section title="Senses & Sprachen" accent="#4dd0e1">
         <div style={ek.grid}>
           {['darkvision','blindsight','tremorsense','truesight'].map(s => (
             <Field key={s} label={`${s} ft.`}>
@@ -364,7 +364,7 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Defenses */}
-      <Section title="Defenses" icon="🛡" accent="#b07afe"
+      <Section title="Defenses" accent="#b07afe"
         subtitle="Resistenzen / Immunitäten / Verwundbarkeiten / Condition Immunities">
         <Field label="Damage Resist">
           <ChipMulti options={DAMAGE_TYPES} selected={draft.resist}
@@ -385,34 +385,34 @@ export default function CreatureEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Description */}
-      <Section title="Beschreibung" icon="✎" accent="#9aa3b4">
+      <Section title="Beschreibung" accent="#9aa3b4">
         <textarea value={draft.description} onChange={e => set('description', e.target.value)}
           rows={4} placeholder="Allgemeine Beschreibung / Lore"
           style={{ ...ek.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Section>
 
       {/* Traits / Actions / Bonus / Reactions / Legendary */}
-      <NamedEntryList label="Traits" icon="✨" accent="#ff9533"
+      <NamedEntryList label="Traits" accent="#ff9533"
         items={draft.trait} ops={traitOps}
         hint="Passive Features (z.B. Pack Tactics, Magic Resistance)"
         presets={PRESET_TRAITS} />
-      <NamedEntryList label="Actions" icon="⚔" accent="#f7768e"
+      <NamedEntryList label="Actions" accent="#f7768e"
         items={draft.action} ops={actionOps}
         hint="Aktiv-Effekte; ein Attack: 'Melee Weapon Attack: +X to hit…'"
         presets={PRESET_ACTIONS} />
-      <NamedEntryList label="Bonus Actions" icon="⚡" accent="#9ece6a"
+      <NamedEntryList label="Bonus Actions" accent="#9ece6a"
         items={draft.bonus} ops={bonusOps}
         hint="Bonus-Action-Effekte"
         presets={PRESET_BONUS} />
-      <NamedEntryList label="Reactions" icon="↻" accent="#7aa2f7"
+      <NamedEntryList label="Reactions" accent="#7aa2f7"
         items={draft.reaction} ops={reactionOps}
         hint="Reaktive Effekte"
         presets={PRESET_REACTIONS} />
-      <NamedEntryList label="Legendary Actions" icon="★" accent="#b07afe"
+      <NamedEntryList label="Legendary Actions" accent="#b07afe"
         items={draft.legendary} ops={legendaryOps}
         hint="Legendary Actions (für Boss-Monster)"
         presets={PRESET_LEGENDARY} />
-      <NamedEntryList label="Lair Actions" icon="🜲" accent="#4dd0e1"
+      <NamedEntryList label="Lair Actions" accent="#4dd0e1"
         items={draft.lair} ops={lairOps}
         hint="Initiative count 20 — passive Effekte in der Lair (z.B. Tremor, Cave-In, Mist)"
         presets={PRESET_LAIR} />

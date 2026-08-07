@@ -8,6 +8,8 @@
 // dataLoader.loadSpellList Homebrew-Branch).
 
 import { useState, useEffect } from 'react'
+import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
+import { loadClassList } from '../../../character-builder/lib/dataLoader'
 
 const SCHOOLS = [
   { v: 'A', l: 'A — Abjuration' },
@@ -40,11 +42,34 @@ const DAMAGE_TYPES = [
   'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
 ]
 const SAVE_ABILITIES = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
-const CLASSES = ['Bard', 'Cleric', 'Druid', 'Paladin', 'Ranger', 'Sorcerer', 'Warlock', 'Wizard', 'Artificer']
+// Fallback bis die echten Klassendaten geladen sind — danach kommt die
+// Liste datengetrieben aus loadClassList (beide Editionen, Union).
+const CLASSES_FALLBACK = ['Bard', 'Cleric', 'Druid', 'Paladin', 'Ranger', 'Sorcerer', 'Warlock', 'Wizard', 'Artificer']
+
+// Erster NdM-Würfelausdruck aus den Beschreibungs-Entries (für die
+// Skalierungs-Generatoren). {@damage 8d6} und blankes 8d6 zählen beide.
+function firstDiceIn(entries) {
+  const flat = (entries || []).map(e => (typeof e === 'string' ? e : JSON.stringify(e))).join(' ')
+  const m = flat.match(/(\d+)d(\d+)/)
+  return m ? { n: parseInt(m[1], 10), die: parseInt(m[2], 10) } : null
+}
 
 export default function SpellEditor({ entry, onSave, onCancel }) {
   const [draft, setDraft] = useState(entry)
   useEffect(() => setDraft(entry), [entry])
+  // Klassen datengetrieben (Union 5e + 5.5e) — Homebrew-Spells können
+  // beiden Editionen zugeordnet werden; dataLoader cached die Files.
+  const [classOpts, setClassOpts] = useState(CLASSES_FALLBACK)
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([loadClassList('5e').catch(() => []), loadClassList('5.5e').catch(() => [])])
+      .then(([a, b]) => {
+        if (cancelled) return
+        const names = [...new Set([...(a || []), ...(b || [])].map(c => c?.name).filter(Boolean))].sort()
+        if (names.length) setClassOpts(names)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
 
@@ -86,6 +111,43 @@ export default function SpellEditor({ entry, onSave, onCancel }) {
     const has = classes.includes(c)
     set('classes', has ? classes.filter(x => x !== c) : [...classes, c])
   }
+  // Spell Attack (M/R) — der VTT-Roll-Prompt zeigt nur mit diesem Feld
+  // einen Angriffswurf-Button an.
+  const atk = draft.spellAttack || []
+  const toggleAtk = (t) => {
+    const has = atk.includes(t)
+    set('spellAttack', has ? atk.filter(x => x !== t) : [...atk, t])
+  }
+  const isRitual = !!draft.meta?.ritual
+  const setRitual = (on) => {
+    const meta = { ...(draft.meta || {}) }
+    if (on) meta.ritual = true
+    else delete meta.ritual
+    set('meta', meta)
+  }
+
+  // ── Skalierungs-Generatoren ──
+  // Cantrip: scalingLevelDice (5/11/17, ein Würfel mehr pro Stufe) — wird
+  // von spellEffectParser + Roll-Prompt konsumiert. Leveled: kanonischer
+  // Upcast-Satz mit {@scaledamage}-Tag, den der Slot-Picker live umrechnet.
+  const baseDice = firstDiceIn(draft.entries)
+  function genCantripScaling() {
+    if (!baseDice) return
+    const { n, die } = baseDice
+    const d = (mult) => `${n * mult}d${die}`
+    set('scalingLevelDice', {
+      label: `${n}d${die}`,
+      scaling: { 1: d(1), 5: d(2), 11: d(3), 17: d(4) },
+    })
+  }
+  function genUpcastText() {
+    if (!baseDice) return
+    const lvl = draft.level ?? 1
+    const step = `1d${baseDice.die}`
+    const base = `${baseDice.n}d${baseDice.die}`
+    const txt = `When you cast this spell using a spell slot of level ${lvl + 1} or higher, the damage increases by {@scaledamage ${base}|${lvl}-9|${step}} for each slot level above ${lvl}.`
+    set('entriesHigherLevel', [{ type: 'entries', name: 'Using a Higher-Level Spell Slot', entries: [txt] }])
+  }
 
   // Entries / entriesHigherLevel als Textarea (jeder Absatz = Eintrag)
   const entriesText = Array.isArray(draft.entries)
@@ -117,11 +179,18 @@ export default function SpellEditor({ entry, onSave, onCancel }) {
   }
 
   function commit() {
+    if (!String(draft.name || '').trim()) {
+      alert('Bitte einen Spell-Namen eingeben.')
+      return
+    }
     const out = { ...draft }
     if (!out.entries?.length) delete out.entries
     if (!out.classes?.length) delete out.classes
     if (!out.damageInflict?.length) delete out.damageInflict
     if (!out.savingThrow?.length) delete out.savingThrow
+    if (!out.spellAttack?.length) delete out.spellAttack
+    if (!out.scalingLevelDice) delete out.scalingLevelDice
+    if (out.meta && Object.keys(out.meta).length === 0) delete out.meta
     onSave(out)
   }
 
@@ -208,9 +277,9 @@ export default function SpellEditor({ entry, onSave, onCancel }) {
         </Field>
       </div>
 
-      <Field label="Klassen-Listen">
+      <Field label="Klassen-Listen (welche Klassen können den Spell lernen/preparen)">
         <div style={ed.chipGrid}>
-          {CLASSES.map(c => {
+          {classOpts.map(c => {
             const on = classes.includes(c)
             return (
               <button key={c} type="button" onClick={() => toggleClass(c)}
@@ -219,6 +288,23 @@ export default function SpellEditor({ entry, onSave, onCancel }) {
           })}
         </div>
       </Field>
+
+      <div style={ed.grid}>
+        <Field label="Spell Attack (zeigt im Roll-Prompt den Angriffs-Button)">
+          <div style={ed.chipGrid}>
+            <button type="button" onClick={() => toggleAtk('M')}
+              style={atk.includes('M') ? ed.chipOn : ed.chip}>Melee</button>
+            <button type="button" onClick={() => toggleAtk('R')}
+              style={atk.includes('R') ? ed.chipOn : ed.chip}>Ranged</button>
+          </div>
+        </Field>
+        <Field label="Ritual">
+          <label style={ed.checkbox}>
+            <input type="checkbox" checked={isRitual} onChange={e => setRitual(e.target.checked)} />
+            Kann als Ritual gewirkt werden
+          </label>
+        </Field>
+      </div>
 
       <div style={ed.grid}>
         <Field label="Damage Types">
@@ -250,11 +336,51 @@ export default function SpellEditor({ entry, onSave, onCancel }) {
           rows={8} style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Field>
 
-      <Field label="Upcast (At Higher Levels)">
-        <textarea value={higherText} onChange={e => setHigherText(e.target.value)}
-          rows={3} placeholder="When you cast this spell using a spell slot of …"
-          style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
-      </Field>
+      {(draft.level ?? 0) === 0 ? (
+        <Field label="Cantrip-Skalierung (5. / 11. / 17. Stufe)">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={genCantripScaling} disabled={!baseDice}
+              title={baseDice ? `Erzeugt ${baseDice.n}d${baseDice.die} → ${baseDice.n * 2}d${baseDice.die} → ${baseDice.n * 3}d${baseDice.die} → ${baseDice.n * 4}d${baseDice.die}` : 'Zuerst einen Würfelausdruck (z.B. 1d8) in die Beschreibung schreiben'}
+              style={{ ...ed.chip, opacity: baseDice ? 1 : 0.5 }}>
+              Aus Beschreibung erzeugen
+            </button>
+            {draft.scalingLevelDice && (
+              <>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {Object.entries(draft.scalingLevelDice.scaling || {}).map(([lv, d]) => `L${lv}: ${d}`).join(' · ')}
+                </span>
+                <button type="button" onClick={() => set('scalingLevelDice', null)} style={ed.chip}>Entfernen</button>
+              </>
+            )}
+          </div>
+        </Field>
+      ) : (
+        <Field label="Upcast (At Higher Levels)">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+            <button type="button" onClick={genUpcastText} disabled={!baseDice}
+              title={baseDice ? 'Erzeugt den Standard-Satz mit {@scaledamage} — der Slot-Picker im Roll-Prompt rechnet die Würfel dann live um' : 'Zuerst einen Würfelausdruck (z.B. 8d6) in die Beschreibung schreiben'}
+              style={{ ...ed.chip, opacity: baseDice ? 1 : 0.5 }}>
+              +1 Würfel pro Slot-Level generieren
+            </button>
+          </div>
+          <textarea value={higherText} onChange={e => setHigherText(e.target.value)}
+            rows={3} placeholder="When you cast this spell using a spell slot of …"
+            style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
+        </Field>
+      )}
+
+      {Array.isArray(draft.entries) && draft.entries.length > 0 && (
+        <Field label="Vorschau (Tags wie {@damage 8d6} werden gerendert)">
+          <div style={{ padding: '10px 14px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }}>
+            <EntryRenderer entries={draft.entries} />
+            {Array.isArray(draft.entriesHigherLevel) && draft.entriesHigherLevel.length > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                <EntryRenderer entries={draft.entriesHigherLevel} />
+              </div>
+            )}
+          </div>
+        </Field>
+      )}
 
       <div style={ed.footer}>
         <button type="button" onClick={onCancel} style={ed.cancelBtn}>Abbrechen</button>

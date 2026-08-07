@@ -32,6 +32,7 @@ import GenericJsonEditor from '../components/editors/GenericJsonEditor'
 import EntryRenderer from '../../character-builder/components/ui/EntryRenderer'
 import { listPublic, importPublic } from '../lib/homebrewSync'
 import { setHomebrewPublic, ensureShareToken, revokeShareToken, importByToken } from '../lib/homebrewStore'
+import { validationCounts } from '../lib/homebrewValidate'
 
 const KIND_LABELS = {
   items:       'Items',
@@ -43,12 +44,12 @@ const KIND_LABELS = {
 }
 
 const KIND_DESC = {
-  items:       'Eigene Waffen, Rüstung, Magic Items, Gegenstände',
-  spells:      'Eigene Cantrips / Spells (alle Level)',
+  items:       'Eigene Waffen, Rüstung, Magic Items, Gegenstände — erscheinen in Item-Pickern und auf dem Sheet',
+  spells:      'Eigene Cantrips / Spells (alle Level) — erscheinen in den Spell-Pickern der zugewiesenen Klassen',
   backgrounds: 'Eigene Backgrounds inkl. Skill/Tool/Language-Grants',
   races:       'Eigene Rassen mit Ability-Bonus, Speed, Profs, Granted Spells und Traits',
-  creatures:   'Eigene Monster / NPCs (für GM-Notizen — kein Engine-Konsumer)',
-  features:    'Eigene Class- / Subclass- / Race-Features',
+  creatures:   'Eigene Monster / NPCs — im VTT-Monster-Panel als Statblock und Token nutzbar',
+  features:    'Eigene Class- / Subclass- / Race-Features — aktiv auf Sheet und im VTT (Aktionen, Rider, Ressourcen)',
 }
 
 const DEFAULT_KIND = 'items'
@@ -58,8 +59,22 @@ export default function HomebrewPage({ session }) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
+  // Erzwungener Roh-JSON-Modus (Power-User): editiert JEDEN Kind-Eintrag
+  // als 5etools-JSON — für Felder, die der strukturierte Editor nicht kennt.
+  const [editingJson, setEditingJson] = useState(false)
   const [templatePicker, setTemplatePicker] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  // Zähler pro Tab (aus dem Store-Cache — nach Mutationen neu geladen).
+  const [counts, setCounts] = useState({})
+
+  const reloadCounts = useCallback(async () => {
+    const next = {}
+    for (const k of HOMEBREW_KINDS) {
+      try { next[k] = (await listHomebrew(k)).length } catch { next[k] = 0 }
+    }
+    setCounts(next)
+  }, [])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -67,14 +82,46 @@ export default function HomebrewPage({ session }) {
       const list = await listHomebrew(kind)
       setEntries(list)
     } finally { setLoading(false) }
-  }, [kind])
+    reloadCounts()
+  }, [kind, reloadCounts])
 
   useEffect(() => { reload() }, [reload])
 
   async function handleSave(entry) {
-    await saveHomebrew(kind, entry)
+    // Zentrale Prüfung für ALLE Editoren: Fehler blockieren (der Eintrag
+    // käme sonst nirgends an), Hinweise werden nur bestätigt — Homebrew
+    // soll nicht bevormunden, aber auch nicht stumm ins Leere laufen.
+    const { errors, warnings, list } = validationCounts(kind, entry)
+    if (errors > 0) {
+      alert('Der Eintrag kann so nicht verwendet werden:\n\n'
+        + list.filter(v => v.level === 'error').map(v => `• ${v.msg}`).join('\n'))
+      return
+    }
+    if (warnings > 0) {
+      const ok = window.confirm('Hinweise zu diesem Eintrag:\n\n'
+        + list.filter(v => v.level === 'warn').map(v => `• ${v.msg}`).join('\n')
+        + '\n\nTrotzdem speichern?')
+      if (!ok) return
+    }
+    try {
+      await saveHomebrew(kind, entry)
+    } catch (e) {
+      alert('Speichern fehlgeschlagen: ' + (e?.message || e))
+      return
+    }
     setEditing(null)
+    setEditingJson(false)
     await reload()
+  }
+
+  async function handleDuplicate(entry) {
+    const clone = JSON.parse(JSON.stringify(entry))
+    delete clone._localMeta
+    clone.name = `${entry.name || 'Eintrag'} (Kopie)`
+    try {
+      await saveHomebrew(kind, clone)
+      await reload()
+    } catch (e) { alert('Duplizieren fehlgeschlagen: ' + (e?.message || e)) }
   }
 
   async function handleDelete(entry) {
@@ -96,9 +143,11 @@ export default function HomebrewPage({ session }) {
     return { name: 'Neues Feature', source, level: 1, entries: [''] }
   }
 
-  function startNew() { setEditing(newBlank()) }
+  function startNew() { setEditingJson(false); setEditing(newBlank()) }
 
-  function startEdit(entry) { setEditing(entry) }
+  function startEdit(entry) { setEditingJson(false); setEditing(entry) }
+
+  function startEditJson(entry) { setEditingJson(true); setEditing(entry) }
 
   function openTemplatePicker() { setTemplatePicker(true) }
 
@@ -116,6 +165,7 @@ export default function HomebrewPage({ session }) {
   }
 
   const Editor = useMemo(() => {
+    if (editingJson) return GenericJsonEditor
     if (kind === 'items') return ItemEditor
     if (kind === 'spells') return SpellEditor
     if (kind === 'features') return FeatureEditor
@@ -123,7 +173,16 @@ export default function HomebrewPage({ session }) {
     if (kind === 'backgrounds') return BackgroundEditor
     if (kind === 'creatures') return CreatureEditor
     return GenericJsonEditor
-  }, [kind])
+  }, [kind, editingJson])
+
+  const visibleEntries = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return entries
+    return entries.filter(e =>
+      String(e.name || '').toLowerCase().includes(q)
+      || String(e.source || '').toLowerCase().includes(q),
+    )
+  }, [entries, search])
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -131,9 +190,11 @@ export default function HomebrewPage({ session }) {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         <h1 style={S.h1}>Homebrew</h1>
         <p style={S.subtitle}>
-          Eigene Items, Spells, Backgrounds, Creatures und Features. Lokal
-          gespeichert im 5etools-Format — direkt vom Programm konsumiert
-          (Items / Spells / Backgrounds tauchen in den Pickern auf).
+          Eigene Items, Spells, Backgrounds, Rassen, Creatures und Features im
+          5etools-Format — in der Cloud gespeichert und direkt vom Programm
+          konsumiert: sie tauchen in den Pickern des Charakter-Builders, auf dem
+          Sheet und im VTT auf. Über „Aus Vorlage laden" startest du mit einem
+          offiziellen Eintrag als Basis.
         </p>
 
         {/* Kind-Tabs */}
@@ -142,9 +203,9 @@ export default function HomebrewPage({ session }) {
             <button
               key={k}
               type="button"
-              onClick={() => { setKind(k); setEditing(null) }}
+              onClick={() => { setKind(k); setEditing(null); setEditingJson(false); setSearch('') }}
               style={k === kind ? S.kindTabActive : S.kindTab}
-            >{KIND_LABELS[k]}</button>
+            >{KIND_LABELS[k]}{counts[k] > 0 ? ` (${counts[k]})` : ''}</button>
           ))}
         </div>
 
@@ -154,7 +215,7 @@ export default function HomebrewPage({ session }) {
         {editing ? (
           <Editor
             entry={editing}
-            onCancel={() => setEditing(null)}
+            onCancel={() => { setEditing(null); setEditingJson(false) }}
             onSave={handleSave}
           />
         ) : (
@@ -180,12 +241,18 @@ export default function HomebrewPage({ session }) {
                     alert('Import fehlgeschlagen: ' + (e?.message || e))
                   }
                 }}
-              >🔗 Token importieren</button>
+              >Token importieren</button>
               <button type="button" style={S.secondaryBtn}
                 title="Öffentliche Einträge anderer Spieler durchstöbern"
                 onClick={() => setLibraryOpen(true)}
-              >🌐 Library</button>
+              >Library</button>
             </div>
+
+            {entries.length > 3 && (
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Nach Name oder Source filtern…"
+                style={{ ...S.input, width: '100%', marginBottom: 10 }} />
+            )}
 
             {loading ? (
               <div style={{ color: 'var(--text-muted)' }}>Lädt…</div>
@@ -196,14 +263,21 @@ export default function HomebrewPage({ session }) {
                 border: '1px dashed var(--border)', borderRadius: 12,
                 color: 'var(--text-muted)',
               }}>
-                Noch keine eigenen {KIND_LABELS[kind]}. Lege einen ersten Eintrag an.
+                Noch keine eigenen {KIND_LABELS[kind]}. Lege einen ersten Eintrag an
+                oder starte über „Aus Vorlage laden" mit einem offiziellen Eintrag als Basis.
+              </div>
+            ) : visibleEntries.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', padding: 12 }}>
+                Kein Eintrag passt auf „{search}".
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {entries.map(e => (
+                {visibleEntries.map(e => (
                   <EntryRow key={e._localMeta?.id} entry={e}
                     kind={kind}
                     onEdit={() => startEdit(e)}
+                    onEditJson={() => startEditJson(e)}
+                    onDuplicate={() => handleDuplicate(e)}
                     onDelete={() => handleDelete(e)}
                     onTogglePublic={async () => {
                       const next = !e._localMeta?.public
@@ -255,69 +329,104 @@ export default function HomebrewPage({ session }) {
 }
 
 // ── Pro-Eintrag-Zeile ────────────────────────────────────────
-function EntryRow({ entry, kind, onEdit, onDelete, onTogglePublic, onShare, onRevokeShare }) {
+// Zusammenfassung pro Kind aus den Feldern, die auch die Konsumenten
+// lesen — bei Spells sind das vor allem die Klassen-Zuweisungen, weil sie
+// darüber entscheiden, ob der Eintrag überhaupt in einem Picker auftaucht.
+function summarize(kind, entry) {
+  const parts = []
+  if (kind === 'items') {
+    if (entry.rarity && entry.rarity !== 'none') parts.push(entry.rarity)
+    if (entry.type) parts.push(String(entry.type).split('|')[0])
+    if (entry.dmg1) parts.push(`${entry.dmg1}${entry.dmgType ? ` ${entry.dmgType}` : ''}`)
+    if (entry.ac) parts.push(`AC ${entry.ac}`)
+  } else if (kind === 'spells') {
+    parts.push(entry.level === 0 ? 'Cantrip' : `Level ${entry.level ?? '?'}`)
+    if (entry.school) parts.push(entry.school)
+    const cls = Array.isArray(entry.classes) ? entry.classes : []
+    parts.push(cls.length ? cls.join(', ') : 'keine Klasse')
+  } else if (kind === 'races') {
+    const size = Array.isArray(entry.size) ? entry.size[0] : entry.size
+    if (size) parts.push(size)
+    if (entry.speed?.walk) parts.push(`${entry.speed.walk} ft.`)
+    if (entry.darkvision) parts.push(`Darkvision ${entry.darkvision}`)
+  } else if (kind === 'creatures') {
+    parts.push(`CR ${typeof entry.cr === 'object' ? entry.cr?.cr : (entry.cr ?? '?')}`)
+    if (entry.type) parts.push(typeof entry.type === 'object' ? entry.type.type : entry.type)
+  } else if (kind === 'backgrounds') {
+    const n = (entry.skillProficiencies || []).length
+    if (n) parts.push(`${n} Skill-Block${n > 1 ? 'e' : ''}`)
+  } else if (kind === 'features') {
+    parts.push(entry.className || 'klassenfrei')
+    parts.push(`L${entry.level ?? '?'}`)
+  }
+  return parts.filter(Boolean).join(' · ')
+}
+
+function EntryRow({ entry, kind, onEdit, onEditJson, onDuplicate, onDelete, onTogglePublic, onShare, onRevokeShare }) {
   const meta = entry._localMeta || {}
   const updated = meta.updated ? new Date(meta.updated).toLocaleString('de-DE') : '—'
   const isPublic = !!meta.public
   const token = meta.token || null
-  const summary =
-    kind === 'items'   ? `${entry.rarity || 'none'} · ${entry.type || '—'}` :
-    kind === 'spells'  ? `Level ${entry.level ?? '?'} · ${entry.school || '?'}` :
-    kind === 'races'   ? `${(Array.isArray(entry.size) ? entry.size[0] : entry.size) || 'M'} · ${entry.source || 'HB'}` :
-    kind === 'creatures' ? `CR ${entry.cr || '?'} · ${entry.type || '?'}` :
-    kind === 'backgrounds' ? `${(entry.skillProficiencies || []).length} Skill-Wahl(en)` :
-    kind === 'features' ? `L${entry.level ?? '?'}` : ''
+  const summary = summarize(kind, entry)
+  const { errors, warnings, list } = validationCounts(kind, entry)
+  const issueText = list.map(v => `${v.level === 'error' ? '[Fehler]' : '[Hinweis]'} ${v.msg}`).join('\n')
 
   return (
     <div style={{
-      display: 'flex', gap: 12, alignItems: 'center',
+      display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
       padding: '10px 14px',
       background: 'var(--bg-elevated)',
       border: '1px solid var(--border)',
       borderRadius: 10,
     }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
           {entry.name || '(unbenannt)'}
           {isPublic && (
-            <span title="Öffentlich geteilt — andere Spieler können diesen Eintrag in der Library finden"
-              style={{
-                marginLeft: 8, padding: '1px 6px', borderRadius: 4,
-                border: '1px solid var(--accent-blue, #7aa2f7)',
-                color: 'var(--accent-blue, #7aa2f7)',
-                fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
-              }}>🌐 public</span>
+            <span title="Öffentlich geteilt — andere Spieler finden diesen Eintrag in der Library"
+              style={S.badgeBlue}>public</span>
           )}
           {token && (
-            <span title={`Share-Token: ${token} — Klick auf 🔗 kopiert ihn`}
-              style={{
-                marginLeft: 4, padding: '1px 6px', borderRadius: 4,
-                border: '1px solid #b07afe', color: '#b07afe',
-                fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
-                fontFamily: 'monospace',
-              }}>🔗 {token}</span>
+            <span title="Share-Token — andere können den Eintrag damit importieren"
+              style={S.badgeToken}>{token}</span>
+          )}
+          {errors > 0 && (
+            <span title={issueText} style={S.badgeError}>
+              {errors} Fehler
+            </span>
+          )}
+          {errors === 0 && warnings > 0 && (
+            <span title={issueText} style={S.badgeWarn}>
+              {warnings} Hinweis{warnings > 1 ? 'e' : ''}
+            </span>
           )}
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-          {summary} · {entry.source || 'HB'} · zuletzt {updated}
+          {summary}{summary ? ' · ' : ''}{entry.source || 'HB'} · zuletzt {updated}
         </div>
       </div>
-      <button type="button" onClick={onTogglePublic} style={S.smallBtn}
-        title={isPublic
-          ? 'Öffentlich → privat schalten'
-          : 'Eintrag in der Public Library sichtbar machen'}
-      >{isPublic ? '🌐 Public ✓' : '🌐 Public'}</button>
-      {token ? (
-        <button type="button" onClick={onRevokeShare} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}
-          title="Share-Token widerrufen"
-        >🔗 Revoke</button>
-      ) : (
-        <button type="button" onClick={onShare} style={S.smallBtn}
-          title="Share-Token generieren — andere können den Eintrag damit importieren"
-        >🔗 Token</button>
-      )}
-      <button type="button" onClick={onEdit} style={S.smallBtn}>Bearbeiten</button>
-      <button type="button" onClick={onDelete} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}>Löschen</button>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onTogglePublic} style={isPublic ? { ...S.smallBtn, borderColor: '#7aa2f7', color: '#7aa2f7' } : S.smallBtn}
+          title={isPublic
+            ? 'Öffentlich → privat schalten'
+            : 'Eintrag in der Public Library sichtbar machen'}
+        >{isPublic ? 'Public: an' : 'Public: aus'}</button>
+        {token ? (
+          <button type="button" onClick={onRevokeShare} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}
+            title="Share-Token widerrufen — bisherige Empfänger verlieren den Zugriff"
+          >Token widerrufen</button>
+        ) : (
+          <button type="button" onClick={onShare} style={S.smallBtn}
+            title="Share-Token generieren — andere können den Eintrag damit importieren"
+          >Token teilen</button>
+        )}
+        <button type="button" onClick={onDuplicate} style={S.smallBtn}
+          title="Kopie anlegen — praktisch als Basis für eine Variante">Duplizieren</button>
+        <button type="button" onClick={onEditJson} style={S.smallBtn}
+          title="Roh-JSON bearbeiten — für Felder, die der strukturierte Editor nicht abdeckt">JSON</button>
+        <button type="button" onClick={onEdit} style={S.smallBtn}>Bearbeiten</button>
+        <button type="button" onClick={onDelete} style={{ ...S.smallBtn, color: 'var(--accent-red)' }}>Löschen</button>
+      </div>
     </div>
   )
 }
@@ -376,7 +485,7 @@ function LibraryModal({ kind, onClose, onImported }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#e6e8ee' }}>
-            🌐 Public Library — {KIND_LABELS[kind]}
+            Public Library — {KIND_LABELS[kind]}
           </div>
           <button type="button" onClick={onClose} style={S.smallBtn}>×</button>
         </div>
@@ -662,6 +771,27 @@ const S = {
     padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)',
     background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
     cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
+  },
+  badgeBlue: {
+    marginLeft: 8, padding: '1px 6px', borderRadius: 4,
+    border: '1px solid #7aa2f7', color: '#7aa2f7',
+    fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
+  },
+  badgeToken: {
+    marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+    border: '1px solid #b07afe', color: '#b07afe',
+    fontSize: 9, fontWeight: 700, verticalAlign: 'middle',
+    fontFamily: 'monospace',
+  },
+  badgeError: {
+    marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+    border: '1px solid #f7768e', color: '#f7768e',
+    fontSize: 9, fontWeight: 700, verticalAlign: 'middle', cursor: 'help',
+  },
+  badgeWarn: {
+    marginLeft: 4, padding: '1px 6px', borderRadius: 4,
+    border: '1px solid #e0af68', color: '#e0af68',
+    fontSize: 9, fontWeight: 700, verticalAlign: 'middle', cursor: 'help',
   },
   input: {
     padding: '6px 10px', fontSize: 12,

@@ -430,7 +430,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
       </div>
 
       {/* Grundeigenschaften */}
-      <Section title="Grundeigenschaften" icon="◆" accent="#7aa2f7">
+      <Section title="Grundeigenschaften" accent="#7aa2f7">
         <div style={ed.grid}>
           <Field label="Typ">
             <select value={draft.type || ''} onChange={e => set('type', e.target.value)} style={ed.input}>
@@ -471,7 +471,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
 
       {/* Waffen-Stats (conditional) */}
       {isWeapon && (
-        <Section title="Waffen-Stats" icon="⚔" accent="#f7768e"
+        <Section title="Waffen-Stats" accent="#f7768e"
           subtitle="Damage, Versatile, Range, Properties, Mastery">
           <div style={ed.grid}>
             <Field label="Damage">
@@ -524,7 +524,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
 
       {/* Armor-Stats (conditional) */}
       {isArmor && (
-        <Section title="Rüstungs-Stats" icon="🛡" accent="#4dd0e1"
+        <Section title="Rüstungs-Stats" accent="#4dd0e1"
           subtitle="AC, Stealth-Disadvantage, Strength-Requirement">
           <div style={ed.grid}>
             <Field label="AC">
@@ -554,14 +554,14 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
       <MagicBonusSection draft={draft} set={set} />
 
       {/* Beschreibung */}
-      <Section title="Beschreibung" icon="✎" accent="#9aa3b4">
+      <Section title="Beschreibung" accent="#9aa3b4">
         <textarea value={draft.description || ''} onChange={e => set('description', e.target.value)}
           rows={3} placeholder="Flavor-Text. Effekte gehören in die Aktionen-Sektion."
           style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Section>
 
       {/* Charges */}
-      <Section title="Charges" icon="⚡" accent="#ff9533"
+      <Section title="Charges" accent="#ff9533"
         subtitle={draft._hbSharedCharges
           ? 'Shared: alle Aktionen ziehen aus einem Pool.'
           : 'Individual: jede Aktion hat eigene Charges.'}>
@@ -599,7 +599,6 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
       {/* Aktionen */}
       <Section
         title={`Aktionen${draft._hbActions?.length ? ` · ${draft._hbActions.length}` : ''}`}
-        icon="⚙"
         accent="#b07afe"
         subtitle="Im Sheet sichtbar wenn attuned + equipped."
         actions={<button type="button" onClick={addAction} style={ed.primaryMini}>+ Aktion</button>}
@@ -620,7 +619,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
       </Section>
 
       {/* Gewährte Spells */}
-      <Section title="Gewährte Spells" icon="📖" accent="#4dd0e1"
+      <Section title="Gewährte Spells" accent="#4dd0e1"
         subtitle="Verfügbar wenn attuned + equipped.">
         <GrantSpellPicker
           grants={draft._hbGrants || []}
@@ -663,7 +662,6 @@ function PassiveGrantsSection({ draft, set }) {
   return (
     <Section
       title={`Passive Grants${cnt ? ` · ${cnt}` : ''}`}
-      icon="✨"
       accent="#b07afe"
       subtitle={cnt
         ? 'Aktive Grants — werden bei attuned + equipped automatisch angewendet'
@@ -817,7 +815,6 @@ function MagicBonusSection({ draft, set }) {
   return (
     <Section
       title={`Magic-Boni${count ? ` · ${count}` : ''}`}
-      icon="✦"
       accent="#9ece6a"
       subtitle={count ? `${count} Bonus-Feld(er) gesetzt` : 'Optional: Cloak of Protection / +1 Weapon / Spell-Focus-Boni …'}
       actions={

@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
+import { loadClassList } from '../../../character-builder/lib/dataLoader'
 
 const ACTION_OPTS = [
   { v: 'passive',  l: 'Passiv (kein Action-Cost)' },
@@ -38,7 +39,9 @@ const DAMAGE_TYPES = [
   '', 'acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning',
   'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
 ]
-const CLASS_OPTS = [
+// Fallback bis die echten Klassendaten geladen sind — danach kommt die
+// Liste datengetrieben aus loadClassList (beide Editionen, Union).
+const CLASS_OPTS_FALLBACK = [
   '', 'Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin',
   'Ranger','Rogue','Sorcerer','Warlock','Wizard','Artificer',
 ]
@@ -140,8 +143,30 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
   }, [entry])
 
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+  // Klassen datengetrieben (Union 5e + 5.5e); '' = klassenfrei bleibt vorn.
+  const [classOpts, setClassOpts] = useState(CLASS_OPTS_FALLBACK)
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([loadClassList('5e').catch(() => []), loadClassList('5.5e').catch(() => [])])
+      .then(([a, b]) => {
+        if (cancelled) return
+        const names = [...new Set([...(a || []), ...(b || [])].map(c => c?.name).filter(Boolean))].sort()
+        if (names.length) setClassOpts(['', ...names])
+      })
+    return () => { cancelled = true }
+  }, [])
+  // Uses-Basis gewählt, aber noch kein Reset-Zeitpunkt → Long Rest als
+  // sinnvoller Default (vorher wurde die Uses-Klausel stumm verworfen).
+  const setUsesBasis = (v) => setDraft(d => ({
+    ...d, usesBasis: v,
+    restType: (v !== 'none' && d.restType === 'none') ? 'long' : d.restType,
+  }))
 
   function commit() {
+    if (!String(draft.name || '').trim()) {
+      alert('Bitte einen Feature-Namen eingeben.')
+      return
+    }
     const entries = buildEntries(draft)
     const out = {
       name: draft.name.trim() || 'Unbenannt',
@@ -173,7 +198,7 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
         </Field>
         <Field label="Klasse (optional)">
           <select value={draft.classId} onChange={e => set('classId', e.target.value)} style={ed.input}>
-            {CLASS_OPTS.map(c => <option key={c} value={c}>{c || '(klassenfrei)'}</option>)}
+            {classOpts.map(c => <option key={c} value={c}>{c || '(klassenfrei — gilt für den ganzen Charakter)'}</option>)}
           </select>
         </Field>
         <Field label="Action-Cost">
@@ -197,7 +222,7 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
 
       <div style={ed.grid}>
         <Field label="Uses — Basis">
-          <select value={draft.usesBasis} onChange={e => set('usesBasis', e.target.value)} style={ed.input}>
+          <select value={draft.usesBasis} onChange={e => setUsesBasis(e.target.value)} style={ed.input}>
             <option value="none">— kein Use-Limit —</option>
             {USES_BASIS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
