@@ -25,6 +25,8 @@ import {
 import ItemEditor from '../components/editors/ItemEditor'
 import SpellEditor from '../components/editors/SpellEditor'
 import SpellListEditor from '../components/editors/SpellListEditor'
+import ClassEditor from '../components/editors/ClassEditor'
+import { blankHomebrewClass } from '../lib/homebrewClass'
 import FeatureEditor from '../components/editors/FeatureEditor'
 import RaceEditor from '../components/editors/RaceEditor'
 import BackgroundEditor from '../components/editors/BackgroundEditor'
@@ -41,6 +43,7 @@ const KIND_LABELS = {
   spelllists:  'Spell-Listen',
   backgrounds: 'Backgrounds',
   races:       'Races',
+  classes:     'Klassen',
   creatures:   'Creatures',
   features:    'Features',
 }
@@ -51,6 +54,7 @@ const KIND_DESC = {
   spelllists:  'Zauber-Sammlungen, die die wählbaren Zauber eines Charakters erweitern — direkt zugeordnet oder an eine Rasse / einen Background / ein Feature / ein Item gehängt',
   backgrounds: 'Eigene Backgrounds inkl. Skill/Tool/Language-Grants',
   races:       'Eigene Rassen mit Ability-Bonus, Speed, Profs, Granted Spells und Traits',
+  classes:     'Eigene Klassen mit Hit Die, Proficiencies, Zauber-Progression, Features pro Stufe und Subclasses — wählbar bei Erstellung, Multiclass und Level-Up',
   creatures:   'Eigene Monster / NPCs — im VTT-Monster-Panel als Statblock und Token nutzbar',
   features:    'Eigene Class- / Subclass- / Race-Features — aktiv auf Sheet und im VTT (Aktionen, Rider, Ressourcen)',
 }
@@ -141,6 +145,7 @@ export default function HomebrewPage({ session }) {
     if (kind === 'items') return { name: 'Neues Item', source, type: 'G', rarity: 'none', entries: [''] }
     if (kind === 'spells') return { name: 'Neuer Spell', source, level: 0, school: 'E', time: [{ number: 1, unit: 'action' }], range: { type: 'point', distance: { type: 'self' } }, components: { v: true }, duration: [{ type: 'instant' }], classes: [], entries: [''] }
     if (kind === 'spelllists') return { name: 'Neue Spell-Liste', source, spells: [] }
+    if (kind === 'classes') return { ...blankHomebrewClass(source), name: 'Neue Klasse' }
     if (kind === 'backgrounds') return { name: 'Neuer Background', source, skillProficiencies: [], languageProficiencies: [], entries: [''] }
     if (kind === 'races') return { name: 'Neue Rasse', source, size: ['M'], speed: { walk: 30 } }
     if (kind === 'creatures') return { name: 'Neue Kreatur', source, size: ['M'], type: 'humanoid', alignment: ['N'], ac: [10], hp: { average: 10, formula: '1d8 + 2' }, speed: { walk: 30 }, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, cr: '1/4', entries: [''] }
@@ -173,6 +178,7 @@ export default function HomebrewPage({ session }) {
     if (kind === 'items') return ItemEditor
     if (kind === 'spells') return SpellEditor
     if (kind === 'spelllists') return SpellListEditor
+    if (kind === 'classes') return ClassEditor
     if (kind === 'features') return FeatureEditor
     if (kind === 'races') return RaceEditor
     if (kind === 'backgrounds') return BackgroundEditor
@@ -363,6 +369,12 @@ function summarize(kind, entry) {
   } else if (kind === 'features') {
     parts.push(entry.className || 'klassenfrei')
     parts.push(`L${entry.level ?? '?'}`)
+  } else if (kind === 'classes') {
+    parts.push(`d${entry.hd?.faces || 8}`)
+    parts.push(entry.casterProgression ? `Caster: ${entry.casterProgression}` : 'kein Caster')
+    parts.push(`${(entry.classFeatures || []).length} Features`)
+    const subs = (entry.subclasses || []).length
+    if (subs) parts.push(`${subs} Subclass${subs > 1 ? 'es' : ''}`)
   } else if (kind === 'spelllists') {
     const n = (entry.spells || []).length
     parts.push(`${n} Zauber`)

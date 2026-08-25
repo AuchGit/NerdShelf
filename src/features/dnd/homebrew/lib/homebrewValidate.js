@@ -57,6 +57,33 @@ const CHECKS = {
       out.push({ level: 'warn', msg: 'Kein Upcast-Text — beim Wirken auf höherem Grad ändern sich die Würfel nicht.' })
     }
   },
+  classes(entry, out) {
+    const feats = Array.isArray(entry.classFeatures) ? entry.classFeatures : []
+    if (feats.length === 0) {
+      out.push({ level: 'warn', msg: 'Keine Klassen-Features — die Klasse gewährt auf keiner Stufe etwas.' })
+    }
+    if (feats.some(f => !f?.name)) {
+      out.push({ level: 'error', msg: 'Ein Feature hat keinen Namen.' })
+    }
+    if (!entry.hd?.faces) {
+      out.push({ level: 'warn', msg: 'Kein Hit Die — es werden d8 angenommen.' })
+    }
+    const profs = Array.isArray(entry.proficiency) ? entry.proficiency : []
+    if (profs.length !== 2) {
+      out.push({ level: 'warn', msg: `Rettungswürfe: ${profs.length} statt der üblichen 2.` })
+    }
+    // Zauberklasse ohne Zauberquelle: weder eigene Liste noch offizielle.
+    if (entry.casterProgression && !(entry.spellListIds || []).length) {
+      out.push({
+        level: 'warn',
+        msg: 'Zauberklasse ohne verknüpfte Spell-Liste — beim Lernen bzw. Vorbereiten stehen keine Zauber zur Auswahl.',
+      })
+    }
+    const subs = Array.isArray(entry.subclasses) ? entry.subclasses : []
+    if (subs.some(s => !s?.name)) {
+      out.push({ level: 'error', msg: 'Eine Subclass hat keinen Namen.' })
+    }
+  },
   spelllists(entry, out) {
     if (!Array.isArray(entry.spells) || entry.spells.length === 0) {
       out.push({ level: 'error', msg: 'Die Liste enthält keine Zauber — sie erweitert nichts.' })

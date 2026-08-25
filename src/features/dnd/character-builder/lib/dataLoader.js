@@ -1,5 +1,6 @@
 import { parseTags } from './tagParser'
 import { applyHomebrewToData, listHomebrew } from '../../homebrew/lib/homebrewStore'
+import { homebrewClassToListEntry, homebrewClassToClassData } from '../../homebrew/lib/homebrewClass'
 
 const SOURCES = {
   '5e':   '/data/5e',
@@ -284,6 +285,15 @@ export async function loadClassList(edition) {
     })
   }
 
+  // Homebrew-Klassen anhaengen — sie erscheinen dadurch ueberall dort, wo
+  // offizielle Klassen stehen (Klassenwahl im Wizard, Multiclass, Level-Up).
+  for (const hb of await listHomebrew('classes')) {
+    const entry = homebrewClassToListEntry(hb)
+    if (!entry || seen.has(entry.name)) continue
+    seen.add(entry.name)
+    classes.push(entry)
+  }
+
   return classes.sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -322,6 +332,13 @@ function deriveSubclassLevel(cls) {
 }
 
 export async function loadClassData(edition, classId) {
+  // Homebrew-Klassen zuerst: fuer sie existiert keine class-<name>.json,
+  // der fetch liefe ins Leere und die Hydration bekaeme null.
+  const hbClass = (await listHomebrew('classes')).find(
+    c => c?.name && c.name.toLowerCase() === String(classId).toLowerCase(),
+  )
+  if (hbClass) return homebrewClassToClassData(hbClass)
+
   const fileName = classId.toLowerCase()
   const data = await fetchData(edition, `class/class-${fileName}.json`)
   if (!data) return null

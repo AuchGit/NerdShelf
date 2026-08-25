@@ -11,6 +11,8 @@
 --   spelllists  — benannte Zauber-Sammlungen, die die wählbaren Zauber
 --                 eines Charakters erweitern (direkt zugeordnet oder über
 --                 eine Rasse / einen Background / ein Feature / ein Item)
+--   classes     — eigene Klassen (erscheinen in Klassenwahl, Multiclass
+--                 und Level-Up wie offizielle Klassen)
 --
 -- Idempotent: mehrfaches Ausführen ist unschädlich.
 
@@ -20,10 +22,11 @@ alter table public.dnd_homebrew
 alter table public.dnd_homebrew
   add constraint dnd_homebrew_kind_check
   check (kind in (
-    'items','spells','backgrounds','races','creatures','features','spelllists'
+    'items','spells','backgrounds','races','creatures','features',
+    'spelllists','classes'
   ));
 
 do $$
 begin
-  raise notice 'dnd_homebrew.kind akzeptiert jetzt auch races und spelllists.';
+  raise notice 'dnd_homebrew.kind akzeptiert jetzt auch races, spelllists und classes.';
 end $$;

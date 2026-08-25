@@ -19,7 +19,7 @@ const TABLE = 'dnd_homebrew'
 // Hinweis: die kind-Spalte hat eine CHECK-Constraint in der DB. Neue Kinds
 // brauchen die Migration scripts/dnd-homebrew-kinds.sql, sonst schlägt der
 // Upsert mit einer Constraint-Verletzung fehl.
-const KINDS = ['items', 'spells', 'spelllists', 'backgrounds', 'races', 'creatures', 'features']
+const KINDS = ['items', 'spells', 'spelllists', 'backgrounds', 'races', 'classes', 'creatures', 'features']
 
 const ROOT_KEY = {
   items:       'item',
@@ -27,6 +27,7 @@ const ROOT_KEY = {
   spelllists:  'spellList',
   backgrounds: 'background',
   races:       'race',
+  classes:     'class',
   creatures:   'monster',
   features:    'classFeature',
 }
