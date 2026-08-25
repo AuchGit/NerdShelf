@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
 import GrantSpellPicker, { SpellPickerModal } from './GrantSpellPicker'
+import SpellListLink from './SpellListLink'
 import { DAMAGE_TYPE_COLOR } from '../../../character-builder/lib/spellEffectParser'
 
 const TYPE_OPTIONS = [
@@ -354,6 +355,7 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
     if (!out.reqAttune) delete out.reqAttune
     if (!out._hbActions?.length) delete out._hbActions
     if (!out._hbGrants?.length) delete out._hbGrants
+    if (!out.spellListIds?.length) delete out.spellListIds
     if (!out._hbSharedCharges) delete out._hbSharedCharges
     // _hbPassiveGrants: leere Felder wegputzen damit der gespeicherte
     // Eintrag klein bleibt und der Engine-Scan keinen no-op macht.
@@ -626,6 +628,10 @@ export default function ItemEditor({ entry, onSave, onCancel }) {
           onChange={(next) => set('_hbGrants', next)}
         />
       </Section>
+
+      <SpellListLink value={draft.spellListIds}
+        onChange={(v) => set('spellListIds', v)}
+        whatHasIt="dieses Item ausgerüstet" />
 
       <div style={ed.footer}>
         <button type="button" onClick={onCancel} style={ed.cancelBtn}>Abbrechen</button>

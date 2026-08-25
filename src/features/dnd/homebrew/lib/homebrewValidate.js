@@ -57,6 +57,11 @@ const CHECKS = {
       out.push({ level: 'warn', msg: 'Kein Upcast-Text — beim Wirken auf höherem Grad ändern sich die Würfel nicht.' })
     }
   },
+  spelllists(entry, out) {
+    if (!Array.isArray(entry.spells) || entry.spells.length === 0) {
+      out.push({ level: 'error', msg: 'Die Liste enthält keine Zauber — sie erweitert nichts.' })
+    }
+  },
   items(entry, out) {
     if (!isNonEmptyStr(entry.type)) {
       out.push({ level: 'warn', msg: 'Kein Item-Typ — das Item wird in Kategorie-Filtern nicht gefunden.' })

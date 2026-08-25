@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
 import { loadClassList } from '../../../character-builder/lib/dataLoader'
+import SpellListLink from './SpellListLink'
 
 const ACTION_OPTS = [
   { v: 'passive',  l: 'Passiv (kein Action-Cost)' },
@@ -134,6 +135,7 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
       usesBasis,
       restType,
       description,
+      spellListIds: Array.isArray(entry.spellListIds) ? entry.spellListIds : [],
       _localMeta: entry._localMeta || {},
     }
   })
@@ -175,6 +177,7 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
       // 5etools setzt className wenn das Feature an eine Klasse gebunden ist
       ...(draft.classId ? { className: draft.classId, classSource: draft.source } : {}),
       entries,
+      ...(draft.spellListIds?.length ? { spellListIds: draft.spellListIds } : {}),
       _localMeta: draft._localMeta,
     }
     onSave(out)
@@ -247,6 +250,10 @@ export default function FeatureEditor({ entry, onSave, onCancel }) {
           rows={6} placeholder="Beschreibe was die Feature macht — Action-Prefix und Uses-Klausel werden automatisch angehängt."
           style={{ ...ed.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Field>
+
+      <SpellListLink value={draft.spellListIds}
+        onChange={(v) => set('spellListIds', v)}
+        whatHasIt="dieses Feature" />
 
       <div style={ed.preview}>
         <div style={ed.label}>Vorschau (so wird's gespeichert + im Sheet gerendert)</div>

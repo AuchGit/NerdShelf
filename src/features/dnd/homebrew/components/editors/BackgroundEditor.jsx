@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react'
 import { Section, Field, ek } from './editorKit'
+import SpellListLink from './SpellListLink'
 
 const SKILL_OPTS = [
   'acrobatics','animal handling','arcana','athletics','deception','history',
@@ -29,6 +30,7 @@ function initFromEntry(entry) {
   out.name = entry.name || ''
   out.source = entry.source || 'HB'
   out._localMeta = entry._localMeta || {}
+  out.spellListIds = Array.isArray(entry.spellListIds) ? entry.spellListIds : []
   // Skills
   if (Array.isArray(entry.skillProficiencies)) {
     for (const b of entry.skillProficiencies) {
@@ -124,6 +126,7 @@ function blank() {
     abilityChoice: { enabled: false, from: ['str','dex','con','int','wis','cha'], points: 3 },
     feats: [],
     description: '',
+    spellListIds: [],
     _localMeta: {},
   }
 }
@@ -200,6 +203,7 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
     if (draft.description.trim()) {
       out.entries = draft.description.split(/\n\n+/).map(s => s.trim()).filter(Boolean)
     }
+    if (draft.spellListIds?.length) out.spellListIds = draft.spellListIds
     onSave(out)
   }
 
@@ -353,6 +357,10 @@ export default function BackgroundEditor({ entry, onSave, onCancel }) {
           rows={6} placeholder="Background-Story, Persönlichkeitstreiber, …"
           style={{ ...ek.input, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
       </Section>
+
+      <SpellListLink value={draft.spellListIds}
+        onChange={(v) => set('spellListIds', v)}
+        whatHasIt="diesen Background" />
 
       <div style={ek.footer}>
         <button type="button" onClick={onCancel} style={ek.cancelBtn}>Abbrechen</button>

@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react'
 import EntryRenderer from '../../../character-builder/components/ui/EntryRenderer'
 import GrantSpellPicker from './GrantSpellPicker'
+import SpellListLink from './SpellListLink'
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 const SIZE_OPTS = [
@@ -107,6 +108,7 @@ export default function RaceEditor({ entry, onSave, onCancel }) {
       entries.push(traitBlock)
     }
     if (entries.length > 0) out.entries = entries
+    if (draft.spellListIds?.length) out.spellListIds = draft.spellListIds
     onSave(out)
   }
 
@@ -202,6 +204,10 @@ export default function RaceEditor({ entry, onSave, onCancel }) {
         />
       </div>
 
+      <SpellListLink value={draft.spellListIds}
+        onChange={(v) => set('spellListIds', v)}
+        whatHasIt="diese Rasse" />
+
       <div style={{ marginTop: 16 }}>
         <div style={ed.label}>Vorschau</div>
         <div style={{
@@ -237,6 +243,7 @@ function initFromEntry(entry) {
   out.name = entry.name || ''
   out.source = entry.source || 'HB'
   out._localMeta = entry._localMeta || {}
+  out.spellListIds = Array.isArray(entry.spellListIds) ? entry.spellListIds : []
   if (Array.isArray(entry.size)) out.size = entry.size[0] || 'M'
   if (typeof entry.speed === 'number') out.speed = entry.speed
   else if (entry.speed?.walk) out.speed = entry.speed.walk
@@ -310,6 +317,7 @@ function blankRace() {
   return {
     name: '',
     source: 'HB',
+    spellListIds: [],
     size: 'M',
     speed: 30,
     darkvision: 0,

@@ -16,11 +16,15 @@ import { supabase } from '../../character-builder/lib/supabase'
 
 const TABLE = 'dnd_homebrew'
 
-const KINDS = ['items', 'spells', 'backgrounds', 'races', 'creatures', 'features']
+// Hinweis: die kind-Spalte hat eine CHECK-Constraint in der DB. Neue Kinds
+// brauchen die Migration scripts/dnd-homebrew-kinds.sql, sonst schlägt der
+// Upsert mit einer Constraint-Verletzung fehl.
+const KINDS = ['items', 'spells', 'spelllists', 'backgrounds', 'races', 'creatures', 'features']
 
 const ROOT_KEY = {
   items:       'item',
   spells:      'spell',
+  spelllists:  'spellList',
   backgrounds: 'background',
   races:       'race',
   creatures:   'monster',

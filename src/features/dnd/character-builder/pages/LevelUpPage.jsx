@@ -25,6 +25,7 @@ import {
 import { parseFeatChoices, parseFeatureChoices } from '../lib/choiceParser'
 import { parseClassFeatureOptionChoices, buildNameSourceMap } from '../lib/optionBlockResolver'
 import { getSpellListClass, getSpellcastingInfo } from '../lib/spellcastingRules'
+import { useExtraSpellNames } from '../lib/useExtraSpellNames'
 import {
   computeLevelUpInfo, applyLevelUp, undoLastLevelUp,
   getLastLevelUpInfo, getLevelFeatures, getLevelFeatureObjects,
@@ -1083,10 +1084,15 @@ function StepSpells({ info, draft, setDraft, allSp, csn, char, optF, edition }) 
   const [sLv,setSLv]=useState(null),[sCon,setSCon]=useState(false),[sRit,setSRit]=useState(false)
   const slci = getSpellListClass(info.classId, draft.subclassId, edition)
   const clsLc = (slci||'').toLowerCase()
-  const isCS = s => { if(csn.size>0&&csn.has(s.name.toLowerCase()))return true; return(s.classes||[]).some(c=>c.toLowerCase()===clsLc) }
-  const classCant = useMemo(()=>allSp.filter(s=>s.level===0&&isCS(s)),[allSp,csn,clsLc])
+  // Homebrew-Spell-Listen erweitern die lernbaren Zauber (direkt zugeordnet
+  // oder über Rasse / Background / Feature / ausgerüstetes Item).
+  const extraSpellNames = useExtraSpellNames(char, info.classId)
+  const isCS = s => { if(csn.size>0&&csn.has(s.name.toLowerCase()))return true
+    if(extraSpellNames.has(s.name.toLowerCase()))return true
+    return(s.classes||[]).some(c=>c.toLowerCase()===clsLc) }
+  const classCant = useMemo(()=>allSp.filter(s=>s.level===0&&isCS(s)),[allSp,csn,clsLc,extraSpellNames])
   const classLev = useMemo(()=>info.maxSpellLevel>0?allSp.filter(s=>s.level>=1&&s.level<=info.maxSpellLevel&&isCS(s)):[]
-    ,[allSp,csn,clsLc,info.maxSpellLevel])
+    ,[allSp,csn,clsLc,info.maxSpellLevel,extraSpellNames])
 
   // Granted spells (known + feat spells)
   const granted = useMemo(()=>{

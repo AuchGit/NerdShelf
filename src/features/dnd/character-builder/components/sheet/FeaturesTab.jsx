@@ -17,6 +17,75 @@ import { favoriteKey } from '../../lib/favorites'
 import { FavoriteToggle } from './OverviewTab'
 import { parseFeatureEffect } from '../../lib/featureEffectParser'
 import { DAMAGE_TYPE_COLOR } from '../../lib/spellEffectParser'
+import { listHomebrew } from '../../../homebrew/lib/homebrewStore'
+import { assignedSpellLists, setSpellListAssigned } from '../../lib/characterSpellLists'
+
+// Homebrew-Spell-Listen: zeigt alle vorhandenen Listen mit Checkbox für die
+// DIREKTE Zuordnung an diesen Charakter, und markiert die Listen, die
+// ohnehin schon über Rasse / Background / Feature / Item gelten.
+function HomebrewSpellListSection({ character, updateCharacter }) {
+  const [lists, setLists] = useState(null)
+  const [carriers, setCarriers] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      listHomebrew('spelllists').catch(() => []),
+      listHomebrew('races').catch(() => []),
+      listHomebrew('backgrounds').catch(() => []),
+      listHomebrew('features').catch(() => []),
+      listHomebrew('items').catch(() => []),
+    ]).then(([spelllists, races, backgrounds, features, items]) => {
+      if (cancelled) return
+      setLists(spelllists)
+      setCarriers({ spelllists, races, backgrounds, features, items })
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const directIds = useMemo(
+    () => new Set((character?.homebrewSpellLists || []).map(String)),
+    [character?.homebrewSpellLists],
+  )
+  // Alles was gilt — inklusive der über Träger-Einträge vererbten Listen.
+  const activeIds = useMemo(() => {
+    if (!carriers) return new Set()
+    return new Set(assignedSpellLists(character, carriers).map(l => String(l?._localMeta?.id)))
+  }, [character, carriers])
+
+  if (!lists || lists.length === 0) return null
+  return (
+    <Section title="Homebrew-Spell-Listen">
+      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
+        Erweitern die wählbaren Zauber: vorbereitende Zauberwirker finden sie im
+        Vorbereiten-Dialog, lernende beim Level-Up. Listen, die an einer Rasse,
+        einem Background, Feature oder ausgerüsteten Item hängen, gelten
+        automatisch — hier kannst du zusätzlich von Hand zuordnen.
+      </p>
+      {lists.map(l => {
+        const id = String(l?._localMeta?.id || '')
+        if (!id) return null
+        const direct = directIds.has(id)
+        const inherited = activeIds.has(id) && !direct
+        return (
+          <label key={id}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12, cursor: 'pointer' }}
+            title={inherited ? 'Gilt bereits über einen Homebrew-Eintrag' : undefined}>
+            <input type="checkbox" checked={direct || inherited} disabled={inherited}
+              onChange={(e) => updateCharacter('homebrewSpellLists', setSpellListAssigned(character, id, e.target.checked))} />
+            <span style={{ fontWeight: 700, color: (direct || inherited) ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+              {l.name}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+              {(l.spells || []).length} Zauber
+              {Array.isArray(l.classes) && l.classes.length ? ` · nur ${l.classes.join(', ')}` : ''}
+              {inherited ? ' · über Homebrew-Eintrag' : ''}
+            </span>
+          </label>
+        )
+      })}
+    </Section>
+  )
+}
 
 function getFeatBonusSummary(character) {
   const result = []
@@ -575,6 +644,13 @@ export default function FeaturesTab({ character, computed, updateCharacter, appl
           </Section>
         )
       })()}
+
+      {/* ── Homebrew-Spell-Listen (direkte Zuordnung) ──
+          Listen, die an einer Homebrew-Rasse / einem Background / Feature /
+          Item hängen, gelten automatisch — hier vergibt man eine Liste
+          zusätzlich von Hand (DM-Vergabe am Tisch). Die Zauber erscheinen
+          danach im Vorbereiten-Dialog bzw. beim Lernen. */}
+      <HomebrewSpellListSection character={character} updateCharacter={updateCharacter} />
 
       {/* ── Class & Subclass Features ── */}
       {/* Hydrated into character.__activeFeatures by CharacterSheetPage's

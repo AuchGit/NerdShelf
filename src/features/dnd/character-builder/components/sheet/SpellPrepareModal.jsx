@@ -19,6 +19,7 @@ import { SheetModal } from './SheetKit'
 import { loadSpellList } from '../../lib/dataLoader'
 import { getScribingDiscounts, getScribingCost } from '../../lib/wizardScribing'
 import { collectCharacterSpells } from '../../lib/sheetUtils'
+import { useExtraSpellNames } from '../../lib/useExtraSpellNames'
 import EntryRendererLazy from '../ui/EntryRenderer'
 
 export default function SpellPrepareModal({
@@ -76,6 +77,11 @@ export default function SpellPrepareModal({
     return set
   }, [character])
 
+  // Homebrew-Spell-Listen: Zauber, die dieser Charakter zusätzlich zur
+  // offiziellen Klassenliste vorbereiten darf — direkt zugeordnet oder über
+  // eine Homebrew-Rasse / einen Background / ein Feature / ein Item.
+  const extraSpellNames = useExtraSpellNames(character, classId)
+
   // ── Spell-Pool für diesen Modal ─────────────────────────────
   // Wizard: nur Spellbook-Einträge (knownSpells).
   // Andere prepared Caster: alle Klassen-Listen-Spells ≤ maxSpellLvl,
@@ -90,12 +96,14 @@ export default function SpellPrepareModal({
         .filter(Boolean)
         .filter(s => (s.level ?? 0) > 0)
       // Auch Wizard kann always-prepared Spells haben (Tome of the
-      // Stilled Tongue, racial …). Mit reinmischen.
+      // Stilled Tongue, racial …). Mit reinmischen — genauso die Zauber
+      // aus zugeordneten Homebrew-Spell-Listen (sie erweitern den Zugriff
+      // unabhängig vom Spellbook).
       const seen = new Set(wizSpells.map(s => s.name.toLowerCase()))
-      for (const lower of alwaysPreparedSet) {
+      for (const lower of [...alwaysPreparedSet, ...extraSpellNames]) {
         if (seen.has(lower)) continue
         const sp = spellMap.get(lower)
-        if (sp && (sp.level ?? 0) > 0) wizSpells.push(sp)
+        if (sp && (sp.level ?? 0) > 0) { wizSpells.push(sp); seen.add(lower) }
       }
       return wizSpells
     }
@@ -111,13 +119,13 @@ export default function SpellPrepareModal({
     // mit unzugänglichen Optionen flutet.
     const seen = new Set(onClassList.map(s => s.name.toLowerCase()))
     const extras = []
-    for (const lower of alwaysPreparedSet) {
+    for (const lower of [...alwaysPreparedSet, ...extraSpellNames]) {
       if (seen.has(lower)) continue
       const sp = spellMap.get(lower)
-      if (sp && (sp.level ?? 0) > 0 && (sp.level ?? 0) <= maxSpellLvl) extras.push(sp)
+      if (sp && (sp.level ?? 0) > 0 && (sp.level ?? 0) <= maxSpellLvl) { extras.push(sp); seen.add(lower) }
     }
     return [...onClassList, ...extras]
-  }, [spellMap, allSpells, isWizard, wizardCls, classId, maxSpellLvl, alwaysPreparedSet])
+  }, [spellMap, allSpells, isWizard, wizardCls, classId, maxSpellLvl, alwaysPreparedSet, extraSpellNames])
 
   // Sortierung: prepared zuerst, dann nach Level, dann alphabetisch.
   const sorted = useMemo(() => {

@@ -3,6 +3,7 @@ import {
   loadSpellList, loadClassSpellNames,
 } from '../../../lib/dataLoader'
 import { getSpellcastingInfo } from '../../../lib/spellcastingRules'
+import { useExtraSpellNames } from '../../../lib/useExtraSpellNames'
 import { UniversalSpellList } from '../AdditionalSpellPicker'
 
 const modStr = n => (n >= 0 ? `+${n}` : `${n}`)
@@ -21,6 +22,9 @@ export default function Step7Spells({ character, updateCharacter }) {
   const [allSpells,      setAllSpells]      = useState([])
   const [classSpellNames, setClassSpellNames] = useState(new Set())
   const [loading,        setLoading]        = useState(true)
+  // Homebrew-Spell-Listen erweitern die wählbaren Zauber (direkt zugeordnet
+  // oder über Rasse / Background / Feature / ausgerüstetes Item).
+  const extraSpellNames = useExtraSpellNames(character, classId)
 
   useEffect(() => {
     let cancelled = false
@@ -69,10 +73,12 @@ export default function Step7Spells({ character, updateCharacter }) {
   // Membership test: a spell belongs to this class if EITHER:
   //   (a) spell-lists.json says so (classSpellNames, guaranteed correct), OR
   //   (b) the spell's inline .classes array says so (fallback), OR
-  //   (c) it was added to the spell list by a racial trait (expanded spells).
+  //   (c) it was added to the spell list by a racial trait (expanded spells), OR
+  //   (d) eine zugeordnete Homebrew-Spell-Liste erweitert die Auswahl.
   function isClassSpell(s) {
     if (classSpellNames.size > 0 && classSpellNames.has(s.name.toLowerCase())) return true
     if ((s.classes || []).some(c => c.toLowerCase() === classId_lc)) return true
+    if (extraSpellNames.has(s.name.toLowerCase())) return true
     return expandedRacialNames.has(s.name.toLowerCase())
   }
 
@@ -81,14 +87,14 @@ export default function Step7Spells({ character, updateCharacter }) {
       ? allSpells.filter(s => s.level === 0 && isClassSpell(s))
       : []
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [allSpells, classSpellNames, classId_lc, spellInfo, expandedRacialNames])
+  , [allSpells, classSpellNames, classId_lc, spellInfo, expandedRacialNames, extraSpellNames])
 
   const classSpellsL1 = useMemo(() =>
     maxCastable > 0
       ? allSpells.filter(s => s.level >= 1 && s.level <= maxCastable && isClassSpell(s))
       : []
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [allSpells, classSpellNames, classId_lc, maxCastable, expandedRacialNames])
+  , [allSpells, classSpellNames, classId_lc, maxCastable, expandedRacialNames, extraSpellNames])
 
   const lv1                  = cls?.levelChoices?.[1] || {}
   const selectedCantrips     = lv1.cantrips        || []

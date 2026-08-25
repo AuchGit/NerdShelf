@@ -24,6 +24,7 @@ import {
 } from '../../character-builder/lib/dataLoader'
 import ItemEditor from '../components/editors/ItemEditor'
 import SpellEditor from '../components/editors/SpellEditor'
+import SpellListEditor from '../components/editors/SpellListEditor'
 import FeatureEditor from '../components/editors/FeatureEditor'
 import RaceEditor from '../components/editors/RaceEditor'
 import BackgroundEditor from '../components/editors/BackgroundEditor'
@@ -37,6 +38,7 @@ import { validationCounts } from '../lib/homebrewValidate'
 const KIND_LABELS = {
   items:       'Items',
   spells:      'Spells',
+  spelllists:  'Spell-Listen',
   backgrounds: 'Backgrounds',
   races:       'Races',
   creatures:   'Creatures',
@@ -46,6 +48,7 @@ const KIND_LABELS = {
 const KIND_DESC = {
   items:       'Eigene Waffen, Rüstung, Magic Items, Gegenstände — erscheinen in Item-Pickern und auf dem Sheet',
   spells:      'Eigene Cantrips / Spells (alle Level) — erscheinen in den Spell-Pickern der zugewiesenen Klassen',
+  spelllists:  'Zauber-Sammlungen, die die wählbaren Zauber eines Charakters erweitern — direkt zugeordnet oder an eine Rasse / einen Background / ein Feature / ein Item gehängt',
   backgrounds: 'Eigene Backgrounds inkl. Skill/Tool/Language-Grants',
   races:       'Eigene Rassen mit Ability-Bonus, Speed, Profs, Granted Spells und Traits',
   creatures:   'Eigene Monster / NPCs — im VTT-Monster-Panel als Statblock und Token nutzbar',
@@ -137,6 +140,7 @@ export default function HomebrewPage({ session }) {
     const source = `HB-${userTag}`
     if (kind === 'items') return { name: 'Neues Item', source, type: 'G', rarity: 'none', entries: [''] }
     if (kind === 'spells') return { name: 'Neuer Spell', source, level: 0, school: 'E', time: [{ number: 1, unit: 'action' }], range: { type: 'point', distance: { type: 'self' } }, components: { v: true }, duration: [{ type: 'instant' }], classes: [], entries: [''] }
+    if (kind === 'spelllists') return { name: 'Neue Spell-Liste', source, spells: [] }
     if (kind === 'backgrounds') return { name: 'Neuer Background', source, skillProficiencies: [], languageProficiencies: [], entries: [''] }
     if (kind === 'races') return { name: 'Neue Rasse', source, size: ['M'], speed: { walk: 30 } }
     if (kind === 'creatures') return { name: 'Neue Kreatur', source, size: ['M'], type: 'humanoid', alignment: ['N'], ac: [10], hp: { average: 10, formula: '1d8 + 2' }, speed: { walk: 30 }, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, cr: '1/4', entries: [''] }
@@ -168,6 +172,7 @@ export default function HomebrewPage({ session }) {
     if (editingJson) return GenericJsonEditor
     if (kind === 'items') return ItemEditor
     if (kind === 'spells') return SpellEditor
+    if (kind === 'spelllists') return SpellListEditor
     if (kind === 'features') return FeatureEditor
     if (kind === 'races') return RaceEditor
     if (kind === 'backgrounds') return BackgroundEditor
@@ -358,6 +363,11 @@ function summarize(kind, entry) {
   } else if (kind === 'features') {
     parts.push(entry.className || 'klassenfrei')
     parts.push(`L${entry.level ?? '?'}`)
+  } else if (kind === 'spelllists') {
+    const n = (entry.spells || []).length
+    parts.push(`${n} Zauber`)
+    const cls = Array.isArray(entry.classes) ? entry.classes : []
+    parts.push(cls.length ? cls.join(', ') : 'alle Klassen')
   }
   return parts.filter(Boolean).join(' · ')
 }
