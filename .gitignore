@@ -12,9 +12,6 @@ dist
 dist-ssr
 *.local
 
-# Claude Code project config (per-machine personal settings).
-.claude/
-
 # Reference / scratch — not shipped with the app. Includes the admin-tool
 # Tauri project source and one-off notes (Supabase warnings dump, etc.).
 _reference/

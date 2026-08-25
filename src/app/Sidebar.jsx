@@ -2,6 +2,7 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../core/auth/AuthContext';
 import IconButton from '../shared/ui/IconButton';
+import { openHandbook } from '../shared/help/openHandbook';
 
 const NAV = [
   { to: '/dnd',   label: 'DnD',   icon: '⚔' },
@@ -163,6 +164,10 @@ export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalenda
               />
             )}
           </div>
+          {/* Handbuch: öffnet public/handbuch.html (eigenes Fenster in der
+              Tauri-Shell, sonst neuer Tab) direkt beim Kapitel zur aktuellen
+              Seite — siehe shared/help/openHandbook.js. */}
+          <IconButton onClick={() => openHandbook()} title="Handbuch" style={{ flex: 1 }}>?</IconButton>
           <IconButton onClick={onOpenSettings} title="Einstellungen" style={{ flex: 1 }}>⚙</IconButton>
           <IconButton onClick={onOpenBugReport} title="Bug melden" style={{ flex: 1 }}>⚐</IconButton>
           <DangerIconButton onClick={signOut} title="Abmelden" style={{ flex: 1 }}>⎋</DangerIconButton>

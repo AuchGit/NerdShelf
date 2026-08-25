@@ -1,6 +1,6 @@
 # VTT ↔ NerdShelf — Übergabe / Handoff
 
-**Zweck dieser Datei:** Ein neuer Claude-Code-Chat (oder Mensch) soll hiermit
+**Zweck dieser Datei:** Wer neu am VTT weiterarbeitet, soll hiermit
 **alles** wissen, um nahtlos weiterzumachen: was gebaut wurde, wie, warum, was
 noch offen ist und wie es weitergehen soll. Lies das zuerst komplett.
 

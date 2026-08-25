@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../core/auth/AuthContext';
 import ActionSheet from './ActionSheet';
+import { openHandbook } from '../help/openHandbook';
 
 const NAV = [
   { to: '/dnd',   label: 'DnD',   icon: '⚔' },
@@ -78,6 +79,8 @@ export default function BottomNav({ onOpenSettings, onOpenBugReport, onOpenCalen
         items={[
           { id: 'calendar', label: 'Kalender', icon: '▦',
             onSelect: () => { setMoreOpen(false); onOpenCalendar?.(); } },
+          { id: 'handbook', label: 'Handbuch', icon: '?',
+            onSelect: () => { setMoreOpen(false); openHandbook(); } },
           { id: 'settings', label: 'Einstellungen', icon: '⚙',
             onSelect: () => { setMoreOpen(false); onOpenSettings?.(); } },
           { id: 'bug', label: 'Bug melden', icon: '⚐',

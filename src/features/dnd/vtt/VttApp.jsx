@@ -48,6 +48,7 @@ import ShortcutOverlay from './components/ShortcutOverlay';
 import BugReportModal from '../../../core/bug-report/BugReportModal';
 import { useAuth } from '../../../core/auth/AuthContext';
 import { openSheetPopout } from '../character-builder/lib/sheetPopout';
+import { openHandbook } from '../../../shared/help/openHandbook';
 import { TooltipProvider, TooltipLayer } from './components/tooltip/Tooltips';
 import { connectSync, getState, persistSnapshot } from './state/store';
 import { setSession, presentHandout, setPaused, confirmTargeting, cancelTargeting, setContextTokens, setViewedMap, setSpectator } from './state/actions';
@@ -505,6 +506,8 @@ export default function VttApp({ campaignId, userId, isGM = false, playerName = 
               <button style={S.joinDirect} onClick={retryLan}
                 title={`Online verbunden. Klick: LAN-Direktverbindung erneut versuchen (${announcedRelayUrl})`}>☁ Online · LAN erneut</button>
             )}
+            {/* Handbuch, direkt beim VTT-Kapitel (public/handbuch.html). */}
+            <button style={S.iconBtn} onClick={() => openHandbook(isDM ? 'dnd-vtt-dm' : 'dnd-vtt-spieler')} title="Handbuch">?</button>
             <button style={S.iconBtn} onClick={() => setShowShortcuts(true)} title="Tastenkürzel (?)">⌨</button>
             <button style={S.iconBtn} onClick={() => setShowSettings(true)} title="VTT-Einstellungen">⚙</button>
             <button style={S.iconBtn} onClick={() => setShowBug(true)} title="Bug melden">⚐</button>

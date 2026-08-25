@@ -35,6 +35,10 @@ export default defineConfig(async ({ mode }) => {
           globIgnores: ['**/data/**'],
           // SPA fallback so deep links resolve to index.html offline.
           navigateFallback: `${PWA_BASE}index.html`,
+          // …aber NICHT für das Handbuch: das ist eine eigenständige Seite in
+          // public/. Ohne diese Ausnahme würde der Navigation-Fallback sie
+          // durch index.html ersetzen und der „?"-Knopf öffnet die App erneut.
+          navigateFallbackDenylist: [/handbuch\.html$/],
           runtimeCaching: [
             {
               urlPattern: ({ url }) => url.pathname.includes('/data/'),

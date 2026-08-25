@@ -1,0 +1,1950 @@
+<!doctype html>
+<!--
+  NerdShelf — Benutzerhandbuch.
+
+  Eigenständige Datei: alles Nötige (CSS, JS) steckt hier drin, nichts wird
+  gebündelt. Liegt in public/, wird also vom normalen Build mit ausgeliefert
+  und funktioniert auch per Doppelklick ohne Server.
+
+  Aufgerufen wird sie im Programm über den ?-Knopf
+  (Sidebar / Mobile-Menü / VTT-Kopfzeile) — siehe src/shared/help/openHandbook.js.
+  Die section-ids sind Sprungziele von dort: nicht umbenennen.
+
+  Pflegehinweise (Sprache, Bausteine, was wann mitzuziehen ist):
+  docs/handbuch-pflege.md. Screenshots: public/handbuch-img/ (README dort
+  erklärt die Dateinamen).
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NerdShelf Handbuch</title>
+<meta name="description" content="Bedienungsanleitung für NerdShelf — D&amp;D, Magic: The Gathering und Warhammer 40.000 unter einem Dach.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&amp;family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   NerdShelf Handbuch
+   Palette folgt dem App-Theme (src/core/theme/theme.css), damit sich
+   das Handbuch wie ein Teil des Programms anfühlt.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#f6f7f9; --bg-elev:#ffffff; --bg-sunk:#eceef2; --surface:#ffffff;
+  --border:#dde1e8; --border-strong:#c4cad4;
+  --text:#13151a; --muted:#5c6473; --dim:#8a92a1;
+  --accent:#3b5bdb; --accent-ink:#ffffff; --accent-soft:rgba(59,91,219,.10);
+  --ok:#2f7d38; --warn:#9a6b00; --danger:#c4374f;
+  --ok-soft:rgba(47,125,56,.10); --warn-soft:rgba(154,107,0,.10); --danger-soft:rgba(196,55,79,.09);
+  --dnd:#9a6a12; --mtg:#6741c4; --w40k:#a8452a;
+  --scrim:rgba(15,17,21,.45);
+  --shadow-sm:0 1px 2px rgba(15,17,21,.06);
+  --shadow-md:0 6px 20px rgba(15,17,21,.10);
+  --shadow-lg:0 18px 48px rgba(15,17,21,.16);
+  --r-sm:6px; --r-md:9px; --r-lg:14px;
+  --font-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --font-body:'Public Sans','Segoe UI',system-ui,-apple-system,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Consolas,monospace;
+  --nav-w:286px; --top-h:58px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --bg-elev:#171a21; --bg-sunk:#0b0d11; --surface:#1d212a;
+    --border:#2a3040; --border-strong:#3a4256;
+    --text:#e6e8ee; --muted:#9aa3b4; --dim:#6b7386;
+    --accent:#7aa2f7; --accent-ink:#0f1115; --accent-soft:rgba(122,162,247,.14);
+    --ok:#9ece6a; --warn:#e0af68; --danger:#f7768e;
+    --ok-soft:rgba(158,206,106,.12); --warn-soft:rgba(224,175,104,.12); --danger-soft:rgba(247,118,142,.12);
+    --dnd:#e0af68; --mtg:#bb9af7; --w40k:#e0794f;
+    --scrim:rgba(0,0,0,.6);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow-md:0 6px 20px rgba(0,0,0,.40);
+    --shadow-lg:0 18px 48px rgba(0,0,0,.55);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --bg-elev:#171a21; --bg-sunk:#0b0d11; --surface:#1d212a;
+  --border:#2a3040; --border-strong:#3a4256;
+  --text:#e6e8ee; --muted:#9aa3b4; --dim:#6b7386;
+  --accent:#7aa2f7; --accent-ink:#0f1115; --accent-soft:rgba(122,162,247,.14);
+  --ok:#9ece6a; --warn:#e0af68; --danger:#f7768e;
+  --ok-soft:rgba(158,206,106,.12); --warn-soft:rgba(224,175,104,.12); --danger-soft:rgba(247,118,142,.12);
+  --dnd:#e0af68; --mtg:#bb9af7; --w40k:#e0794f;
+  --scrim:rgba(0,0,0,.6);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow-md:0 6px 20px rgba(0,0,0,.40);
+  --shadow-lg:0 18px 48px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--top-h) + 18px)}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto} *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-body); font-size:15.5px; line-height:1.62;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:var(--accent-soft)}
+a{color:var(--accent);text-underline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;
+}
+
+/* ── Kopfleiste ─────────────────────────────────────────── */
+.top{
+  position:fixed; inset:0 0 auto 0; height:var(--top-h); z-index:60;
+  display:flex; align-items:center; gap:14px; padding:0 16px;
+  background:color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--border);
+}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:800;letter-spacing:-.02em;font-size:17px;white-space:nowrap;text-decoration:none;color:var(--text)}
+.brand .logo{
+  width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
+  background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:800;
+  font-family:var(--font-display);flex-shrink:0;
+}
+.brand small{font-family:var(--font-mono);font-size:10.5px;font-weight:400;color:var(--dim);letter-spacing:0}
+.top-spacer{flex:1}
+.searchwrap{position:relative;flex:0 1 420px;min-width:0}
+#q{
+  width:100%; height:34px; padding:0 34px 0 32px; font-family:inherit; font-size:13.5px;
+  color:var(--text); background:var(--bg-sunk); border:1px solid var(--border);
+  border-radius:var(--r-md); transition:border-color .12s, box-shadow .12s;
+}
+#q::placeholder{color:var(--dim)}
+#q:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:var(--surface)}
+.searchwrap .mag{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:13px;pointer-events:none}
+.searchwrap .slash{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:10px;color:var(--dim);border:1px solid var(--border);border-radius:4px;padding:1px 5px;pointer-events:none;transition:opacity .12s}
+#q:focus ~ .slash{opacity:0}
+.results{
+  position:absolute; top:calc(100% + 8px); left:0; right:0; z-index:70;
+  background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:var(--r-lg);
+  box-shadow:var(--shadow-lg); max-height:min(64vh,520px); overflow-y:auto; padding:6px; display:none;
+}
+.results.open{display:block}
+.results .r{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:var(--r-md);cursor:pointer;color:var(--text);font-family:inherit;font-size:13.5px;line-height:1.4}
+.results .r:hover,.results .r.sel{background:var(--accent-soft)}
+.results .r b{font-weight:600}
+.results .r span{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+.results .r mark{background:transparent;color:var(--accent);font-weight:700}
+.results .none{padding:14px 12px;color:var(--muted);font-size:13px}
+.iconbtn{
+  height:34px;min-width:34px;padding:0 9px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--r-md);
+  cursor:pointer;font-family:inherit;font-size:12.5px;transition:background .12s,border-color .12s;white-space:nowrap;
+}
+.iconbtn:hover{background:var(--bg-sunk);border-color:var(--border-strong)}
+.altpill{
+  display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px;border-radius:999px;
+  border:1px dashed var(--border-strong); color:var(--muted); font-size:12px; white-space:nowrap;
+}
+.altpill kbd{font-family:var(--font-mono);font-size:10.5px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
+body.altdown .altpill{border-style:solid;border-color:var(--accent);color:var(--accent)}
+#navtoggle{display:none}
+
+/* ── Seitennavigation ───────────────────────────────────── */
+.nav{
+  position:fixed; top:var(--top-h); bottom:0; left:0; width:286px; z-index:50;
+  overflow-y:auto; padding:18px 10px 40px; border-right:1px solid var(--border);
+  background:var(--bg-elev);
+}
+.nav-group{margin-bottom:18px}
+.nav-group > .gh{
+  display:flex;align-items:center;gap:8px;padding:0 10px 7px;
+  font-family:var(--font-mono); font-size:10px; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--dim);
+}
+.nav-group > .gh i{width:8px;height:8px;border-radius:2px;background:var(--dim);flex-shrink:0}
+.nav-group[data-c="dnd"] > .gh i{background:var(--dnd)} .nav-group[data-c="dnd"] > .gh{color:var(--dnd)}
+.nav-group[data-c="mtg"] > .gh i{background:var(--mtg)} .nav-group[data-c="mtg"] > .gh{color:var(--mtg)}
+.nav-group[data-c="w40k"] > .gh i{background:var(--w40k)} .nav-group[data-c="w40k"] > .gh{color:var(--w40k)}
+.nav a{
+  display:block; padding:6px 10px; margin-bottom:1px; border-radius:var(--r-md);
+  color:var(--muted); text-decoration:none; font-size:13.5px; line-height:1.35;
+  border-left:2px solid transparent; transition:background .12s,color .12s;
+}
+.nav a:hover{background:var(--bg-sunk);color:var(--text)}
+.nav a.active{background:var(--accent-soft);color:var(--text);font-weight:600;border-left-color:var(--accent)}
+.nav-group[data-c="dnd"] a.active{border-left-color:var(--dnd)}
+.nav-group[data-c="mtg"] a.active{border-left-color:var(--mtg)}
+.nav-group[data-c="w40k"] a.active{border-left-color:var(--w40k)}
+.navscrim{display:none}
+
+/* ── Inhalt ─────────────────────────────────────────────── */
+main{margin-left:286px; padding:calc(var(--top-h) + 30px) 40px 120px; max-width:1080px}
+section{scroll-margin-top:calc(var(--top-h) + 20px); margin-bottom:60px}
+.eyebrow{
+  font-family:var(--font-mono); font-size:10.5px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--dim); margin-bottom:9px; display:flex; align-items:center; gap:9px;
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--border)}
+section[data-c="dnd"] .eyebrow{color:var(--dnd)} section[data-c="mtg"] .eyebrow{color:var(--mtg)} section[data-c="w40k"] .eyebrow{color:var(--w40k)}
+h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;letter-spacing:-.02em;margin:0}
+h1{font-size:clamp(30px,4.2vw,44px);font-weight:800;line-height:1.08}
+h2{font-size:clamp(23px,2.6vw,29px);font-weight:700;line-height:1.15;margin-bottom:10px}
+h3{font-size:17.5px;font-weight:700;margin:30px 0 8px}
+h4{font-size:14.5px;font-weight:700;margin:20px 0 6px}
+p,li{max-width:70ch}
+p{margin:0 0 12px}
+.lede{font-size:17px;color:var(--muted);max-width:66ch;margin-bottom:20px}
+.muted{color:var(--muted)}
+strong{font-weight:600}
+code,.mono{font-family:var(--font-mono);font-size:.87em;background:var(--bg-sunk);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+ul,ol{margin:0 0 14px;padding-left:20px}
+li{margin-bottom:5px}
+li::marker{color:var(--dim)}
+hr{border:0;border-top:1px solid var(--border);margin:34px 0}
+
+/* Pfadangabe „wo finde ich das" */
+.path{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:12px;color:var(--muted);
+  background:var(--bg-sunk);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:var(--r-md);padding:8px 12px;margin:0 0 18px;max-width:none;
+}
+section[data-c="dnd"] .path{border-left-color:var(--dnd)}
+section[data-c="mtg"] .path{border-left-color:var(--mtg)}
+section[data-c="w40k"] .path{border-left-color:var(--w40k)}
+.path b{color:var(--text);font-weight:600}
+.path i{color:var(--dim);font-style:normal}
+
+/* Karten & Raster */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:12px;margin:16px 0 20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px}
+.card h4{margin:0 0 5px;font-size:14.5px}
+.card p{margin:0;font-size:13.5px;color:var(--muted);max-width:none}
+.card .cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:6px}
+
+/* Schritt für Schritt */
+ol.steps{list-style:none;padding:0;counter-reset:s;margin:14px 0 20px}
+ol.steps > li{counter-increment:s; position:relative; padding-left:38px; margin-bottom:13px; max-width:68ch}
+ol.steps > li::before{
+  content:counter(s); position:absolute; left:0; top:1px;
+  width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent);color:var(--accent-ink);
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;
+}
+section[data-c="dnd"] ol.steps > li::before{background:var(--dnd);color:#1a1408}
+section[data-c="mtg"] ol.steps > li::before{background:var(--mtg);color:#150c22}
+section[data-c="w40k"] ol.steps > li::before{background:var(--w40k);color:#1c0d06}
+
+/* Hinweise */
+.note{border:1px solid var(--border);border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:var(--r-md);padding:11px 14px;margin:16px 0;font-size:14px}
+.note.tip{border-left-color:var(--ok);background:var(--ok-soft)}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note.danger{border-left-color:var(--danger);background:var(--danger-soft)}
+.note p{margin:0;max-width:none}
+.note p + p{margin-top:8px}
+.note .lbl{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+/* Tabellen */
+.tablewrap{overflow-x:auto;margin:16px 0 20px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.8px;min-width:420px}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--dim);background:var(--bg-sunk);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.k{white-space:nowrap;width:1%}
+td b{font-weight:600}
+.num{font-variant-numeric:tabular-nums}
+
+kbd{
+  font-family:var(--font-mono);font-size:11.5px;font-weight:600;
+  background:var(--bg-sunk);border:1px solid var(--border-strong);border-bottom-width:2px;
+  border-radius:5px;padding:2px 6px;color:var(--text);white-space:nowrap;
+}
+.ui{
+  display:inline-block;font-size:.9em;font-weight:600;background:var(--bg-sunk);
+  border:1px solid var(--border-strong);border-radius:5px;padding:0 6px;white-space:nowrap;
+}
+
+/* Glossar — Alt + Hover */
+.term{font-weight:600;border-bottom:1px dashed var(--border-strong);cursor:help}
+body.altdown .term{border-bottom-color:var(--accent);color:var(--accent)}
+#tip{
+  position:fixed;z-index:200;max-width:330px;padding:11px 13px;
+  background:var(--bg-elev);color:var(--text);border:1px solid var(--border-strong);
+  border-radius:var(--r-lg);box-shadow:var(--shadow-lg);font-size:13px;line-height:1.5;
+  opacity:0;transform:translateY(4px) scale(.985);transition:opacity .13s,transform .13s;pointer-events:none;
+}
+#tip.on{opacity:1;transform:none}
+#tip .t{font-family:var(--font-display);font-weight:700;font-size:13.5px;margin-bottom:3px;display:block}
+
+/* Screenshot-Slots */
+figure.shot{margin:20px 0 24px;max-width:100%}
+.shot-frame{
+  position:relative;border:1px solid var(--border-strong);border-radius:var(--r-lg);
+  overflow:hidden;background:var(--bg-sunk);aspect-ratio:16/10;
+}
+.shot-frame img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+.shot-empty{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  text-align:center;padding:20px;
+  background-image:repeating-linear-gradient(135deg,transparent 0 11px,color-mix(in srgb,var(--border) 55%,transparent) 11px 12px);
+}
+.shot-frame.has-img .shot-empty{display:none}
+.shot-empty .n{font-family:var(--font-mono);font-size:12px;color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--r-md);padding:5px 10px}
+.shot-empty .h{font-size:12.5px;color:var(--muted);max-width:46ch}
+.mark{
+  position:absolute;width:23px;height:23px;border-radius:50%;display:none;place-items:center;
+  background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:11.5px;font-weight:600;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--bg-elev) 70%, transparent),var(--shadow-md);transform:translate(-50%,-50%);
+}
+.shot-frame.has-img .mark{display:grid}
+figcaption{margin-top:9px;font-size:13px;color:var(--muted)}
+ol.legend{list-style:none;counter-reset:l;padding:0;margin:8px 0 0;display:grid;gap:5px}
+ol.legend li{counter-increment:l;position:relative;padding-left:28px;font-size:13px;margin:0;max-width:66ch}
+ol.legend li::before{
+  content:counter(l);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
+  display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);
+  font-family:var(--font-mono);font-size:10.5px;font-weight:600;
+}
+
+details{border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);margin:14px 0}
+details summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;gap:9px}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:"›";font-family:var(--font-mono);color:var(--dim);transition:transform .14s;display:inline-block}
+details[open] summary::before{transform:rotate(90deg)}
+details .dbody{padding:12px 14px 13px;border-top:1px solid var(--border)}
+details .dbody > :last-child{margin-bottom:0}
+
+/* Auftakt */
+.hero{margin-bottom:52px}
+.hero .kicker{font-family:var(--font-mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:12px}
+.domains{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:26px}
+.domain{
+  border:1px solid var(--border);border-radius:var(--r-lg);padding:15px 16px;background:var(--surface);
+  border-top:3px solid var(--c); text-decoration:none; color:inherit; display:block; transition:transform .14s, box-shadow .14s;
+}
+.domain:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.domain .g{font-family:var(--font-display);font-size:19px;font-weight:800;color:var(--c);margin-bottom:3px}
+.domain .d{font-size:13.3px;color:var(--muted)}
+.anchor{opacity:0;margin-left:8px;font-size:.6em;text-decoration:none;color:var(--dim);font-family:var(--font-mono);vertical-align:middle}
+h2:hover .anchor,h3:hover .anchor{opacity:1}
+.totop{
+  position:fixed;right:22px;bottom:22px;z-index:40;width:38px;height:38px;border-radius:50%;
+  background:var(--bg-elev);border:1px solid var(--border-strong);color:var(--text);cursor:pointer;
+  box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:opacity .18s;font-size:15px;
+}
+.totop.on{opacity:1;pointer-events:auto}
+
+@media (max-width:1080px){ main{padding-left:28px;padding-right:28px} }
+@media (max-width:900px){
+  #navtoggle{display:inline-flex}
+  .nav{transform:translateX(-100%);transition:transform .2s ease;width:280px;box-shadow:var(--shadow-lg)}
+  body.navopen .nav{transform:none}
+  body.navopen .navscrim{display:block;position:fixed;inset:var(--top-h) 0 0 0;z-index:45;background:var(--scrim);backdrop-filter:blur(2px)}
+  main{margin-left:0;padding-top:calc(var(--top-h) + 22px)}
+  .altpill{display:none}
+  .searchwrap{flex:1 1 auto}
+  .brand small{display:none}
+}
+@media (max-width:560px){
+  body{font-size:15px}
+  main{padding-left:16px;padding-right:16px}
+  .brand span.full{display:none}
+}
+@media print{
+  .top,.nav,.totop,#tip,.navscrim{display:none!important}
+  main{margin:0;padding:0;max-width:none}
+  section{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="iconbtn" id="navtoggle" aria-label="Navigation öffnen">☰</button>
+  <a class="brand" href="#top"><span class="logo">NS</span><span class="full">NerdShelf</span> <small id="verpill">Handbuch</small></a>
+  <div class="top-spacer"></div>
+  <div class="searchwrap">
+    <input id="q" type="search" placeholder="Handbuch durchsuchen …" autocomplete="off" spellcheck="false" aria-label="Handbuch durchsuchen">
+    <span class="mag" aria-hidden="true">⌕</span>
+    <span class="slash" aria-hidden="true">/</span>
+    <div class="results" id="results" role="listbox" aria-label="Suchergebnisse"></div>
+  </div>
+  <span class="altpill" title="Halte Alt gedrückt und fahre über hervorgehobene Begriffe"><kbd>Alt</kbd> halten = Begriffe erklären</span>
+  <button class="iconbtn" id="themebtn" title="Hell / Dunkel / System umschalten" aria-label="Farbschema umschalten">◐</button>
+</header>
+
+<div class="navscrim" id="navscrim"></div>
+
+<nav class="nav" id="nav" aria-label="Inhaltsverzeichnis">
+  <div class="nav-group">
+    <div class="gh"><i></i>Start</div>
+    <a href="#start-ueberblick">Was NerdShelf kann</a>
+    <a href="#start-konto">Konto &amp; Anmeldung</a>
+    <a href="#start-navigation">Sich zurechtfinden</a>
+    <a href="#start-kniffe">Bedienung, die man leicht übersieht</a>
+    <a href="#start-teilen">Teilen &amp; Importieren</a>
+    <a href="#start-einstellungen">Einstellungen</a>
+    <a href="#start-kalender">Kalender</a>
+    <a href="#start-updates">Updates &amp; Fehler melden</a>
+    <a href="#start-handy">Am Handy (PWA)</a>
+  </div>
+  <div class="nav-group" data-c="dnd">
+    <div class="gh"><i></i>Dungeons &amp; Dragons</div>
+    <a href="#dnd">Überblick</a>
+    <a href="#dnd-erstellen">Charakter erstellen</a>
+    <a href="#dnd-sheet">Der Charakterbogen</a>
+    <a href="#dnd-levelup">Level Up &amp; Level Down</a>
+    <a href="#dnd-campaigns">Campaigns</a>
+    <a href="#dnd-session">Session-Übersicht (SL)</a>
+    <a href="#dnd-vtt">VTT — Einstieg</a>
+    <a href="#dnd-vtt-dm">VTT — Karten &amp; Werkzeuge</a>
+    <a href="#dnd-vtt-spieler">VTT — Am Tisch spielen</a>
+    <a href="#dnd-vtt-wuerfel">VTT — Würfel, Initiative, Journal</a>
+    <a href="#dnd-vtt-technik">VTT — Einstellungen &amp; Verbindung</a>
+    <a href="#dnd-homebrew">Homebrew</a>
+    <a href="#dnd-import">Import &amp; Export</a>
+  </div>
+  <div class="nav-group" data-c="mtg">
+    <div class="gh"><i></i>Magic: The Gathering</div>
+    <a href="#mtg">Überblick</a>
+    <a href="#mtg-decks">Decks-Übersicht</a>
+    <a href="#mtg-builder">Deck-Builder</a>
+    <a href="#mtg-suche">Kartensuche (Scryfall)</a>
+    <a href="#mtg-analyse">Deck-Analyse</a>
+    <a href="#mtg-sammlung">Sammlung</a>
+    <a href="#mtg-wunschliste">Wunschliste &amp; Cardmarket</a>
+    <a href="#mtg-match">Match HUD</a>
+  </div>
+  <div class="nav-group" data-c="w40k">
+    <div class="gh"><i></i>Warhammer 40.000</div>
+    <a href="#w40k">Überblick</a>
+    <a href="#w40k-armeen">Armee-Builder</a>
+    <a href="#w40k-einheiten">Einheiten-Browser</a>
+    <a href="#w40k-squads">Squads</a>
+    <a href="#w40k-sammlung">Sammlung</a>
+    <a href="#w40k-combat">Combat Helper</a>
+  </div>
+  <div class="nav-group">
+    <div class="gh"><i></i>Referenz</div>
+    <a href="#ref-kuerzel">Alle Tastenkürzel</a>
+    <a href="#ref-glossar">Glossar</a>
+    <a href="#ref-hilfe">Wenn etwas klemmt</a>
+  </div>
+</nav>
+
+<main id="top">
+
+<div class="hero">
+  <div class="kicker">Bedienungsanleitung · Version <span id="ver">1.1.20</span></div>
+  <h1>NerdShelf Handbuch</h1>
+  <p class="lede">Alles, was du im Programm anklicken kannst — erklärt in der Reihenfolge, in der du es brauchst.
+  Wenn du nur wissen willst, wo etwas steckt: die Zeile mit dem Pfeil <span class="mono">›</span> unter jeder Überschrift sagt es dir.</p>
+  <div class="domains">
+    <a class="domain" href="#dnd" style="--c:var(--dnd)">
+      <div class="g">Dungeons &amp; Dragons</div>
+      <div class="d">Charaktere, Kampagnen, Spielleiter-Sicht, virtueller Spieltisch und eigene Inhalte.</div>
+    </a>
+    <a class="domain" href="#mtg" style="--c:var(--mtg)">
+      <div class="g">Magic: The Gathering</div>
+      <div class="d">Decks bauen mit Live-Kartensuche, Analyse, Sammlung, Wunschliste und Lebenspunkte-HUD.</div>
+    </a>
+    <a class="domain" href="#w40k" style="--c:var(--w40k)">
+      <div class="g">Warhammer 40.000</div>
+      <div class="d">Armeelisten, Datenblätter, deine Sammlung und ein Begleiter für die laufende Schlacht.</div>
+    </a>
+  </div>
+</div>
+
+<section id="start-ueberblick">
+  <div class="eyebrow">Start</div>
+  <h2>Was NerdShelf kann</h2>
+  <p>NerdShelf ist eine Sammelmappe für drei Hobbys in einem Fenster. Jeder Bereich ist eigenständig, teilt sich aber
+  dieselbe Anmeldung, dieselben <span class="term" data-def="Eine Sammlung deiner Dinge — bei MTG Karten, bei WH40K Modelle. Getrennt pro Bereich, aber überall gleich bedient.">Sammlungs</span>-Logik, dasselbe Teilen per Token und dieselben Einstellungen.</p>
+
+  <div class="cards">
+    <div class="card"><span class="cap">D&amp;D</span><h4>Vom Charakterbogen bis zur Battlemap</h4>
+      <p>Charaktere bauen und spielen, Kampagnen organisieren, Termine planen und live an einem virtuellen Spieltisch spielen — inklusive eigener Regelinhalte.</p></div>
+    <div class="card"><span class="cap">MTG</span><h4>Decks mit echten Kartendaten</h4>
+      <p>Suche direkt über Scryfall, Preise von Cardmarket, Mana-Basis-Vorschläge, Konsistenz-Simulation, Sammlung und Wunschliste.</p></div>
+    <div class="card"><span class="cap">WH40K</span><h4>Listen und Schlacht-Begleiter</h4>
+      <p>Armeen aus dem 10e-Datensatz zusammenstellen, Wargear wählen, Punkte zählen und während der Partie an Regeln und Stratageme erinnert werden.</p></div>
+  </div>
+
+  <h3>Wo läuft das?</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Variante</th><th>Was du davon hast</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Desktop-App</b><br><span class="muted">Windows</span></td><td>Der volle Umfang. Nur hier gibt es eigene Fenster (Charakterbogen-Popout, angeheftete Erklärungen), den Ordner-Dialog für den Foundry-Export, den 5e.tools-Browser im zweiten Fenster und automatische Updates.</td></tr>
+      <tr><td class="k"><b>Web / PWA</b><br><span class="muted">Handy, Tablet</span></td><td>Dieselben Daten im Browser. Wenn du sie zum Startbildschirm hinzufügst, bekommst du eine untere Tab-Leiste, Vollbild und Schlaf-Sperre für die Spiel-Ansichten.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note tip"><span class="lbl">Gut zu wissen</span>
+    <p>Deine Charaktere, Decks, Armeen und Kampagnen liegen in der Cloud und sind auf jedem Gerät gleich, sobald du dich anmeldest.
+    Rein persönliche Anzeige-Einstellungen (Farbschema, Panel-Breiten, Darstellung im VTT) bleiben dagegen <strong>auf dem jeweiligen Gerät</strong> — dein Mitspieler sieht davon nichts.</p></div>
+</section>
+
+<section id="start-konto">
+  <div class="eyebrow">Start</div>
+  <h2>Konto &amp; Anmeldung</h2>
+  <p class="path"><b>Beim ersten Start</b> <i>›</i> Anmeldemaske</p>
+
+  <ol class="steps">
+    <li><b>Registrieren.</b> Unten auf <span class="ui">Noch kein Account? → Registrieren</span> klicken. Du brauchst einen <b>Player-Namen</b> (2–50 Zeichen — so tauchst du bei Mitspielern auf), eine E-Mail und ein Passwort mit mindestens 6 Zeichen.</li>
+    <li><b>E-Mail bestätigen.</b> Falls du beim Anmelden „Bitte bestätige zuerst deine E-Mail-Adresse" liest: im Postfach nachsehen.</li>
+    <li><b>Auf Freischaltung warten.</b> Neue Konten müssen freigeschaltet werden. Bis dahin siehst du die Seite <span class="ui">Warte auf Freischaltung</span>. Das ist kein Fehler — ein Admin muss dich durchwinken.</li>
+    <li><b>Anmelden.</b> Danach landest du direkt in dem Bereich, in dem du zuletzt warst.</li>
+  </ol>
+
+  <h3>Passwort vergessen oder ändern</h3>
+  <ul>
+    <li>Auf der Anmeldemaske: E-Mail oben eintragen, dann <span class="ui">Passwort vergessen?</span>.</li>
+    <li>Angemeldet: <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>Account</b> <span class="mono">›</span> <span class="ui">Reset-Email senden</span>.</li>
+  </ul>
+
+  <h3>Player-Name ändern</h3>
+  <p><span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>Account</b> <span class="mono">›</span> Feld <b>Player-Name</b> <span class="mono">›</span> <span class="ui">Speichern</span>.
+  Der Name steht in Kampagnen neben deinem Charakter und bei geteilten Inhalten neben deinen Sachen.</p>
+
+  <h3>Abmelden</h3>
+  <p>Der rote Knopf <span class="ui">⎋</span> ganz unten in der Seitenleiste (am Handy: <span class="ui">Mehr</span> <span class="mono">›</span> <span class="ui">Abmelden</span>). Im VTT sitzt derselbe Knopf oben rechts.</p>
+</section>
+
+<section id="start-navigation">
+  <div class="eyebrow">Start</div>
+  <h2>Sich zurechtfinden</h2>
+
+  <h3>Die drei Ebenen der Navigation</h3>
+  <ol class="steps">
+    <li><b>Seitenleiste links</b> — wechselt den Bereich: <span class="ui">DnD</span>, <span class="ui">MTG</span>, <span class="ui">WH40k</span>. Ganz unten sitzen Kalender, dieses Handbuch <span class="ui">?</span>, Einstellungen, Fehler melden und Abmelden. Der <span class="ui">?</span> öffnet immer das Kapitel zu der Seite, auf der du gerade bist.</li>
+    <li><b>Reiter-Zeile oben</b> — wechselt innerhalb des Bereichs: z.&nbsp;B. bei MTG <span class="ui">Decks</span> · <span class="ui">Wunschliste</span> · <span class="ui">Sammlung</span> · <span class="ui">Match HUD</span>.</li>
+    <li><b>Seiten-eigene Kopfzeile</b> — Deck-Builder, Armee-Builder, Charakterbogen und VTT nehmen die ganze Fläche und bringen eine eigene Kopfzeile mit Zurück-Knopf mit.</li>
+  </ol>
+
+  <h3>Seitenleiste breiter oder schmaler</h3>
+  <p>Der kleine Pfeil <span class="ui">‹</span> / <span class="ui">›</span> oben in der Seitenleiste schaltet zwischen voller Breite (mit Beschriftung) und schmaler Symbolleiste um. Die Wahl bleibt über Neustarts erhalten.
+  Wird das Fenster sehr schmal, klappt die volle Leiste als Überlagerung über den Inhalt — <kbd>Esc</kbd> oder ein Klick daneben schließt sie wieder.</p>
+
+  <div class="note"><span class="lbl">Praktisch</span>
+    <p>Beim nächsten Start landest du automatisch auf der Seite, auf der du zuletzt warst. Ausnahme sind laufende MTG-Matches — die würden dich sonst in eine längst beendete Partie zurückwerfen.</p></div>
+</section>
+
+<section id="start-kniffe">
+  <div class="eyebrow">Start</div>
+  <h2>Bedienung, die man leicht übersieht</h2>
+  <p class="lede">Vieles im Programm hat eine zweite, schnellere Bedienung. Das hier sind die, nach denen sonst niemand sucht.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Geste</th><th>Wo</th><th>Was passiert</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Rechtsklick</b> auf eine Erklärung</td><td>Charakterbogen, VTT</td><td>Heftet den Hover-Text als eigenes Fensterchen fest: verschiebbar, in der Größe änderbar, bleibt offen, auch wenn du den Reiter wechselst. In der Desktop-App wird daraus ein echtes Fenster, das über allen anderen bleibt.</td></tr>
+      <tr><td class="k"><b>Rechtsklick</b> auf eine Karte</td><td>MTG-Suche, Decklisten</td><td>Pinnt die Karte in die große Vorschau links. Bei doppelseitigen Karten pinnt der Rechtsklick genau die Seite, über der du stehst.</td></tr>
+      <tr><td class="k"><b>Rechtsklick</b> auf eine Stückzahl</td><td>Charakterbogen · Inventar-Kachel</td><td>Legt eins drauf. Linksklick verbraucht eins. So brauchst du für Tränke und Munition kein Bearbeiten-Fenster.</td></tr>
+      <tr><td class="k"><b>Rechtsklick</b> auf ein Token</td><td>VTT</td><td>Öffnet das Token-Menü (HP, Zustände, Licht, Größe). Mehrere Menüs können gleichzeitig offen bleiben; sie schließen erst über ihr <span class="ui">✕</span>.</td></tr>
+      <tr><td class="k"><b>Doppelklick</b></td><td>VTT-Token, SL-Party-Leiste</td><td>Öffnet den Charakterbogen bzw. den Statblock als eigenes Fenster.</td></tr>
+      <tr><td class="k"><b>Hovern</b></td><td>überall, wo Regeltext dahintersteckt</td><td>Zeigt den vollständigen Eintrag als formatierten Tooltip — nicht nur die ersten Zeilen.</td></tr>
+      <tr><td class="k"><b>Lange drücken</b></td><td>Handy: Deck- und Charakterkacheln</td><td>Öffnet das Aktionsmenü von unten (Duplizieren, Löschen …), statt winzige Symbole zu treffen.</td></tr>
+      <tr><td class="k"><b>Wischen</b></td><td>Handy: Match HUD, Combat HUD</td><td>Blendet die Kopfleiste ein und aus, damit das Spielfeld die ganze Anzeige bekommt.</td></tr>
+      <tr><td class="k"><b>Ziehen an Kanten</b></td><td>VTT-Panels, Spieler-Leiste, Popout-Fenster</td><td>Ändert die Breite bzw. Höhe. Kopfzeilen von schwebenden Fenstern sind Ziehgriffe.</td></tr>
+      <tr><td class="k"><kbd>Enter</kbd> in Zahlenfeldern</td><td>HP-Felder in Bogen, Session, VTT</td><td>Übernimmt den Wert. Ein Minus davor heißt Schaden, ohne Vorzeichen Heilung.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note tip"><span class="lbl">In diesem Handbuch</span>
+    <p>Halte <kbd>Alt</kbd> gedrückt und fahre über <span class="term" data-def="Genau so: Begriffe mit gestrichelter Unterstreichung erklären sich, solange Alt gedrückt ist.">hervorgehobene Begriffe</span> — dann bekommst du eine kurze Erklärung eingeblendet, ohne die Seite zu verlassen. Mit <kbd>/</kbd> springst du in die Suche.</p></div>
+</section>
+<section id="start-teilen">
+  <div class="eyebrow">Start</div>
+  <h2>Teilen &amp; Importieren</h2>
+  <p>Jeder Charakter, jedes Deck und jede Armee hat einen eigenen <span class="term" data-def="Ein 12-stelliger Code in der Form X3Q9-F4MV-7K2H. Er gehört dauerhaft zu diesem einen Eintrag — auch wenn du ihn umbenennst.">Share-Token</span>. Wer den Token hat, kann deinen Eintrag <strong>ansehen</strong> — verändern kann ihn nur du.</p>
+
+  <h3>Etwas weitergeben</h3>
+  <ol class="steps">
+    <li>Auf der Kachel (Dashboard) oder in der Kopfzeile den Token-Chip anklicken — er kopiert sich in die Zwischenablage und blinkt kurz <span class="ui">Kopiert</span>.</li>
+    <li>Alternativ der Teilen-Knopf daneben: am Handy öffnet er das System-Teilen-Menü (WhatsApp, Discord …), am Rechner kopiert er einen fertigen Link.</li>
+  </ol>
+
+  <h3>Etwas übernehmen</h3>
+  <ul>
+    <li><b>Per Link:</b> anklicken — die App öffnet den passenden Bereich und importiert automatisch.</li>
+    <li><b>Per Token:</b> auf dem Dashboard des Bereichs im Feld <span class="ui">Import via Token</span> eintragen. Bindestriche sind egal.</li>
+  </ul>
+  <p>Übernommene Sachen landen unter <b>Importierte Charaktere / Decks / Armeen</b> ganz unten auf dem Dashboard, gruppiert nach Besitzer und darunter nach Edition, Format bzw. Fraktion. Sie sind <strong>nur lesbar</strong> und lassen sich jederzeit wieder entfernen — beim Besitzer passiert dabei nichts.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Was</th><th>Token-Art</th><th>Ergebnis beim Empfänger</th></tr></thead>
+    <tbody>
+      <tr><td class="k">D&amp;D-Charakter</td><td>Share-Token</td><td>Nur-Lese-Übersicht des Charakters</td></tr>
+      <tr><td class="k">MTG-Deck</td><td>Share-Token</td><td>Decklist mit Preisen, ohne Bearbeiten</td></tr>
+      <tr><td class="k">WH40K-Armee</td><td>Share-Token</td><td>Armeeliste mit Ausrüstung und Punkten</td></tr>
+      <tr><td class="k">D&amp;D-Kampagne</td><td>Join-Token <span class="muted">(kurz, z.&nbsp;B. K7QM2F)</span></td><td>Beitritt als Mitspieler samt Charakterwahl</td></tr>
+      <tr><td class="k">Homebrew-Eintrag</td><td>eigener Token</td><td>Kopie in der eigenen Homebrew-Sammlung</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note warn"><span class="lbl">Achtung</span>
+    <p>Einen Homebrew-Token kannst du wieder <span class="ui">widerrufen</span> — dann verlieren alle bisherigen Empfänger den Zugriff. Bei Charakteren, Decks und Armeen bleibt der Token dauerhaft bestehen.</p></div>
+</section>
+
+<section id="start-einstellungen">
+  <div class="eyebrow">Start</div>
+  <h2>Einstellungen</h2>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>⚙</b> &nbsp;·&nbsp; Handy: <b>Mehr</b> <i>›</i> <b>Einstellungen</b></p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Reiter</th><th>Was drinsteckt</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>General</b></td><td>Auf Updates prüfen und die letzten Versionen mit ihren Änderungen ansehen.</td></tr>
+      <tr><td class="k"><b>Account</b></td><td>E-Mail (nur Anzeige), Player-Name ändern, Passwort-Reset anfordern.</td></tr>
+      <tr><td class="k"><b>Theme</b></td><td><b>System</b>, <b>Hell</b>, <b>Dunkel</b> oder <b>Benutzerdefiniert</b> mit eigenen Farben — pro Gerät gespeichert, mit <span class="ui">Zurücksetzen</span>.</td></tr>
+      <tr><td class="k"><b>DnD</b></td><td>Zielordner für den Foundry-Export (nur Desktop-App) · Standardwerte der <b>Spielleiter</b>-Session-Karten · Farben der Pills (Schadensarten, Rettungswürfe, Aktionen, Zauber) · Marker für Einträge aus der jeweils anderen Edition ein-/ausblenden.</td></tr>
+      <tr><td class="k"><b>MTG</b></td><td>Preis-Warnschwellen: ab welchem Betrag eine <b>einzelne Karte</b> und ab welchem Betrag ein <b>ganzes Deck</b> markiert wird (in EUR).</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><span class="lbl">Nicht hier</span>
+    <p>Die Anzeige-Einstellungen des virtuellen Spieltischs (UI-Größe, Gelände, Licht, Pings …) liegen <strong>im VTT selbst</strong> hinter dem Zahnrad oben rechts. Siehe <a href="#dnd-vtt-technik">VTT — Einstellungen &amp; Verbindung</a>.</p></div>
+</section>
+
+<section id="start-kalender">
+  <div class="eyebrow">Start</div>
+  <h2>Kalender</h2>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>▦</b></p>
+  <p>Ein Monatsraster über alle Termine deiner D&amp;D-Kampagnen — egal ob du sie leitest oder mitspielst. Heute ist hervorgehoben, vergangene Tage sind gedimmt, Tage mit Terminen bekommen einen Punkt. Klick auf einen Tag zeigt, was ansteht.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Punkt am ▦-Knopf</th><th>Bedeutung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b style="color:var(--danger)">Rot</b></td><td>Heute ist ein Termin.</td></tr>
+      <tr><td class="k"><b style="color:var(--warn)">Gelb</b></td><td>Morgen ist ein Termin.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Termine selbst werden in der Kampagne angelegt — siehe <a href="#dnd-campaigns">Campaigns</a>. Der Punkt aktualisiert sich von selbst, sobald jemand einen Termin anlegt oder verschiebt.</p>
+</section>
+
+<section id="start-updates">
+  <div class="eyebrow">Start</div>
+  <h2>Updates &amp; Fehler melden</h2>
+
+  <h3>Updates</h3>
+  <p>Die Desktop-App sucht wenige Sekunden nach dem Start und danach alle sechs Stunden nach einer neuen Version. Gibt es eine, erscheint ein schmales Band mit <span class="ui">Installieren</span> — die App lädt, installiert und startet sich neu. Verschieben geht ebenfalls; dann fragt sie beim nächsten Start wieder.
+  Manuell prüfen: <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>General</b>. Dort steht auch, was sich in den letzten Versionen geändert hat.</p>
+
+  <h3>Fehler melden</h3>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>⚐</b> &nbsp;·&nbsp; im VTT: oben rechts <b>⚐</b></p>
+  <p>Beschreib in ein, zwei Sätzen, was passiert ist, und wähle eine Dringlichkeit. Mitgeschickt werden automatisch die letzten Konsolenmeldungen, die Seite, auf der du warst, dein Farbschema, die Fenstergröße und die App-Version — du musst also nichts davon selbst heraussuchen.</p>
+  <div class="note tip"><span class="lbl">Tipp</span><p>Melde direkt aus der Situation heraus, in der der Fehler auftrat. Die automatisch angehängten Angaben sind dann am aussagekräftigsten.</p></div>
+</section>
+
+<section id="start-handy">
+  <div class="eyebrow">Start</div>
+  <h2>Am Handy (PWA)</h2>
+  <p>Öffne NerdShelf im Handy-Browser und füge es zum Startbildschirm hinzu. Danach erkennt die App, dass sie „in der Hand" läuft, und schaltet die Bedienung um.</p>
+
+  <div class="cards">
+    <div class="card"><span class="cap">Navigation</span><h4>Tab-Leiste unten</h4><p>Statt Seitenleiste: <b>DnD</b>, <b>MTG</b>, <b>WH40k</b> und <b>Mehr</b>. Hinter <b>Mehr</b> liegen Kalender, Handbuch, Einstellungen, Fehler melden und Abmelden.</p></div>
+    <div class="card"><span class="cap">Listen</span><h4>Lange drücken</h4><p>Auf Deck- und Charakterkacheln öffnet langes Drücken das Aktionsmenü von unten statt der kleinen Symbole.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Wischbare Reiter-Zeile</h4><p>Die Reiter oben werden zu einer horizontal scrollenden Leiste mit Einrastpunkten.</p></div>
+    <div class="card"><span class="cap">Spielansichten</span><h4>Bildschirm bleibt an</h4><p>Match HUD und Combat HUD halten die Anzeige wach, gehen ins Vollbild und drehen — soweit dein Gerät das zulässt — ins Querformat.</p></div>
+  </div>
+
+  <div class="note"><span class="lbl">Unterschiede zur Desktop-App</span>
+    <p>Eigene Fenster (Charakterbogen-Popout, angeheftete Erklärungen, 5e.tools-Browser), die Ordner-Auswahl für den Foundry-Export und die automatischen Updates gibt es nur in der Desktop-App. Alles andere ist gleich.</p></div>
+</section>
+
+<section id="dnd" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Überblick</h2>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>DnD</b></p>
+  <p class="lede">Der D&amp;D-Bereich hat drei Reiter — und dahinter drei Welten: deine Charaktere, deine Runden und deine eigenen Regelinhalte.</p>
+
+  <div class="cards">
+    <div class="card"><span class="cap">Reiter 1</span><h4>Characters</h4><p>Alle deine Charaktere, gruppiert nach Edition (5e / 5.5e). Von hier startest du die Erstellung und öffnest den Bogen.</p></div>
+    <div class="card"><span class="cap">Reiter 2</span><h4>Campaigns</h4><p>Runden, die du leitest oder in denen du mitspielst — mit Terminen, Mitgliedern, Session-Übersicht und dem virtuellen Spieltisch.</p></div>
+    <div class="card"><span class="cap">Reiter 3</span><h4>Homebrew</h4><p>Eigene Items, Zauber, Rassen, Klassen, Hintergründe, Kreaturen und Features, die überall im Programm auftauchen.</p></div>
+  </div>
+
+  <h3>Editionen</h3>
+  <p>Jeder Charakter gehört zu einer Edition: <b>5e</b> (2014) oder <b>5.5e</b> (2024). Sie bestimmt, aus welchen Daten Klassen, Zauber, Items und Monster gezogen werden — auch im VTT. Einträge, die du aus der jeweils anderen Edition importierst, bekommen einen kleinen Marker; ausblenden lässt der sich unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>DnD</b>.</p>
+
+  <figure class="shot">
+    <div class="shot-frame">
+      <img src="handbuch-img/dnd-dashboard.png" alt="Die Charakterübersicht im D&amp;D-Bereich" loading="lazy">
+      <div class="shot-empty"><span class="n">handbuch-img/dnd-dashboard.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
+      <b class="mark" style="left:8%;top:11%">1</b>
+      <b class="mark" style="left:50%;top:11%">2</b>
+      <b class="mark" style="left:88%;top:22%">3</b>
+      <b class="mark" style="left:20%;top:55%">4</b>
+    </div>
+    <figcaption>Die Charakterübersicht
+      <ol class="legend">
+        <li>Reiter-Zeile des Bereichs</li>
+        <li>Gruppen nach Edition — Kopfzeilen lassen sich zuklappen</li>
+        <li><span class="ui">+ Neuer Charakter</span></li>
+        <li>Charakterkachel: Klick öffnet den Bogen, der Token-Chip kopiert den Share-Token</li>
+      </ol>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="dnd-erstellen" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Charakter erstellen</h2>
+  <p class="path"><b>DnD</b> <i>›</i> <b>Characters</b> <i>›</i> <b>+ Neuer Charakter</b></p>
+  <p>Ein Assistent mit elf Schritten. Oben siehst du immer, wo du stehst; über die Schrittleiste kannst du auch zurückspringen. Schritte, in denen es für deine Wahl nichts zu entscheiden gibt, werden automatisch übersprungen.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Schritt</th><th>Was du festlegst</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>1 · Edition</b></td><td>5e oder 5.5e. Bestimmt alle folgenden Datenlisten.</td></tr>
+      <tr><td class="k"><b>2 · Basic Info</b></td><td>Name, Gesinnung, Portrait und die erzählerischen Grunddaten.</td></tr>
+      <tr><td class="k"><b>3 · Race</b></td><td>Volk und Untervolk. Varianten schalten ihre eigenen Unterwahlen frei — es erscheinen nur die, die zur getroffenen Wahl gehören.</td></tr>
+      <tr><td class="k"><b>4 · Background</b></td><td>Hintergrund samt Fertigkeiten, Werkzeugen und Sprachen.</td></tr>
+      <tr><td class="k"><b>5 · Class</b></td><td>Klasse, bei Bedarf direkt die Subklasse — nämlich dann, wenn die Klasse sie schon auf Stufe 1 verlangt.</td></tr>
+      <tr><td class="k"><b>6 · Class Options</b></td><td>Kampfstil, Manöver und ähnliche Wahlmenüs. Entfällt, wenn deine Klasse auf Stufe 1 nichts zu wählen hat.</td></tr>
+      <tr><td class="k"><b>7 · Abilities</b></td><td>Attributswerte: Standard-Array, Point-Buy oder Würfeln — inklusive der Boni aus Volk und Hintergrund.</td></tr>
+      <tr><td class="k"><b>8 · Proficiencies</b></td><td>Klassenfertigkeiten, Expertise, Wahlmöglichkeiten aus Volk und Talenten. Doppelt gewählte Fertigkeiten werden blockiert.</td></tr>
+      <tr><td class="k"><b>9 · Spells</b></td><td>Zaubertricks und Zauber, sofern deine Klasse zaubert — inklusive zusätzlicher Zauber aus Volk, Hintergrund oder Subklasse.</td></tr>
+      <tr><td class="k"><b>10 · Equipment</b></td><td>Startausrüstung als A/B/C-Paket, dazu ein Item-Browser mit Suche und Filtern für Typ und Seltenheit.</td></tr>
+      <tr><td class="k"><b>11 · Review</b></td><td>Alles auf einen Blick, dann speichern.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note tip"><span class="lbl">Tipp</span>
+    <p>Solange ein Charakter auf <b>Stufe 1</b> steht, kannst du ihn komplett überarbeiten: Bogen öffnen <span class="mono">›</span> <span class="ui">Bearbeiten</span> führt zurück in denselben Assistenten. Ab Stufe 2 sind Änderungen absichtlich nur noch über <span class="ui">Custom</span> und <span class="ui">Level Down</span> möglich, damit die Level-Historie stimmig bleibt.</p></div>
+</section>
+<section id="dnd-sheet" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Der Charakterbogen</h2>
+  <p class="path"><b>DnD</b> <i>›</i> <b>Characters</b> <i>›</i> Charakterkachel anklicken</p>
+  <p class="lede">Der Bogen ist zum Spielen gebaut, nicht zum Nachschlagen: alles, was sich während einer Sitzung ändert, liegt vorne — der Rest ist weggeklappt.</p>
+
+  <h3>Kopfzeile</h3>
+  <p>Die Kopfzeile ist eingeklappt und zeigt nur Name, Volk, Klasse und Stufe. Der Pfeil <span class="ui">▼</span> ganz oben klappt sie auf; sie schließt wieder, sobald die Maus sie verlässt. Darin:</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Knopf</th><th>Was er tut</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="ui">Export</span></td><td>Charakter als <b>FoundryVTT-JSON</b> herunterladen — siehe <a href="#dnd-import">Import &amp; Export</a>.</td></tr>
+      <tr><td class="k"><span class="ui">Level Up</span></td><td>Startet den Stufenaufstieg.</td></tr>
+      <tr><td class="k"><span class="ui">Custom</span></td><td>Freies Bearbeiten: eigene Items, Zauber, Talente, Attributsänderungen — auch aus Homebrew und den Datenbanken.</td></tr>
+      <tr><td class="k"><span class="ui">Bearbeiten</span></td><td>Nur auf Stufe 1: zurück in den Erstellungs-Assistenten.</td></tr>
+      <tr><td class="k"><span class="ui">Level Down</span></td><td>Macht den letzten Stufenaufstieg rückgängig — mit Auflistung dessen, was verloren geht.</td></tr>
+      <tr><td class="k"><span class="ui">Popout</span></td><td>Öffnet den Bogen als eigenes, immer sichtbares Fenster. Gedacht für das Spielen neben einem anderen Programm.</td></tr>
+      <tr><td class="k"><span class="ui">📥 5e.tools</span></td><td>Zauber, Item oder Talent per 5e.tools-Adresse importieren.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Die sechs Reiter</h3>
+  <div class="cards">
+    <div class="card"><span class="cap">Reiter</span><h4>Overview</h4><p>Die Spielansicht: HP, Kampfwerte, Zustände, Aktionen, Zauber, Ressourcen, Schnellzugriff aufs Inventar.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Spells</h4><p>Die vollständige Zauberliste mit Vorbereitung, Slots, Höherwirken und Konzentration.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Inventory</h4><p>Alles, was du trägst: anlegen, einstimmen, Behälter, Münzen, Datenbank-Browser.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Features</h4><p>Merkmale von Volk, Hintergrund, Klasse und Talenten — plus optionale Klassen-Features.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Basic Info</h4><p>Persönlichkeit, Aussehen, Hintergrundgeschichte — frei beschreibbar.</p></div>
+    <div class="card"><span class="cap">Reiter</span><h4>Class History</h4><p>Wann du welche Stufe genommen hast und was sie gebracht hat.</p></div>
+  </div>
+
+  <h3>Overview — was du im Spiel benutzt</h3>
+  <ul>
+    <li><b>HP-Block.</b> Aktuelle Trefferpunkte, temporäre HP und eine Maximal-Anpassung. Daneben zwei Felder: Zahl eintippen, <kbd>Enter</kbd> — links Schaden, rechts Heilung.</li>
+    <li><b>Vier Kacheln:</b> Rüstungsklasse, Initiative, Bewegungsrate, passive Wahrnehmung.</li>
+    <li><b>Zustände.</b> Ein Klick setzt oder löst einen <span class="term" data-def="Die 14 Standard-Zustände wie Blinded, Prone, Restrained. Dieselben IDs benutzt auch der VTT — was du hier setzt, sehen SL und Mitspieler.">Zustand</span>. Bei 0 HP erscheinen die Rettungswürfe gegen den Tod als Punktereihe zum Anklicken.</li>
+    <li><b>Konzentration.</b> Läuft ein Konzentrationszauber, wird er angezeigt. Sinken deine HP, fragt der Bogen von selbst nach dem Rettungswurf (DC = das Höhere aus 10 und dem halben Schaden) — misslingt er, endet die Konzentration automatisch.</li>
+    <li><b>Aktionen.</b> Eine durchsuchbare Liste dessen, was du gerade wirklich tun kannst: Standardaktionen, Waffenangriffe, vorbereitete Zauber und alle Merkmale mit Auslöser — sortiert nach Aktion, Bonusaktion und Reaktion. Mit <span class="ui">★</span> heftest du Häufiges an einen eigenen Reiter.</li>
+    <li><b>Zauber-Spalte.</b> Der Punkt vor jedem Zauber schaltet ihn vorbereitet/nicht vorbereitet. <span class="ui">Cast</span> verbraucht den Slot, bei Zaubern ab Grad 1 mit Wahl des Grades.</li>
+    <li><b>Klassen-Ressourcen.</b> Ki, Rage, Superiority Dice, Kanalisierte Göttlichkeit &hellip; als anklickbare Punkte.</li>
+    <li><b>Inventar-Schnellzugriff.</b> Linksklick auf die Zahl verbraucht ein Stück, Rechtsklick legt eins drauf.</li>
+    <li><b>Waffenmeisterschaft</b> (5.5e) als eigener Abschnitt.</li>
+  </ul>
+  <div class="note"><span class="lbl">Anpassbar</span>
+    <p>Die Abschnitte lassen sich mit <span class="ui">▲</span>/<span class="ui">▼</span> umsortieren und mit <span class="ui">↻</span> zurücksetzen; die beiden großen Spalten kannst du tauschen. Die Farben der Pills stellst du unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>DnD</b> ein.</p></div>
+
+  <h3>Rasten</h3>
+  <ul>
+    <li><b>Kurze Rast:</b> ein geführter Dialog — du gibst an, wie viele Trefferwürfel du ausgibst, und siehst den HP-Gewinn vorher. Verbrauchte Trefferwürfel werden je Klasse mitgezählt.</li>
+    <li><b>Lange Rast:</b> setzt HP, Zauberslots und Ressourcen zurück und gibt die Hälfte der Trefferwürfel wieder — aufgerundet, wie es die Regeln vorsehen.</li>
+  </ul>
+
+  <h3>Popout-Fenster</h3>
+  <p><span class="ui">Popout</span> öffnet ein rahmenloses Fenster, das über anderen Programmen bleibt — praktisch neben einer Battlemap oder einem Videochat. Oben sitzt eine sehr kompakte Leiste mit HP, Rüstungsklasse, Initiative, Bewegungsrate, passiver Wahrnehmung, Attributen, Gold, Ressourcen, Zuständen und Aktionsökonomie. Unten wechselst du zwischen <b>Standard</b>, <b>Zaubern</b>, <b>Favoriten</b> und <b>Meisterschaft</b>. Die Leiste selbst ist der Ziehgriff des Fensters; das Layout passt sich der Fenstergröße an.</p>
+
+  <figure class="shot">
+    <div class="shot-frame">
+      <img src="handbuch-img/dnd-sheet.png" alt="Charakterbogen, Reiter Overview" loading="lazy">
+      <div class="shot-empty"><span class="n">handbuch-img/dnd-sheet.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
+      <b class="mark" style="left:50%;top:6%">1</b>
+      <b class="mark" style="left:14%;top:24%">2</b>
+      <b class="mark" style="left:40%;top:24%">3</b>
+      <b class="mark" style="left:16%;top:62%">4</b>
+      <b class="mark" style="left:62%;top:62%">5</b>
+      <b class="mark" style="left:90%;top:40%">6</b>
+    </div>
+    <figcaption>Charakterbogen, Reiter <b>Overview</b>
+      <ol class="legend">
+        <li>Eingeklappte Kopfzeile — Pfeil zum Ausklappen</li>
+        <li>HP-Block mit Schaden-/Heilungsfeld</li>
+        <li>Kampfkacheln und Zustände</li>
+        <li>Aktionen mit Reitern für Aktion / Bonusaktion / Reaktion</li>
+        <li>Zauber-Spalte mit Vorbereitungs-Punkten</li>
+        <li>Ressourcen und Inventar-Schnellzugriff</li>
+      </ol>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="dnd-levelup" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Level Up &amp; Level Down</h2>
+  <p class="path"><b>Charakterbogen</b> <i>›</i> Kopfzeile <i>›</i> <b>Level Up</b></p>
+  <p>Auch der Aufstieg ist ein Assistent — er zeigt nur die Schritte, die für diese Stufe wirklich anfallen:</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Schritt</th><th>Erscheint, wenn &hellip;</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Klasse</b></td><td>immer — hier wählst du auch, ob du <span class="term" data-def="Eine weitere Klasse dazunehmen statt die bestehende zu steigern. Das Programm prüft vorher die Attributs-Voraussetzungen.">multiclassen</span> willst.</td></tr>
+      <tr><td class="k"><b>HP</b></td><td>immer — würfeln oder den Durchschnitt nehmen.</td></tr>
+      <tr><td class="k"><b>Subklasse</b></td><td>die Klasse ihre Subklasse auf dieser Stufe verlangt.</td></tr>
+      <tr><td class="k"><b>ASI / Feat</b></td><td>eine Attributssteigerung ansteht. Doppelklick auf ein Attribut vergibt gleich beide Punkte dorthin.</td></tr>
+      <tr><td class="k"><b>Features</b></td><td>es etwas zu wählen gibt (Manöver, Anrufungen, Kampfstile, Varianten &hellip;).</td></tr>
+      <tr><td class="k"><b>Zauber</b></td><td>neue Zauber oder Zaubertricks dazukommen — inklusive Tauschen, wo die Regeln es erlauben.</td></tr>
+      <tr><td class="k"><b>Übersicht</b></td><td>immer — letzte Kontrolle, dann übernehmen.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note tip"><span class="lbl">Sicherheitsnetz</span>
+    <p>Wird ein Aufstieg nicht sauber gespeichert, merkt der Bogen das beim nächsten Öffnen und bietet an, die lokale Sicherung wiederherzustellen. <span class="ui">Level Down</span> in der Kopfzeile nimmt den letzten Aufstieg vollständig zurück und listet vorher auf, was dabei wegfällt.</p></div>
+  <p>Startest du den Aufstieg aus dem VTT heraus (Sidebar <b>Level-Historie</b>), landest du nach dem Abschluss oder Abbruch automatisch wieder am Spieltisch.</p>
+</section>
+
+<section id="dnd-campaigns" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Campaigns</h2>
+  <p class="path"><b>DnD</b> <i>›</i> <b>Campaigns</b></p>
+  <p>Eine Kampagne bündelt Spielleitung, Mitspieler, Termine und den virtuellen Spieltisch. Du siehst hier sowohl die Runden, die du leitest, als auch die, in denen du mitspielst — jeweils mit dem nächsten Termin und einem Countdown.</p>
+
+  <h3>Als Spielleitung: Runde eröffnen</h3>
+  <ol class="steps">
+    <li><span class="ui">Campaign erstellen</span> — Name, Beschreibung, Edition und optional ein Banner-Bild.</li>
+    <li>Den <b>Join-Token</b> aus der Kopfzeile kopieren und an die Gruppe geben.</li>
+    <li>Termine anlegen: Titel, Datum &amp; Uhrzeit, Ort und Notizen. Sie erscheinen bei allen Beteiligten im <a href="#start-kalender">Kalender</a>.</li>
+    <li>Wenn es losgeht: <span class="ui">▶ Session starten</span>.</li>
+  </ol>
+
+  <h3>Als Mitspieler: beitreten</h3>
+  <ol class="steps">
+    <li><span class="ui">Campaign beitreten</span>, Token eintragen (oder einfach den geteilten Link öffnen).</li>
+    <li>Charakter auswählen, mit dem du mitspielst. Hast du mehrere in dieser Runde, fragt das Programm beim Einsteigen nach.</li>
+    <li>Läuft die Session bereits, kommst du direkt an den Spieltisch. Sonst wartet <span class="ui">▶ Session beitreten</span> auf dich.</li>
+  </ol>
+
+  <h3>In der Kampagnenansicht</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Für wen</th><th>Was möglich ist</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Spielleitung</b></td><td>Kampagne bearbeiten oder löschen · Termine anlegen, ändern, löschen · Mitglieder entfernen · jeden Charakterbogen schreibgeschützt öffnen · einzelne oder <span class="ui">Alle exportieren</span> (Foundry) · <span class="ui">🗺 VTT</span> zum Vorbereiten und Spielen · Session starten und beenden.</td></tr>
+      <tr><td class="k"><b>Mitspieler</b></td><td>Mitgliederkarten sehen · den eigenen Charakter öffnen · der laufenden Session beitreten · Kampagne verlassen.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="lbl">Zusammenhang</span>
+    <p>Eine laufende <b>Session</b> und der <b>VTT</b> sind dasselbe: Startet die Spielleitung die Session, können Spieler an den Tisch. Ohne laufende Session dürfen sie die Karte trotzdem ansehen — dann als <span class="term" data-def="Ansehen erlaubt, bewegen und ändern nicht. Sobald die Spielleitung die Session startet, wird ohne Neuladen freigeschaltet.">Zuschauer</span>.</p></div>
+</section>
+
+<section id="dnd-session" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Session-Übersicht (Spielleitung)</h2>
+  <p class="path"><b>Campaign</b> <i>›</i> <b>▶ Session starten</b></p>
+  <p>Eine kompakte Karte pro Charakter — die Tischsicht der Spielleitung ohne VTT. Alles ist live: Ändert ein Spieler seine HP am Bogen oder am Spieltisch, siehst du es sofort, ohne etwas neu zu laden. Umgekehrt kannst du direkt auf den Karten schreiben.</p>
+  <ul>
+    <li><b>Trefferpunkte, Zustände und Rettungswürfe gegen den Tod</b> lassen sich pro Karte setzen.</li>
+    <li><b>Konzentration</b> wird markiert, inklusive Hinweis auf den fälligen Rettungswurf.</li>
+    <li><b>Notizen</b> pro Mitglied — nur für dich sichtbar.</li>
+    <li><b>Nachschlagen ohne Bogen:</b> pro Karte lassen sich <b>Inventar</b>, <b>Zauber</b>, <b>Features</b> und <b>Talente</b> aufklappen. Jeder Eintrag darin klappt nochmal für den vollen Regeltext auf.</li>
+    <li><b>Welche Werte</b> auf den Karten stehen (passive Sinne, Attribute, Traglast &hellip;), stellst du im Panel oben oder dauerhaft unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>DnD</b> <span class="mono">›</span> <b>Spielleiter</b> ein.</li>
+  </ul>
+</section>
+<section id="dnd-vtt" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons · Spieltisch</div>
+  <h2>VTT — Einstieg</h2>
+  <p class="path"><b>Campaign</b> <i>›</i> <b>🗺 VTT</b> &nbsp;·&nbsp; als Spieler: <b>▶ Zur Session</b></p>
+  <p class="lede">Der virtuelle Spieltisch ist eine echte Battlemap: Karte im Vollbild, Werkzeuge schweben darüber. Alles ist mit den Charakterbögen verbunden — Trefferpunkte und Zustände am Token sind dieselben wie auf dem Bogen und in der Session-Übersicht.</p>
+
+  <h3>Wer sieht was</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Rolle</th><th>Ansicht</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Spielleitung</b></td><td>Alle Werkzeuge, alle Karten, alle Würfe, sieht immer die ganze Karte. Mit <span class="ui">👁 Spieler-Ansicht</span> schaltet sie testweise auf die Spielersicht um — praktisch, um vor der Sitzung zu prüfen, was die Gruppe wirklich sieht.</td></tr>
+      <tr><td class="k"><b>Spieler</b></td><td>Sieht nur, was das eigene Token sieht, bewegt nur das eigene Token, sieht nur die eigenen Würfe. Dafür gibt es die Spieler-Leiste und die Charakter-Panels.</td></tr>
+      <tr><td class="k"><b>Zuschauer</b></td><td>Ohne laufende Session: ansehen ja, bewegen und ändern nein. Ein Hinweis oben sagt das. Startet die Spielleitung die Session, wird ohne Neuladen freigeschaltet.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Die Oberfläche</h3>
+  <ol class="steps">
+    <li><b>Kopfzeile</b> — Zurück, Rolle, Session starten/beenden, Pause, Handbuch <span class="ui">?</span>, Tastenkürzel <span class="ui">⌨</span>, VTT-Einstellungen <span class="ui">⚙</span>, Fehler melden <span class="ui">⚐</span>, Abmelden.</li>
+    <li><b>Werkzeugleiste</b> darunter — Auswahl, Messen, Ping, dazu für die Spielleitung Wände, Licht und Gelände; rechts die Zonen-Formen mit Farbwahl.</li>
+    <li><b>Symbolleisten an beiden Rändern</b> — je ein Knopf pro Panel. Du kannst dasselbe Panel links <em>oder</em> rechts öffnen und mehrere gleichzeitig nebeneinander stehen lassen.</li>
+    <li><b>Untere Leiste</b> — bei Spielern die eigene Spielfläche, bei der Spielleitung die Party-Übersicht bzw. die Einstellungen des aktiven Werkzeugs.</li>
+  </ol>
+
+  <p>Jedes offene Panel hat in seiner Kopfzeile drei kleine Knöpfe: <span class="ui">‹</span> schiebt es Richtung Fensterrand, <span class="ui">›</span> nach innen, <span class="ui">×</span> schließt es. An der inneren Kante ziehst du die Breite.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Panel</th><th>Für wen</th><th>Inhalt</th></tr></thead>
+    <tbody>
+      <tr><td class="k">🗺 <b>Karten</b></td><td>SL</td><td>Kartenbibliothek, Import, Aktivieren, Sichtbarkeit, geteilte Karten</td></tr>
+      <tr><td class="k">⚙ <b>Grid · Fog · Licht</b></td><td>SL</td><td>Raster, Nebel des Krieges, Beleuchtung der aktiven Karte</td></tr>
+      <tr><td class="k">🪜 <b>Ebenen</b></td><td>SL</td><td>Stockwerke und deren Verbindungen</td></tr>
+      <tr><td class="k">👤 <b>Tokens</b></td><td>SL</td><td>Token setzen — für einzelne Mitglieder oder alle</td></tr>
+      <tr><td class="k">🐉 <b>Kompendium</b></td><td>SL</td><td>Monster, Gegenstände und Zauber suchen, setzen oder verschenken</td></tr>
+      <tr><td class="k">⚔ <b>Initiative</b></td><td>SL</td><td>Kampfreihenfolge aufbauen und Züge weiterschalten</td></tr>
+      <tr><td class="k">📜 <b>Charakter</b></td><td>Spieler</td><td>Kampfwerte des eigenen Charakters</td></tr>
+      <tr><td class="k">✦ <b>Zauber</b></td><td>Spieler</td><td>Zauberliste mit Wirken und Slot-Verbrauch</td></tr>
+      <tr><td class="k">🎒 <b>Inventar</b></td><td>Spieler</td><td>Ausrüstung, Münzen, Anlegen und Einstimmen</td></tr>
+      <tr><td class="k">✨ <b>Features</b></td><td>Spieler</td><td>Merkmale wie auf dem Bogen</td></tr>
+      <tr><td class="k">📖 <b>Persönlichkeit</b></td><td>Spieler</td><td>Charakterbeschreibung</td></tr>
+      <tr><td class="k">📈 <b>Level-Historie</b></td><td>Spieler</td><td>Aufstiegs-Zeitleiste und <span class="ui">Level Up</span> direkt vom Tisch aus</td></tr>
+      <tr><td class="k">🎲 <b>Roll-Log</b></td><td>alle</td><td>Wurfprotokoll — SL sieht alle Würfe, Spieler nur die eigenen</td></tr>
+      <tr><td class="k">📓 <b>Journal</b></td><td>alle</td><td>Handouts und Notizen der Spielleitung</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><span class="lbl">Pause</span>
+    <p><span class="ui">⏸ Pause</span> friert den Tisch ein: Spieler können nichts mehr bewegen oder auslösen, die Spielleitung schon. Ein Band oben sagt allen Bescheid.</p></div>
+
+  <figure class="shot">
+    <div class="shot-frame">
+      <img src="handbuch-img/vtt-overview.png" alt="Der virtuelle Spieltisch" loading="lazy">
+      <div class="shot-empty"><span class="n">handbuch-img/vtt-overview.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
+      <b class="mark" style="left:50%;top:4%">1</b>
+      <b class="mark" style="left:20%;top:12%">2</b>
+      <b class="mark" style="left:3%;top:45%">3</b>
+      <b class="mark" style="left:16%;top:45%">4</b>
+      <b class="mark" style="left:50%;top:22%">5</b>
+      <b class="mark" style="left:50%;top:92%">6</b>
+    </div>
+    <figcaption>Der Spieltisch mit geöffneten Panels
+      <ol class="legend">
+        <li>Kopfzeile: Session, Pause, Einstellungen</li>
+        <li>Werkzeugleiste mit Zonen und Wandtypen</li>
+        <li>Symbolleiste — ein Knopf je Panel</li>
+        <li>Geöffnetes Panel, Breite an der Kante ziehbar</li>
+        <li>Initiative-Leiste über der Karte</li>
+        <li>Untere Leiste: Spielfläche bzw. Party-Übersicht</li>
+      </ol>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="dnd-vtt-dm" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons · Spieltisch</div>
+  <h2>VTT — Karten &amp; Werkzeuge (Spielleitung)</h2>
+
+  <h3>Karten</h3>
+  <ol class="steps">
+    <li><b>Importieren.</b> Im Panel <span class="ui">🗺 Karten</span> ein Bild wählen — es wird automatisch komprimiert. Oder eine <span class="term" data-def="Austauschformat vieler Karten-Generatoren (.uvtt / .dd2vtt). Es enthält neben dem Bild bereits Raster, Wände, Türen und Lichter.">Universal-VTT-Datei</span> laden: Raster, Wände, Türen und Lichter kommen dann fertig mit.</li>
+    <li><b>Aktivieren.</b> Die aktive Karte ist die, auf der gespielt wird — sie erscheint bei allen.</li>
+    <li><b>Sichtbar machen.</b> Zusätzlich kannst du einzelne Karten für die Spieler freigeben. Sie bekommen dann oben eine Auswahl und dürfen selbst zwischen den freigegebenen Karten blättern; die aktive ist mit <span class="ui">● aktiv</span> markiert.</li>
+    <li><b>Geteilte Karten.</b> Im selben Panel kannst du die aktive Karte unter einem Namen hochladen und Karten anderer Spielleiter als eigene Kopie in deine Kampagne laden.</li>
+  </ol>
+
+  <h3>Raster, Nebel und Licht</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Bereich</th><th>Was einstellbar ist</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Raster</b></td><td>Feldgröße, „Karte auf volle Felder einrasten", Versatz, Farbe, Deckkraft, Dicke und Stil (durchgezogen, gestrichelt, Punkte). Ein Feld entspricht 5&nbsp;ft.</td></tr>
+      <tr><td class="k"><b>Nebel des Krieges</b></td><td><b>Aus</b> · <b>Manuell</b> (du deckst Rechtecke auf) · <b>Dynamisch</b> (Sichtlinie). Dynamisch heißt: Spieler sehen nur, was ihr Token durch sichtblockende Wände sehen kann.</td></tr>
+      <tr><td class="k"><b>Erinnerung</b></td><td>Schon gesehene, aktuell unsichtbare Bereiche bleiben abgedunkelt oder in Schwarz-Weiß stehen. Zuletzt gesehene Tokens bleiben als grauer Schemen zurück, bis man sie wieder live sieht.</td></tr>
+      <tr><td class="k"><b>Licht</b></td><td>Pro Karte an- oder abschaltbar. Lichtquellen setzt du mit dem Licht-Werkzeug; Reichweite in ft (hell/dämmrig), Farbe und An/Aus im Editor.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Wände, Türen und Fenster</h3>
+  <p>Werkzeug <span class="ui">🧱 Wände</span>: klicken setzt Eckpunkte, die Wand wächst als zusammenhängender Zug weiter. <kbd>Esc</kbd>, <kbd>Enter</kbd> oder ein Rechtsklick beendet den Zug, <kbd>Shift</kbd> platziert frei ohne Einrasten.</p>
+  <ul>
+    <li>Die Wandtypen in der Werkzeugleiste sind <b>Vorlagen</b> für drei Schalter: blockiert <b>Bewegung</b>, blockiert <b>Licht</b>, blockiert <b>Sicht</b>. Im Editor siehst du das tatsächliche Verhalten und kannst es je Wand abweichend setzen.</li>
+    <li><b>Sicht</b> hat zwei Zusatzfelder in ft: ab welcher Nähe man hindurchsieht (0 = nie) und wie weit dahinter (0 = unbegrenzt) — damit baust du Fenster, Brüstungen und Deckung.</li>
+    <li><b>Türen</b> setzt du mit zwei Klicks auf Gitterpunkte. Ein Klick mit dem Auswahl-Werkzeug öffnet und schließt sie — auch Spieler dürfen das. Die Auswahl bleibt dabei erhalten.</li>
+    <li><b>Doppelklick</b> auf eine Wand wählt den ganzen Zug bzw. die geschlossene Schleife aus. <kbd>Strg</kbd> beim Ziehen eines Endpunkts löst ihn aus dem Verbund.</li>
+  </ul>
+
+  <h3>Gelände, Zonen, Ebenen</h3>
+  <ul>
+    <li><b>⛰ Gelände:</b> Felder mit einer Box auswählen (<kbd>Shift</kbd> erweitert) und ihnen <b>Höhe zum Klettern</b> oder <b>schwieriges Gelände</b> zuweisen. Einzelne Kanten lassen sich als Durchgang öffnen.</li>
+    <li><b>Zonen / Flächenzauber:</b> Kreis, Kegel, Linie und Quadrat, in ft mit Live-Größenanzeige; betroffene Felder werden hervorgehoben. Später anklickbar zum Verschieben, Drehen, Skalieren, Umfärben oder Löschen. Auch Spieler dürfen ihre eigenen Zonen legen.</li>
+    <li><b>🪜 Ebenen:</b> Mehrere Stockwerke auf einer Karte, jedes mit eigenem Bild. Tokens, Wände und Lichter gehören zu einer Ebene. <b>Treppen, Leitern und Portale</b> verbinden Felder über Ebenen hinweg; betritt ein Token so ein Feld, wechselt es automatisch die Ebene — bei mehreren Zielen fragt das Programm nach.</li>
+  </ul>
+
+  <h3>Tokens setzen</h3>
+  <ul>
+    <li><b>Spieler-Tokens:</b> im Panel <span class="ui">👤 Tokens</span> gezielt für ein Mitglied oder für alle auf einmal. Sie sind fest mit dem Charakter verbunden.</li>
+    <li><b>Monster:</b> im Panel <span class="ui">🐉 Kompendium</span> im Reiter Monster suchen und anklicken — Name, Trefferpunkte und Größe kommen aus dem Statblock. Das Token erscheint in der Kartenmitte, von dort ziehst du es an seinen Platz. Alternativ eine 5e.tools-Bestiary-Adresse einfügen.</li>
+    <li><b>Gegenstände und Zauber verschenken:</b> in denselben Panel-Reitern suchen und einem Charakter zuweisen — der Eintrag landet in dessen Inventar bzw. Zauberliste.</li>
+    <li><b>Rechtsklick</b> auf ein Token öffnet das Token-Menü: Zustände, Trefferpunkte per Zahl und <kbd>Enter</kbd>, Größe, Lichtquelle (Fackel, Laterne, Kerze oder eigene Reichweite), Sheet öffnen, entfernen.</li>
+    <li><b>Doppelklick</b> auf ein Monster-Token öffnet dessen Statblock als schwebendes Fenster — mehrere gleichzeitig möglich. Auch die Zauber im Statblock werden mit vollen Daten angezeigt, nicht nur als Namensliste.</li>
+  </ul>
+
+  <div class="note tip"><span class="lbl">Party im Blick</span>
+    <p>Solange kein Werkzeug aktiv ist, zeigt die untere Leiste alle gebundenen Charaktere mit Trefferpunkten, Rüstungsklasse, passiven Sinnen und Zuständen. Doppelklick auf eine Karte öffnet den zugehörigen Bogen schreibgeschützt.</p></div>
+</section>
+
+<section id="dnd-vtt-spieler" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons · Spieltisch</div>
+  <h2>VTT — Am Tisch spielen (Spieler)</h2>
+
+  <h3>Bewegen und schauen</h3>
+  <ul>
+    <li><b>Karte bewegen:</b> mit gedrückter mittlerer oder rechter Maustaste ziehen. <b>Zoomen:</b> Mausrad.</li>
+    <li><b>Token bewegen:</b> mit dem Auswahl-Werkzeug ziehen, oder <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> für Feld-für-Feld. Wände bremsen dich; die Spielleitung darf hindurch.</li>
+    <li><b>Türen und Fenster</b> öffnest du per Klick, ebenso <b>Lichtschalter</b>.</li>
+    <li><b>Doppelklick auf dein eigenes Token</b> öffnet deinen Charakterbogen als eigenes Fenster. Fremde Tokens öffnen bei Spielern absichtlich nichts.</li>
+    <li><b>Mehrere Karten freigegeben?</b> Oben in der Kopfzeile wechselst du zwischen ihnen. Aktiviert die Spielleitung eine neue Karte, springst du automatisch mit.</li>
+  </ul>
+
+  <h3>Die Spieler-Leiste unten</h3>
+  <p>Deine ständige Spielfläche — groß genug für schnelle Klicks mitten im Kampf. Was du hier änderst, steht sofort auch auf dem Bogen und in der Sicht der Spielleitung.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Element</th><th>Funktion</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>HP</b></td><td>Schaden und Heilung über <span class="ui">−</span> / <span class="ui">+</span> oder Zahl eintippen.</td></tr>
+      <tr><td class="k"><b>SR / LR</b></td><td>Kurze Rast (Pakt-Slots und kurzrast-basierte Ressourcen) und Lange Rast (HP, Slots, Ressourcen, halbe Trefferwürfel).</td></tr>
+      <tr><td class="k"><b>Zauberslots &amp; Ressourcen</b></td><td>Anklickbare Punkte pro Grad bzw. pro Klassenressource.</td></tr>
+      <tr><td class="k"><b>Inspiration</b></td><td>Hältst du sie, bekommt das ganze Fenster einen goldenen Rahmen — kaum zu übersehen.</td></tr>
+      <tr><td class="k">⚔ <b>Aktionen</b></td><td>Was du diese Runde tun kannst, nach Aktionsart sortiert.</td></tr>
+      <tr><td class="k">✨ <b>Specials</b></td><td>Alles, was <em>beim Treffen</em> oder <em>bei Gelegenheit</em> zündet: Manöver, Sneak Attack, Smites und ähnliche Zusatzeffekte.</td></tr>
+      <tr><td class="k">🎒 <b>Items</b></td><td>Die Gegenstände, die du dir auf dem Bogen für den Schnellzugriff markiert hast.</td></tr>
+      <tr><td class="k">★ <b>Favoriten</b></td><td>Deine angehefteten Einträge.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Die Panels öffnen sich nach oben und stapeln sich; ihre Höhe ziehst du an der Kopfzeile. Mit <span class="ui">⧉</span> löst du das Aktionen-Panel als frei verschiebbares, in der Größe änderbares Fenster heraus.</p>
+
+  <h3>Notizen</h3>
+  <p>Der Knopf neben dem Würfel unten rechts öffnet deine Charakternotizen als kleines schwebendes Fenster. Es speichert automatisch und landet auch auf dem Charakterbogen.</p>
+
+  <div class="note"><span class="lbl">Bewegungsreichweite</span>
+    <p>Ist dein Zug an der Reihe, zeigt die Karte deine normale Reichweite. Die <span class="ui">Dash</span>-Pille zeigt beim Darüberfahren die verdoppelte Reichweite und lässt sich per Klick für den Zug festhalten. Beim Zugwechsel setzt sie sich von selbst zurück.</p></div>
+</section>
+<section id="dnd-vtt-wuerfel" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons · Spieltisch</div>
+  <h2>VTT — Würfel, Initiative, Journal</h2>
+
+  <h3>Würfeln</h3>
+  <p>Der Würfel-Knopf unten rechts öffnet den Würfelkasten. Er ist verschiebbar, die Position bleibt erhalten.</p>
+  <ul>
+    <li><b>Einzelner Würfel:</b> auf <span class="ui">d20</span>, <span class="ui">d6</span> &hellip; klicken — sofort geworfen. Mit <span class="ui">+</span> / <span class="ui">−</span> baust du stattdessen eine Formel auf.</li>
+    <li><b>Formel:</b> frei eintippen, z.&nbsp;B. <code>2d6+4</code> oder <code>1d4+2d6+5</code>, dann <span class="ui">Roll</span>.</li>
+    <li>Die Würfel fallen als echte 3D-Würfel mit Physik. Das Ergebnis steht vorher fest — die Animation zeigt es nur. Bei sehr vielen Würfeln oder fehlender Grafikunterstützung erscheint direkt das Zahlenergebnis.</li>
+  </ul>
+
+  <h4>Wurf-Fenster bei Aktionen und Zaubern</h4>
+  <p>Benutzt du eine Aktion oder wirkst einen Zauber, öffnet sich ein kompaktes Wurf-Fenster:</p>
+  <ul>
+    <li><b>Grundschaden plus abhakbare Zusätze</b> (Sneak Attack, Smite, Manöver &hellip;) werden in <em>einem</em> Wurf geworfen und danach nach Schadensart aufgeschlüsselt.</li>
+    <li><b>Zaubergrad:</b> die Grad-Chips rechnen die Formel live um; verbraucht wird der Grad, den du bestätigst.</li>
+    <li><b>Optionen</b> wie Power-Attack oder geworfene Waffen verschieben Angriffs- und Schadenswerte entsprechend.</li>
+    <li><kbd>Shift</kbd> beim Würfeln wirft als <b>kritischer Treffer</b>.</li>
+    <li>Verbraucht wird erst beim Schadenswurf oder über <span class="ui">Benutzt</span>. Schließt du das Fenster mit <span class="ui">✕</span>, kostet dich das nichts — Umentscheiden ist ausdrücklich erlaubt.</li>
+    <li>Zusätze, die nur einmal pro Zug gehen und in diesem Zug schon dabei waren, sind nicht vorangehakt und tragen einen Hinweis.</li>
+  </ul>
+
+  <h4>Wurfprotokoll</h4>
+  <p>Panel <span class="ui">🎲 Roll-Log</span>: wer wann was mit welcher Formel gewürfelt hat, neueste oben. Die Spielleitung sieht alle Würfe, Spieler nur ihre eigenen. Die letzten Würfe überleben auch ein Neuladen.</p>
+
+  <h4>Würfe anfordern (Spielleitung)</h4>
+  <p>In der Party-Leiste unten hat jede Spielerkarte einen Würfel-Knopf — oder du nimmst <span class="ui">Wurf: alle</span>. Dann wählst du Attribut, <b>Save</b> oder <b>Check</b> und optional einen Schwierigkeitsgrad. Die Betroffenen bekommen eine Aufforderung eingeblendet und würfeln mit ihrem korrekten Bonus (oder tragen von Hand ein). Die Ergebnisse laufen im Roll-Log ein.</p>
+
+  <h3>Initiative</h3>
+  <ol class="steps">
+    <li><b>Kampf starten:</b> Tokens auswählen und den Initiative-Knopf über der Karte drücken. Ohne Auswahl nimmt er alle Tokens der Ebene. Läuft schon ein Kampf, fügt derselbe Knopf die Auswahl nachträglich hinzu.</li>
+    <li><b>Werte würfeln:</b> das 🎲 pro Eintrag wirft W20 und rechnet den richtigen Initiative-Bonus dazu — beim gebundenen Charakter aus dessen Werten, bei Monstern aus dem Statblock. Spieler, deren Wert noch offen ist, bekommen eine eigene Abfrage.</li>
+    <li><b>Züge schalten:</b> die Spielleitung geht vor und zurück; der aktive Zug ist in der Leiste über der Karte hervorgehoben, ein Klick auf ein Portrait wählt das Token aus.</li>
+    <li><b>Hinweise:</b> Spieler bekommen „Du bist dran" groß in die Mitte und eine Vorwarnung, wenn sie als Nächste dran sind.</li>
+  </ol>
+
+  <h3>Journal &amp; Handouts</h3>
+  <ul>
+    <li><b>Spielleitung:</b> Bild hochladen, Titel und Notizen dazu, dann <span class="ui">Allen zeigen</span> — es erscheint bei allen als großes, verschiebbares Fenster. Der Eintrag bleibt danach im Journal.</li>
+    <li><b>Spieler:</b> können frühere Handouts jederzeit über <span class="ui">Ansehen</span> für sich öffnen. Schließen blendet nur bei ihnen aus; die Spielleitung beendet es mit <span class="ui">Für alle beenden</span> für alle.</li>
+    <li><b>Text mit Formatierung:</b> Fett, kursiv, Überschriften, Listen, Zitate und Links über eine Werkzeugleiste — keine Sonderzeichen-Syntax nötig.</li>
+    <li><b>Ingame-Sprachen:</b> Mit dem 🗣-Menü markierst du eine Textstelle als Passage in einer Sprache. Spieler, deren Charakter diese Sprache nicht beherrscht, sehen dort <span class="term" data-def="Der Text wird für Unkundige in eine unleserliche Fantasieschrift verwandelt — die Länge bleibt erhalten, der Inhalt nicht lesbar.">Fantasieschrift</span>. Die Spielleitung liest immer alles.</li>
+  </ul>
+</section>
+
+<section id="dnd-vtt-technik" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons · Spieltisch</div>
+  <h2>VTT — Einstellungen &amp; Verbindung</h2>
+
+  <h3>Darstellung (nur für dich)</h3>
+  <p class="path"><b>VTT</b> <i>›</i> oben rechts <b>⚙</b></p>
+  <p>Alles hier ist <strong>persönlich und pro Gerät</strong> — deine Mitspieler sehen davon nichts.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Einstellung</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>UI-Größe</b></td><td>Skaliert alle Bedienelemente. Die Oberfläche passt sich zusätzlich automatisch an kleinere Bildschirme an.</td></tr>
+      <tr><td class="k"><b>Token-Badges</b></td><td>Größe der Zustands-, HP- und Rüstungsklasse-Symbole an den Tokens; die Rüstungsklasse zusätzlich separat.</td></tr>
+      <tr><td class="k"><b>Pings</b></td><td>Größe, Sichtdauer und — für die Spielleitung — die eigene Ping-Farbe.</td></tr>
+      <tr><td class="k"><b>Dunkelsicht-Färbung</b></td><td>Tönung der Fläche, die du nur dank Dunkelsicht siehst.</td></tr>
+      <tr><td class="k"><b>Erkundeter Bereich</b></td><td>Farbig abgedunkelt oder Schwarz-Weiß, dazu die Helligkeit.</td></tr>
+      <tr><td class="k"><b>Gelände</b></td><td>Deckkraft, Muster (Fläche, Schraffur, Punkte), Farbe sowie wie deutlich Kletterhöhe und schwieriges Gelände markiert werden.</td></tr>
+      <tr><td class="k"><b>Lichtschalter</b></td><td>Schalter auf der Karte ein- oder ausblenden.</td></tr>
+      <tr><td class="k"><b>Eigene Vorlagen</b></td><td>Eigene Wand- und Lichtvorlagen anlegen, mitgelieferte anpassen oder ausblenden.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Tastenkürzel</h3>
+  <p>Drücke <kbd>?</kbd> für die Übersicht direkt im Spieltisch. Die vollständige Liste steht auch <a href="#ref-kuerzel">hier im Handbuch</a>.</p>
+
+  <h3>Online oder direkt im selben Netzwerk</h3>
+  <p>Beim <span class="ui">▶ Session starten</span> fragt die App, über welche Netzwerkadressen Mitspieler <b>direkt</b> beitreten dürfen:</p>
+  <ul>
+    <li><b>Nichts anhaken</b> = alle verbinden sich online über die Cloud. Funktioniert immer.</li>
+    <li><b>Adressen anhaken</b> = Mitspieler im selben Netzwerk verbinden sich direkt mit deinem Rechner. Sie erkennen das automatisch und zeigen oben <span class="ui">🔌 LAN-Direkt</span>. Wer nicht in deinem Netz ist, bleibt online — ohne dass jemand etwas tun muss.</li>
+    <li>Klappt die Erkennung nicht sofort (z.&nbsp;B. weil das WLAN erst danach verbunden wurde), gibt es oben den Knopf <span class="ui">☁ Online · LAN erneut</span>.</li>
+    <li>Beendest du die Session, fallen alle automatisch auf die Online-Verbindung zurück.</li>
+  </ul>
+  <div class="note"><span class="lbl">Immer online</span><p>Charakterbögen kommen unabhängig davon immer aus der Cloud — nur die Battlemap selbst nimmt die direkte Verbindung.</p></div>
+</section>
+
+<section id="dnd-homebrew" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Homebrew</h2>
+  <p class="path"><b>DnD</b> <i>›</i> <b>Homebrew</b></p>
+  <p class="lede">Eigene Regelinhalte im selben Format wie die mitgelieferten Daten — sie erscheinen anschließend ganz normal in den Auswahllisten des Assistenten, auf dem Bogen und im VTT.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Art</th><th>Wo es danach auftaucht</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Items</b></td><td>Waffen, Rüstung, magische Gegenstände — in den Item-Auswahllisten und im Inventar.</td></tr>
+      <tr><td class="k"><b>Spells</b></td><td>Zauber aller Grade — in den Zauber-Auswahllisten der zugewiesenen Klassen.</td></tr>
+      <tr><td class="k"><b>Spell-Listen</b></td><td>Zauber-Sammlungen, die die wählbaren Zauber erweitern — direkt einem Charakter zugeordnet oder an ein Volk, einen Hintergrund, ein Feature oder ein Item gehängt.</td></tr>
+      <tr><td class="k"><b>Backgrounds</b></td><td>Hintergründe samt Fertigkeiten, Werkzeugen und Sprachen.</td></tr>
+      <tr><td class="k"><b>Races</b></td><td>Völker mit Attributsboni, Bewegungsrate, Übungen, gewährten Zaubern und Merkmalen.</td></tr>
+      <tr><td class="k"><b>Klassen</b></td><td>Eigene Klassen mit Trefferwürfel, Übungen, Zauber-Progression, Features pro Stufe und Subklassen — wählbar bei Erstellung, Multiclass und Aufstieg.</td></tr>
+      <tr><td class="k"><b>Creatures</b></td><td>Monster und NPCs — im VTT als Statblock und als Token nutzbar.</td></tr>
+      <tr><td class="k"><b>Features</b></td><td>Klassen-, Subklassen- und Volks-Merkmale — wirken auf Bogen und Spieltisch (Aktionen, Zusatzeffekte, Ressourcen).</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>So legst du etwas an</h3>
+  <ol class="steps">
+    <li>Reiter der gewünschten Art wählen. Die Zahl dahinter zeigt, wie viele Einträge du dort schon hast.</li>
+    <li><span class="ui">+ Neu anlegen</span> für ein leeres Formular — oder <span class="ui">Aus Vorlage laden …</span>, um mit einem offiziellen Eintrag als Grundlage zu starten.</li>
+    <li>Formular ausfüllen. Jede Art hat ihren eigenen Editor mit genau den Feldern, die das Programm auch ausliest.</li>
+    <li>Speichern. Vorher prüft das Programm den Eintrag: <b>Fehler</b> blockieren das Speichern (der Eintrag käme sonst nirgends an), <b>Hinweise</b> musst du nur bestätigen.</li>
+  </ol>
+
+  <h3>Weitergeben und übernehmen</h3>
+  <ul>
+    <li><span class="ui">Teilen</span> erzeugt einen Token und kopiert ihn — andere tragen ihn unter <span class="ui">Token importieren</span> ein.</li>
+    <li>Ein Eintrag lässt sich auf <b>öffentlich</b> stellen; dann finden ihn andere über <span class="ui">Library</span>.</li>
+    <li><span class="ui">Widerrufen</span> nimmt einen Token zurück — bisherige Empfänger verlieren den Zugriff auf Aktualisierungen.</li>
+    <li><span class="ui">Duplizieren</span> legt eine Kopie an, praktisch für Varianten.</li>
+  </ul>
+
+  <div class="note"><span class="lbl">Für Bastler</span>
+    <p>Neben dem geführten Formular gibt es zu jedem Eintrag einen Roh-Modus, in dem du direkt das zugrunde liegende JSON bearbeitest — für Felder, die das Formular nicht kennt.</p></div>
+</section>
+
+<section id="dnd-import" data-c="dnd">
+  <div class="eyebrow">Dungeons &amp; Dragons</div>
+  <h2>Import &amp; Export</h2>
+
+  <h3>Import von 5e.tools</h3>
+  <p class="path"><b>Charakterbogen</b> <i>›</i> Kopfzeile <i>›</i> <b>📥 5e.tools</b></p>
+  <ol class="steps">
+    <li><b>Adresse einfügen</b> — du siehst sofort eine Vorschau dessen, was importiert würde (Zauber, Gegenstand oder Talent).</li>
+    <li><b>Oder im Programm stöbern:</b> Die Desktop-App öffnet ein zweites Fenster mit 5e.tools in der Edition deines Charakters. Suchst du dort etwas heraus, importiert <span class="ui">Import current</span> genau das, was dort gerade offen ist.</li>
+    <li>Stammt der Eintrag aus der <em>anderen</em> Edition, wird das in der Vorschau hervorgehoben und der Eintrag entsprechend markiert. Den Marker kannst du in den Einstellungen ausblenden.</li>
+  </ol>
+  <p>An vielen Detailansichten sitzt außerdem eine kleine Pille <span class="ui">↗ 5e.tools</span>, die den passenden Eintrag im Browser öffnet.</p>
+
+  <h3>Export nach FoundryVTT</h3>
+  <p class="path"><b>Charakterbogen</b> <i>›</i> <b>Export</b> <i>›</i> <b>FoundryVTT (.json)</b></p>
+  <p>Erzeugt eine Foundry-taugliche JSON-Datei mit Werten, Gegenständen, Zaubern und Merkmalen. In der Desktop-App legst du den Zielordner einmal unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>DnD</b> fest. Die Spielleitung kann in der Kampagne mit <span class="ui">Alle exportieren</span> die gesamte Gruppe auf einmal ausgeben.</p>
+</section>
+<section id="mtg" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Überblick</h2>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>MTG</b></p>
+  <p class="lede">Vier Reiter, die zusammenarbeiten: was du baust (Decks), was du besitzt (Sammlung), was dir fehlt (Wunschliste) und was am Tisch passiert (Match HUD).</p>
+
+  <div class="cards">
+    <div class="card"><span class="cap">Reiter 1</span><h4>Decks</h4><p>Alle Decks als Kacheln mit Cover-Artwork, Farbverteilung, Kartenzahl und geschätztem Wert.</p></div>
+    <div class="card"><span class="cap">Reiter 2</span><h4>Wunschliste</h4><p>Errechnet sich selbst: alles, was deine Decks brauchen und deine Sammlung nicht hergibt.</p></div>
+    <div class="card"><span class="cap">Reiter 3</span><h4>Sammlung</h4><p>Was du wirklich besitzt — mit Stückzahlen.</p></div>
+    <div class="card"><span class="cap">Reiter 4</span><h4>Match HUD</h4><p>Lebenspunkte-Anzeige für die laufende Partie, online mit mehreren Geräten oder lokal auf einem.</p></div>
+  </div>
+
+  <div class="note"><span class="lbl">Woher die Kartendaten kommen</span>
+    <p>Alle Karten, Bilder und Preise kommen live von <b>Scryfall</b>; die Preise sind Cardmarket-Trendpreise in Euro. Es gibt also keine veraltete lokale Kartendatenbank — dafür brauchst du beim Suchen eine Internetverbindung.</p></div>
+</section>
+
+<section id="mtg-decks" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Decks-Übersicht</h2>
+  <p class="path"><b>MTG</b> <i>›</i> <b>Decks</b></p>
+  <p>Die Decks sind nach Format gruppiert; die Gruppen lassen sich zuklappen. Jede Kachel zeigt Cover, Name, Format, Karten im Main- und Sideboard, die Farbverteilung und den geschätzten Gesamtwert.</p>
+  <ul>
+    <li><b>Klick</b> öffnet den Deck-Builder.</li>
+    <li><b>Duplizieren</b> und <b>Löschen</b> sitzen als kleine Symbole oben rechts auf der Kachel — am Handy stattdessen langes Drücken.</li>
+    <li><b>Roter Rahmen</b> heißt: Das Deck liegt über deiner Preisgrenze. Die Schwellen stellst du unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>MTG</b> ein — je eine für einzelne Karten und für ganze Decks.</li>
+    <li><b>Cover:</b> Welche Karte das Artwork liefert, wählst du im Builder mit dem Cover-Knopf.</li>
+    <li>Ganz unten stehen die <b>importierten Decks</b> anderer Spieler, gruppiert nach Besitzer.</li>
+  </ul>
+</section>
+
+<section id="mtg-builder" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Deck-Builder</h2>
+  <p class="path"><b>MTG</b> <i>›</i> <b>Decks</b> <i>›</i> <b>+ Neues Deck</b> oder ein vorhandenes Deck</p>
+
+  <h3>Der Aufbau</h3>
+  <ol class="steps">
+    <li><b>Links die Vorschau</b> — die zuletzt überfahrene Karte groß, mit Regeltext, Manakosten, Seltenheit und Preis. Die Leiste lässt sich einklappen.</li>
+    <li><b>In der Mitte die Suche</b> mit den Treffern als Kachelraster.</li>
+    <li><b>Rechts das Deck</b> mit den Reitern <b>Mainboard</b>, <b>Sideboard</b> und <b>Ideen</b>.</li>
+  </ol>
+
+  <h3>Karten hinzufügen</h3>
+  <p>Fahre über eine Karte im Suchergebnis — es erscheinen gestapelte Knöpfe:</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Knopf</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><span class="ui">+ Hinzufügen</span></td><td>Ins Mainboard.</td></tr>
+      <tr><td class="k"><span class="ui">+ Sideboard</span></td><td>Direkt ins Sideboard (max. 15).</td></tr>
+      <tr><td class="k"><span class="ui">+ Ideen</span></td><td>In den <span class="term" data-def="Ein Sammelbecken ohne Obergrenze für „vielleicht später". Ideen zählen nicht zum Deck, fließen aber in die Wunschliste ein.">Ideen-Pool</span>.</td></tr>
+      <tr><td class="k"><span class="ui">+ Sammlung</span> / <span class="ui">− Sammlung</span></td><td>Ein Exemplar zur eigenen Sammlung hinzufügen oder abziehen.</td></tr>
+      <tr><td class="k"><span class="ui">★</span></td><td>Als Favorit markieren.</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>Rechtsklick</b> auf eine Karte pinnt sie in die Vorschau — bei doppelseitigen Karten genau die Seite, über der du stehst.</p>
+
+  <h3>Kopfzeile</h3>
+  <ul>
+    <li><b>Deck-Format</b> — filtert die Kartensuche automatisch auf legale Karten.</li>
+    <li><b>Commander</b> — im Commander-Format wählst du zuerst deinen Commander; danach beschränkt die Suche sich automatisch auf seine Farbidentität, und Nicht-Standardländer sind auf ein Exemplar begrenzt.</li>
+    <li><b>Cover-Karte</b> für die Anzeige auf dem Dashboard.</li>
+    <li><span class="ui">Importieren</span> — Decklist als Text einfügen.</li>
+    <li><span class="ui">Speichern</span> — der Knopf zeigt an, ob es ungespeicherte Änderungen gibt.</li>
+  </ul>
+
+  <h3>Ansicht &amp; Sortierung</h3>
+  <ul>
+    <li>Über den Treffern: <b>Kartengröße</b> und <b>Spaltenzahl</b>.</li>
+    <li>Rechts daneben zwei Modi: <span class="ui">✎</span> Suchen und Hinzufügen · <span class="ui">◉</span> die Decklist als reine Liste ansehen.</li>
+    <li>Im Deck-Panel sortierst du die Liste nach verschiedenen Kriterien; ein Fortschrittsbalken zeigt, wie voll Main- und Sideboard sind.</li>
+    <li>Der Preis oben im Deck-Panel ist der Gesamtwert; überschreitet er deine Grenze, erscheint <span class="ui">⚠ Limit überschritten</span>.</li>
+  </ul>
+
+  <h3>Import &amp; Export</h3>
+  <ul>
+    <li><b>Import:</b> Standard-Decklisten wie <code>4 Lightning Bolt</code>, <code>4x Lightning Bolt</code> oder <code>1 Lightning Bolt (LEA) 161</code>. Zeilen wie <code>Sideboard</code> oder <code>SB:</code> trennen die Bereiche; Zeilen mit <code>#</code> werden ignoriert.</li>
+    <li><b>Export:</b> <span class="ui">Export</span> im Deck-Panel legt die Decklist als Text in die Zwischenablage — passend für Arena, MTGO, Cockatrice oder Moxfield.</li>
+  </ul>
+
+  <figure class="shot">
+    <div class="shot-frame">
+      <img src="handbuch-img/mtg-builder.png" alt="Der MTG-Deck-Builder" loading="lazy">
+      <div class="shot-empty"><span class="n">handbuch-img/mtg-builder.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
+      <b class="mark" style="left:11%;top:40%">1</b>
+      <b class="mark" style="left:50%;top:13%">2</b>
+      <b class="mark" style="left:50%;top:52%">3</b>
+      <b class="mark" style="left:88%;top:20%">4</b>
+      <b class="mark" style="left:88%;top:62%">5</b>
+    </div>
+    <figcaption>Deck-Builder
+      <ol class="legend">
+        <li>Kartenvorschau — Hover zeigt, Rechtsklick pinnt</li>
+        <li>Suche und Filter</li>
+        <li>Treffer mit den Hinzufügen-Knöpfen beim Überfahren</li>
+        <li>Deck-Reiter Mainboard / Sideboard / Ideen</li>
+        <li>Decklist mit Stückzahlen</li>
+      </ol>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="mtg-suche" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Kartensuche (Scryfall)</h2>
+  <p>Die Suche baut aus deinen Eingaben eine echte Scryfall-Abfrage. Du musst also keine Suchsyntax lernen — bekommst aber dieselbe Genauigkeit.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Filter</th><th>Bedeutung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Name / Oracle</b></td><td>Umschalter über dem Suchfeld: Kartenname oder Regeltext durchsuchen.</td></tr>
+      <tr><td class="k"><b>Farbpunkte W U B R G C</b></td><td>Anklicken filtert. Bei mehreren Farben erscheint zusätzlich: <b>any</b> (mindestens eine), <b>all</b> (alle enthalten), <b>exact</b> (genau diese).</td></tr>
+      <tr><td class="k"><b>L</b></td><td>Länder anzeigen. Ohne diesen Schalter werden Länder aus den Ergebnissen herausgehalten.</td></tr>
+      <tr><td class="k"><b>★</b></td><td>Nur Favoriten.</td></tr>
+      <tr><td class="k"><b>◉</b></td><td>Nur Karten aus deiner Sammlung.</td></tr>
+      <tr><td class="k"><b>Typ</b></td><td>Kreatur, Spontanzauber, Hexerei, Verzauberung, Artefakt, Planeswalker, Battle.</td></tr>
+      <tr><td class="k"><b>Sortierung</b></td><td>Name, Farbe, Manawert, Typ, Seltenheit, Set, Erscheinungsdatum oder Preis — auf- oder absteigend.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Erweiterte Filter</h4>
+  <p>Hinter <span class="ui">Erweiterte Filter</span> stecken Seltenheit, Manawert von–bis, Untertyp (z.&nbsp;B. <em>Goblin</em>), Formatlegalität als Übersteuerung, Set-Code und eine Preisspanne in Euro. Sind erweiterte Filter aktiv, zeigt der Knopf einen Punkt. <span class="ui">Reset</span> räumt alles auf.</p>
+
+  <div class="note tip"><span class="lbl">Praktisch</span>
+    <p>Setzt du im Deck ein Format, brauchst du den Formatfilter der Suche nicht — er wird automatisch übernommen. Der Filter in der Suche ist nur zum bewussten Abweichen da.</p></div>
+</section>
+
+<section id="mtg-analyse" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Deck-Analyse</h2>
+  <p class="path"><b>Deck-Builder</b> <i>›</i> Deck-Panel <i>›</i> <b>Analyse</b></p>
+
+  <h3>Mana-Basis</h3>
+  <p>Der Vorschlag liest dein Deck aus — Farbsymbole, Kurve, Ramp — und schlägt eine passende Länderbasis vor. Gesteuert wird er über Schieberegler und Voreinstellungen:</p>
+  <ul>
+    <li><b>Tempo, Frühes Spiel, Gier</b> formen die ideale Basis.</li>
+    <li><b>Budget</b> tauscht anschließend Stück für Stück teure gegen günstigere Länder — beginnend bei den unwichtigsten Slots. Die Preise sind echte Cardmarket-Preise.</li>
+    <li><b>Alle behalten</b> lässt deine bereits eingebauten Länder unangetastet und füllt nur auf. <b>Alle ersetzen</b> baut die Basis komplett neu.</li>
+    <li>Du siehst <b>Quellen pro Farbe</b>, den durchschnittlichen Manawert, eine Bewertung der Manabasis, den Anteil ungetappt hereinkommender Länder und die Gesamtkosten.</li>
+    <li>Der Vorschlag lässt sich mit einem Klick ins Deck übernehmen.</li>
+  </ul>
+
+  <h3>Konsistenz-Simulation</h3>
+  <p>Ein Monte-Carlo-Test: Das Programm zieht viele tausend Starthände und misst, wie oft dein Deck tut, was du willst.</p>
+  <ul>
+    <li><b>Regeln</b> definierst du selbst — z.&nbsp;B. „Karte X bis Zug 3", „bestimmte Manaanforderung bis Zug 4", „Kartengruppe in der Starthand", „Mulligan-Bedingungen".</li>
+    <li>Ergebnis sind <b>Keep-Rate</b> (Hände ohne Mulligan), <b>Brick-Rate</b> (nach allen Mulligans unspielbar) und die Trefferquote deiner eigenen Regeln.</li>
+    <li>Die Zahl der Durchläufe stellst du selbst ein — mehr Iterationen, stabilere Werte.</li>
+  </ul>
+</section>
+
+<section id="mtg-sammlung" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Sammlung</h2>
+  <p class="path"><b>MTG</b> <i>›</i> <b>Sammlung</b></p>
+  <p>Was du wirklich besitzt, mit Stückzahlen. Die Kartendetails (Bild, Manakosten, Set) werden bei Bedarf nachgeladen.</p>
+  <ul>
+    <li><b>Direkt im Builder pflegen:</b> die Knöpfe <span class="ui">+ Sammlung</span> / <span class="ui">− Sammlung</span> auf jeder Karte.</li>
+    <li><b>Massenimport:</b> Eine Textliste einfügen — <code>4 Lightning Bolt</code>, <code>2x Counterspell</code>, <code>1 Sol Ring (CMR)</code>. Fehlt die Zahl, wird 1 angenommen; Zeilen mit <code>#</code> oder <code>//</code> werden übersprungen.</li>
+    <li><b>Hinzufügen statt Überschreiben:</b> Karten, die schon drin sind, bekommen die importierte Menge <em>dazu</em>. Für „ich habe alles neu gezählt" gibt es ein Häkchen zum Ersetzen.</li>
+    <li>Im Builder blendet <span class="ui">◉</span> die Suche auf deine Sammlung ein.</li>
+  </ul>
+</section>
+
+<section id="mtg-wunschliste" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Wunschliste &amp; Cardmarket</h2>
+  <p class="path"><b>MTG</b> <i>›</i> <b>Wunschliste</b></p>
+  <p>Die Wunschliste pflegst du nicht — sie ergibt sich. Für jede Karte gilt: <em>gebraucht in allen Decks</em> minus <em>in der Sammlung vorhanden</em>. Was übrig bleibt, steht hier, samt Angabe, aus welchen Decks der Bedarf kommt.</p>
+  <ul>
+    <li><span class="ui">⊕</span> in einer Zeile schiebt die Karte in der benötigten Menge direkt in die Sammlung — der typische Ablauf nach einem Einkauf.</li>
+    <li>Die Liste aktualisiert sich automatisch, sobald du ein Deck oder deine Sammlung änderst.</li>
+  </ul>
+
+  <h3>Export für Cardmarket</h3>
+  <p>Erzeugt eine Liste, die Cardmarket unter <em>Wants → Massenimport</em> direkt frisst.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Einstellung</th><th>Bedeutung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Aktuelles Deck</b></td><td>Nur das, was diesem einen Deck fehlt.</td></tr>
+      <tr><td class="k"><b>Alles</b></td><td>Die komplette Wunschliste über alle Decks.</td></tr>
+      <tr><td class="k"><b>Auswahl</b></td><td>Nur die Zeilen, die du vorher angehakt hast.</td></tr>
+      <tr><td class="k"><b>Duplikate</b> aus</td><td>Standard: Besitzt du die Karte schon woanders, kaufst du sie nicht nochmal — du tauschst zwischen den Decks.</td></tr>
+      <tr><td class="k"><b>Duplikate</b> an</td><td>Für Leute, die jedes Deck spielfertig halten wollen: Zweitexemplare werden mitbestellt.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Vor dem Kopieren kannst du in der Vorschau noch einzelne Mengen ändern oder Zeilen abwählen.</p>
+</section>
+
+<section id="mtg-match" data-c="mtg">
+  <div class="eyebrow">Magic: The Gathering</div>
+  <h2>Match HUD</h2>
+  <p class="path"><b>MTG</b> <i>›</i> <b>Match HUD</b></p>
+  <p class="lede">Die Lebenspunkte-Anzeige für die laufende Partie. Zwei Betriebsarten, je nachdem, ob jeder sein eigenes Gerät hat.</p>
+
+  <h3>Online-Match — jeder mit eigenem Handy</h3>
+  <ol class="steps">
+    <li><b>Erstellen:</b> Startleben wählen (Voreinstellung oder eigener Wert) und deine Spielerfarbe. Du bekommst einen sechsstelligen <b>Join-Code</b>.</li>
+    <li><b>Beitreten:</b> Die anderen geben den Code ein, wählen Farbe, Namen und optional ihr Deck.</li>
+    <li><b>Spielen:</b> Deine eigene Kachel ist die größte. Ein Tipp auf die <b>linke Hälfte</b> zieht ein Leben ab, auf die <b>rechte Hälfte</b> zählt eins dazu. Gift hat eigene kleine Knöpfe.</li>
+    <li><b>Ändern:</b> Über das Zahnrad auf deiner Kachel: Name, Farbe, Deck, Lebenspunkte von Hand setzen oder das Match verlassen.</li>
+  </ol>
+  <p>Die Anzeige der anderen aktualisiert sich praktisch verzögerungsfrei; ein Punkt an jeder Kachel zeigt, wer gerade verbunden ist. Schließt du die App versehentlich, findest du das Match unter <b>Deine Matches</b> und steigst wieder ein.</p>
+
+  <h3>Lokales Match — ein Gerät in der Tischmitte</h3>
+  <p>Kein Code, keine Anmeldung der Mitspieler: Du wählst nur Spielerzahl und Startleben. Jede Kachel ist für den bedienbar, der davor sitzt — die Zahlen sind so gedreht, dass sie von der jeweiligen Sitzposition aus richtig herum stehen. Der Stand bleibt auch nach einem versehentlichen Neuladen erhalten.</p>
+
+  <div class="note"><span class="lbl">Am Handy</span>
+    <p>Beide Modi halten den Bildschirm wach, gehen ins Vollbild und versuchen, ins Querformat zu drehen. Zum Verlassen gibt es ein kleines <span class="ui">✕</span> in der Mitte. Am iPhone lässt sich das Drehen nicht erzwingen — dort stellst du das Gerät selbst quer.</p></div>
+</section>
+<section id="w40k" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Überblick</h2>
+  <p class="path"><b>Seitenleiste</b> <i>›</i> <b>WH40k</b></p>
+  <p class="lede">Vier Reiter: Armeen bauen, Datenblätter nachschlagen, die eigene Sammlung führen und während der Partie den Überblick behalten. Alle Daten stammen aus dem mitgelieferten 10.-Edition-Datensatz und funktionieren <strong>ohne Internet</strong>.</p>
+
+  <div class="cards">
+    <div class="card"><span class="cap">Reiter 1</span><h4>Armeen</h4><p>Deine gespeicherten Listen, nach Fraktion gruppiert.</p></div>
+    <div class="card"><span class="cap">Reiter 2</span><h4>Einheiten</h4><p>Alle Datenblätter mit Filtern — zum Stöbern und Nachschlagen.</p></div>
+    <div class="card"><span class="cap">Reiter 3</span><h4>Combat</h4><p>Der Begleiter für die laufende Schlacht: Phasen, Erinnerungen, Stratageme, Punkte.</p></div>
+    <div class="card"><span class="cap">Reiter 4</span><h4>Sammlung</h4><p>Welche Modelle du besitzt — inklusive gespeicherter Squads.</p></div>
+  </div>
+</section>
+
+<section id="w40k-armeen" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Armee-Builder</h2>
+  <p class="path"><b>WH40k</b> <i>›</i> <b>Armeen</b> <i>›</i> <b>+ Neue Armee</b></p>
+
+  <ol class="steps">
+    <li><b>Name, Fraktion, Detachment</b> in der Kopfzeile festlegen. Das Detachment lässt sich erst wählen, wenn die Fraktion steht.</li>
+    <li><b>Einheiten suchen</b> — dieselben Filter wie im Einheiten-Browser.</li>
+    <li><b>Hinzufügen</b> per Klick auf die Einheit. Rechts wächst die Armee; Stückzahlen änderst du dort mit <span class="ui">−</span> und <span class="ui">+</span>.</li>
+    <li><b>Ausrüstung wählen.</b> Zu jeder Einheit legst du fest, welche Modelle welche Wargear-Option nehmen. Außerhalb des Bearbeitens zeigt die Liste nie mehr eine unaufgelöste Entweder-oder-Auswahl, sondern genau das, was du gewählt hast.</li>
+    <li><b>Speichern.</b> Der Knopf zeigt an, ob es ungespeicherte Änderungen gibt.</li>
+  </ol>
+
+  <h3>Detachment-Infos</h3>
+  <p>Zum gewählten Detachment siehst du die Detachment-Regel, alle <b>Stratageme</b> mit CP-Kosten, Phase und Wirkung sowie alle <b>Verbesserungen</b> mit Punktkosten — damit die Wahl eine informierte ist und nicht nur ein Name. Dieselben Angaben tauchen im Combat Helper wieder auf.</p>
+
+  <h3>Punkte, Prüfung, Export</h3>
+  <ul>
+    <li><b>Punkte</b> werden laufend zusammengezählt — je Einheit und für die ganze Armee.</li>
+    <li><b>Hinweise</b> zur Liste erscheinen direkt im Builder.</li>
+    <li><span class="ui">Exportieren</span> legt die Liste als lesbaren Text in die Zwischenablage — zum Einfügen in Chat, Forum oder Turnier-App.</li>
+    <li><b>Teilen</b> geht wie überall per Token; Empfänger sehen die Liste samt Ausrüstung und Punkten, ohne sie ändern zu können.</li>
+  </ul>
+</section>
+
+<section id="w40k-einheiten" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Einheiten-Browser</h2>
+  <p class="path"><b>WH40k</b> <i>›</i> <b>Einheiten</b></p>
+  <p>Alle Datenblätter zum Stöbern und Nachschlagen — ohne dass eine Armee offen sein muss.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Filter</th><th>Bedeutung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Suchfeld</b></td><td>Nach Einheitennamen.</td></tr>
+      <tr><td class="k"><b>Fraktionen</b></td><td>Als Chips. Zu vielen Fraktionen gibt es zusätzlich <b>Subfraktionen</b> — Orden, Clans, Weltenschiffe, Septen, Dynastien. Die Auswahl ist pro Fraktion exklusiv: eine neue ersetzt die vorherige.</td></tr>
+      <tr><td class="k"><b>Rollen</b></td><td>Charakter, Battleline, Infanterie, Fahrzeug, Monster.</td></tr>
+      <tr><td class="k"><b>★</b> / <b>Besitz</b></td><td>Nur Favoriten bzw. nur Einheiten, die du besitzt.</td></tr>
+      <tr><td class="k"><b>Erweitert</b></td><td>Punktespanne von–bis und Schlüsselwörter mit eigener Suche.</td></tr>
+      <tr><td class="k"><b>Sortierung</b></td><td>Name, Punkte, Rolle oder Fraktion.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Ein Klick auf eine Einheit öffnet das <b>Datenblatt</b>: Werte-Tabelle, Schlüsselwörter, Fähigkeiten und Wargear.</p>
+  <div class="note"><span class="lbl">Zu Subfraktionen</span>
+    <p>Die 10. Edition kennt Subfraktionen nur als Schlüsselwörter. Der Filter berücksichtigt das: Wählst du z.&nbsp;B. einen Ordens­namen, bleiben auch alle Einheiten <em>ohne</em> Ordens­schlüsselwort sichtbar — genau wie es die Armeelisten-Regeln vorsehen.</p></div>
+</section>
+
+<section id="w40k-squads" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Squads</h2>
+  <p>Ein <span class="term" data-def="Ein benanntes Bündel aus mehreren Datenblättern mit fester Modellzahl und Ausrüstung — dein „so steht es bemalt im Regal"-Preset.">Squad</span> ist eine gespeicherte Zusammenstellung, die du mit einem Klick in eine Armee legst: mehrere Einheiten, je mit Modellzahl, Wargear-Auswahl und Notizen, unter einem Namen und einer Fraktion.</p>
+  <ul>
+    <li><b>Aus der Sammlung heraus:</b> Tippst du dort eine Einheit an, startet der Squad-Editor bereits mit ihr.</li>
+    <li><b>Aus dem Armee-Builder heraus:</b> <span class="ui">+ Neuer Squad</span> startet leer — hier darfst du auch Einheiten nehmen, die du (noch) nicht besitzt.</li>
+    <li>In der Liste deiner Squads: bearbeiten, duplizieren, löschen — und im Armee-Builder zusätzlich <span class="ui">+ Armee</span>, um den Squad in die geöffnete Liste zu legen.</li>
+    <li>Squads lassen sich nach Name und Fraktion filtern.</li>
+  </ul>
+</section>
+
+<section id="w40k-sammlung" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Sammlung</h2>
+  <p class="path"><b>WH40k</b> <i>›</i> <b>Sammlung</b></p>
+  <p>Alle Einheiten, von denen du mindestens ein Modell besitzt — nach Fraktion gruppiert, mit Summen. Die Stückzahlen änderst du direkt in der Zeile. Im Einheiten-Browser und im Armee-Builder kannst du mit einem Schalter die Ansicht auf deinen Besitz einschränken. Darunter liegen deine gespeicherten <a href="#w40k-squads">Squads</a>.</p>
+</section>
+
+<section id="w40k-combat" data-c="w40k">
+  <div class="eyebrow">Warhammer 40.000</div>
+  <h2>Combat Helper</h2>
+  <p class="path"><b>WH40k</b> <i>›</i> <b>Combat</b></p>
+  <p class="lede">Ein Begleiter für die laufende Partie — keine Regel-Engine. Er merkt sich, was man mitten im Spiel gern vergisst, und zeigt zur richtigen Phase das Richtige an.</p>
+
+  <h3>Partie vorbereiten</h3>
+  <ol class="steps">
+    <li><b>Armee</b> wählen (oder ohne Armee starten).</li>
+    <li><b>Gegner</b> mit Namen und Fraktion eintragen — für den Verlauf.</li>
+    <li><b>Spielgröße:</b> Combat Patrol, Incursion, Strike Force oder Onslaught, jeweils mit Punktobergrenze.</li>
+    <li><b>Mission:</b> Missionsdeck, Primärmission und Aufstellungskarte.</li>
+    <li><b>Sekundärmissionen:</b> Fixed oder Tactical, bei Fixed bis zu zwei feste Missionen.</li>
+  </ol>
+  <p>Pflicht sind nur Spielgröße und Primärmission — den Rest kannst du mitten im Spiel nachtragen.</p>
+
+  <h3>Während der Partie</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Element</th><th>Was es dir gibt</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Phasenleiste</b></td><td>Kommando, Bewegung, Schießen, Angriff, Nahkampf, Ende — weiterschalten mit den Pfeilen. Alles darunter richtet sich nach der aktiven Phase.</td></tr>
+      <tr><td class="k"><b>Regel-Auffrischung</b></td><td>Was in dieser Phase zu tun ist, in kurzen Schritten formuliert — nicht als Regelbuch-Abschrift.</td></tr>
+      <tr><td class="k"><b>Erinnerungen</b></td><td>Dinge, die nicht von selbst auslösen: Oath of Moment ansagen, Doctrina wählen, Acts of Faith aufrufen &hellip; passend zu deiner Fraktion.</td></tr>
+      <tr><td class="k"><b>Stratageme</b></td><td>Die Stratageme deines Detachments, gefiltert auf die aktive Phase, mit CP-Kosten.</td></tr>
+      <tr><td class="k"><b>Fähigkeiten</b></td><td>Fähigkeiten deiner noch lebenden Einheiten, die in dieser Phase greifen — mit Markierungen wie „1× pro Schlacht" oder „Beim Schießen".</td></tr>
+      <tr><td class="k"><b>Einheiten-Karten</b></td><td>Status (aktiv, im Gefecht, zerstört), Modellzahl, Wunden, die Werte, die diese Phase zählen, und die Waffen, die jetzt zum Einsatz kommen.</td></tr>
+      <tr><td class="k"><b>Einmal-Marker</b></td><td>Alles, was einmal pro Schlacht, Runde oder Phase geht, bekommt ein Kästchen zum Abhaken.</td></tr>
+      <tr><td class="k"><b>CP &amp; VP</b></td><td>Kommandopunkte und Siegpunkte für beide Seiten, mit der Wertungshilfe zur gewählten Mission.</td></tr>
+      <tr><td class="k"><b>Notizen</b></td><td>Freitext pro Phase — für Würfelmemos und Absprachen.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note"><span class="lbl">Am Handy</span>
+    <p>Auf dem Telefon wird daraus eine randlose Vollbild-Ansicht: Phasenleiste zum Wischen, Vor/Zurück immer in Daumennähe und ein Umschalter zwischen <b>Kontext</b> (Erinnerungen, Stratageme, Fähigkeiten) und <b>Einheiten</b>. Auf dem Rechner bleibt es zweispaltig.</p></div>
+
+  <div class="note tip"><span class="lbl">Speicherung</span>
+    <p>Combat-Sitzungen liegen <strong>lokal auf diesem Gerät</strong> und werden laufend gesichert — ein versehentliches Schließen kostet dich nichts. Sie wandern aber nicht auf dein anderes Gerät.</p></div>
+
+  <figure class="shot">
+    <div class="shot-frame">
+      <img src="handbuch-img/w40k-combat.png" alt="Combat Helper während einer Partie" loading="lazy">
+      <div class="shot-empty"><span class="n">handbuch-img/w40k-combat.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
+      <b class="mark" style="left:50%;top:8%">1</b>
+      <b class="mark" style="left:50%;top:22%">2</b>
+      <b class="mark" style="left:26%;top:52%">3</b>
+      <b class="mark" style="left:78%;top:52%">4</b>
+    </div>
+    <figcaption>Combat Helper
+      <ol class="legend">
+        <li>Kopfzeile mit Runde, Kommando- und Siegpunkten</li>
+        <li>Phasenleiste</li>
+        <li>Erinnerungen, Stratageme und Fähigkeiten zur Phase</li>
+        <li>Einheiten mit Modellen, Wunden und Status</li>
+      </ol>
+    </figcaption>
+  </figure>
+</section>
+<section id="ref-kuerzel">
+  <div class="eyebrow">Referenz</div>
+  <h2>Alle Tastenkürzel</h2>
+
+  <h3>Überall in der App</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Taste</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><kbd>Esc</kbd></td><td>Schließt Dialoge und die ausgeklappte Seitenleiste.</td></tr>
+      <tr><td class="k"><kbd>Enter</kbd></td><td>In Zahlenfeldern (Trefferpunkte, Mengen): Wert übernehmen.</td></tr>
+      <tr><td class="k"><b>Rechtsklick</b></td><td>Auf einer Erklärung: als eigenes Fenster anheften. Auf einer Magic-Karte: in die Vorschau pinnen. Auf einer Stückzahl: eins hinzufügen.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Virtueller Spieltisch — Spielen</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Eingabe</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td><td>Ausgewähltes Token Feld für Feld bewegen.</td></tr>
+      <tr><td class="k"><b>Mausrad</b></td><td>Zoomen.</td></tr>
+      <tr><td class="k"><b>Mittlere / rechte Maustaste ziehen</b></td><td>Karte verschieben.</td></tr>
+      <tr><td class="k"><b>Klick</b> auf Tür, Fenster, Lichtschalter</td><td>Öffnen bzw. schließen, Licht an bzw. aus (Auswahl-Werkzeug).</td></tr>
+      <tr><td class="k"><b>Doppelklick</b> auf Token</td><td>Statblock oder Charakterbogen öffnen.</td></tr>
+      <tr><td class="k"><b>Rechtsklick</b> auf Token</td><td>Token-Menü: Trefferpunkte, Zustände, Licht, Größe.</td></tr>
+      <tr><td class="k"><kbd>Shift</kbd> + Klick · Rahmen ziehen</td><td>Mehrere Tokens auswählen.</td></tr>
+      <tr><td class="k"><kbd>Alt</kbd> + Klick</td><td>Stelle anpingen (auch über das Ping-Werkzeug).</td></tr>
+      <tr><td class="k"><kbd>Shift</kbd> beim Würfeln</td><td>Im Wurf-Fenster als kritischer Treffer werfen.</td></tr>
+      <tr><td class="k"><kbd>?</kbd></td><td>Kürzel-Übersicht ein- und ausblenden.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Virtueller Spieltisch — Bearbeiten (Spielleitung)</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Eingabe</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><kbd>Shift</kbd> beim Platzieren</td><td>Frei platzieren, ohne am Raster einzurasten.</td></tr>
+      <tr><td class="k"><kbd>Esc</kbd> · <kbd>Enter</kbd></td><td>Wandzug beenden, Tür- oder Fenster-Entwurf abbrechen.</td></tr>
+      <tr><td class="k"><b>Doppelklick</b> auf Wand</td><td>Ganzen Wandzug bzw. die Schleife auswählen.</td></tr>
+      <tr><td class="k"><kbd>Entf</kbd> · <kbd>Backspace</kbd></td><td>Ausgewähltes Element löschen.</td></tr>
+      <tr><td class="k"><kbd>Strg</kbd> beim Endpunkt-Ziehen</td><td>Nur diesen Endpunkt bewegen und aus dem Verbund lösen.</td></tr>
+      <tr><td class="k"><kbd>Strg</kbd>+<kbd>Z</kbd></td><td>Rückgängig.</td></tr>
+      <tr><td class="k"><kbd>Strg</kbd>+<kbd>Y</kbd> · <kbd>Strg</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Wiederholen.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>In diesem Handbuch</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Eingabe</th><th>Wirkung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><kbd>/</kbd></td><td>In die Suche springen.</td></tr>
+      <tr><td class="k"><kbd>Alt</kbd> halten + hovern</td><td>Begriffserklärung einblenden.</td></tr>
+      <tr><td class="k"><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd></td><td>Durch die Suchergebnisse gehen und öffnen.</td></tr>
+      <tr><td class="k"><kbd>Esc</kbd></td><td>Suche schließen.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="ref-glossar">
+  <div class="eyebrow">Referenz</div>
+  <h2>Glossar</h2>
+  <p>Begriffe, die im Programm auftauchen. Alles hier Erklärte erscheint im ganzen Handbuch auch als <span class="term">Begriff mit gestrichelter Linie</span> — <kbd>Alt</kbd> halten und darüberfahren.</p>
+  <div class="tablewrap"><table id="glossary">
+    <thead><tr><th>Begriff</th><th>Bedeutung</th></tr></thead>
+    <tbody>
+      <tr><td class="k"><b>Share-Token</b></td><td>Zwölfstelliger Code (z.&nbsp;B. X3Q9-F4MV-7K2H), der dauerhaft zu einem Charakter, Deck oder einer Armee gehört. Wer ihn hat, darf ansehen — nicht ändern.</td></tr>
+      <tr><td class="k"><b>Join-Token</b></td><td>Kurzer Code einer D&amp;D-Kampagne, mit dem Mitspieler beitreten.</td></tr>
+      <tr><td class="k"><b>Edition</b></td><td>D&amp;D-Regelstand eines Charakters: 5e (2014) oder 5.5e (2024). Bestimmt, aus welchen Daten Klassen, Zauber, Gegenstände und Monster gezogen werden.</td></tr>
+      <tr><td class="k"><b>Zustand</b></td><td>Einer der 14 Standard-Zustände (Blinded, Prone, Restrained &hellip;). Charakterbogen, Session-Übersicht und Spieltisch teilen sich dieselben Zustände.</td></tr>
+      <tr><td class="k"><b>Konzentration</b></td><td>Markierung, dass ein Zauber aufrechterhalten wird. Sinken die Trefferpunkte, fragt das Programm selbst nach dem Rettungswurf; misslingt er, endet die Konzentration.</td></tr>
+      <tr><td class="k"><b>Aktionsökonomie</b></td><td>Was dir in deinem Zug zur Verfügung steht: Aktion, Bonusaktion, Reaktion — auf Bogen und Spieltisch als Marker sichtbar.</td></tr>
+      <tr><td class="k"><b>Zusatzeffekt</b></td><td>Schaden, der beim Treffen dazukommt (Sneak Attack, Smite, Manöver). Im Wurf-Fenster ankreuzbar und im selben Wurf enthalten.</td></tr>
+      <tr><td class="k"><b>Trefferwürfel</b></td><td>Der Vorrat, aus dem du bei einer kurzen Rast Trefferpunkte zurückholst. Eine lange Rast gibt die Hälfte davon wieder.</td></tr>
+      <tr><td class="k"><b>Gebundenes Token</b></td><td>Ein Token, das zu einem echten Charakter gehört. Trefferpunkte und Zustände sind dieselben wie auf dem Bogen — überall.</td></tr>
+      <tr><td class="k"><b>Nebel des Krieges</b></td><td>Verdeckte Kartenbereiche. <em>Manuell</em> deckt die Spielleitung selbst auf, <em>dynamisch</em> berechnet die Sichtlinie jedes Tokens.</td></tr>
+      <tr><td class="k"><b>Zone</b></td><td>Eine Fläche auf der Karte für Flächenzauber und Effekte: Kreis, Kegel, Linie oder Quadrat, in Fuß bemaßt.</td></tr>
+      <tr><td class="k"><b>Ebene</b></td><td>Ein Stockwerk einer Karte mit eigenem Bild. Tokens, Wände und Lichter gehören jeweils zu einer Ebene.</td></tr>
+      <tr><td class="k"><b>Übergang</b></td><td>Treppe, Leiter oder Portal — verbindet Felder über Ebenen hinweg. Betritt ein Token so ein Feld, wechselt es die Ebene.</td></tr>
+      <tr><td class="k"><b>Handout</b></td><td>Ein Bild oder Text, den die Spielleitung allen zeigen kann und der im Journal erhalten bleibt.</td></tr>
+      <tr><td class="k"><b>Fantasieschrift</b></td><td>Darstellung eines Textabschnitts für alle, deren Charakter die markierte Sprache nicht beherrscht: unleserlich, aber gleich lang.</td></tr>
+      <tr><td class="k"><b>Zuschauer</b></td><td>Zustand am Spieltisch ohne laufende Session: ansehen ja, bewegen und ändern nein.</td></tr>
+      <tr><td class="k"><b>LAN-Direkt</b></td><td>Direkte Verbindung zum Rechner der Spielleitung im selben Netzwerk statt über die Cloud.</td></tr>
+      <tr><td class="k"><b>Popout</b></td><td>Ein eigenes, immer sichtbares Fenster mit dem Charakterbogen — nur in der Desktop-App.</td></tr>
+      <tr><td class="k"><b>Homebrew</b></td><td>Selbst erstellte Regelinhalte, die im Programm genauso funktionieren wie die mitgelieferten.</td></tr>
+      <tr><td class="k"><b>Kompendium</b></td><td>Das Nachschlage-Panel im Spieltisch: Monster als Token setzen, Gegenstände und Zauber an Charaktere geben.</td></tr>
+      <tr><td class="k"><b>Ideen-Pool</b></td><td>MTG: Sammelbecken ohne Obergrenze für „vielleicht später". Zählt nicht zum Deck, fließt aber in die Wunschliste.</td></tr>
+      <tr><td class="k"><b>Farbidentität</b></td><td>MTG: alle Farbsymbole einer Karte inklusive Regeltext. Im Commander-Format begrenzt der Commander damit, was ins Deck darf.</td></tr>
+      <tr><td class="k"><b>Manabasis</b></td><td>MTG: die Länder eines Decks. Der Vorschlag im Programm richtet sich nach Farbbedarf, Kurve und Budget.</td></tr>
+      <tr><td class="k"><b>Keep-Rate</b></td><td>MTG: Anteil der Starthände, die man ohne Mulligan behalten würde.</td></tr>
+      <tr><td class="k"><b>Brick-Rate</b></td><td>MTG: Anteil der Hände, die auch nach allen Mulligans unspielbar bleiben.</td></tr>
+      <tr><td class="k"><b>Detachment</b></td><td>WH40K: das Regelpaket einer Armee — eigene Regel, eigene Stratageme, eigene Verbesserungen.</td></tr>
+      <tr><td class="k"><b>Stratagem</b></td><td>WH40K: für Kommandopunkte gekaufter Effekt, meist an eine Phase gebunden.</td></tr>
+      <tr><td class="k"><b>Battleline</b></td><td>WH40K: Rolle der Standardeinheiten einer Armee.</td></tr>
+      <tr><td class="k"><b>Subfraktion</b></td><td>WH40K: Orden, Clan, Weltenschiff, Septe oder Dynastie — in der 10. Edition über Schlüsselwörter abgebildet.</td></tr>
+      <tr><td class="k"><b>Squad</b></td><td>WH40K: gespeichertes Bündel aus mehreren Datenblättern mit Modellzahl und Ausrüstung, mit einem Klick in eine Armee einsetzbar.</td></tr>
+      <tr><td class="k"><b>PWA</b></td><td>Die zum Startbildschirm hinzugefügte Web-Version. Verhält sich wie eine App, mit Tab-Leiste unten und Vollbild.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="ref-hilfe">
+  <div class="eyebrow">Referenz</div>
+  <h2>Wenn etwas klemmt</h2>
+
+  <details><summary>„Warte auf Freischaltung" — und jetzt?</summary>
+    <div class="dbody"><p>Dein Konto existiert, ist aber noch nicht freigegeben. Ein Admin muss das tun; danach reicht ein Neuladen bzw. neues Anmelden.</p></div></details>
+
+  <details><summary>Der Spieltisch zeigt „Keine aktive Map"</summary>
+    <div class="dbody"><p>Es ist noch keine Karte aktiviert. Als Spielleitung: Panel <span class="ui">🗺 Karten</span> öffnen, Karte importieren und aktivieren. Als Spieler: warten, bis die Spielleitung eine Karte öffnet.</p></div></details>
+
+  <details><summary>Ich sehe als Spieler fast nichts auf der Karte</summary>
+    <div class="dbody"><p>Das ist meist der dynamische Nebel des Krieges — du siehst nur, was dein Token sieht. Prüfe, ob du überhaupt ein Token auf dieser Karte hast und ob es auf der richtigen Ebene steht. Bereits erkundete Bereiche bleiben abgedunkelt sichtbar.</p></div></details>
+
+  <details><summary>Oben steht „Zuschauer — keine Session aktiv"</summary>
+    <div class="dbody"><p>Die Spielleitung hat die Session nicht gestartet. Du darfst die Karte ansehen, aber nichts bewegen. Sobald <span class="ui">▶ Session starten</span> gedrückt wird, schaltet sich deine Ansicht ohne Neuladen frei.</p></div></details>
+
+  <details><summary>Die LAN-Direktverbindung kommt nicht zustande</summary>
+    <div class="dbody"><p>Kein Beinbruch — du bleibst online verbunden und kannst normal weiterspielen. Mit dem Knopf <span class="ui">☁ Online · LAN erneut</span> oben startest du einen neuen Versuch, etwa nachdem du ins richtige WLAN gewechselt bist. Prüfe außerdem, ob die Spielleitung beim Start überhaupt Adressen freigegeben hat und ob eine Firewall dazwischenfunkt.</p></div></details>
+
+  <details><summary>Die 3D-Würfel erscheinen nicht</summary>
+    <div class="dbody"><p>Fehlt die Grafikunterstützung oder wären es sehr viele Würfel auf einmal, zeigt der Würfelkasten direkt das Zahlenergebnis. Das Ergebnis ist in beiden Fällen zufällig und gleichwertig — die Animation stellt es nur dar. Über <span class="ui">Nochmal versuchen</span> kannst du die 3D-Anzeige erneut anstoßen.</p></div></details>
+
+  <details><summary>Ein Level-Up ging verloren</summary>
+    <div class="dbody"><p>Der Bogen legt beim Aufstieg eine lokale Sicherung an. Findet er beim nächsten Öffnen eine neuere als den gespeicherten Stand, fragt er, ob er sie wiederherstellen soll.</p></div></details>
+
+  <details><summary>Mein Homebrew-Eintrag taucht nirgends auf</summary>
+    <div class="dbody"><p>Meist fehlt eine Zuordnung: Ein Zauber erscheint nur in den Auswahllisten der Klassen, die ihm zugewiesen sind; ein Feature braucht Klasse und Stufe. Beim Speichern zeigt das Programm Hinweise dazu an — die lohnen sich zu lesen. Und: Der Charakter muss zur passenden Edition gehören.</p></div></details>
+
+  <details><summary>Die Kartensuche bleibt leer</summary>
+    <div class="dbody"><p>Die MTG-Suche fragt Scryfall live ab und braucht Internet. Sonst: Filter prüfen — besonders die Farbmodi <b>all</b> und <b>exact</b>, den Länder-Schalter und die Formatlegalität. <span class="ui">Reset</span> setzt alle Filter zurück.</p></div></details>
+
+  <details><summary>Bei einer Karte steht kein Preis</summary>
+    <div class="dbody"><p>Dann liefert Scryfall für diese Ausgabe keinen Cardmarket-Preis in Euro. Die Deck-Summe rechnet dann ohne diese Karte weiter.</p></div></details>
+
+  <details><summary>Popout, angeheftete Erklärungen oder die Ordnerauswahl fehlen</summary>
+    <div class="dbody"><p>Diese drei brauchen die Desktop-App — im Browser gibt es dafür keine Entsprechung. Der Foundry-Export funktioniert im Browser trotzdem, er landet nur im normalen Download-Ordner.</p></div></details>
+
+  <details><summary>Meine Combat-Sitzung ist auf dem anderen Gerät nicht da</summary>
+    <div class="dbody"><p>WH40K-Combat-Sitzungen liegen bewusst nur lokal auf dem Gerät, auf dem du gespielt hast. Armeen, Sammlung und Squads dagegen sind überall gleich.</p></div></details>
+
+  <details><summary>Es kommt kein Update-Hinweis</summary>
+    <div class="dbody"><p><span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>General</b> <span class="mono">›</span> manuell prüfen. Dort siehst du auch, welche Version installiert ist und was die letzten Versionen gebracht haben.</p></div></details>
+
+  <details><summary>Etwas anderes stimmt nicht</summary>
+    <div class="dbody"><p>Melde es direkt aus der Situation heraus über <span class="ui">⚐</span> in der Seitenleiste bzw. oben rechts im Spieltisch. Die technischen Angaben hängt das Programm selbst an.</p></div></details>
+</section>
+
+<footer style="border-top:1px solid var(--border);padding-top:20px;color:var(--muted);font-size:13px">
+  <p style="max-width:70ch">NerdShelf-Handbuch — beschreibt den Stand der App-Version <span class="mono" id="ver2">1.1.20</span>.
+  Screenshots landen als PNG im Ordner <span class="mono">handbuch-img/</span> neben dieser Datei und ersetzen die Platzhalter automatisch.</p>
+</footer>
+
+</main>
+
+<button class="totop" id="totop" title="Nach oben" aria-label="Nach oben">↑</button>
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+<script>
+(function () {
+  'use strict';
+
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* egal */ } },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) { /* egal */ } }
+  };
+
+  /* ── Farbschema: System → Hell → Dunkel ─────────────────── */
+  var root = document.documentElement;
+  var themeBtn = document.getElementById('themebtn');
+  var MODES = ['system', 'light', 'dark'];
+  var GLYPH = { system: '◐', light: '☀', dark: '☾' };
+  var TITLE = { system: 'Farbschema: System', light: 'Farbschema: Hell', dark: 'Farbschema: Dunkel' };
+
+  function applyTheme(mode) {
+    if (mode === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', mode);
+    if (themeBtn) { themeBtn.textContent = GLYPH[mode]; themeBtn.title = TITLE[mode] + ' — klicken zum Wechseln'; }
+  }
+  var theme = store.get('nerdshelf-handbuch-theme');
+  if (MODES.indexOf(theme) < 0) theme = 'system';
+  applyTheme(theme);
+  if (themeBtn) themeBtn.addEventListener('click', function () {
+    theme = MODES[(MODES.indexOf(theme) + 1) % MODES.length];
+    store.set('nerdshelf-handbuch-theme', theme);
+    applyTheme(theme);
+  });
+
+  /* ── Screenshot-Slots: Bild da → Platzhalter weg ────────── */
+  Array.prototype.forEach.call(document.querySelectorAll('.shot-frame img'), function (img) {
+    function ok() {
+      var f = img.closest('.shot-frame');
+      f.classList.add('has-img');
+      // Rahmen an das echte Seitenverhältnis anpassen, damit die Markierungen
+      // (in Prozent gesetzt) genau auf der Stelle im Bild sitzen.
+      if (img.naturalWidth && img.naturalHeight) f.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+    }
+    function fail() { var f = img.closest('.shot-frame'); if (f) f.classList.remove('has-img'); img.style.display = 'none'; }
+    if (img.complete) { (img.naturalWidth > 0 ? ok : fail)(); }
+    else { img.addEventListener('load', ok); img.addEventListener('error', fail); }
+  });
+
+  /* ── Glossar → Erklärungen für Begriffe ohne eigenen Text ─ */
+  var defs = {};
+  Array.prototype.forEach.call(document.querySelectorAll('#glossary tbody tr'), function (tr) {
+    var cells = tr.children;
+    if (cells.length < 2) return;
+    defs[cells[0].textContent.trim().toLowerCase()] = cells[1].textContent.trim();
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.term'), function (el) {
+    if (el.getAttribute('data-def')) return;
+    var d = defs[el.textContent.trim().toLowerCase()];
+    if (d) el.setAttribute('data-def', d);
+  });
+
+  /* ── Alt + Hover = Erklärung ────────────────────────────── */
+  var tip = document.getElementById('tip');
+  var hovered = null;
+  var altDown = false;
+  var pinnedTerm = null;
+
+  function place(el) {
+    var r = el.getBoundingClientRect();
+    tip.style.visibility = 'hidden';
+    tip.classList.add('on');
+    var tr = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(10, r.left), window.innerWidth - tr.width - 10);
+    var top = r.bottom + 9;
+    if (top + tr.height > window.innerHeight - 10) top = Math.max(10, r.top - tr.height - 9);
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+    tip.style.visibility = '';
+  }
+  function showTip(el) {
+    var def = el && el.getAttribute('data-def');
+    if (!def) return hideTip();
+    tip.innerHTML = '';
+    var t = document.createElement('span');
+    t.className = 't';
+    t.textContent = el.textContent.trim();
+    var b = document.createElement('span');
+    b.textContent = def;
+    tip.appendChild(t); tip.appendChild(b);
+    tip.setAttribute('aria-hidden', 'false');
+    place(el);
+  }
+  function hideTip() {
+    tip.classList.remove('on');
+    tip.setAttribute('aria-hidden', 'true');
+    pinnedTerm = null;
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest ? e.target.closest('.term') : null;
+    if (el === hovered) return;
+    hovered = el;
+    if (pinnedTerm) return;
+    if (el && altDown) showTip(el); else if (!el) hideTip();
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Alt' && !altDown) {
+      altDown = true;
+      document.body.classList.add('altdown');
+      if (hovered) showTip(hovered);
+    }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.key === 'Alt') {
+      altDown = false;
+      document.body.classList.remove('altdown');
+      if (!pinnedTerm) hideTip();
+    }
+  });
+  window.addEventListener('blur', function () {
+    altDown = false;
+    document.body.classList.remove('altdown');
+    if (!pinnedTerm) hideTip();
+  });
+  /* Touch / Klick: Begriff antippen zeigt die Erklärung ebenfalls. */
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest ? e.target.closest('.term') : null;
+    if (el) {
+      if (pinnedTerm === el) { hideTip(); return; }
+      pinnedTerm = el; showTip(el); e.preventDefault();
+    } else if (pinnedTerm) hideTip();
+  });
+  window.addEventListener('scroll', function () { if (!pinnedTerm && !altDown) hideTip(); }, { passive: true });
+
+  /* ── Sprungmarken an Überschriften ──────────────────────── */
+  Array.prototype.forEach.call(document.querySelectorAll('section[id] > h2'), function (h) {
+    var id = h.parentNode.id;
+    var a = document.createElement('a');
+    a.className = 'anchor'; a.href = '#' + id; a.textContent = '#';
+    a.setAttribute('aria-label', 'Link zu diesem Abschnitt');
+    h.appendChild(a);
+  });
+
+  /* ── Suche ──────────────────────────────────────────────── */
+  var q = document.getElementById('q');
+  var box = document.getElementById('results');
+  var index = [];
+  Array.prototype.forEach.call(document.querySelectorAll('main section[id]'), function (sec) {
+    var h2 = sec.querySelector('h2');
+    if (!h2) return;
+    var title = h2.textContent.replace(/#$/, '').trim();
+    var groupLink = document.querySelector('.nav a[href="#' + sec.id + '"]');
+    var group = groupLink && groupLink.closest('.nav-group')
+      ? groupLink.closest('.nav-group').querySelector('.gh').textContent.trim() : '';
+    index.push({ id: sec.id, title: title, group: group, sub: '', text: sec.textContent.replace(/\s+/g, ' ').toLowerCase() });
+    Array.prototype.forEach.call(sec.querySelectorAll('h3'), function (h3, i) {
+      if (!h3.id) h3.id = sec.id + '-h' + i;
+      index.push({
+        id: h3.id, title: h3.textContent.trim(), group: group, sub: title,
+        text: (h3.textContent + ' ' + (h3.nextElementSibling ? h3.nextElementSibling.textContent : '')).replace(/\s+/g, ' ').toLowerCase()
+      });
+    });
+  });
+
+  var sel = -1, current = [];
+  function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function hi(text, needle) {
+    var i = text.toLowerCase().indexOf(needle);
+    if (i < 0) return esc(text);
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + needle.length)) + '</mark>' + esc(text.slice(i + needle.length));
+  }
+  function render(list, needle) {
+    box.innerHTML = '';
+    if (!list.length) {
+      box.innerHTML = '<div class="none">Nichts gefunden. Versuch es mit einem anderen Wort — z.&nbsp;B. „Token", „Wunschliste" oder „Phase".</div>';
+      box.classList.add('open'); return;
+    }
+    list.forEach(function (e, i) {
+      var b = document.createElement('button');
+      b.className = 'r' + (i === sel ? ' sel' : '');
+      b.type = 'button';
+      b.innerHTML = '<b>' + hi(e.title, needle) + '</b><span>' + esc(e.group + (e.sub ? ' · ' + e.sub : '')) + '</span>';
+      b.addEventListener('click', function () { go(e.id); });
+      box.appendChild(b);
+    });
+    box.classList.add('open');
+  }
+  function go(id) {
+    var el = document.getElementById(id);
+    if (el) { location.hash = '#' + id; el.scrollIntoView({ block: 'start' }); }
+    box.classList.remove('open'); q.blur();
+  }
+  function search() {
+    var needle = q.value.trim().toLowerCase();
+    if (needle.length < 2) { box.classList.remove('open'); current = []; return; }
+    var scored = [];
+    index.forEach(function (e) {
+      var t = e.title.toLowerCase();
+      var s = 0;
+      if (t === needle) s = 100;
+      else if (t.indexOf(needle) === 0) s = 80;
+      else if (t.indexOf(needle) > -1) s = 60;
+      else if (e.text.indexOf(needle) > -1) s = 20;
+      if (s) scored.push({ e: e, s: s });
+    });
+    scored.sort(function (a, b) { return b.s - a.s; });
+    current = scored.slice(0, 12).map(function (x) { return x.e; });
+    sel = current.length ? 0 : -1;
+    render(current, needle);
+  }
+  if (q) {
+    q.addEventListener('input', search);
+    q.addEventListener('focus', function () { if (q.value.trim().length > 1) search(); });
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, current.length - 1); render(current, q.value.trim().toLowerCase()); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); render(current, q.value.trim().toLowerCase()); e.preventDefault(); }
+      else if (e.key === 'Enter') { if (current[sel]) { go(current[sel].id); e.preventDefault(); } }
+      else if (e.key === 'Escape') { box.classList.remove('open'); q.blur(); }
+    });
+  }
+  document.addEventListener('click', function (e) {
+    if (box && !box.contains(e.target) && e.target !== q) box.classList.remove('open');
+  });
+  window.addEventListener('keydown', function (e) {
+    var tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+    if (e.key === '/') { if (q) { q.focus(); q.select(); e.preventDefault(); } }
+  });
+
+  /* ── Aktiven Abschnitt in der Navigation markieren ───────── */
+  var links = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.nav a[href^="#"]'), function (a) {
+    links[a.getAttribute('href').slice(1)] = a;
+  });
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+  var activeId = null;
+  function spy() {
+    var y = window.scrollY + 140, best = null;
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].offsetTop <= y) best = sections[i].id; else break;
+    }
+    if (best === activeId) return;
+    if (activeId && links[activeId]) links[activeId].classList.remove('active');
+    activeId = best;
+    if (activeId && links[activeId]) {
+      links[activeId].classList.add('active');
+      var a = links[activeId], nav = document.getElementById('nav');
+      var top = a.offsetTop, h = nav.clientHeight;
+      if (top < nav.scrollTop || top > nav.scrollTop + h - 60) nav.scrollTop = Math.max(0, top - h / 2);
+    }
+  }
+  var ticking = false;
+  window.addEventListener('scroll', function () {
+    if (ticking) return; ticking = true;
+    window.requestAnimationFrame(function () { spy(); tt(); ticking = false; });
+  }, { passive: true });
+  spy();
+
+  /* ── Navigation am Handy ────────────────────────────────── */
+  var navToggle = document.getElementById('navtoggle');
+  var scrim = document.getElementById('navscrim');
+  function closeNav() { document.body.classList.remove('navopen'); }
+  if (navToggle) navToggle.addEventListener('click', function () { document.body.classList.toggle('navopen'); });
+  if (scrim) scrim.addEventListener('click', closeNav);
+  Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) { a.addEventListener('click', closeNav); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeNav(); });
+
+  /* ── Nach oben ──────────────────────────────────────────── */
+  var totop = document.getElementById('totop');
+  function tt() { if (totop) totop.classList.toggle('on', window.scrollY > 700); }
+  if (totop) totop.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  tt();
+
+  /* ── Sprung aus der App: „?"-Knopf bei schon offenem Fenster ─
+     Die App legt {section, t} unter diesem Schlüssel ab; das storage-Event
+     erreicht alle Fenster desselben Origin, also auch dieses hier. */
+  window.addEventListener('storage', function (e) {
+    if (e.key !== 'nerdshelf:handbuch-goto' || !e.newValue) return;
+    try {
+      var target = JSON.parse(e.newValue).section;
+      var el = target && document.getElementById(target);
+      if (el) { location.hash = '#' + target; el.scrollIntoView({ block: 'start' }); }
+    } catch (err) { /* egal */ }
+  });
+
+  /* ── Version aus der Adresse übernehmen (?v=1.2.3) ──────── */
+  try {
+    var v = new URLSearchParams(location.search).get('v');
+    if (v && /^[0-9][0-9.]{0,15}$/.test(v)) {
+      var a1 = document.getElementById('ver'), a2 = document.getElementById('ver2');
+      if (a1) a1.textContent = v;
+      if (a2) a2.textContent = v;
+    }
+  } catch (e) { /* egal */ }
+})();
+</script>
+</body>
+</html>
