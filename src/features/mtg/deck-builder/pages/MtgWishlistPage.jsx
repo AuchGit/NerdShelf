@@ -8,7 +8,7 @@
 // Clicking ⊕ moves the card straight into inventory at the needed
 // quantity — the typical "I just bought the missing ones" workflow.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Panel, Button } from '../../../../shared/ui';
 import { SearchBar } from '../../../../shared/search';
 import { useMtgWishlist } from '../hooks/useMtgWishlist';
@@ -56,11 +56,16 @@ export default function MtgWishlistPage() {
   }, [w.wishlist, query, filter]);
 
   async function handleAcquire(row) {
-    const id = row.cardId;
     const name = row.card?.name || row.label || '';
     // Add exactly the missing quantity. User can fine-tune from the
-    // inventory page if they bought more / fewer.
-    await inv.adjustQuantity(id, row.missing, name);
+    // inventory page if they bought more / fewer. A fixed artwork goes
+    // into the collection as exactly that printing.
+    const byId = new Map();
+    for (const part of row.parts || [{ printing: null, count: row.missing }]) {
+      const id = part.printing?.id || row.cardId;
+      byId.set(id, (byId.get(id) || 0) + part.count);
+    }
+    for (const [id, count] of byId) await inv.adjustQuantity(id, count, name);
   }
 
   // Cardmarket trend price summed across the whole wishlist (the price
@@ -159,14 +164,17 @@ export default function MtgWishlistPage() {
         )}
       </div>
 
-      <CardmarketExportModal
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-        decks={w.decks}
-        inventory={inv.quantities}
-        initialSource={exportSource}
-        preselectedRows={selected}
-      />
+      {/* Mounted per opening so every export starts from fresh settings. */}
+      {exportOpen && (
+        <CardmarketExportModal
+          open
+          onClose={() => setExportOpen(false)}
+          decks={w.decks}
+          ownedIndex={w.ownedIndex}
+          initialSource={exportSource}
+          preselectedRows={selected}
+        />
+      )}
     </>
   );
 }

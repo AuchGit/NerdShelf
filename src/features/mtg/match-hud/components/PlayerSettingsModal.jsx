@@ -32,12 +32,16 @@ export default function PlayerSettingsModal({
   const [lifeStr, setLifeStr] = useState(String(player?.life ?? 20));
   const [poisonStr, setPoisonStr] = useState(String(player?.poison ?? 0));
 
-  useEffect(() => {
-    if (!open) return;
-    setName(player?.player_name || '');
-    setLifeStr(String(player?.life ?? 20));
-    setPoisonStr(String(player?.poison ?? 0));
-  }, [open, player]);
+  // Re-seed the form whenever the modal opens or the player row changes.
+  const [syncedFor, setSyncedFor] = useState({ open, player });
+  if (syncedFor.open !== open || syncedFor.player !== player) {
+    setSyncedFor({ open, player });
+    if (open) {
+      setName(player?.player_name || '');
+      setLifeStr(String(player?.life ?? 20));
+      setPoisonStr(String(player?.poison ?? 0));
+    }
+  }
 
   useEffect(() => {
     if (!open || !user) return;

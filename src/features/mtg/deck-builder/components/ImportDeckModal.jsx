@@ -1,11 +1,11 @@
 // src/features/mtg/deck-builder/components/ImportDeckModal.jsx
 import { useState } from 'react';
 import { Modal, Button } from '../../../../shared/ui';
-import { parseDecklistText, resolveCardNames, buildDeckFromParsed } from '../services/deckImport';
+import { parseDecklistText, resolveDecklist, buildDeckFromParsed } from '../services/deckImport';
 
 const EXAMPLE = `// Example:
 4 Lightning Bolt
-4 Counterspell
+4 Counterspell (MH2) 267
 20 Island
 
 Sideboard
@@ -17,12 +17,14 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [notFound, setNotFound] = useState([]);
+  const [fallbacks, setFallbacks] = useState([]);
 
   async function handleImport() {
     if (!text.trim()) return;
     setBusy(true);
     setResult(null);
     setNotFound([]);
+    setFallbacks([]);
 
     const parsed = parseDecklistText(text);
     const allNames = [...parsed.main.map(e => e.name), ...parsed.side.map(e => e.name)];
@@ -32,7 +34,7 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
       return;
     }
 
-    const resolved = await resolveCardNames(allNames);
+    const resolved = await resolveDecklist(parsed);
     const deck = buildDeckFromParsed(parsed, resolved);
     setBusy(false);
 
@@ -46,9 +48,11 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
     }
 
     setNotFound(deck.notFound);
+    setFallbacks(deck.fallbacks);
+    const fixed = Object.keys(deck.printings).length;
     setResult({
       type: 'success',
-      text: `${mainCount} Karten im Main, ${sideCount} im Sideboard.`,
+      text: `${mainCount} Karten im Main, ${sideCount} im Sideboard.${fixed ? ` ${fixed} mit fester Edition.` : ''}`,
       deck,
     });
   }
@@ -59,6 +63,7 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
     setText('');
     setResult(null);
     setNotFound([]);
+    setFallbacks([]);
     onClose?.();
   }
 
@@ -83,7 +88,8 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
     >
       <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--space-3)' }}>
         Füge eine Decklist im Standard-MTG-Format ein. Kommentare mit <code>//</code> oder <code>#</code>.
-        Sideboard nach einer Zeile <code>Sideboard</code>.
+        Sideboard nach einer Zeile <code>Sideboard</code>. Eine Edition wie <code>(LEA) 161</code> oder{' '}
+        <code>[M10]</code> legt das Artwork der Karte fest.
       </div>
 
       <textarea
@@ -131,6 +137,24 @@ export default function ImportDeckModal({ open, onClose, onImport }) {
             overflow: 'auto',
           }}>
             {notFound.map((n, i) => <div key={i}>{n}</div>)}
+          </div>
+        </details>
+      )}
+
+      {fallbacks.length > 0 && (
+        <details style={{ marginTop: 'var(--space-3)' }}>
+          <summary style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
+            {fallbacks.length} Editionen nicht gefunden — Standard-Artwork verwendet
+          </summary>
+          <div style={{
+            marginTop: 'var(--space-2)',
+            fontSize: 'var(--fs-xs)',
+            color: 'var(--color-text-muted)',
+            fontFamily: 'var(--font-mono)',
+            maxHeight: 150,
+            overflow: 'auto',
+          }}>
+            {fallbacks.map((n, i) => <div key={i}>{n}</div>)}
           </div>
         </details>
       )}

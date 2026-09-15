@@ -40,6 +40,9 @@ export function printingSummary(card) {
     collector_number: card.collector_number || '',
     released_at: card.released_at || '',
     rarity: card.rarity,
+    // Cardmarket product id — lets the export name the exact Cardmarket
+    // expansion / version (see cardmarketMap.js).
+    cardmarket_id: card.cardmarket_id ?? null,
     prices: card.prices
       ? { eur: card.prices.eur ?? null, eur_foil: card.prices.eur_foil ?? null }
       : undefined,
@@ -112,39 +115,19 @@ export function printingLabel(p) {
 }
 
 /**
- * Cardmarket "Wants → Massenimport" line. Cardmarket accepts
- * `<Anzahl> <Name> (<Edition>)` with the full expansion name, which is
- * what Scryfall calls `set_name`. Without a chosen printing the line stays
- * the plain `<Anzahl> <Name>` so Cardmarket may offer any edition.
+ * Cardmarket "Wants → Massenimport" line:
+ *   `<Anzahl> <Name> (V.<n>) (<Edition>)`
+ * - with a Cardmarket target (expansion as Cardmarket names it, version when
+ *   the expansion has several products of the card) → exact product
+ * - with only a chosen printing → Scryfall's set name as best guess
+ * - otherwise the plain `<Anzahl> <Name>`, any edition
  */
-export function cardmarketLine(qty, name, printing) {
+export function cardmarketLine(qty, name, printing, target = null) {
   const base = `${qty} ${name}`;
-  return printing?.set_name ? `${base} (${printing.set_name})` : base;
-}
-
-/**
- * Split a card's demand into per-printing parts and take owned copies off.
- * Owned copies are not tracked per artwork, so they first cover demand
- * without a fixed artwork, then the fixed ones in the given order.
- *
- * @param {{printing: object|null, count: number}[]} parts
- * @param {number} owned
- * @returns {{printing: object|null, count: number}[]} remaining (> 0 only)
- */
-export function allocateOwned(parts, owned) {
-  let left = Math.max(0, owned || 0);
-  const ordered = [
-    ...parts.filter(p => !p.printing),
-    ...parts.filter(p => p.printing),
-  ];
-  const out = [];
-  for (const part of ordered) {
-    const take = Math.min(left, part.count);
-    left -= take;
-    const rest = part.count - take;
-    if (rest > 0) out.push({ printing: part.printing, count: rest });
+  if (target?.expansion) {
+    return `${base}${target.version ? ` (V.${target.version})` : ''} (${target.expansion})`;
   }
-  return out;
+  return printing?.set_name ? `${base} (${printing.set_name})` : base;
 }
 
 // Session cache: oracle key → { cards, nextPage }

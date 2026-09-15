@@ -1,7 +1,14 @@
 // src/features/mtg/deck-builder/services/deckOrganize.js
 //
-// Group + sort deck entries for display. Shared by the desktop DeckPanel
-// and the mobile deck viewer so both sort the same way.
+// Group + sort deck entries for display. Shared by the desktop DeckPanel,
+// the decklist view and the mobile deck viewer so all sort the same way.
+//
+// Modes: 'type' | 'color' | 'rarity' | 'cmc' group the deck; 'name' and
+// 'price' are flat orders. An optional second mode refines the first:
+//   - a grouping mode → sub-groups inside every group (Creatures → 2 CMC …)
+//   - 'name' / 'price' → the order of the cards inside every group
+//   - with a flat first mode it swaps in: group by the second, order by the
+//     first (e.g. price, then type → type groups ordered by price)
 
 import { getTypeGroup, getCardPriceEur } from './scryfall';
 
@@ -34,96 +41,101 @@ function manaValue(card) {
   return typeof v === 'number' ? v : (Number(v) || 0);
 }
 
-/** Group + sort entries based on active sort mode. Returns an array of
- *  `{ groupLabel, groupCount, entries }` ready to render. */
-export function organizeDeck(deck, sortMode) {
+// Ways to group a deck; `rank` orders the groups.
+const GROUPINGS = {
+  type: {
+    keyOf: (card) => getTypeGroup(card),
+    rank: (k) => GROUP_ORDER.indexOf(k),
+    label: (k) => k,
+  },
+  color: {
+    keyOf: colorGroup,
+    rank: (k) => COLOR_GROUP_ORDER.indexOf(k),
+    label: (k) => COLOR_GROUP_LABEL[k],
+  },
+  rarity: {
+    keyOf: (card) => card.rarity || 'common',
+    rank: (k) => RARITY_ORDER[k] ?? 99,
+    label: (k) => RARITY_LABEL[k] || k,
+  },
+  cmc: {
+    // Integer mana value; lands get their own bucket at the end
+    keyOf: (card) => (card.type_line?.includes('Land') ? 'Land' : String(Math.floor(manaValue(card)))),
+    rank: (k) => (k === 'Land' ? Number.MAX_SAFE_INTEGER : Number(k)),
+    label: (k) => (k === 'Land' ? 'Land' : `${k} CMC`),
+  },
+};
+
+const byName = (a, b) => a.card.name.localeCompare(b.card.name);
+const priceOf = (e) => getCardPriceEur(e.card) ?? -1;
+
+/** Comparator for the cards inside a group (or a flat list). */
+function orderFor(mode) {
+  if (mode === 'price') return (a, b) => priceOf(b) - priceOf(a) || byName(a, b);
+  if (mode === 'cmc') return (a, b) => manaValue(a.card) - manaValue(b.card) || byName(a, b);
+  const g = GROUPINGS[mode];
+  if (g) return (a, b) => g.rank(g.keyOf(a.card)) - g.rank(g.keyOf(b.card)) || byName(a, b);
+  return byName;
+}
+
+const countOf = (entries) => entries.reduce((s, e) => s + e.count, 0);
+
+function groupBy(entries, mode) {
+  const g = GROUPINGS[mode];
+  const buckets = new Map();
+  for (const e of entries) {
+    const k = g.keyOf(e.card);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(e);
+  }
+  return [...buckets.entries()]
+    .sort(([a], [b]) => g.rank(a) - g.rank(b))
+    .map(([k, es]) => ({ key: k, label: g.label(k), entries: es }));
+}
+
+/**
+ * Group + sort entries. Returns an array of
+ * `{ groupLabel, groupCount, entries, subgroups? }` ready to render;
+ * `entries` always holds the whole group in display order, `subgroups`
+ * (`{ label, count, entries }`) is present only for a grouping second mode.
+ */
+export function organizeDeck(deck, sortMode, thenMode = null) {
   const entries = Object.values(deck);
-
-  if (sortMode === 'type') {
-    const groups = {};
-    for (const e of entries) {
-      const g = getTypeGroup(e.card);
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(e);
-    }
-    return GROUP_ORDER
-      .filter(g => groups[g])
-      .map(g => ({
-        groupLabel: g,
-        entries: groups[g].sort((a, b) => a.card.name.localeCompare(b.card.name)),
-        groupCount: groups[g].reduce((s, e) => s + e.count, 0),
-      }));
+  let groupMode = GROUPINGS[sortMode] ? sortMode : null;
+  let inner = thenMode && thenMode !== sortMode ? thenMode : null;
+  if (!groupMode && GROUPINGS[inner]) {
+    groupMode = inner;
+    inner = sortMode;
   }
 
-  if (sortMode === 'color') {
-    const groups = {};
-    for (const e of entries) {
-      const g = colorGroup(e.card);
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(e);
-    }
-    return COLOR_GROUP_ORDER
-      .filter(g => groups[g])
-      .map(g => ({
-        groupLabel: COLOR_GROUP_LABEL[g],
-        entries: groups[g].sort((a, b) => a.card.name.localeCompare(b.card.name)),
-        groupCount: groups[g].reduce((s, e) => s + e.count, 0),
-      }));
-  }
-
-  if (sortMode === 'rarity') {
-    const groups = {};
-    for (const e of entries) {
-      const r = e.card.rarity || 'common';
-      if (!groups[r]) groups[r] = [];
-      groups[r].push(e);
-    }
-    return Object.entries(groups)
-      .sort(([a], [b]) => (RARITY_ORDER[a] ?? 99) - (RARITY_ORDER[b] ?? 99))
-      .map(([r, es]) => ({
-        groupLabel: RARITY_LABEL[r] || r,
-        entries: es.sort((a, b) => a.card.name.localeCompare(b.card.name)),
-        groupCount: es.reduce((s, e) => s + e.count, 0),
-      }));
-  }
-
-  if (sortMode === 'cmc') {
-    // Group by integer mana value; lands get their own bucket at the end
-    const groups = {};
-    for (const e of entries) {
-      const isLand = e.card.type_line?.includes('Land');
-      const key = isLand ? 'Land' : String(Math.floor(manaValue(e.card)));
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(e);
-    }
-    const numericKeys = Object.keys(groups)
-      .filter(k => k !== 'Land')
-      .sort((a, b) => Number(a) - Number(b));
-    const ordered = numericKeys.map(k => [k, groups[k]]);
-    if (groups['Land']) ordered.push(['Land', groups['Land']]);
-    return ordered.map(([k, es]) => ({
-      groupLabel: k === 'Land' ? 'Land' : `${k} CMC`,
-      entries: es.sort((a, b) =>
-        manaValue(a.card) - manaValue(b.card) || a.card.name.localeCompare(b.card.name)
-      ),
-      groupCount: es.reduce((s, e) => s + e.count, 0),
-    }));
-  }
-
-  if (sortMode === 'price') {
-    // Single flat list, most expensive first; unknown prices at the end
-    const price = (e) => getCardPriceEur(e.card) ?? -1;
+  if (!groupMode) {
     return [{
       groupLabel: null,
-      entries: entries.sort((a, b) => price(b) - price(a) || a.card.name.localeCompare(b.card.name)),
-      groupCount: entries.reduce((s, e) => s + e.count, 0),
+      entries: entries.sort(orderFor(inner || sortMode)),
+      groupCount: countOf(entries),
     }];
   }
 
-  // sortMode === 'name' → single flat list
-  return [{
-    groupLabel: null,
-    entries: entries.sort((a, b) => a.card.name.localeCompare(b.card.name)),
-    groupCount: entries.reduce((s, e) => s + e.count, 0),
-  }];
+  // Default order inside a group: mana value for CMC groups, else name.
+  const innerMode = inner || (groupMode === 'cmc' ? 'cmc' : 'name');
+  return groupBy(entries, groupMode).map(g => {
+    if (GROUPINGS[innerMode] && innerMode !== groupMode) {
+      const subgroups = groupBy(g.entries, innerMode).map(s => ({
+        label: s.label,
+        count: countOf(s.entries),
+        entries: s.entries.sort(orderFor(innerMode === 'cmc' ? 'cmc' : 'name')),
+      }));
+      return {
+        groupLabel: g.label,
+        groupCount: countOf(g.entries),
+        entries: subgroups.flatMap(s => s.entries),
+        subgroups,
+      };
+    }
+    return {
+      groupLabel: g.label,
+      groupCount: countOf(g.entries),
+      entries: g.entries.sort(orderFor(innerMode)),
+    };
+  });
 }

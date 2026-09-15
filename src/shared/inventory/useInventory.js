@@ -28,10 +28,14 @@
 //   - quantity 0 → row deleted (a missing key in `quantities` Map === not owned).
 //   - Optimistic updates with rollback on error.
 //   - Graceful soft-degrade when the table doesn't exist yet (session-only).
+//   - Data belongs to the user it was loaded for: without a user (or right
+//     after switching users) the inventory reads as empty.
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../core/supabase/client';
 import { useAuth } from '../../core/auth/AuthContext';
+
+const EMPTY = new Map();
 
 /**
  * @param {object} options
@@ -44,23 +48,35 @@ import { useAuth } from '../../core/auth/AuthContext';
  */
 export function useInventory({ table, kind }) {
   const { user } = useAuth();
-  const [quantities, setQuantities] = useState(() => new Map()); // id -> qty
+  const userId = user?.id ?? null;
+  // quantities: id -> qty. labels: id -> item_label (e.g. the MTG card name),
+  // lets callers match rows that stand for the same thing under different
+  // ids (other printings).
+  const [store, setStore] = useState({ userId: null, quantities: EMPTY, labels: EMPTY });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [tableMissing, setTableMissing] = useState(false);
 
+  const mine = userId != null && store.userId === userId;
+  const quantities = mine ? store.quantities : EMPTY;
+  const labels = mine ? store.labels : EMPTY;
+
+  const updateStore = useCallback((key, updater) => {
+    setStore(prev => {
+      const base = prev.userId === userId ? prev : { userId, quantities: EMPTY, labels: EMPTY };
+      return { ...base, [key]: updater(base[key]) };
+    });
+  }, [userId]);
+
   useEffect(() => {
-    if (!user) {
-      setQuantities(new Map());
-      return;
-    }
+    if (!user) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
       let q = supabase
         .from(table)
-        .select('item_id, quantity')
+        .select('item_id, quantity, item_label')
         .eq('user_id', user.id);
       if (kind) q = q.eq('kind', kind);
 
@@ -76,10 +92,12 @@ export function useInventory({ table, kind }) {
         return;
       }
       const map = new Map();
+      const labelMap = new Map();
       for (const row of data || []) {
         if (row.quantity > 0) map.set(row.item_id, row.quantity);
+        if (row.item_label) labelMap.set(row.item_id, row.item_label);
       }
-      setQuantities(map);
+      setStore({ userId: user.id, quantities: map, labels: labelMap });
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -105,12 +123,15 @@ export function useInventory({ table, kind }) {
     if (safe === prev) return;
 
     // Optimistic update
-    setQuantities(map => {
+    updateStore('quantities', map => {
       const next = new Map(map);
       if (safe === 0) next.delete(id);
       else next.set(id, safe);
       return next;
     });
+    if (label) {
+      updateStore('labels', map => (map.get(id) === label ? map : new Map(map).set(id, label)));
+    }
 
     if (tableMissing) return;
 
@@ -134,7 +155,7 @@ export function useInventory({ table, kind }) {
 
     if (result.error) {
       // Rollback
-      setQuantities(map => {
+      updateStore('quantities', map => {
         const next = new Map(map);
         if (prev === 0) next.delete(id);
         else next.set(id, prev);
@@ -142,7 +163,7 @@ export function useInventory({ table, kind }) {
       });
       setError(result.error.message);
     }
-  }, [user, table, kind, quantities, tableMissing]);
+  }, [user, table, kind, quantities, tableMissing, updateStore]);
 
   const adjustQuantity = useCallback(
     (id, delta, label) => setQuantity(id, (quantities.get(id) || 0) + delta, label),
@@ -153,6 +174,7 @@ export function useInventory({ table, kind }) {
 
   return {
     quantities,
+    labels,
     getQuantity,
     isOwned,
     setQuantity,

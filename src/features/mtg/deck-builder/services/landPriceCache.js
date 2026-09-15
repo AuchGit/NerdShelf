@@ -83,7 +83,6 @@ function recordPairFromCard(name, card) {
   if (catalogPair === actualPair) return;
   if (pairCorrections.get(name) === actualPair) return;  // already corrected
   pairCorrections.set(name, actualPair);
-  // eslint-disable-next-line no-console
   console.warn(
     `[landPriceCache] catalog says ${name} is ${catalogPair}, Scryfall says ${actualPair}. Overriding.`
   );
@@ -134,7 +133,6 @@ export async function loadLandPrices() {
     } catch (e) {
       // Network error / Scryfall down — leave the cache as-is so the
       // suggester just keeps using catalog prices.
-      // eslint-disable-next-line no-console
       console.warn('[landPriceCache] failed to load prices:', e?.message || e);
     }
   })();

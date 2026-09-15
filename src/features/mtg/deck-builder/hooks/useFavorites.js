@@ -4,6 +4,7 @@ import { useAuth } from '../../../../core/auth/AuthContext';
 
 const SCRYFALL_COLLECTION_URL = 'https://api.scryfall.com/cards/collection';
 const COLLECTION_BATCH_SIZE = 75;
+const NO_FAVORITES = new Set();
 
 async function fetchCardsByIds(ids) {
   if (ids.length === 0) return [];
@@ -34,21 +35,37 @@ async function fetchCardsByIds(ids) {
  */
 export function useFavorites() {
   const { user } = useAuth();
-  const [favorites, setFavorites] = useState(() => new Set());
-  const [favoriteCards, setFavoriteCards] = useState(null); // null = not yet fetched
+  const userId = user?.id ?? null;
+  // Favorites belong to the user they were loaded for — a different (or no)
+  // user reads as "no favorites" until their own list has loaded.
+  const [favData, setFavData] = useState({ userId: null, ids: NO_FAVORITES, cards: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const cardCacheRef = useRef(new Map()); // scryfall_id -> full card
 
+  const mine = favData.userId === userId && userId != null;
+  const favorites = mine ? favData.ids : NO_FAVORITES;
+  const favoriteCards = mine ? favData.cards : null; // null = not yet fetched
+
+  const setFavorites = useCallback((updater) => {
+    setFavData(prev => {
+      const base = prev.userId === userId ? prev : { userId, ids: NO_FAVORITES, cards: null };
+      return { ...base, ids: updater(base.ids) };
+    });
+  }, [userId]);
+
+  const setFavoriteCards = useCallback((updater) => {
+    setFavData(prev => {
+      const base = prev.userId === userId ? prev : { userId, ids: NO_FAVORITES, cards: null };
+      return { ...base, cards: typeof updater === 'function' ? updater(base.cards) : updater };
+    });
+  }, [userId]);
+
   // Load favorites from Supabase on user change
   useEffect(() => {
-    if (!user) {
-      setFavorites(new Set());
-      setFavoriteCards(null);
-      cardCacheRef.current = new Map();
-      return;
-    }
+    cardCacheRef.current = new Map();
+    if (!user) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -63,8 +80,8 @@ export function useFavorites() {
         setLoading(false);
         return;
       }
-      setFavorites(new Set((data || []).map(r => r.scryfall_id)));
-      setFavoriteCards(null); // invalidate, will refetch on demand
+      // Full cards are invalidated and refetched on demand.
+      setFavData({ userId: user.id, ids: new Set((data || []).map(r => r.scryfall_id)), cards: null });
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -129,7 +146,7 @@ export function useFavorites() {
       }
       setError(result.error.message);
     }
-  }, [user, favorites]);
+  }, [user, favorites, setFavorites, setFavoriteCards]);
 
   /** Fetch full card data for all favorites. Idempotent — caches results. */
   const loadFavoriteCards = useCallback(async () => {
@@ -154,7 +171,7 @@ export function useFavorites() {
     } finally {
       setLoading(false);
     }
-  }, [user, favorites]);
+  }, [user, favorites, setFavoriteCards]);
 
   return {
     favorites,

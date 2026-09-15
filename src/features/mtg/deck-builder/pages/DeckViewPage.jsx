@@ -3,20 +3,27 @@
 // Read-only viewer for an imported (foreign) MTG deck. Loaded via
 // share_token by the route /mtg/deck/view/:token. Renders the deck's
 // mainboard / sideboard / commander as plain lists with prices — no
-// edit affordances of any kind. The deck-builder app itself is left
-// untouched.
+// edit affordances of any kind. On phones it uses the same viewer as the
+// deck builder's "Ansehen" tab (sortable, grid/list, full-screen cards).
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../../../core/supabase/client';
 import { Panel } from '../../../../shared/ui';
 import { ShareTokenBadge } from '../../../../shared/tokens';
+import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
 import { getCardPriceEur, formatEur } from '../services/scryfall';
 import { applyPrinting, applyPrintingsToZone } from '../services/deckPrintings';
+import MtgDeckViewerMobile from '../pwa/MtgDeckViewerMobile';
+import { useDeckTokens } from '../hooks/useDeckTokens';
+
+// Ideas are the owner's scratch pool — not part of a shared deck.
+const NO_IDEAS = {};
 
 export default function DeckViewPage() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const { isPwaMobile } = usePwaMobile();
   const [row, setRow] = useState(null);
   const [ownerName, setOwnerName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -62,15 +69,23 @@ export default function DeckViewPage() {
     const main = sumEntry(mainboard);
     const side = sumEntry(sideboard);
     const cmdPrice = commander ? (getCardPriceEur(commander) ?? 0) : 0;
+    const byName = (a, b) => (a.card?.name || '').localeCompare(b.card?.name || '');
     return {
       main,
       side,
+      mainboard,
+      sideboard,
       commander,
-      mainEntries: Object.values(mainboard),
-      sideEntries: Object.values(sideboard),
+      mainEntries: Object.values(mainboard).sort(byName),
+      sideEntries: Object.values(sideboard).sort(byName),
       totalEur: main.price + side.price + cmdPrice,
     };
   }, [row]);
+
+  const deckTokens = useDeckTokens(
+    row?.data?.mainboard, row?.data?.sideboard, row?.data?.commander, row?.data?.tokens,
+  );
+  const shownTokens = deckTokens.list.filter(t => t.count > 0);
 
   if (loading) return <Centered>Lade Deck…</Centered>;
   if (error) {
@@ -82,6 +97,38 @@ export default function DeckViewPage() {
     );
   }
   if (!row || !stats) return null;
+
+  if (isPwaMobile) {
+    const meta = [
+      'Nur lesen',
+      ownerName && `von ${ownerName}`,
+      row.format,
+      stats.totalEur > 0 && `≈ ${formatEur(stats.totalEur)}`,
+    ].filter(Boolean).join(' · ');
+    return (
+      <div className="mdv-share">
+        <header className="mdv-share-head">
+          <button
+            type="button"
+            className="mdv-share-back"
+            onClick={() => navigate('/mtg')}
+            aria-label="Zurück zum Dashboard"
+          >←</button>
+          <div className="mdv-share-title">
+            <div className="mdv-share-name">{row.name || 'Unbenanntes Deck'}</div>
+            <div className="mdv-share-meta">{meta}</div>
+          </div>
+        </header>
+        <MtgDeckViewerMobile
+          mainboard={stats.mainboard}
+          sideboard={stats.sideboard}
+          ideas={NO_IDEAS}
+          commander={stats.commander}
+          tokens={deckTokens.zone}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--space-5)' }}>
@@ -120,11 +167,9 @@ export default function DeckViewPage() {
           <Empty>Leer.</Empty>
         ) : (
           <div>
-            {stats.mainEntries
-              .sort((a, b) => (a.card?.name || '').localeCompare(b.card?.name || ''))
-              .map(e => (
-                <CardRow key={e.card?.id || Math.random()} entry={e} />
-              ))}
+            {stats.mainEntries.map((e, i) => (
+              <CardRow key={e.card?.id || `main-${i}`} entry={e} />
+            ))}
           </div>
         )}
       </Panel>
@@ -133,11 +178,18 @@ export default function DeckViewPage() {
         <Panel style={{ marginTop: 'var(--space-3)', padding: 0 }}>
           <SectionLabel padded>Sideboard ({stats.side.count})</SectionLabel>
           <div>
-            {stats.sideEntries
-              .sort((a, b) => (a.card?.name || '').localeCompare(b.card?.name || ''))
-              .map(e => (
-                <CardRow key={e.card?.id || Math.random()} entry={e} />
-              ))}
+            {stats.sideEntries.map((e, i) => (
+              <CardRow key={e.card?.id || `side-${i}`} entry={e} />
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {shownTokens.length > 0 && (
+        <Panel style={{ marginTop: 'var(--space-3)', padding: 0 }}>
+          <SectionLabel padded>Tokens ({shownTokens.reduce((s, t) => s + t.count, 0)})</SectionLabel>
+          <div>
+            {shownTokens.map(t => <CardRow key={t.key} entry={t} />)}
           </div>
         </Panel>
       )}

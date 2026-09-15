@@ -75,26 +75,22 @@ export function useScryfall({
     }
   }, []);
 
+  const hasInput = !!(
+    query || colors.length > 0 || cardType || showLands ||
+    rarity || cmcMin || cmcMax || subtype || format || setCode ||
+    priceMin || priceMax || tags.length > 0 ||
+    commanderIdentity || commanderPick
+  );
+
   // Debounced re-fetch whenever any filter/sort param changes
   useEffect(() => {
-    const hasInput =
-      query || colors.length > 0 || cardType || showLands ||
-      rarity || cmcMin || cmcMax || subtype || format || setCode ||
-      priceMin || priceMax || tags.length > 0 ||
-      commanderIdentity || commanderPick;
-
     if (!hasInput) {
       // Bump the request id so any fetch still in flight (from before
       // the user cleared everything) is discarded when it resolves
-      // instead of re-populating the now-empty base view.
+      // instead of re-populating the now-empty base view. The empty
+      // result itself is derived below — no state write needed.
       reqIdRef.current++;
       clearTimeout(timerRef.current);
-      setCards([]);
-      setHasMore(false);
-      setNextPageUrl(null);
-      setTotalCards(0);
-      setError(null);
-      setLoading(false);
       return;
     }
 
@@ -120,5 +116,10 @@ export function useScryfall({
     }
   }, [nextPageUrl, loading, fetchCards]);
 
+  if (!hasInput) {
+    return { cards: NO_CARDS, loading: false, error: null, hasMore: false, totalCards: 0, loadMore };
+  }
   return { cards, loading, error, hasMore, totalCards, loadMore };
 }
+
+const NO_CARDS = [];

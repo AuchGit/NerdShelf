@@ -24,6 +24,7 @@ import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
 import { useMtgInventory } from './hooks/useMtgInventory';
 import { useOracleTags } from './hooks/useOracleTags';
+import { useDeckTokens } from './hooks/useDeckTokens';
 import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
 import { filterFavorites } from './services/favoritesFilter';
@@ -35,7 +36,7 @@ import './MtgDeckBuilder.css';
 import './App.css';
 
 // Standard MTG formats. value '' = no filter, value 'limited' is a label-only entry (no Scryfall filter).
-export const MTG_FORMATS = [
+const MTG_FORMATS = [
   { value: '',            label: '(Kein Format)' },
   { value: 'standard',    label: 'Standard'      },
   { value: 'pioneer',     label: 'Pioneer'       },
@@ -82,6 +83,8 @@ export default function MtgDeckBuilderApp() {
   // stay untouched — see services/deckPrintings.js.
   const [printings, setPrintings] = useState({});
   const [artPickerCard, setArtPickerCard] = useState(null);
+  // Wanted count per token (key: token oracle id); unset tokens count 1.
+  const [tokenCounts, setTokenCounts] = useState({});
 
   const isCommanderFormat = deckFormat === 'commander';
   // While in commander format with no commander chosen yet, the search
@@ -241,9 +244,9 @@ export default function MtgDeckBuilderApp() {
   const loadMore    = scryfall.loadMore;
 
   const previewCard = pinnedCard || hoveredCard;
-  useEffect(() => {
-    if (previewCard) setLastSeenCard(previewCard);
-  }, [previewCard]);
+  // Remember the last previewed card so the preview doesn't blank out when
+  // the pointer leaves a card (state adjusted during render, not in an effect).
+  if (previewCard && previewCard !== lastSeenCard) setLastSeenCard(previewCard);
 
   const displayCard = previewCard || lastSeenCard;
   const isStale     = !previewCard && !!lastSeenCard;
@@ -278,6 +281,7 @@ export default function MtgDeckBuilderApp() {
       setCoverCardId(data.data?.coverCardId || null);
       setCommander(data.data?.commander || null);
       setPrintings(data.data?.printings || {});
+      setTokenCounts(data.data?.tokens || {});
       setShareToken(data.share_token || null);
       setLoadingDeck(false);
       // allow dirty tracking to resume after next tick
@@ -290,7 +294,7 @@ export default function MtgDeckBuilderApp() {
   useEffect(() => {
     if (skipDirtyRef.current) return;
     setDirty(true);
-  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander, printings]);
+  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander, printings, tokenCounts]);
 
   // ── Singleton helper ─────────────────────────────────
   // In Commander, every non-basic-land card is capped at 1 copy.
@@ -342,7 +346,7 @@ export default function MtgDeckBuilderApp() {
       }
       const next = entry.count + delta;
       if (next <= 0) {
-        const { [cardId]: _removed, ...rest } = prev;
+        const rest = { ...prev }; delete rest[cardId];
         return rest;
       }
       return { ...prev, [cardId]: { ...entry, count: next } };
@@ -351,7 +355,7 @@ export default function MtgDeckBuilderApp() {
 
   const removeMain = useCallback((cardId) => {
     setMainboard(prev => {
-      const { [cardId]: _removed, ...rest } = prev;
+      const rest = { ...prev }; delete rest[cardId];
       return rest;
     });
   }, []);
@@ -382,7 +386,7 @@ export default function MtgDeckBuilderApp() {
       if (!entry) return prev;
       const next = entry.count + delta;
       if (next <= 0) {
-        const { [cardId]: _removed, ...rest } = prev;
+        const rest = { ...prev }; delete rest[cardId];
         return rest;
       }
       return { ...prev, [cardId]: { ...entry, count: next } };
@@ -391,7 +395,7 @@ export default function MtgDeckBuilderApp() {
 
   const removeSide = useCallback((cardId) => {
     setSideboard(prev => {
-      const { [cardId]: _removed, ...rest } = prev;
+      const rest = { ...prev }; delete rest[cardId];
       return rest;
     });
   }, []);
@@ -416,7 +420,7 @@ export default function MtgDeckBuilderApp() {
       if (!entry) return prev;
       const next = entry.count + delta;
       if (next <= 0) {
-        const { [cardId]: _removed, ...rest } = prev;
+        const rest = { ...prev }; delete rest[cardId];
         return rest;
       }
       return { ...prev, [cardId]: { ...entry, count: next } };
@@ -424,7 +428,7 @@ export default function MtgDeckBuilderApp() {
   }, []);
   const removeIdeas = useCallback((cardId) => {
     setIdeas(prev => {
-      const { [cardId]: _removed, ...rest } = prev;
+      const rest = { ...prev }; delete rest[cardId];
       return rest;
     });
   }, []);
@@ -612,6 +616,12 @@ export default function MtgDeckBuilderApp() {
     });
   }, []);
 
+  // ── Tokens the deck's cards create ───────────────────
+  const deckTokens = useDeckTokens(mainboard, sideboard, commander, tokenCounts);
+  const setTokenCount = useCallback((key, count) => {
+    setTokenCounts(prev => ({ ...prev, [key]: Math.max(0, count) }));
+  }, []);
+
   // ── Preview handlers ─────────────────────────────────
   // Pin semantics:
   //   - no card pinned     → pin this card+face
@@ -655,6 +665,7 @@ export default function MtgDeckBuilderApp() {
       data: {
         mainboard, sideboard, ideas, coverCardId, commander,
         printings: prunePrintings(printings, { mainboard, sideboard, ideas, commander }),
+        tokens: tokenCounts,
       },
       share_token: tokenForSave,
       updated_at: new Date().toISOString(),
@@ -692,13 +703,20 @@ export default function MtgDeckBuilderApp() {
   }
 
   // ── Import / Export ──────────────────────────────────
-  function handleImport({ mainboard: importedMain, sideboard: importedSide }) {
+  function handleImport({ mainboard: importedMain, sideboard: importedSide, printings: importedPrintings }) {
     setMainboard(importedMain);
     setSideboard(importedSide);
+    // The imported list decides the artwork of its cards: editions from the
+    // text are set, earlier choices for those cards are dropped.
+    setPrintings(prev => {
+      const next = { ...prev };
+      for (const id of [...Object.keys(importedMain), ...Object.keys(importedSide)]) delete next[id];
+      return { ...next, ...(importedPrintings || {}) };
+    });
   }
 
   async function handleExport() {
-    const ok = await copyDecklistToClipboard(mainboard, sideboard);
+    const ok = await copyDecklistToClipboard(mainboard, sideboard, printings);
     setExportStatus(ok
       ? { type: 'success', text: 'In Zwischenablage kopiert' }
       : { type: 'error',   text: 'Kopieren fehlgeschlagen' }
@@ -734,7 +752,10 @@ export default function MtgDeckBuilderApp() {
       onPin={() => handlePin(hoveredCard || pinned?.card, 0)}
       onUnpin={handleUnpin}
       printing={displayPrinting}
-      onChooseArtwork={() => setArtPickerCard(storedDisplayCard)}
+      // Tokens aren't deck entries — no artwork choice for them.
+      onChooseArtwork={/token/.test(storedDisplayCard?.layout || '')
+        ? undefined
+        : () => setArtPickerCard(storedDisplayCard)}
       onResetArtwork={() => setCardPrinting(displayCard?.id, null)}
       tags={storedDisplayCard ? tagsForCard(oracleTags.index, storedDisplayCard) : []}
       tagStatus={oracleTags.status}
@@ -750,6 +771,9 @@ export default function MtgDeckBuilderApp() {
       sideboard={viewSideboard}
       ideas={viewIdeas}
       commander={viewCommander}
+      tokens={deckTokens.zone}
+      tokenSources={deckTokens.sources}
+      onSetTokenCount={setTokenCount}
       onUpdateMainCount={updateMainCount}
       onRemoveMain={removeMain}
       onClearDeck={clearDeck}
@@ -895,6 +919,7 @@ export default function MtgDeckBuilderApp() {
             sideboard: viewSideboard,
             ideas: viewIdeas,
             commander: viewCommander,
+            tokens: deckTokens.zone,
           }}
         />
         <Suspense fallback={null}>

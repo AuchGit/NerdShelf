@@ -37,25 +37,29 @@ export default function MatchHudSessionPage() {
 
   // Resolve the code → match id. We could embed this in useMatchSession but
   // keeping the lookup outside lets us show the "not found" state cleanly.
-  const [matchId, setMatchId] = useState(null);
-  const [lookupErr, setLookupErr] = useState(null);
-  const [lookupLoading, setLookupLoading] = useState(true);
+  // The lookup result belongs to the code it was made for; until the
+  // current code has resolved, the page is still loading.
+  const [lookup, setLookup] = useState({ code: null, matchId: null, err: null });
 
   useEffect(() => {
     if (!joinCode) return;
     let cancelled = false;
-    setLookupLoading(true);
     (async () => {
       const { data, error } = await findMatchByCode(joinCode);
       if (cancelled) return;
-      if (error)   { setLookupErr(error.message); setLookupLoading(false); return; }
-      if (!data)   { setLookupErr('Match nicht gefunden'); setLookupLoading(false); return; }
-      setMatchId(data.id);
-      setLookupErr(null);
-      setLookupLoading(false);
+      setLookup({
+        code: joinCode,
+        matchId: !error && data ? data.id : null,
+        err: error ? error.message : (!data ? 'Match nicht gefunden' : null),
+      });
     })();
     return () => { cancelled = true; };
   }, [joinCode]);
+
+  const lookupDone = lookup.code === joinCode;
+  const matchId = lookupDone ? lookup.matchId : null;
+  const lookupErr = lookupDone ? lookup.err : null;
+  const lookupLoading = !lookupDone;
 
   const session = useMatchSession(matchId, user?.id || null);
   const {

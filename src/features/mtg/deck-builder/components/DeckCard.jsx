@@ -17,6 +17,8 @@ export default function DeckCard({
   moveRightTitle,
   onHover,          // optional: (card) => void
   onPin,            // optional: (card) => void — right-click pins to preview
+  note,             // optional: small muted line under the card (e.g. token sources)
+  removeTitle,      // optional: tooltip of the ✕ button
 }) {
   const manaCost = getManaCost(card);
   const manaSyms = parseManaCost(manaCost);
@@ -94,6 +96,21 @@ export default function DeckCard({
             {overCardThreshold && '⚠ '}{priceLine}
           </div>
         )}
+        {note && (
+          <div
+            title={note}
+            style={{
+              fontSize: 10,
+              color: 'var(--text-lo, #777)',
+              marginTop: 2,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {note}
+          </div>
+        )}
       </div>
 
       <div className="dc-controls">
@@ -107,7 +124,7 @@ export default function DeckCard({
             title={moveRightTitle || 'Nach rechts verschieben'}
           >→</button>
         )}
-        <button className="dc-btn dc-remove" onClick={onRemove} title="Alle entfernen">✕</button>
+        <button className="dc-btn dc-remove" onClick={onRemove} title={removeTitle || 'Alle entfernen'}>✕</button>
       </div>
     </div>
   );

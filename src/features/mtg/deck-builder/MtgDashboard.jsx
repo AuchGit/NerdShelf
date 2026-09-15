@@ -58,15 +58,20 @@ export default function MtgDashboard() {
     },
   });
 
-  const loadDecks = useCallback(async () => {
-    if (!user) return;
-    // No setLoading(true) here — initial value already reflects cache
-    // presence, and a background refetch shouldn't blink the spinner.
-    const { data, error: err } = await supabase
+  // No setLoading(true) on refetch — the initial value already reflects
+  // cache presence, and a background refetch shouldn't blink the spinner.
+  const fetchDecks = useCallback(async () => {
+    if (!user) return null;
+    return supabase
       .from('mtg_decks')
       .select('*')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
+  }, [user]);
+
+  const applyDecks = useCallback((result) => {
+    if (!result) return;
+    const { data, error: err } = result;
     if (err) {
       setError(err.message);
     } else {
@@ -77,7 +82,15 @@ export default function MtgDashboard() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { loadDecks(); }, [loadDecks]);
+  const loadDecks = useCallback(async () => {
+    applyDecks(await fetchDecks());
+  }, [fetchDecks, applyDecks]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDecks().then(result => { if (!cancelled) applyDecks(result); });
+    return () => { cancelled = true; };
+  }, [fetchDecks, applyDecks]);
 
   // Pick up invalidations from other components (currently only this
   // dashboard writes, but the subscription is cheap insurance for future
@@ -110,7 +123,11 @@ export default function MtgDashboard() {
     // unique index would otherwise reject the insert. id / timestamps
     // are stripped too so the row gets defaults rather than overwriting
     // them with the source row's values.
-    const { id: _ignore, created_at: _c, updated_at: _u, share_token: _t, ...rest } = deck;
+    const rest = { ...deck };
+    delete rest.id;
+    delete rest.created_at;
+    delete rest.updated_at;
+    delete rest.share_token;
     const payload = {
       ...rest,
       user_id: user.id,
@@ -484,12 +501,12 @@ function ColorBar({ entries, total }) {
 
   // Cumulative start position (0..1) for each segment so we can place a count
   // label exactly where the colour begins on the bar.
+  const labels = [];
   let acc = 0;
-  const labels = entries.map(([c, n]) => {
-    const startPct = (acc / total) * 100;
+  for (const [c, n] of entries) {
+    labels.push({ c, n, startPct: (acc / total) * 100 });
     acc += n;
-    return { c, n, startPct };
-  });
+  }
 
   return (
     <div

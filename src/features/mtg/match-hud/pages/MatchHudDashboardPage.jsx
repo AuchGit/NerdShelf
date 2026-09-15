@@ -44,12 +44,16 @@ export default function MatchHudDashboardPage() {
   const [open, setOpen] = useState([]);
 
   // Load the user's active matches (created or joined) for the rejoin list.
-  const reload = useCallback(async () => {
-    if (!user) return;
+  const fetchRecent = useCallback(async () => {
+    if (!user) return null;
     const { data } = await listUserMatches({ userId: user.id });
-    setRecent(data || []);
+    return data || [];
   }, [user]);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchRecent().then(rows => { if (!cancelled && rows) setRecent(rows); });
+    return () => { cancelled = true; };
+  }, [fetchRecent]);
 
   // Load the global list of "open" matches (status != ended, < 24h old)
   // and keep it live via a Supabase realtime subscription. We debounce

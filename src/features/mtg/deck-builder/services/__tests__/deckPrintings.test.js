@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   printingSummary, applyPrinting, applyPrintingsToZone, prunePrintings,
-  cardmarketLine, allocateOwned,
+  cardmarketLine,
 } from '../deckPrintings';
+import { cardmarketTarget } from '../cardmarketMap';
 
 const bolt = {
   id: 'base', oracle_id: 'o1', name: 'Lightning Bolt', layout: 'normal',
@@ -80,19 +81,18 @@ describe('cardmarketLine', () => {
     expect(cardmarketLine(4, 'Lightning Bolt', printingSummary(boltMma)))
       .toBe('4 Lightning Bolt (Modern Masters 2015)');
   });
-});
 
-describe('allocateOwned', () => {
-  const p = printingSummary(boltMma);
-  it('covers demand without a fixed artwork first', () => {
-    expect(allocateOwned([{ printing: p, count: 2 }, { printing: null, count: 2 }], 3))
-      .toEqual([{ printing: p, count: 1 }]);
+  it('prefers the Cardmarket expansion and version', () => {
+    const map = { e: { 3048: 'Core 2021', 5428: 'Wilds of Eldraine: Extras' }, p: { 471134: [3048, 2], 729058: [5428] } };
+    expect(cardmarketLine(4, 'Forest', null, cardmarketTarget(map, 471134)))
+      .toBe('4 Forest (V.2) (Core 2021)');
+    expect(cardmarketLine(1, 'Beluna Grandsquall // Seek Thrills', null, cardmarketTarget(map, 729058)))
+      .toBe('1 Beluna Grandsquall // Seek Thrills (Wilds of Eldraine: Extras)');
+    expect(cardmarketTarget(map, 1)).toBeNull();
+    expect(cardmarketTarget(null, 471134)).toBeNull();
   });
-  it('returns everything when nothing is owned', () => {
-    expect(allocateOwned([{ printing: null, count: 2 }, { printing: p, count: 1 }], 0))
-      .toEqual([{ printing: null, count: 2 }, { printing: p, count: 1 }]);
-  });
-  it('drops fully owned parts', () => {
-    expect(allocateOwned([{ printing: p, count: 2 }], 5)).toEqual([]);
+
+  it('stores the Cardmarket product id with the printing', () => {
+    expect(printingSummary({ ...boltMma, cardmarket_id: 42 }).cardmarket_id).toBe(42);
   });
 });

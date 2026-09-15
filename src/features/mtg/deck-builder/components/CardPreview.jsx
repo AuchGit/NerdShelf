@@ -110,7 +110,17 @@ export default function CardPreview({
   // which tags are active search filters, and the toggle / load handlers.
   tags = [], tagStatus = 'idle', activeTagSlugs = [], onToggleTag, onLoadTags,
 }) {
-  const [currentFace, setCurrentFace] = useState(0);
+  // Face shown for double-faced cards. A pick only counts for the card /
+  // pinned face it was made on — a new card starts at its pinned face or 0.
+  const faceKey = `${card?.id}|${pinned ? 1 : 0}|${pinnedFaceIndex}`;
+  const [facePick, setFacePick] = useState({ key: null, face: 0 });
+  const currentFace = facePick.key === faceKey
+    ? facePick.face
+    : (pinned && pinnedFaceIndex != null ? pinnedFaceIndex : 0);
+  const setCurrentFace = (updater) => setFacePick({
+    key: faceKey,
+    face: typeof updater === 'function' ? updater(currentFace) : updater,
+  });
   // Card id whose full tag list is expanded (collapses again on the next card).
   const [tagsExpandedFor, setTagsExpandedFor] = useState(null);
 
@@ -118,15 +128,6 @@ export default function CardPreview({
   useEffect(() => {
     if (card && onToggleTag && tagStatus === 'idle') onLoadTags?.();
   }, [card, onToggleTag, tagStatus, onLoadTags]);
-
-  // Reset / sync currentFace when the card changes or a face is explicitly pinned
-  useEffect(() => {
-    if (pinned && pinnedFaceIndex != null) {
-      setCurrentFace(pinnedFaceIndex);
-    } else {
-      setCurrentFace(0);
-    }
-  }, [card?.id, pinned, pinnedFaceIndex]);
 
   if (!card) return <EmptyPreview />;
 

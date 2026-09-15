@@ -1,4 +1,4 @@
-import { useSettings } from '../context/SettingsContext';
+import { useSettings } from '../context/settings';
 import CardItem from './CardItem';
 import './CardList.css';
 
@@ -19,7 +19,7 @@ const COL_OPTS = [
 
 export default function CardList({
   cards, loading, error, hasMore, onLoadMore, onAddCard, onAddSideCard, onAddIdeasCard, deck,
-  onHoverCard, onPinCard, pinnedCard,
+  onHoverCard, onPinCard,
   viewMode, setViewMode,
   isFavorite, onToggleFavorite,
   getOwnedQty, onIncOwned, onDecOwned,

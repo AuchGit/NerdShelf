@@ -24,7 +24,7 @@ export default function JoinMatchPanel({
   onJoin,
   onCancel,
 }) {
-  const [code, setCode] = useState(presetCode || '');
+  const [code, setCode] = useState(presetCode ? normaliseCode(presetCode) : '');
   const [name, setName] = useState(defaultName);
   const [color, setColor] = useState('blue');
   const [deck, setDeck] = useState(null);   // { id, name } | null
@@ -33,10 +33,13 @@ export default function JoinMatchPanel({
   const [lookupErr, setLookupErr] = useState(null);
   const [lookupBusy, setLookupBusy] = useState(false);
 
-  // Pre-fill the join code from the URL if the user landed via a share link.
-  useEffect(() => {
+  // Pre-fill the join code from the URL if the user landed via a share link
+  // (and again if that link changes while the panel stays mounted).
+  const [syncedPreset, setSyncedPreset] = useState(presetCode);
+  if (presetCode !== syncedPreset) {
+    setSyncedPreset(presetCode);
     if (presetCode) setCode(normaliseCode(presetCode));
-  }, [presetCode]);
+  }
 
   // Load the user's decks so they can pick one to bring to the table. We
   // request only the fields we actually display — no need to pull the full

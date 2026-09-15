@@ -236,12 +236,6 @@ function analyzeStructure(mainboard, analysis) {
   };
 }
 
-const RAMP_SCALING_MULTIPLIERS = {
-  mild:   0.6,
-  medium: 1.0,
-  strong: 1.6,
-};
-
 /**
  * Land-Equivalent (LEQ) production from non-land sources. Each LEQ unit is
  * one land we can drop without losing colored-mana access. Subtracted from
@@ -578,47 +572,6 @@ const FIXING_LANDS = [
   { name: 'Zagoth Triome',        tapped: true, priceTier: 3, priceEur: 6.00, fixesAny: false, fixes: ['B','G','U'],         etbValue: 0.40 },
 ];
 
-/** Allocate `slots` across the FIXING_LANDS catalog. Picks deterministic
- *  by (priority desc, name asc), full-fills the top candidate up to its cap
- *  before moving on. Singleton when `isCommander`. */
-function allocateFixingLands(slots, deckColors, sliders, isCommander, ctx = {}) {
-  if (slots <= 0) return new Map();
-  const usedColors = new Set(deckColors);
-  const exclude = ctx.excludeNames instanceof Set ? ctx.excludeNames : null;
-  const candidates = FIXING_LANDS.filter(l =>
-    (!exclude || !exclude.has(l.name))
-    && (l.fixesAny || l.fixes.every(c => usedColors.has(c)))
-  );
-  if (candidates.length === 0) return new Map();
-
-  const tapMul = ctx.tappedPenaltyMul ?? 1.0;
-  const tappedTempoPenalty = Math.max(0, sliders.tempo + sliders.earlyGame * 0.5 - 0.55) * tapMul;
-  const scored = candidates.map(l => {
-    const colorRelevance = l.fixesAny
-      ? Math.min(deckColors.length || 1, 5)
-      : l.fixes.filter(c => usedColors.has(c)).length;
-    const budgetPenalty = (l.priceTier ?? 0) * 0.18 * (1 - sliders.greed * 0.4);
-    const tappedPen = l.tapped ? tappedTempoPenalty : 0;
-    const priority = colorRelevance + (l.etbValue ?? 0) - tappedPen - budgetPenalty;
-    return { land: l, priority };
-  });
-  scored.sort((a, b) =>
-    b.priority - a.priority || a.land.name.localeCompare(b.land.name)
-  );
-
-  const cap = isCommander ? 1 : 4;
-  const result = new Map();
-  let remaining = slots;
-  for (let i = 0; i < scored.length && remaining > 0; i++) {
-    const take = Math.min(cap, remaining);
-    if (take > 0) {
-      result.set(scored[i].land.name, take);
-      remaining -= take;
-    }
-  }
-  return result;
-}
-
 function findFixingLand(name) {
   return FIXING_LANDS.find(l => l.name === name) || null;
 }
@@ -745,8 +698,6 @@ function resolveUtilityName(rawInput) {
 // proximity. The only true hard filter is the `basics` constraint, which
 // represents the explicit "no duals" extreme.
 
-const TIER_DECAY = 0.55;          // mild, NOT steep
-const TIER2_FLOOR_OFFSET = 0.05;  // T2 weight never sits below T1's
 
 const CONSTRAINT_OPTIMAL_TIER = {
   basics: -1,    // sentinel: extreme constraint disables duals entirely
@@ -992,62 +943,6 @@ function tapToleranceFromSignals(signals, utilityCount) {
   // remaining slots.
   tol += Math.min(0.50, (utilityCount || 0) * 0.05);
   return Math.max(0.4, Math.min(1.4, tol));
-}
-
-/**
- * Allocate `count` dual-land slots for one color pair across its tier
- * options. Deterministic: largest fractional remainder breaks ties.
- *
- *   weight(land) = -|tier - optimalTier| * decay  - tappedPenalty + greedBonus
- *
- * Painland (T2) rule: in any non-`basics` constraint, T2 weight is lifted
- * to at least T1's so it never gets fully penalized below tier 1.
- */
-function pairAllocation(options, count, sliders, constraintKey, ctxOverrides = {}) {
-  if (count <= 0 || !options || options.length === 0) return new Map();
-  if (constraintKey === 'basics') return new Map();
-
-  const optimalTier = optimalTierFor(constraintKey, sliders);
-  const ctx = { optimalTier, tappedPenaltyMul: 1.0, ...ctxOverrides };
-
-  const scored = options.map(opt => ({
-    opt,
-    w: scoreLand(opt, sliders, ctx),
-  }));
-
-  // T2 floor: never below T1 in normal modes.
-  const t1 = scored.find(x => x.opt.priceTier === 1);
-  const t2 = scored.find(x => x.opt.priceTier === 2);
-  if (t1 && t2 && t2.w < t1.w + TIER2_FLOOR_OFFSET) {
-    t2.w = t1.w + TIER2_FLOOR_OFFSET;
-  }
-
-  // Soft, never zero — keeps every tier viable. Subtract minW so the
-  // strongest option dominates without fully zeroing out the others.
-  const minW = Math.min(...scored.map(x => x.w));
-  const shifted = scored.map(x => ({ name: x.opt.name, w: (x.w - minW) + 0.05 }));
-  const total = shifted.reduce((s, x) => s + x.w, 0);
-
-  // Floor-then-largest-remainder allocation (deterministic).
-  const fractions = shifted.map(x => ({ name: x.name, raw: count * x.w / total }));
-  const result = new Map();
-  let remaining = count;
-  for (const f of fractions) {
-    const floored = Math.floor(f.raw);
-    if (floored > 0) result.set(f.name, floored);
-    remaining -= floored;
-  }
-  if (remaining > 0) {
-    const remainders = fractions
-      .map(f => ({ name: f.name, frac: f.raw - Math.floor(f.raw) }))
-      .sort((a, b) => b.frac - a.frac || a.name.localeCompare(b.name));
-    for (let i = 0; i < remainders.length && remaining > 0; i++) {
-      const k = remainders[i].name;
-      result.set(k, (result.get(k) || 0) + 1);
-      remaining--;
-    }
-  }
-  return result;
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -1495,15 +1390,6 @@ export function suggestLands(mainboard, options = {}) {
         return compressed * diminish + stickinessBonus;
       }
 
-      function premiumCountIn(groupAlloc, members) {
-        let n = 0;
-        for (const [name, cnt] of groupAlloc) {
-          const m = members.find(x => x.cand.name === name);
-          if (m && m.tier === 3) n += cnt;
-        }
-        return n;
-      }
-
       // Softmax-based fractional slot allocation (deterministic).
       //
       // Replaces the previous greedy slot-by-slot picking. For each
@@ -1604,13 +1490,6 @@ export function suggestLands(mainboard, options = {}) {
           result.set(g.key, groupAlloc);
         }
         return result;
-      }
-
-      // Clone allocation map (deep, deterministic).
-      function cloneAlloc(alloc) {
-        const copy = new Map();
-        for (const [k, v] of alloc) copy.set(k, new Map(v));
-        return copy;
       }
 
       // ── Precomputed swap-list traversal ────────────────────
@@ -2079,7 +1958,6 @@ function buildCostReport(breakdown, utilityAlloc, fixingAlloc) {
   const merged = new Map();
   for (const [name, count] of Object.entries(breakdown || {})) {
     if (merged.has(name)) {
-      // eslint-disable-next-line no-console
       console.warn(`[landSuggestion] duplicate breakdown entry for "${name}" — merging counts.`);
       merged.set(name, merged.get(name) + count);
     } else {
@@ -2174,10 +2052,10 @@ function describeStrongestSignal(sliders) {
 
 function formatResult({
   totalLands, breakdown,
-  analysis, structure, signals, perColor,
+  analysis, structure, perColor,
   isCommander, targetDeckSize,
   archetype, constraint, sliders,
-  minSourcesPerColor, rampImpact, engineAdjustment = 0,
+  minSourcesPerColor,
   landBreakdown = null, archetypeDelta = 0, colorSourceTargets = null,
   colorTargetMeta = null, boostedColors = [],
   utilityAlloc = new Map(), utilityRequested = 0, utilityResolved = [],

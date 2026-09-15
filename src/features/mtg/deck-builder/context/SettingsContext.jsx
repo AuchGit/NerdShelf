@@ -1,25 +1,12 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { SettingsContext } from './settings';
 
-const SettingsContext = createContext(null);
-
-export const CARD_SIZES = {
-  small:  { label: 'Small',  minWidth: '110px' },
-  medium: { label: 'Medium', minWidth: '150px' },
-  large:  { label: 'Large',  minWidth: '195px' },
-};
-
-export const COLS_OPTIONS = [
-  { value: 'auto', label: 'Auto' },
-  { value: 2,      label: '2' },
-  { value: 3,      label: '3' },
-  { value: 4,      label: '4' },
-  { value: 5,      label: '5' },
-  { value: 6,      label: '6' },
-];
-
+// Per-device display preferences (localStorage), not shared deck state.
 const DEFAULTS = {
-  cardSize:   'medium',  // 'small' | 'medium' | 'large'
-  cardsPerRow: 'auto',  // 'auto' | 2..6
+  cardSize:     'medium', // 'small' | 'medium' | 'large'
+  cardsPerRow:  'auto',   // 'auto' | 2..6
+  deckListSort: 'type',   // sort of the ◉ decklist view (see services/deckOrganize)
+  deckListSort2: '',      // optional second level ('' = none)
 };
 
 export function SettingsProvider({ children }) {
@@ -45,8 +32,4 @@ export function SettingsProvider({ children }) {
       {children}
     </SettingsContext.Provider>
   );
-}
-
-export function useSettings() {
-  return useContext(SettingsContext);
 }

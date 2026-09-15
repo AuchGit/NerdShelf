@@ -28,7 +28,7 @@
 import { useState } from 'react';
 import { ActionSheet } from '../../../../shared/ui';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings } from '../context/settings';
 import MtgDeckViewerMobile from './MtgDeckViewerMobile';
 import './MtgDeckBuilderMobile.css';
 
@@ -206,6 +206,7 @@ export default function MtgDeckBuilderMobile({
       sideboard={viewDeck?.sideboard}
       ideas={viewDeck?.ideas}
       commander={viewDeck?.commander}
+      tokens={viewDeck?.tokens}
     />
   );
 

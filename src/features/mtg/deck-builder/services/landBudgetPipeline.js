@@ -49,7 +49,6 @@ import {
   BASIC_PRICE_EUR_EXPORT as BASIC_PRICE_EUR,
   pairKeyOf as pairKey,
   findLandMetaExt as findLandMeta,
-  buildCostReportExt as buildCostReport,
   analyzeStructureExt as analyzeStructure,
   deriveBaseLandCountExt as deriveBaseLandCount,
   deriveTargetsExt as deriveTargets,
@@ -64,15 +63,6 @@ const BASIC_NAMES = new Set([
   ...Object.values(COLOR_TO_BASIC),
   'Wastes',
 ]);
-
-const ALL_CATALOG_NAMES = (() => {
-  const set = new Set();
-  for (const opts of Object.values(LAND_CATALOG)) for (const o of opts) set.add(o.name);
-  for (const o of FIXING_LANDS) set.add(o.name);
-  for (const c of COLORS) set.add(COLOR_TO_BASIC[c]);
-  set.add('Wastes');
-  return set;
-})();
 
 // ────────────────────────────────────────────────────────────────────────
 // 1. EXISTING-LAND DETECTION
@@ -663,7 +653,7 @@ function buildIdealAllocation({
   if (slotsAvailable > 0 && slotsAvailable < landTarget) landTarget = slotsAvailable;
 
   // Slider knobs (basics-vs-duals split + per-color floor).
-  const { dualPct, minSourcesPerColor } = deriveTargets(sliders, signals);
+  const { dualPct } = deriveTargets(sliders, signals);
 
   // Color source targets (used for explanation / diagnostics).
   const colorSourceTargets = {};
@@ -902,7 +892,7 @@ function buildLivePricedCost(breakdown, ctx) {
     // Price source priority for utility lands: their own card's
     // Scryfall eur (we captured it in `utilityCardPrice`). For
     // everything else: live cached price → fall back to catalog.
-    let unit = null;
+    let unit;
     if (category === 'utility' && utilityCardPrice && utilityCardPrice.has(name)) {
       unit = utilityCardPrice.get(name);
     } else {
@@ -1058,7 +1048,7 @@ function categorise(breakdown) {
 
 /** Build the short human-readable summary line shown above the breakdown. */
 function buildExplanation({
-  analysis, structure, ideal, sliders, applied, finalCost, targetDeckSize, existing, budget, score,
+  analysis, ideal, sliders, applied, finalCost, targetDeckSize, existing, budget, score,
 }) {
   const colorList = analysis.colorsUsed.length > 0 ? analysis.colorsUsed.join('') : 'farbloses';
   const sizeText = `${targetDeckSize}-Karten`;
@@ -1103,7 +1093,7 @@ function buildExplanation({
 // the per-component breakdown so the UI can show what costs points.
 
 export function scoreManabase(breakdown, ctx) {
-  const { analysis, sliders, isCommander, perColor, colorSourceTargets } = ctx;
+  const { analysis, sliders, perColor, colorSourceTargets } = ctx;
   const colorsUsed = analysis.colorsUsed || [];
   const numColors = colorsUsed.length;
 
@@ -1273,12 +1263,3 @@ function recomputePerColor(breakdown) {
   return counts;
 }
 
-/** Replace the trailing "Mana-Basis ≈ X.YY €." sentence in the
- *  pre-budget explanation with the post-swap cost so the modal's text
- *  summary stays accurate. */
-function rewriteCostTail(text, totalEur) {
-  if (!text) return text;
-  const re = /Mana-Basis ≈ [^.]*\./;
-  const replacement = `Mana-Basis ≈ ${totalEur.toFixed(2)} €.`;
-  return re.test(text) ? text.replace(re, replacement) : `${text} ${replacement}`;
-}

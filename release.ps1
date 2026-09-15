@@ -77,6 +77,14 @@ if ($LASTEXITCODE -ne 0) {
     Read-Host "Enter druecken"
     exit 1
 }
+
+# Cardmarket-Zuordnung fuer den MTG-Export auffrischen. Nicht kritisch: ohne
+# Netz bleibt die zuletzt eingecheckte public/data/mtg/cardmarket.json im Release.
+Write-Host "[data] mtg:cardmarket ..." -ForegroundColor Cyan
+node scripts/mtg-cardmarket-map.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Cardmarket-Zuordnung nicht aktualisiert - vorhandene Datei bleibt." -ForegroundColor Yellow
+}
 Write-Host ""
 
 $confirm = Read-Host "Release v$new? (j/n)"

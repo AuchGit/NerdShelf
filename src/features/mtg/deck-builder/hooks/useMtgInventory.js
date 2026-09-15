@@ -11,7 +11,7 @@
 //
 // See scripts/split-nerdshelf-tables.sql for the table shape.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useInventory } from '../../../../shared/inventory';
 import { fetchCardsByIds } from '../services/scryfallCollection';
 
@@ -21,18 +21,19 @@ export function useMtgInventory() {
   // Full-card cache and the resolved list used by the deck-builder when
   // showing "owned cards only". `null` means "not loaded yet" — flipping
   // to an array (even an empty one) means the bulk fetch is done.
-  const [ownedCards, setOwnedCards] = useState(null);
   const [ownedCardsLoading, setOwnedCardsLoading] = useState(false);
   const [ownedCardsError, setOwnedCardsError] = useState(null);
   const cacheRef = useRef(new Map()); // id -> card
 
-  // Whenever the owned-id set changes (add/remove from collection),
-  // invalidate the resolved list so the next consumer triggers a refresh.
+  // The resolved list is tied to the owned-id set it was built from. When
+  // the collection changes (add/remove), it reads as `null` again so the
+  // next consumer triggers a refresh.
   const ownedIdsKey = useMemo(
     () => [...core.quantities.keys()].sort().join('|'),
     [core.quantities]
   );
-  useEffect(() => { setOwnedCards(null); }, [ownedIdsKey]);
+  const [resolved, setResolved] = useState({ key: null, cards: null });
+  const ownedCards = resolved.key === ownedIdsKey ? resolved.cards : null;
 
   /**
    * Resolve every owned id to its full Scryfall card object. Idempotent —
@@ -41,10 +42,11 @@ export function useMtgInventory() {
    */
   const loadOwnedCards = useCallback(async () => {
     const ids = [...core.quantities.keys()];
+    const key = [...ids].sort().join('|');
     const missing = ids.filter(id => !cacheRef.current.has(id));
     if (missing.length === 0) {
       const arr = ids.map(id => cacheRef.current.get(id)).filter(Boolean);
-      setOwnedCards(arr);
+      setResolved({ key, cards: arr });
       return;
     }
     setOwnedCardsLoading(true);
@@ -53,7 +55,7 @@ export function useMtgInventory() {
       const fetched = await fetchCardsByIds(missing);
       for (const c of fetched) cacheRef.current.set(c.id, c);
       const arr = ids.map(id => cacheRef.current.get(id)).filter(Boolean);
-      setOwnedCards(arr);
+      setResolved({ key, cards: arr });
     } catch (e) {
       setOwnedCardsError(e.message);
     } finally {

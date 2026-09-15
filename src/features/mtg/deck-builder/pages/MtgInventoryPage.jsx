@@ -21,6 +21,8 @@ import { getCardPriceEur, formatEur } from '../services/scryfall';
 import MtgSubNav from '../components/MtgSubNav';
 import InventoryImportModal from '../components/InventoryImportModal';
 
+const NO_CARDS = {};
+
 export default function MtgInventoryPage() {
   const navigate = useNavigate();
   const inv = useMtgInventory();
@@ -30,9 +32,11 @@ export default function MtgInventoryPage() {
   const [showImport, setShowImport] = useState(false);
 
   const ownedIds = useMemo(() => [...inv.quantities.keys()], [inv.quantities]);
+  // Nothing owned → nothing to resolve; no fetch, no state write.
+  const shownCards = ownedIds.length === 0 ? NO_CARDS : cards;
 
   useEffect(() => {
-    if (ownedIds.length === 0) { setCards({}); return; }
+    if (ownedIds.length === 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -51,14 +55,14 @@ export default function MtgInventoryPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return ownedIds
-      .map(id => ({ id, card: cards?.[id] || null, qty: inv.getQuantity(id) }))
+      .map(id => ({ id, card: shownCards?.[id] || null, qty: inv.getQuantity(id) }))
       .filter(r => {
         if (!q) return true;
         const name = (r.card?.name || '').toLowerCase();
         return name.includes(q) || r.id.includes(q);
       })
       .sort((a, b) => (a.card?.name || a.id).localeCompare(b.card?.name || b.id));
-  }, [ownedIds, cards, inv, query]);
+  }, [ownedIds, shownCards, inv, query]);
 
   const totalOwned = useMemo(() => {
     let n = 0;
@@ -71,14 +75,14 @@ export default function MtgInventoryPage() {
   // price — partially-loaded inventories show a smaller number until the
   // background fetch finishes.
   const totalEur = useMemo(() => {
-    if (!cards) return 0;
+    if (!shownCards) return 0;
     let sum = 0;
     for (const [id, qty] of inv.quantities) {
-      const price = getCardPriceEur(cards[id]);
+      const price = getCardPriceEur(shownCards[id]);
       if (price != null) sum += price * qty;
     }
     return sum;
-  }, [cards, inv.quantities]);
+  }, [shownCards, inv.quantities]);
 
   return (
     <>

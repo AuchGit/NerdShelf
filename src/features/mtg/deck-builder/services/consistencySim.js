@@ -98,12 +98,10 @@ function canCast(card, lands) {
 
   const single = { W: 0, U: 0, B: 0, R: 0, G: 0 };
   const duals = [];
-  let colorless = 0;
   for (const land of lands) {
     const produces = landProducesColors(land);
-    if (produces.length === 0) colorless += 1;
-    else if (produces.length === 1) single[produces[0]] += 1;
-    else duals.push(produces);
+    if (produces.length === 1) single[produces[0]] += 1;
+    else if (produces.length > 1) duals.push(produces);
   }
 
   const remaining = { ...colored };
@@ -196,12 +194,10 @@ function evaluateRule(rule, ctx) {
 
       const single = { W: 0, U: 0, B: 0, R: 0, G: 0 };
       const duals = [];
-      let any = 0;
       for (const l of lands) {
         const p = landProducesColors(l);
-        if (p.length === 0) any += 1;
-        else if (p.length === 1) single[p[0]] += 1;
-        else duals.push(p);
+        if (p.length === 1) single[p[0]] += 1;
+        else if (p.length > 1) duals.push(p);
       }
 
       const need = {};
@@ -349,8 +345,8 @@ export function simulateHand(deck, options = {}) {
   } = options;
 
   let mulligans = 0;
-  let dealtHand = [];
-  let library = [];
+  let dealtHand;
+  let library;
 
   while (true) {
     const cards = deck.slice();

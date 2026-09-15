@@ -3,7 +3,7 @@
 // Auto-computed "Wishlist" — the list of MTG cards the user needs but
 // doesn't have enough copies of, derived from:
 //
-//   Σ deck-quantity(card) − inventory-quantity(card)
+//   Σ deck-quantity(card) − owned copies(card)
 //
 // across every deck the user owns. The list is reactive: it updates as
 // the user adjusts inventory or saves a deck.
@@ -14,10 +14,10 @@
 //     table, no schema migration. The single source of truth is the deck
 //     contents + inventory hooks that already exist.
 //
-//   - Foil tracking lives in the canonical inventory row's quantity (one
-//     row per (user_id, domain, item_id)) — the wishlist treats foils
-//     and non-foils as interchangeable for needs calculation. Future
-//     foil-aware bookkeeping can layer on without changing this hook.
+//   - Owned copies (services/ownedCopies.js): without a fixed artwork any
+//     printing of the card in the collection counts; with a fixed artwork
+//     only that exact printing does — so the wishlist and the Cardmarket
+//     export ask for the artwork the deck wants.
 //
 //   - Manual entries (a card the user wants but isn't yet in a deck) are
 //     persisted to `mtg_inventory` under kind='wishlist-manual' so they
@@ -29,11 +29,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../../core/supabase/client';
 import { useAuth } from '../../../../core/auth/AuthContext';
 import { useMtgInventory } from './useMtgInventory';
-import { applyPrinting, allocateOwned } from '../services/deckPrintings';
+import { applyPrinting } from '../services/deckPrintings';
+import {
+  buildOwnedIndex, ownedCopiesOf, allocateOwnedCopies, totalCopies,
+} from '../services/ownedCopies';
 import { getCardPriceEur } from '../services/scryfall';
 
 const TABLE = 'mtg_inventory';
 const MANUAL_KIND = 'wishlist-manual';
+const NO_ROWS = [];
 
 /**
  * @param {object} opts
@@ -43,15 +47,20 @@ const MANUAL_KIND = 'wishlist-manual';
 export function useMtgWishlist(opts = {}) {
   const { includeSideboard = true, includeCommander = true } = opts;
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const inv = useMtgInventory();
-  const [decks, setDecks] = useState([]);
+  // Loaded rows belong to the user they were loaded for.
+  const [deckState, setDeckState] = useState({ userId: null, rows: NO_ROWS });
   const [loadingDecks, setLoadingDecks] = useState(true);
   const [error, setError] = useState(null);
-  const [manualRows, setManualRows] = useState([]); // {card_id, label, quantity}
+  const [manualState, setManualState] = useState({ userId: null, rows: NO_ROWS }); // rows: {cardId, label, quantity}
+
+  const decks = userId && deckState.userId === userId ? deckState.rows : NO_ROWS;
+  const manualRows = userId && manualState.userId === userId ? manualState.rows : NO_ROWS;
 
   /* ─── load decks ─── */
   useEffect(() => {
-    if (!user) { setDecks([]); setLoadingDecks(false); return; }
+    if (!user) return;
     let cancelled = false;
     (async () => {
       setLoadingDecks(true);
@@ -61,7 +70,7 @@ export function useMtgWishlist(opts = {}) {
         .eq('user_id', user.id);
       if (cancelled) return;
       if (err) { setError(err.message); setLoadingDecks(false); return; }
-      setDecks(data || []);
+      setDeckState({ userId: user.id, rows: data || [] });
       setLoadingDecks(false);
     })();
     return () => { cancelled = true; };
@@ -69,7 +78,7 @@ export function useMtgWishlist(opts = {}) {
 
   /* ─── load manual wishlist entries ─── */
   useEffect(() => {
-    if (!user) { setManualRows([]); return; }
+    if (!user) return;
     let cancelled = false;
     (async () => {
       const { data, error: err } = await supabase
@@ -79,12 +88,27 @@ export function useMtgWishlist(opts = {}) {
         .eq('kind', MANUAL_KIND);
       if (cancelled) return;
       if (err) { /* table-missing soft-degrades */ return; }
-      setManualRows((data || []).map(r => ({
-        cardId: r.item_id, label: r.item_label || '', quantity: r.quantity,
-      })));
+      setManualState({
+        userId: user.id,
+        rows: (data || []).map(r => ({
+          cardId: r.item_id, label: r.item_label || '', quantity: r.quantity,
+        })),
+      });
     })();
     return () => { cancelled = true; };
   }, [user]);
+
+  const updateManualRows = useCallback((fn) => {
+    setManualState(prev => ({
+      userId,
+      rows: fn(prev.userId === userId ? prev.rows : NO_ROWS),
+    }));
+  }, [userId]);
+
+  const ownedIndex = useMemo(
+    () => buildOwnedIndex(inv.quantities, inv.labels),
+    [inv.quantities, inv.labels]
+  );
 
   /* ─── compute the wishlist ─── */
   const wishlist = useMemo(() => {
@@ -126,34 +150,32 @@ export function useMtgWishlist(opts = {}) {
       }
     }
 
-    // 2. Subtract inventory, retain anything still > 0.
+    // 2. Take owned copies off, retain anything still missing.
     const auto = [];
     for (const [cardId, row] of need) {
-      const owned = inv.getQuantity(cardId);
-      const missing = row.count - owned;
-      if (missing > 0) {
-        // Owned copies aren't tracked per artwork — they cover demand
-        // without a fixed artwork first (see allocateOwned).
-        const remaining = allocateOwned(row.parts, owned);
-        const chosen = remaining.filter(p => p.printing);
-        const single = remaining.length === 1 && chosen.length === 1 ? chosen[0].printing : null;
-        let missingEur = null;
-        for (const p of remaining) {
-          const eur = getCardPriceEur(applyPrinting(row.card, p.printing));
-          if (eur != null) missingEur = (missingEur ?? 0) + eur * p.count;
-        }
-        auto.push({
-          cardId,
-          card: single ? applyPrinting(row.card, single) : row.card,
-          neededTotal: row.count,
-          owned,
-          missing,
-          missingEur,
-          printings: chosen,
-          sources: row.sources,
-          kind: 'auto',
-        });
+      const copies = ownedCopiesOf(ownedIndex, cardId, row.card?.name);
+      const remaining = allocateOwnedCopies(row.parts, copies);
+      const missing = remaining.reduce((s, p) => s + p.count, 0);
+      if (missing <= 0) continue;
+      const chosen = remaining.filter(p => p.printing);
+      const single = remaining.length === 1 && chosen.length === 1 ? chosen[0].printing : null;
+      let missingEur = null;
+      for (const p of remaining) {
+        const eur = getCardPriceEur(applyPrinting(row.card, p.printing));
+        if (eur != null) missingEur = (missingEur ?? 0) + eur * p.count;
       }
+      auto.push({
+        cardId,
+        card: single ? applyPrinting(row.card, single) : row.card,
+        neededTotal: row.count,
+        owned: totalCopies(copies),
+        missing,
+        missingEur,
+        printings: chosen,
+        parts: remaining,
+        sources: row.sources,
+        kind: 'auto',
+      });
     }
     auto.sort((a, b) =>
       b.missing - a.missing ||
@@ -164,24 +186,27 @@ export function useMtgWishlist(opts = {}) {
     const autoIds = new Set(auto.map(a => a.cardId));
     const manual = manualRows
       .filter(m => !autoIds.has(m.cardId))
-      .map(m => ({
-        cardId: m.cardId,
-        card: null,                      // manual entries store label-only by default
-        label: m.label,
-        neededTotal: m.quantity,
-        owned: inv.getQuantity(m.cardId),
-        missing: Math.max(0, m.quantity - inv.getQuantity(m.cardId)),
-        sources: [],
-        kind: 'manual',
-      }));
+      .map(m => {
+        const owned = totalCopies(ownedCopiesOf(ownedIndex, m.cardId, m.label));
+        return {
+          cardId: m.cardId,
+          card: null,                    // manual entries store label-only by default
+          label: m.label,
+          neededTotal: m.quantity,
+          owned,
+          missing: Math.max(0, m.quantity - owned),
+          sources: [],
+          kind: 'manual',
+        };
+      });
 
     return [...auto, ...manual];
-  }, [decks, inv, manualRows, includeSideboard, includeCommander]);
+  }, [decks, ownedIndex, manualRows, includeSideboard, includeCommander]);
 
   /* ─── manual API ─── */
   const addManual = useCallback(async (card, quantity = 1) => {
     if (!user || !card?.id) return;
-    setManualRows(rows => {
+    updateManualRows(rows => {
       const existing = rows.find(r => r.cardId === card.id);
       if (existing) {
         return rows.map(r => r.cardId === card.id
@@ -201,23 +226,24 @@ export function useMtgWishlist(opts = {}) {
         item_label: card.name || '', quantity,
       });
     }
-  }, [user, manualRows]);
+  }, [user, manualRows, updateManualRows]);
 
   const removeManual = useCallback(async (cardId) => {
     if (!user) return;
-    setManualRows(rows => rows.filter(r => r.cardId !== cardId));
+    updateManualRows(rows => rows.filter(r => r.cardId !== cardId));
     await supabase.from(TABLE).delete()
       .eq('user_id', user.id).eq('kind', MANUAL_KIND).eq('item_id', cardId);
-  }, [user]);
+  }, [user, updateManualRows]);
 
   return {
     wishlist,
     autoCount: wishlist.filter(w => w.kind === 'auto').length,
     manualCount: wishlist.filter(w => w.kind === 'manual').length,
     totalMissing: wishlist.reduce((s, w) => s + w.missing, 0),
-    loading: loadingDecks || inv.loading,
+    loading: (user ? loadingDecks : false) || inv.loading,
     error: error || inv.error,
     decks,
+    ownedIndex,
     addManual,
     removeManual,
   };

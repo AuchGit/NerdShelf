@@ -1,15 +1,18 @@
 // src/features/mtg/deck-builder/pwa/MtgDeckViewerMobile.jsx
 //
 // Read-only deck viewer for phones — the "Ansehen" tab of the mobile deck
-// builder. Nothing here edits the deck: switch zone, pick a sort order,
-// flip between a card grid and a compact list, and tap a card to see it
-// full-screen (swipe or arrows to step through the deck in sort order).
+// builder and the shared-deck page on phones. Nothing here edits the deck:
+// switch zone, pick a sort order, flip between a card grid and a compact
+// list, and tap a card to see it full-screen. The full-screen view is a
+// carousel: the neighbour cards are already rendered (images preloaded),
+// the track follows the finger and slides on release, so stepping through
+// the deck never re-mounts or flashes.
 //
 // Receives display zones that already carry the deck's chosen artwork.
 // Sort / layout / column count are per-device display preferences and
 // live in localStorage.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ManaSymbol from '../components/ManaSymbol';
 import {
   getCardImage, getCardFaces, getCardLayout, getManaCost, parseManaCost,
@@ -27,10 +30,10 @@ const SORTS = [
   { id: 'rarity', label: 'Seltenheit' },
   { id: 'price',  label: 'Preis' },
 ];
-const COLS = [2, 3, 4];
+const COLS = [1, 2, 3, 4];
 
-const PREFS_KEY = 'mtg-mobile-viewer';
-const DEFAULT_PREFS = { sort: 'type', layout: 'grid', cols: 3 };
+const PREFS_KEY = 'mtg-mobile-viewer:v2';
+const DEFAULT_PREFS = { sort: 'type', sort2: '', layout: 'grid', cols: 2 };
 
 function readPrefs() {
   try {
@@ -47,44 +50,85 @@ const eurOf = (deck) => Object.values(deck).reduce((s, e) => {
   return p != null ? s + p * (e.count || 0) : s;
 }, 0);
 
-export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, commander }) {
+export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, commander, tokens }) {
   const [prefs, setPrefs] = useState(readPrefs);
   const [zoneId, setZoneId] = useState('main');
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [openIndex, setOpenIndex] = useState(null);
 
-  useEffect(() => {
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
-  }, [prefs]);
-  const setPref = (key, value) => setPrefs(p => ({ ...p, [key]: value }));
+  // Only explicit choices are stored, so a changed default still applies.
+  const setPref = (key, value) => {
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
 
   const zones = useMemo(() => [
     { id: 'main',  label: 'Mainboard', deck: mainboard || {} },
     { id: 'side',  label: 'Sideboard', deck: sideboard || {} },
     { id: 'ideas', label: 'Ideen',     deck: ideas || {} },
-  ].map(z => ({ ...z, count: countOf(z.deck), eur: eurOf(z.deck) })), [mainboard, sideboard, ideas]);
+    // Tokens set to 0 ("don't buy") aren't shown.
+    { id: 'tokens', label: 'Tokens',   deck: Object.fromEntries(Object.entries(tokens || {}).filter(([, e]) => e.count > 0)) },
+  ].map(z => ({ ...z, count: countOf(z.deck), eur: eurOf(z.deck) })), [mainboard, sideboard, ideas, tokens]);
 
   const zone = zones.find(z => z.id === zoneId) || zones[0];
   const withCommander = zone.id === 'main' && !!commander;
+  const sort2 = prefs.sort2 && prefs.sort2 !== prefs.sort ? prefs.sort2 : '';
 
   const groups = useMemo(() => {
-    const organized = organizeDeck(zone.deck, prefs.sort);
+    const organized = organizeDeck(zone.deck, prefs.sort, sort2 || null);
     const all = withCommander
       ? [{ groupLabel: 'Commander', groupCount: 1, entries: [{ card: commander, count: 1 }] }, ...organized]
       : organized;
-    // `start` = index of the group's first card in the flat order below.
+    // `start` = index of the group's (and each sub-group's) first card in
+    // the flat order used by the full-screen view.
     const starts = [];
     all.forEach((g, i) => starts.push(i === 0 ? 0 : starts[i - 1] + all[i - 1].entries.length));
-    return all.map((g, i) => ({ ...g, start: starts[i] }));
-  }, [zone.deck, prefs.sort, withCommander, commander]);
+    return all.map((g, i) => {
+      if (!g.subgroups) return { ...g, start: starts[i] };
+      const subStarts = [];
+      g.subgroups.forEach((s, j) => subStarts.push(
+        j === 0 ? starts[i] : subStarts[j - 1] + g.subgroups[j - 1].entries.length
+      ));
+      return {
+        ...g,
+        start: starts[i],
+        subgroups: g.subgroups.map((s, j) => ({ ...s, start: subStarts[j] })),
+      };
+    });
+  }, [zone.deck, prefs.sort, sort2, withCommander, commander]);
 
   // Flat order for the full-screen viewer — same order as on screen.
   const flat = useMemo(() => groups.flatMap(g => g.entries), [groups]);
+  // Count badges only where they carry information (not in singleton decks).
+  const showCounts = flat.some(e => e.count > 1);
 
   const zoneEur = zone.eur + (withCommander ? (getCardPriceEur(commander) ?? 0) : 0);
   const zoneCount = zone.count + (withCommander ? 1 : 0);
 
-  const groupKey = (label) => `${zone.id}:${prefs.sort}:${label}`;
+  const groupKey = (label) => `${zone.id}:${prefs.sort}:${sort2}:${label}`;
+
+  const renderEntries = (entries, start) => (prefs.layout === 'grid' ? (
+    <div
+      className={`mdv-grid ${prefs.cols === 1 ? 'is-single' : ''}`}
+      style={{ gridTemplateColumns: `repeat(${prefs.cols}, 1fr)` }}
+    >
+      {entries.map((e, i) => (
+        <GridTile
+          key={e.card.id}
+          entry={e}
+          showCount={showCounts}
+          onOpen={() => setOpenIndex(start + i)}
+        />
+      ))}
+    </div>
+  ) : (
+    <div className="mdv-list">
+      {entries.map((e, i) => (
+        <ListRow key={e.card.id} entry={e} onOpen={() => setOpenIndex(start + i)} />
+      ))}
+    </div>
+  ));
   const toggleGroup = (label) => setCollapsed(prev => {
     const next = new Set(prev);
     const k = groupKey(label);
@@ -112,16 +156,22 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
             ))}
         </div>
 
-        <div className="mdv-sorts" role="group" aria-label="Sortierung">
-          {SORTS.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              className={`mdv-pill ${prefs.sort === s.id ? 'is-active' : ''}`}
-              onClick={() => setPref('sort', s.id)}
-              aria-pressed={prefs.sort === s.id}
-            >{s.label}</button>
-          ))}
+        <div className="mdv-sortrow">
+          <label className="mdv-select">
+            <span>Sortieren</span>
+            <select value={prefs.sort} onChange={(e) => setPref('sort', e.target.value)}>
+              {SORTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
+          <label className="mdv-select">
+            <span>dann nach</span>
+            <select value={sort2} onChange={(e) => setPref('sort2', e.target.value)}>
+              <option value="">–</option>
+              {SORTS.filter(s => s.id !== prefs.sort).map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="mdv-row">
@@ -179,19 +229,17 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
                     <span className="mdv-group-count">{g.groupCount}</span>
                   </button>
                 )}
-                {!isCollapsed && (prefs.layout === 'grid' ? (
-                  <div className="mdv-grid" style={{ gridTemplateColumns: `repeat(${prefs.cols}, 1fr)` }}>
-                    {g.entries.map((e, i) => (
-                      <GridTile key={e.card.id} entry={e} onOpen={() => setOpenIndex(start + i)} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mdv-list">
-                    {g.entries.map((e, i) => (
-                      <ListRow key={e.card.id} entry={e} onOpen={() => setOpenIndex(start + i)} />
-                    ))}
-                  </div>
-                ))}
+                {!isCollapsed && (g.subgroups
+                  ? g.subgroups.map(s => (
+                    <div key={s.label} className="mdv-sub">
+                      <div className="mdv-sub-hdr">
+                        <span>{s.label}</span>
+                        <span className="mdv-group-count">{s.count}</span>
+                      </div>
+                      {renderEntries(s.entries, s.start)}
+                    </div>
+                  ))
+                  : renderEntries(g.entries, start))}
               </section>
             );
           })}
@@ -200,7 +248,6 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
 
       {openIndex != null && flat[openIndex] && (
         <CardLightbox
-          key={flat[openIndex].card.id}
           entries={flat}
           index={openIndex}
           onIndex={setOpenIndex}
@@ -211,7 +258,7 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
   );
 }
 
-function GridTile({ entry, onOpen }) {
+function GridTile({ entry, showCount, onOpen }) {
   const { card, count } = entry;
   const img = getCardImage(card, 'normal');
   return (
@@ -219,7 +266,7 @@ function GridTile({ entry, onOpen }) {
       {img
         ? <img src={img} alt="" loading="lazy" />
         : <span className="mdv-tile-fallback">{card.name}</span>}
-      {count > 1 && <span className="mdv-count">{count}×</span>}
+      {showCount && <span className="mdv-count">{count}×</span>}
     </button>
   );
 }
@@ -245,83 +292,204 @@ function ListRow({ entry, onOpen }) {
   );
 }
 
-function CardLightbox({ entries, index, onIndex, onClose }) {
-  const { card, count } = entries[index];
-  const [face, setFace] = useState(0);
-  const touch = useRef(null);
+// ── Full-screen carousel ──────────────────────────────────────────────
 
+const SLIDE_MS = 220;
+
+function moveTrack(el, px, animate) {
+  if (!el) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  el.style.transition = animate && !reduce
+    ? `transform ${SLIDE_MS}ms cubic-bezier(0.2, 0.7, 0.2, 1)`
+    : 'none';
+  el.style.transform = `translate3d(${px}px, 0, 0)`;
+}
+
+function CardLightbox({ entries, index, onIndex, onClose }) {
+  const stageRef = useRef(null);
+  const trackRef = useRef(null);
+  const dragRef = useRef(null);
+  const pendingRef = useRef({ dir: 0, timer: null });
+  const [faces, setFaces] = useState({}); // card id → shown face (double-faced cards)
+
+  // The index moved: the neighbour slide already sits in the middle of the
+  // re-rendered window, so the track snaps back to 0 without animation.
+  useLayoutEffect(() => {
+    moveTrack(trackRef.current, 0, false);
+  }, [index]);
+
+  useEffect(() => {
+    const pending = pendingRef.current;
+    return () => clearTimeout(pending.timer);
+  }, []);
+
+  const commit = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending.dir) return;
+    const dir = pending.dir;
+    pending.dir = 0;
+    clearTimeout(pending.timer);
+    onIndex(index + dir);
+  }, [index, onIndex]);
+
+  const go = useCallback((dir) => {
+    if (pendingRef.current.dir) return;
+    const target = index + dir;
+    if (target < 0 || target >= entries.length) {
+      moveTrack(trackRef.current, 0, true);
+      return;
+    }
+    const width = stageRef.current?.clientWidth || window.innerWidth;
+    pendingRef.current.dir = dir;
+    moveTrack(trackRef.current, -dir * width, true);
+    // transitionend can be skipped (reduced motion, hidden tab) — commit anyway.
+    pendingRef.current.timer = setTimeout(commit, SLIDE_MS + 80);
+  }, [index, entries.length, commit]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') go(-1);
+      else if (e.key === 'ArrowRight') go(1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go, onClose]);
+
+  const onTouchStart = (e) => {
+    if (pendingRef.current.dir) return;
+    const t = e.touches[0];
+    dragRef.current = { x: t.clientX, y: t.clientY, dx: 0, axis: null, at: Date.now() };
+  };
+  const onTouchMove = (e) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const t = e.touches[0];
+    const dx = t.clientX - drag.x;
+    const dy = t.clientY - drag.y;
+    if (!drag.axis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      drag.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (drag.axis !== 'x') return;
+    // Rubber band at the first / last card.
+    const atEdge = (dx > 0 && index === 0) || (dx < 0 && index === entries.length - 1);
+    drag.dx = atEdge ? dx * 0.3 : dx;
+    moveTrack(trackRef.current, drag.dx, false);
+  };
+  const onTouchEnd = () => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag || drag.axis !== 'x') return;
+    const width = stageRef.current?.clientWidth || window.innerWidth;
+    const speed = Math.abs(drag.dx) / Math.max(1, Date.now() - drag.at);
+    if (Math.abs(drag.dx) > width * 0.2 || (Math.abs(drag.dx) > 30 && speed > 0.5)) {
+      go(drag.dx < 0 ? 1 : -1);
+    } else {
+      moveTrack(trackRef.current, 0, true);
+    }
+  };
+
+  const current = entries[index];
+
+  return (
+    <div className="mdv-lb" role="dialog" aria-modal="true" aria-label={current.card.name}>
+      <div className="mdv-lb-top">
+        <span className="mdv-lb-pos">{index + 1} / {entries.length}</span>
+        <button type="button" className="mdv-lb-btn" onClick={onClose} aria-label="Schließen">✕</button>
+      </div>
+
+      <div
+        className="mdv-lb-stage"
+        ref={stageRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      >
+        <div
+          className="mdv-lb-track"
+          ref={trackRef}
+          onTransitionEnd={(e) => {
+            if (e.target === trackRef.current && e.propertyName === 'transform') commit();
+          }}
+        >
+          {[-1, 0, 1].map(offset => {
+            const entry = entries[index + offset];
+            if (!entry) return null;
+            const id = entry.card.id;
+            return (
+              <LightboxSlide
+                key={id}
+                entry={entry}
+                offset={offset}
+                face={faces[id] || 0}
+                onFlip={() => setFaces(f => ({ ...f, [id]: f[id] ? 0 : 1 }))}
+                onClose={onClose}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mdv-lb-nav">
+        <button type="button" className="mdv-lb-btn" onClick={() => go(-1)} disabled={index === 0} aria-label="Vorherige Karte">‹</button>
+        <button type="button" className="mdv-lb-btn" onClick={() => go(1)} disabled={index === entries.length - 1} aria-label="Nächste Karte">›</button>
+      </div>
+    </div>
+  );
+}
+
+function LightboxSlide({ entry, offset, face, onFlip, onClose }) {
+  const { card, count } = entry;
   const faces = getCardFaces(card);
   const isDouble = getCardLayout(card) === 'double_faced';
   const shown = faces[face] || faces[0];
   const img = shown?.image_uri_large || shown?.image_uri;
   const eur = getCardPriceEur(card);
-
-  const hasPrev = index > 0;
-  const hasNext = index < entries.length - 1;
-  const prev = () => { if (hasPrev) onIndex(index - 1); };
-  const next = () => { if (hasNext) onIndex(index + 1); };
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft' && index > 0) onIndex(index - 1);
-      else if (e.key === 'ArrowRight' && index < entries.length - 1) onIndex(index + 1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [index, entries.length, onIndex, onClose]);
-
-  const onTouchStart = (e) => {
-    const t = e.touches[0];
-    touch.current = { x: t.clientX, y: t.clientY };
-  };
-  const onTouchEnd = (e) => {
-    const start = touch.current;
-    touch.current = null;
-    if (!start) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - start.x;
-    const dy = t.clientY - start.y;
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) next(); else prev();
-  };
-
-  const stop = (e) => e.stopPropagation();
-  const setLabel = printingLabel(card);
+  const syms = parseManaCost(shown?.mana_cost || getManaCost(card));
+  const active = offset === 0;
+  const priceText = eur == null
+    ? null
+    : count > 1 ? `${formatEur(eur)} · ∑ ${formatEur(eur * count)}` : formatEur(eur);
+  const closeOnBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
 
   return (
-    <div className="mdv-lb" role="dialog" aria-modal="true" aria-label={card.name} onClick={onClose}>
-      <div className="mdv-lb-top" onClick={stop}>
-        <span className="mdv-lb-pos">{index + 1} / {entries.length}</span>
-        <button type="button" className="mdv-lb-btn" onClick={onClose} aria-label="Schließen">✕</button>
-      </div>
-
-      <div className="mdv-lb-stage" onClick={stop} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div
+      className="mdv-lb-slide"
+      style={{ transform: `translate3d(${offset * 100}%, 0, 0)` }}
+      aria-hidden={!active}
+      onClick={closeOnBackdrop}
+    >
+      <div className="mdv-lb-card" onClick={closeOnBackdrop}>
         {img
-          ? <img src={img} alt={shown?.name || card.name} className="mdv-lb-img" />
+          ? <img src={img} alt={shown?.name || card.name} className="mdv-lb-img" draggable={false} />
           : <div className="mdv-lb-fallback">{card.name}</div>}
         {isDouble && (
           <button
             type="button"
             className="mdv-lb-btn mdv-lb-flip"
-            onClick={() => setFace(f => (f === 0 ? 1 : 0))}
+            onClick={onFlip}
+            tabIndex={active ? 0 : -1}
             aria-label="Andere Seite zeigen"
           >↻</button>
         )}
       </div>
 
-      <div className="mdv-lb-info" onClick={stop}>
-        <div className="mdv-lb-name">{isDouble ? shown?.name : card.name}</div>
-        <div className="mdv-lb-meta">
-          <span>{count}×</span>
-          {setLabel && <span>{setLabel}</span>}
-          {eur != null && <span>{formatEur(eur)}</span>}
+      <div className="mdv-lb-info">
+        <div className="mdv-lb-titlerow">
+          <span className="mdv-lb-qty" aria-label={`${count} im Deck`}>{count}×</span>
+          <span className="mdv-lb-name">{isDouble ? shown?.name : card.name}</span>
+          {syms.length > 0 && (
+            <span className="mdv-lb-mana">
+              {syms.map((s, i) => <ManaSymbol key={i} symbol={s} size="sm" />)}
+            </span>
+          )}
         </div>
-      </div>
-
-      <div className="mdv-lb-nav" onClick={stop}>
-        <button type="button" className="mdv-lb-btn" onClick={prev} disabled={!hasPrev} aria-label="Vorherige Karte">‹</button>
-        <button type="button" className="mdv-lb-btn" onClick={next} disabled={!hasNext} aria-label="Nächste Karte">›</button>
+        <div className="mdv-lb-sub">{shown?.type_line || card.type_line}</div>
+        <div className="mdv-lb-sub">
+          {[printingLabel(card), priceText].filter(Boolean).join(' · ')}
+        </div>
       </div>
     </div>
   );

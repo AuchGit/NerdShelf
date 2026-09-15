@@ -68,6 +68,8 @@ const FRESH_WINDOW_MS = 3000;
 // 15 s) makes a huge difference at the free-tier connection budget.
 const SAFETY_REFETCH_MS = 60000;
 
+const NO_PLAYERS = [];
+
 /**
  * @param {string|null} matchId
  * @param {string|null} userId
@@ -76,8 +78,10 @@ export default function useMatchSession(matchId, userId) {
   const [match, setMatch] = useState(null);
   const [players, setPlayers] = useState([]);
   const [presence, setPresence] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Loading / error belong to the match they were produced for: a new
+  // matchId reads as "loading, no error" until its own snapshot is in.
+  const [loadedFor, setLoadedFor] = useState(null);
+  const [errorState, setErrorState] = useState({ matchId: null, message: null });
 
   const channelRef       = useRef(null);
   const channelReadyRef  = useRef(false);
@@ -189,16 +193,11 @@ export default function useMatchSession(matchId, userId) {
 
   // ── Initial fetch + channel subscription ─────────────
   useEffect(() => {
-    if (!matchId) {
-      writePlayers([]);
-      setMatch(null); setLoading(false);
-      return undefined;
-    }
+    // No match → the hook reports an empty session (derived below).
+    if (!matchId) return undefined;
     let cancelled = false;
     let channel = null;
     let safetyTimer = null;
-    setLoading(true);
-    setError(null);
     freshRef.current = new Map();
     lastBroadcastTsRef.current = new Map();
     everSubscribedRef.current = false;
@@ -209,11 +208,12 @@ export default function useMatchSession(matchId, userId) {
         fetchMatchPlayers(matchId),
       ]);
       if (cancelled) return;
-      if (mRes.error)   { setError(mRes.error.message); setLoading(false); return; }
-      if (!mRes.data)   { setError('Match nicht gefunden'); setLoading(false); return; }
+      if (mRes.error)   { setErrorState({ matchId, message: mRes.error.message }); setLoadedFor(matchId); return; }
+      if (!mRes.data)   { setErrorState({ matchId, message: 'Match nicht gefunden' }); setLoadedFor(matchId); return; }
       setMatch(mRes.data);
       writePlayers(pRes.data || []);
-      setLoading(false);
+      setErrorState({ matchId, message: null });
+      setLoadedFor(matchId);
 
       channel = supabase.channel(`mtg-match:${matchId}`, {
         config: {
@@ -298,13 +298,18 @@ export default function useMatchSession(matchId, userId) {
   }, [matchId, userId, applyBroadcast, reconcileFromDb, writePlayers]);
 
   // ── Derived selectors ────────────────────────────────
+  const activeMatch = matchId ? match : null;
+  const activePlayers = matchId ? players : NO_PLAYERS;
+  const loading = !!matchId && loadedFor !== matchId;
+  const error = errorState.matchId === matchId ? errorState.message : null;
+
   const me = useMemo(
-    () => players.find(p => p.user_id === userId) || null,
-    [players, userId]
+    () => activePlayers.find(p => p.user_id === userId) || null,
+    [activePlayers, userId]
   );
   const others = useMemo(
-    () => players.filter(p => p.user_id !== userId),
-    [players, userId]
+    () => activePlayers.filter(p => p.user_id !== userId),
+    [activePlayers, userId]
   );
 
   // ── Mutators (optimistic, synchronous side-effect ordering) ──────
@@ -354,7 +359,7 @@ export default function useMatchSession(matchId, userId) {
           markFresh(playerId, updated);
           sendBroadcast(updated);
         });
-        setError(err.message);
+        setErrorState({ matchId, message: err.message });
         return;
       }
       if (data) {
@@ -413,11 +418,11 @@ export default function useMatchSession(matchId, userId) {
     return leaveMatch({ playerId: me.id, userId });
   }, [me, userId]);
 
-  const isCreator = match && userId && match.created_by === userId;
+  const isCreator = activeMatch && userId && activeMatch.created_by === userId;
   const updateMatchPatch = useCallback(async (patch) => {
     if (!isCreator) return { error: new Error('Nur Ersteller darf Match ändern') };
-    return updateMatch({ matchId: match.id, patch });
-  }, [match, isCreator]);
+    return updateMatch({ matchId: activeMatch.id, patch });
+  }, [activeMatch, isCreator]);
 
   // Creator-only: flip status to 'ended'. The realtime postgres-changes
   // echo on mtg_matches pushes the new status to every connected peer,
@@ -425,11 +430,11 @@ export default function useMatchSession(matchId, userId) {
   // page instead of the HUD.
   const closeMatch = useCallback(async () => {
     if (!isCreator) return { error: new Error('Nur Ersteller darf Match beenden') };
-    return apiCloseMatch({ matchId: match.id });
-  }, [match, isCreator]);
+    return apiCloseMatch({ matchId: activeMatch.id });
+  }, [activeMatch, isCreator]);
 
   return {
-    match, players, me, others, presence, loading, error,
+    match: activeMatch, players: activePlayers, me, others, presence, loading, error,
     isCreator,
     adjustLife, adjustPoison, setLife, setPoison, setColor,
     setPlayerName, setDeck, leave,

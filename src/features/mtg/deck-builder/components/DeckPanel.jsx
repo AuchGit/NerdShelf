@@ -61,6 +61,11 @@ export default function DeckPanel({
   onPinCard,
   onExportDeck,
   onAnalyzeDeck,
+  // Tokens the deck's cards create: { [key]: { key, card, count } }, the
+  // cards creating each token, and the setter for the wanted count.
+  tokens = null,
+  tokenSources = {},
+  onSetTokenCount,
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [tab, setTab] = useState('main');
@@ -73,6 +78,8 @@ export default function DeckPanel({
   const mainTotal   = mainEntries.reduce((s, e) => s + e.count, 0);
   const sideTotal   = sideEntries.reduce((s, e) => s + e.count, 0);
   const ideaTotal   = ideaEntries.reduce((s, e) => s + e.count, 0);
+  const tokenEntries = Object.values(tokens || {});
+  const tokenTotal  = tokenEntries.reduce((s, e) => s + e.count, 0);
 
   // Total deck price (Cardmarket EUR via Scryfall): commander + main + side.
   // Ideas DON'T contribute to the deck-price — they're a separate
@@ -84,7 +91,6 @@ export default function DeckPanel({
     }, 0);
   const mainEur      = sumEur(mainEntries);
   const sideEur      = sumEur(sideEntries);
-  const ideasEur     = sumEur(ideaEntries);
   const commanderEur = commander ? (getCardPriceEur(commander) ?? 0) : 0;
   const totalEur     = mainEur + sideEur + commanderEur;
 
@@ -95,7 +101,8 @@ export default function DeckPanel({
 
   const activeDeck = tab === 'main' ? mainboard
                    : tab === 'side' ? sideboard
-                   : ideas;
+                   : tab === 'ideas' ? ideas
+                   : (tokens || {});
   const organized  = organizeDeck(activeDeck, sortMode);
 
   const manaStats   = getManaStats(mainboard);
@@ -194,6 +201,15 @@ export default function DeckPanel({
         >
           Ideen <span className="dp-tab-count">{ideaTotal}</span>
         </button>
+        {(tokenEntries.length > 0 || tab === 'tokens') && (
+          <button
+            className={`dp-tab ${tab === 'tokens' ? 'active' : ''}`}
+            onClick={() => setTab('tokens')}
+            title="Tokens, die Karten im Deck erzeugen — Anzahl für die Cardmarket-Liste"
+          >
+            Tokens <span className="dp-tab-count">{tokenTotal}</span>
+          </button>
+        )}
       </div>
 
       {/* Sort selector */}
@@ -220,7 +236,9 @@ export default function DeckPanel({
               ? `${Math.min((mainTotal / 60) * 100, 100)}%`
               : tab === 'side'
                 ? `${Math.min((sideTotal / 15) * 100, 100)}%`
-                : `${Math.min((ideaTotal / 30) * 100, 100)}%`,
+                : tab === 'ideas'
+                  ? `${Math.min((ideaTotal / 30) * 100, 100)}%`
+                  : '0%',
           }}
         />
       </div>
@@ -254,14 +272,15 @@ export default function DeckPanel({
           onPin={onPinCard}
         />
       )}
-      {(tab === 'main' ? mainTotal : tab === 'side' ? sideTotal : ideaTotal) === 0 ? (
+      {(tab === 'tokens' ? tokenEntries.length : tab === 'main' ? mainTotal : tab === 'side' ? sideTotal : ideaTotal) === 0 ? (
         (tab === 'main' && commander) ? null : (
           <div className="dp-empty">
             <div className="dp-empty-icon">⊕</div>
             <div>{
               tab === 'main' ? 'Klicke Karten in der Suche, um sie hinzuzufügen' :
               tab === 'side' ? 'Leeres Sideboard' :
-              'Noch keine Ideen'
+              tab === 'ideas' ? 'Noch keine Ideen' :
+              'Keine Karte im Deck erzeugt Tokens'
             }</div>
             {tab === 'side' && (
               <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
@@ -285,7 +304,24 @@ export default function DeckPanel({
                   <span className="dp-group-count">{group.groupCount}</span>
                 </div>
               )}
-              {group.entries.map(({ card, count }) => {
+              {group.entries.map(({ card, count, key: tokenKey }) => {
+                if (tab === 'tokens') {
+                  const sources = tokenSources[tokenKey] || [];
+                  return (
+                    <DeckCard
+                      key={tokenKey}
+                      card={card}
+                      count={count}
+                      onIncrease={() => onSetTokenCount?.(tokenKey, count + 1)}
+                      onDecrease={() => onSetTokenCount?.(tokenKey, count - 1)}
+                      onRemove={() => onSetTokenCount?.(tokenKey, 0)}
+                      removeTitle="Nicht kaufen (0)"
+                      note={sources.length > 0 ? `aus: ${sources.join(', ')}` : null}
+                      onHover={onHoverCard}
+                      onPin={onPinCard}
+                    />
+                  );
+                }
                 // Resolve the (left, right) handler pair + their
                 // tooltip labels based on the active tab.
                 let onLeft, onRight, leftLabel, rightLabel;

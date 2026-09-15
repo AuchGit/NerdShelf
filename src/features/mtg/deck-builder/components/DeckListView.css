@@ -11,6 +11,71 @@
   padding: 0.85rem 0.85rem 0;
 }
 
+.dlv-sort {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.85rem;
+}
+
+.dlv-sort-label {
+  font-size: 0.72rem;
+  color: var(--text-lo);
+  margin-right: 0.2rem;
+}
+
+.dlv-sort-pill {
+  font-size: 0.72rem;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-mid);
+  background: transparent;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dlv-sort-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.dlv-sort-pill.active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent-hi);
+}
+
+.dlv-sort-then {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+}
+.dlv-sort-then select {
+  font-size: 0.72rem;
+  padding: 0.18rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-mid);
+  background: var(--bg-input);
+  color: var(--text-hi);
+  cursor: pointer;
+}
+
+.dlv-subgroup + .dlv-subgroup {
+  margin-top: 0.6rem;
+}
+.dlv-subgroup-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.68rem;
+  color: var(--text-lo);
+  letter-spacing: 0.4px;
+  padding: 0 0 0.3rem 0.5rem;
+  border-left: 2px solid var(--border-hi);
+  margin-bottom: 0.4rem;
+}
+
 .dlv-section + .dlv-section {
   margin-top: 1.5rem;
 }

@@ -3,7 +3,9 @@
 // Generates a Cardmarket-Wants-compatible decklist from the user's MTG
 // wishlist with three source modes and a preview/edit step. The output
 // format is the canonical MTG decklist line — `<count> <Cardname>` per
-// line — which Cardmarket "Wants → Massenimport" accepts directly.
+// line — which Cardmarket "Wants → Massenimport" accepts directly. Cards
+// with a fixed artwork get the exact Cardmarket product appended:
+// `<count> <Cardname> (V.<n>) (<Expansion>)` (see cardmarketMap.js).
 //
 // Source modes
 //   - "current_deck"  → buy what's missing for one specific deck
@@ -11,29 +13,35 @@
 //   - "selected"      → only the rows the user ticked beforehand
 //
 // Duplicates toggle
-//   - OFF (default)   → subtract inventory: if I already own a copy
-//                       somewhere else, I won't buy it again (I'll just
-//                       swap between decks)
-//   - ON              → don't subtract inventory at all (or subtract
-//                       only what's unallocated) — buy fresh duplicates
+//   - OFF (default)   → subtract owned copies (services/ownedCopies.js):
+//                       without a fixed artwork any printing counts, with
+//                       one only that printing
+//   - ON              → don't subtract the collection at all — buy fresh
+//                       duplicates
 //
 // Preview lets the user tweak per-row quantities and tick off entries
 // before generating the final text. The shopping list's total Cardmarket
 // price is shown live so they know what the trip will cost.
+//
+// The parent mounts this modal per opening, so props seed the state.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Button } from '../../../../shared/ui';
 import { getCardPriceEur, formatEur } from '../services/scryfall';
 import { isBasicLand } from '../services/deckAnalysis';
+import { applyPrinting, cardmarketLine, printingLabel } from '../services/deckPrintings';
+import { ownedCopiesOf, allocateOwnedCopies } from '../services/ownedCopies';
 import {
-  applyPrinting, allocateOwned, cardmarketLine, printingLabel,
-} from '../services/deckPrintings';
+  loadCardmarketMap, cardmarketTarget, cardmarketTokenTarget, tokenCardmarketName,
+} from '../services/cardmarketMap';
+import { collectTokenRefs, loadTokenCards, tokenKeyOf } from '../services/deckTokens';
+import { fetchCardsByIds } from '../services/scryfallCollection';
 
 export default function CardmarketExportModal({
   open,
   onClose,
   decks,             // [{ id, name, data }]
-  inventory,         // Map<cardId, qty>
+  ownedIndex,        // services/ownedCopies buildOwnedIndex(collection)
   initialSource = 'everything',
   initialDeckId,
   preselectedRows,   // optional Set<cardId> — when opened from "selected mode"
@@ -54,102 +62,129 @@ export default function CardmarketExportModal({
   // etc. — in the same `<count> <name>` format Cardmarket's bulk
   // wants-import expects, so the user can copy-paste once.
   const [includeTokens, setIncludeTokens] = useState(true);
-  // Cards with an artwork chosen in the deck builder get their edition
-  // appended — `4 Lightning Bolt (Modern Masters 2015)` — which Cardmarket's
-  // wants import understands. Off → plain `<count> <name>` as before.
+  // Cards with an artwork chosen in the deck builder are ordered as that
+  // exact Cardmarket product. Off → plain `<count> <name>`, any edition.
   const [useArtworks, setUseArtworks] = useState(true);
-  const [rows, setRows]           = useState([]);     // editable preview rows
-  const [includeMap, setInclude]  = useState({});     // cardId → bool
-  const [qtyMap, setQty]          = useState({});     // cardId → number
   const [copied, setCopied]       = useState(false);
-  const [generated, setGenerated] = useState(null);
+  const [busy, setBusy]           = useState(false);
 
-  // Re-initialise when opening / when source-controls change.
+  // Full token cards (colour, power/toughness, oracle id) for merging
+  // identical tokens, the deck's token counts and Cardmarket names.
+  const [tokenCards, setTokenCards] = useState(null);
   useEffect(() => {
-    if (!open) return;
-    setSource(initialSource);
-    setDeckId(initialDeckId || (decks?.[0]?.id || ''));
-    setCopied(false);
-    setGenerated(null);
-  }, [open, initialSource, initialDeckId, decks]);
-
-  // Build candidate rows from the chosen source + dup-toggle.
-  useEffect(() => {
-    if (!open) return;
-    const candidate = buildCandidates({
-      source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas, includeTokens,
-      useArtworks,
-    });
-    setRows(candidate);
-    const inc = {};
-    const qty = {};
-    for (const r of candidate) {
-      inc[r.key] = true;
-      qty[r.key] = r.qty;
+    const ids = new Set();
+    for (const d of decks || []) {
+      const data = d.data || {};
+      const refs = collectTokenRefs([data.mainboard, data.sideboard, data.ideas], data.commander);
+      for (const id of refs.keys()) ids.add(id);
     }
-    setInclude(inc);
-    setQty(qty);
-    setGenerated(null);
-  }, [open, source, deckId, allowDups, decks, inventory, preselectedRows, includeIdeas, includeTokens, useArtworks]);
+    if (ids.size === 0) return;
+    let cancelled = false;
+    loadTokenCards([...ids])
+      .then(cards => { if (!cancelled) setTokenCards(cards); })
+      .catch(() => { /* tokens fall back to the names from all_parts */ });
+    return () => { cancelled = true; };
+  }, [decks]);
 
-  const totalEur = useMemo(() => {
-    let sum = 0;
-    for (const r of rows) {
-      if (!includeMap[r.key]) continue;
-      const q = Number(qtyMap[r.key]) || 0;
-      const p = getCardPriceEur(r.card);
-      if (p != null) sum += p * q;
-    }
-    return sum;
-  }, [rows, includeMap, qtyMap]);
+  // Decks may still be loading when the modal opens — fall back to the
+  // first one without writing state.
+  const effectiveDeckId = deckId || decks?.[0]?.id || '';
+  // Row edits and the generated text belong to the settings they were made
+  // with; changing a setting starts from the fresh candidate list.
+  const settingsKey = JSON.stringify([source, effectiveDeckId, allowDups, includeIdeas, includeTokens, useArtworks]);
+  const [edits, setEdits]         = useState({ key: null, include: {}, qty: {} });
+  const [output, setOutput]       = useState(null); // { key, text, fallbacks }
 
-  const includedCount = useMemo(
-    () => rows.reduce((s, r) => s + (includeMap[r.key] ? (Number(qtyMap[r.key]) || 0) : 0), 0),
-    [rows, includeMap, qtyMap]
-  );
+  const rows = useMemo(() => buildCandidates({
+    source, deckId: effectiveDeckId, allowDups, decks, ownedIndex, preselectedRows,
+    includeIdeas, includeTokens, useArtworks, tokenCards,
+  }), [source, effectiveDeckId, allowDups, decks, ownedIndex, preselectedRows, includeIdeas, includeTokens, useArtworks, tokenCards]);
 
-  const handleGenerate = async () => {
-    const list = rows
-      .filter(r => includeMap[r.key] && (Number(qtyMap[r.key]) || 0) > 0)
-      .sort((a, b) =>
-        (a.card?.name || a.cardId).localeCompare(b.card?.name || b.cardId)
-        || (a.printing?.set_name || '').localeCompare(b.printing?.set_name || ''))
-      .map(r => cardmarketLine(qtyMap[r.key], formatNameForCardmarket(r.card, r.cardId), r.printing));
-    const text = list.join('\n');
-    setGenerated(text);
-    if (text) {
-      try {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch { /* clipboard blocked — user can still copy from the textarea */ }
-    }
+  const myEdits = edits.key === settingsKey ? edits : { key: settingsKey, include: {}, qty: {} };
+  const isIncluded = (r) => myEdits.include[r.key] ?? true;
+  const qtyOf = (r) => Number(myEdits.qty[r.key] ?? r.qty) || 0;
+  const setIncluded = (r, value) => setEdits({ ...myEdits, include: { ...myEdits.include, [r.key]: value } });
+  const setQtyFor = (r, value) => setEdits({ ...myEdits, qty: { ...myEdits.qty, [r.key]: value } });
+  const generated = output?.key === settingsKey ? output : null;
+
+  let totalEur = 0;
+  let includedCount = 0;
+  for (const r of rows) {
+    if (!isIncluded(r)) continue;
+    const q = qtyOf(r);
+    includedCount += q;
+    const p = getCardPriceEur(r.card);
+    if (p != null) totalEur += p * q;
+  }
+
+  const copyText = async (text) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — user can still copy from the textarea */ }
   };
 
-  // Cardmarket listet Tokens als eigene Produkte mit dem Suffix
-  // " Token" im Namen (z. B. "Goblin Token", "Treasure Token",
-  // "Scorpion Dragon Token"). Scryfalls all_parts liefert nur den
-  // Kreatur-/Artefakt-Typ ("Goblin", "Dragon") — wir hängen daher
-  // " Token" an, wenn das Suffix noch nicht da ist. Damit findet die
-  // Wants-Massenimport-Suche das richtige Produkt.
-  function formatNameForCardmarket(card, fallbackId) {
-    const name = card?.name || fallbackId || '';
-    if (card?._isToken && name && !/\btoken\b/i.test(name)) {
-      return `${name} Token`;
+  const handleGenerate = async () => {
+    const chosen = rows
+      .filter(r => isIncluded(r) && qtyOf(r) > 0)
+      .sort((a, b) =>
+        (a.card?.name || a.cardId).localeCompare(b.card?.name || b.cardId)
+        || (a.printing?.set_name || '').localeCompare(b.printing?.set_name || ''));
+
+    // Resolve fixed artworks (and tokens) to Cardmarket products.
+    const printings = new Map(chosen.filter(r => r.printing).map(r => [r.printing.id, r.printing]));
+    const hasTokens = chosen.some(r => r.card?._isToken);
+    let map = null;
+    if (printings.size > 0 || hasTokens) {
+      setBusy(true);
+      try {
+        map = await loadCardmarketMap();
+        // Artworks chosen before the Cardmarket id was stored: look it up.
+        const missingIds = [...printings.values()].filter(p => p.cardmarket_id == null).map(p => p.id);
+        if (missingIds.length > 0) {
+          const cards = await fetchCardsByIds(missingIds).catch(() => []);
+          for (const c of cards) {
+            printings.set(c.id, { ...printings.get(c.id), cardmarket_id: c.cardmarket_id ?? null });
+          }
+        }
+      } finally {
+        setBusy(false);
+      }
     }
-    return name;
-  }
+
+    let fallbacks = 0;
+    let tokenFallbacks = 0;
+    const text = chosen.map(r => {
+      const qty = qtyOf(r);
+      if (r.card?._isToken) {
+        const target = cardmarketTokenTarget(map, r.card);
+        if (!target) tokenFallbacks++;
+        return target
+          ? `${qty} ${target.name} (${target.expansion})`
+          : `${qty} ${tokenCardmarketName(r.card)}`;
+      }
+      const printing = r.printing ? printings.get(r.printing.id) : null;
+      const target = printing ? cardmarketTarget(map, printing.cardmarket_id) : null;
+      if (printing && !target) fallbacks++;
+      return cardmarketLine(qty, r.card?.name || r.cardId, printing, target);
+    }).join('\n');
+
+    setOutput({ key: settingsKey, text, fallbacks, tokenFallbacks });
+    copyText(text);
+  };
 
   const footer = (
     <>
       <Button variant="secondary" onClick={onClose}>Schließen</Button>
       {!generated && (
-        <Button onClick={handleGenerate} disabled={includedCount === 0}>
-          Liste generieren ({includedCount})
+        <Button onClick={handleGenerate} disabled={includedCount === 0 || busy}>
+          {busy ? 'Suche Cardmarket-Editionen…' : `Liste generieren (${includedCount})`}
         </Button>
       )}
       {generated && (
-        <Button onClick={() => { setGenerated(null); }}>
+        <Button onClick={() => setOutput(null)}>
           Zurück zur Vorschau
         </Button>
       )}
@@ -163,7 +198,7 @@ export default function CardmarketExportModal({
           <>
             <SourceControls
               source={source} setSource={setSource}
-              deckId={deckId} setDeckId={setDeckId}
+              deckId={effectiveDeckId} setDeckId={setDeckId}
               decks={decks}
               allowDups={allowDups} setAllowDups={setAllowDups}
               includeIdeas={includeIdeas} setIncludeIdeas={setIncludeIdeas}
@@ -182,16 +217,12 @@ export default function CardmarketExportModal({
                   // Promote every included non-basic-land row to a full
                   // playset (4 copies). Basics stay where they are —
                   // nobody wants 4-of basics in their Cardmarket cart.
-                  setQty(prev => {
-                    const next = { ...prev };
-                    for (const r of rows) {
-                      if (!includeMap[r.key]) continue;
-                      if (isBasicLand(r.card)) continue;
-                      const cur = Number(prev[r.key] ?? r.qty) || 0;
-                      if (cur < 4) next[r.key] = 4;
-                    }
-                    return next;
-                  });
+                  const qty = { ...myEdits.qty };
+                  for (const r of rows) {
+                    if (!isIncluded(r) || isBasicLand(r.card)) continue;
+                    if (qtyOf(r) < 4) qty[r.key] = 4;
+                  }
+                  setEdits({ ...myEdits, qty });
                 }}
                 style={miniBtnStyle}
                 title="Setzt alle ausgewählten Nicht-Basics auf 4 Kopien"
@@ -212,8 +243,8 @@ export default function CardmarketExportModal({
                   Keine Karten zum Kaufen — diese Auswahl ist schon vollständig in deiner Sammlung.
                 </div>
               ) : rows.map(r => {
-                const checked = !!includeMap[r.key];
-                const q = Number(qtyMap[r.key] ?? r.qty) || 0;
+                const checked = isIncluded(r);
+                const q = qtyOf(r);
                 const eur = getCardPriceEur(r.card);
                 const line = eur != null ? eur * q : null;
                 const cardIsBasic = isBasicLand(r.card);
@@ -241,7 +272,7 @@ export default function CardmarketExportModal({
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={(e) => setInclude(m => ({ ...m, [r.key]: e.target.checked }))}
+                      onChange={(e) => setIncluded(r, e.target.checked)}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
@@ -288,13 +319,7 @@ export default function CardmarketExportModal({
                         onClick={(e) => {
                           e.preventDefault();
                           // Toggle between current suggester quantity and 4.
-                          setQty(prev => {
-                            const cur = Number(prev[r.key] ?? r.qty) || 0;
-                            return {
-                              ...prev,
-                              [r.key]: cur >= 4 ? r.qty : 4,
-                            };
-                          });
+                          setQtyFor(r, q >= 4 ? r.qty : 4);
                         }}
                         style={{
                           ...playsetBtnStyle,
@@ -321,7 +346,7 @@ export default function CardmarketExportModal({
                       type="number"
                       min={0}
                       value={q}
-                      onChange={(e) => setQty(m => ({ ...m, [r.key]: Math.max(0, Number(e.target.value) || 0) }))}
+                      onChange={(e) => setQtyFor(r, Math.max(0, Number(e.target.value) || 0))}
                       style={qtyInputStyle}
                       onClick={(e) => e.preventDefault()}
                     />
@@ -345,13 +370,26 @@ export default function CardmarketExportModal({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
               Format ist „<code>&lt;Anzahl&gt; &lt;Kartenname&gt;</code>" pro Zeile, bei gewähltem
-              Artwork mit „<code>(Edition)</code>" dahinter — auf Cardmarket unter <em>Wants → Massenimport</em> einfügen.
+              Artwork mit Version und Edition dahinter — auf Cardmarket unter <em>Wants → Massenimport</em> einfügen.
               Du kannst die Liste hier vor dem Kopieren noch ändern.
             </div>
+            {generated.fallbacks > 0 && (
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-warning)' }}>
+                {generated.fallbacks === 1 ? '1 Zeile' : `${generated.fallbacks} Zeilen`} ohne genaue
+                Cardmarket-Zuordnung — dort steht der Editionsname von Scryfall. Cardmarket meldet nach
+                dem Import, falls es eine Zeile nicht findet.
+              </div>
+            )}
+            {generated.tokenFallbacks > 0 && (
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
+                {generated.tokenFallbacks === 1 ? '1 Token' : `${generated.tokenFallbacks} Tokens`} ohne genaue
+                Zuordnung — dort stehen Name, Farbe und Stärke, die Ausgabe wählt Cardmarket.
+              </div>
+            )}
             <textarea
-              value={generated}
-              onChange={(e) => setGenerated(e.target.value)}
-              rows={Math.min(20, generated.split('\n').length + 1)}
+              value={generated.text}
+              onChange={(e) => setOutput({ ...generated, text: e.target.value })}
+              rows={Math.min(20, generated.text.split('\n').length + 1)}
               style={{
                 width: '100%',
                 fontFamily: 'var(--font-mono)',
@@ -366,16 +404,7 @@ export default function CardmarketExportModal({
               }}
             />
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(generated);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  } catch { /* ignore */ }
-                }}
-              >
+              <Button size="sm" onClick={() => copyText(generated.text)}>
                 {copied ? '✓ Kopiert' : 'In Zwischenablage'}
               </Button>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
@@ -429,7 +458,7 @@ function SourceControls({
             )))}
         </select>
       )}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+      <label style={checkboxLabelStyle}>
         <input
           type="checkbox"
           checked={allowDups}
@@ -437,7 +466,7 @@ function SourceControls({
         />
         Duplikate kaufen — auch Karten, die ich schon (in einem anderen Deck) habe
       </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+      <label style={checkboxLabelStyle}>
         <input
           type="checkbox"
           checked={!!includeIdeas}
@@ -445,7 +474,7 @@ function SourceControls({
         />
         Ideen einbeziehen — Karten aus dem Ideen-Pool des Decks mit in die Liste
       </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+      <label style={checkboxLabelStyle}>
         <input
           type="checkbox"
           checked={!!includeTokens}
@@ -453,13 +482,13 @@ function SourceControls({
         />
         Tokens einbeziehen — automatisch alle Tokens hinzufügen, die meine Karten erzeugen
       </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--color-text)' }}>
+      <label style={checkboxLabelStyle}>
         <input
           type="checkbox"
           checked={!!useArtworks}
           onChange={(e) => setUseArtworks?.(e.target.checked)}
         />
-        Gewählte Artworks übernehmen — Edition mit an Cardmarket schicken
+        Gewählte Artworks übernehmen — genau diese Ausgabe auf Cardmarket bestellen
       </label>
     </div>
   );
@@ -502,8 +531,8 @@ function RadioPill({ name, value, current, onChange, children }) {
  * `key` is unique per row — one card can appear once per chosen artwork.
  */
 function buildCandidates({
-  source, deckId, allowDups, decks, inventory, preselectedRows,
-  includeIdeas = true, includeTokens = true, useArtworks = true,
+  source, deckId, allowDups, decks, ownedIndex, preselectedRows,
+  includeIdeas = true, includeTokens = true, useArtworks = true, tokenCards = null,
 }) {
   // Aggregate "needed by source" per card, split by chosen artwork.
   const need = new Map();   // cardId → { card, count, sources: [deckName], parts }
@@ -553,12 +582,11 @@ function buildCandidates({
   const candidates = [];
   for (const [cardId, row] of need) {
     if (preselectedRows && source === 'selected' && !preselectedRows.has(cardId)) continue;
-    // allowDups → buy the FULL needed amount regardless of inventory.
-    // Otherwise subtract everything currently owned (cross-deck swap is
-    // fine); owned copies cover demand without a fixed artwork first.
+    // allowDups → buy the FULL needed amount regardless of the collection.
+    // Otherwise subtract owned copies (cross-deck swap is fine).
     const parts = allowDups
       ? row.parts
-      : allocateOwned(row.parts, inventory.get?.(cardId) || 0);
+      : allocateOwnedCopies(row.parts, ownedCopiesOf(ownedIndex, cardId, row.card?.name));
     for (const part of parts) {
       if (part.count <= 0) continue;
       candidates.push({
@@ -577,52 +605,68 @@ function buildCandidates({
     (a.card?.name || a.cardId).localeCompare(b.card?.name || b.cardId)
     || (a.printing?.set_name || '').localeCompare(b.printing?.set_name || ''));
 
-  // ── Token resolution via Scryfall's all_parts ──────────────
-  // Every card that creates a token carries a reference to the token
-  // printing in its `all_parts` array (component === 'token'). We
-  // dedupe by printing id (or name fallback), default each to qty 1,
-  // tag with the cards that produce it, and append at the END of the
-  // candidate list so they read as an addendum in the preview.
+  // ── Tokens via Scryfall's all_parts ───────────────────────
+  // Every card that creates a token links the token printing in its
+  // `all_parts` (see services/deckTokens.js). Identical tokens from
+  // different cards merge (oracle id, once the token cards are loaded);
+  // each deck contributes the count set in its Tokens tab (default 1,
+  // 0 = don't buy). Rows go at the END so they read as an addendum.
   if (includeTokens) {
-    const tokens = new Map();  // key (id|name) → { card, sources: [name] }
-    for (const c of candidates) {
-      const parts = c.card?.all_parts;
-      if (!Array.isArray(parts)) continue;
-      for (const p of parts) {
-        if (p?.component !== 'token') continue;
-        if (!p.name) continue;
-        const key = p.id || `name:${p.name.toLowerCase()}`;
-        const existing = tokens.get(key) || {
-          card: {
-            id: p.id || `token-${p.name.toLowerCase().replace(/\s+/g, '-')}`,
-            name: p.name,
-            type_line: p.type_line || 'Token',
-            // Tokens don't have prices in the all_parts payload —
-            // leave undefined so the UI shows "—" rather than €0.
-            prices: undefined,
-            _isToken: true,
-          },
-          sources: [],
-        };
-        if (c.card?.name && !existing.sources.includes(c.card.name)) {
-          existing.sources.push(c.card.name);
+    const tokens = new Map();  // key → { key, card, qty, sources: Set }
+    const include = source === 'selected' && preselectedRows
+      ? (id) => preselectedRows.has(id)
+      : null;
+    const considerTokens = (d) => {
+      const data = d.data || {};
+      const zones = includeIdeas
+        ? [data.mainboard, data.sideboard, data.ideas]
+        : [data.mainboard, data.sideboard];
+      const perDeck = new Map();
+      for (const [id, ref] of collectTokenRefs(zones, data.commander, include)) {
+        const full = tokenCards?.get(id);
+        const key = tokenKeyOf(full, id);
+        let row = perDeck.get(key);
+        if (!row) {
+          perDeck.set(key, (row = {
+            card: full
+              ? { ...full, _isToken: true }
+              // Not loaded (yet): what all_parts knows. No price → "—".
+              : { id, name: ref.name, type_line: ref.type_line || 'Token', prices: undefined, _isToken: true },
+            sources: new Set(),
+          }));
         }
-        tokens.set(key, existing);
+        for (const s of ref.sources) row.sources.add(s);
       }
+      for (const [key, row] of perDeck) {
+        const count = data.tokens?.[key] ?? 1;
+        if (count <= 0) continue;
+        let t = tokens.get(key);
+        if (!t) tokens.set(key, (t = { key, card: row.card, qty: 0, sources: new Set() }));
+        t.qty += count;
+        for (const s of row.sources) t.sources.add(s);
+      }
+    };
+    if (source === 'current_deck') {
+      const d = (decks || []).find(x => x.id === deckId);
+      if (d) considerTokens(d);
+    } else {
+      for (const d of (decks || [])) considerTokens(d);
     }
+
     // Deduplicate against any token-id that was ALREADY in the
     // candidate list (e.g. user manually wishlisted a token).
     const existingCardIds = new Set(candidates.map(c => c.cardId));
     const tokenRows = [];
-    for (const [, t] of tokens) {
+    for (const t of tokens.values()) {
       if (existingCardIds.has(t.card.id)) continue;
+      const sources = [...t.sources];
       tokenRows.push({
-        key: t.card.id,
+        key: `token:${t.key}`,
         cardId: t.card.id,
         printing: null,
         card: t.card,
-        qty: 1,
-        reason: `Token aus: ${t.sources.slice(0, 3).join(', ')}${t.sources.length > 3 ? ` …+${t.sources.length - 3}` : ''}`,
+        qty: t.qty,
+        reason: `Token aus: ${sources.slice(0, 3).join(', ')}${sources.length > 3 ? ` …+${sources.length - 3}` : ''}`,
       });
     }
     tokenRows.sort((a, b) => a.card.name.localeCompare(b.card.name));
@@ -641,6 +685,10 @@ const summaryStyle = {
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)',
   fontSize: 'var(--fs-sm)',
+};
+const checkboxLabelStyle = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  fontSize: 'var(--fs-sm)', color: 'var(--color-text)',
 };
 const selectStyle = {
   background: 'var(--color-surface)',

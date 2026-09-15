@@ -5,7 +5,6 @@ import {
   MANA_MODES,
   getModeLabel,
   modeToConfig,
-  DEFAULT_CONFIG,
 } from '../services/landSuggestion';
 import { suggestLandsWithBudget, detectExistingLands } from '../services/landBudgetPipeline';
 import { loadLandPrices, snapshotLivePrices, snapshotPairCorrections } from '../services/landPriceCache';
@@ -130,7 +129,6 @@ export default function DeckAnalyzerModal({
   onClose,
   mainboard,
   commander,
-  deckFormat,
   onApplyLands,
 }) {
   const [tab, setTab] = useState('lands');
@@ -163,9 +161,12 @@ export default function DeckAnalyzerModal({
     for (const [name] of detected.utility) s.add(name);
     return s;
   }, [detected]);
-  const [keptLandNames, setKeptLandNames] = useState(initialKept);
-  // When the mainboard (and therefore `initialKept`) changes, reset.
-  useEffect(() => { setKeptLandNames(initialKept); }, [initialKept]);
+  // The user's choice is tied to the `initialKept` it was made on: when the
+  // mainboard (and therefore `initialKept`) changes, it falls back to the
+  // fresh default without an extra effect.
+  const [keptState, setKeptState] = useState(() => ({ base: initialKept, names: initialKept }));
+  const keptLandNames = keptState.base === initialKept ? keptState.names : initialKept;
+  const setKeptLandNames = (names) => setKeptState({ base: initialKept, names });
 
   // ── Live Scryfall prices for the suggester ──────────────
   // Catalog `priceEur` numbers are coarse stable approximations; what
@@ -175,11 +176,9 @@ export default function DeckAnalyzerModal({
   // ideal allocation and totals cost using real-world prices.
   const [livePrices, setLivePrices] = useState(() => snapshotLivePrices());
   const [pairCorrections, setPairCorrections] = useState(() => snapshotPairCorrections());
-  const [pricesLoading, setPricesLoading] = useState(false);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setPricesLoading(true);
     loadLandPrices()
       .then((map) => {
         if (cancelled) return;
@@ -189,8 +188,7 @@ export default function DeckAnalyzerModal({
         // real color identity, not the catalog's nested key.
         setPairCorrections(snapshotPairCorrections());
       })
-      .catch(() => { /* error already logged; cache stays at last value */ })
-      .finally(() => { if (!cancelled) setPricesLoading(false); });
+      .catch(() => { /* error already logged; cache stays at last value */ });
     return () => { cancelled = true; };
   }, [open]);
 
