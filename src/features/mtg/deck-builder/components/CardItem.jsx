@@ -36,6 +36,9 @@ export default function CardItem({
   card, onAdd, onAddSide, onAddIdeas, deckCount, onHover, onHoverEnd, onPin,
   isFavorite = false, onToggleFavorite,
   ownedQty = 0, onIncOwned, onDecOwned,
+  // Optional tap/click on the card itself (phones: show it instead of
+  // adding — adding then only happens through the buttons).
+  onSelect,
 }) {
   const layout = getCardLayout(card);
   const faces  = getCardFaces(card);
@@ -161,7 +164,7 @@ export default function CardItem({
   return (
     <div
       className={`card-item ${isFavorite ? 'is-favorite' : ''} ${isWide ? 'card-tile-wide' : ''} card-layout-${layout}`}
-      onClick={() => onAdd?.(card)}
+      onClick={() => (onSelect ? onSelect(card) : onAdd?.(card))}
       onMouseEnter={() => onHover?.(card)}
       onMouseLeave={() => onHoverEnd?.()}
       onContextMenu={handleContextMenu}

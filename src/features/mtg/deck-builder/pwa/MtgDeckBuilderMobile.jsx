@@ -55,6 +55,7 @@ export default function MtgDeckBuilderMobile({
   viewDeck,           // { mainboard, sideboard, ideas, commander } with artwork applied
   // Shared decks: nothing editable, "Kopieren" instead of saving.
   readOnly = false, ownerName = '', onCopy, copying = false,
+  selectSeq = 0,      // bumps when a search result is tapped → show "Karte"
 }) {
   const { isLandscape } = usePwaMobile();
   const [tab, setTab] = useState(readOnly ? 'view' : 'search'); // 'search' | 'deck' | 'preview' | 'view'
@@ -67,9 +68,17 @@ export default function MtgDeckBuilderMobile({
   const [lastPinnedId, setLastPinnedId] = useState(null);
   if (pinnedCard?.id && pinnedCard.id !== lastPinnedId) {
     setLastPinnedId(pinnedCard.id);
-    if (!isLandscape && tab !== 'preview') setTab('preview');
+    if (!isLandscape && !readOnly && tab !== 'preview') setTab('preview');
   } else if (!pinnedCard && lastPinnedId) {
     setLastPinnedId(null);
+  }
+
+  // A tapped search result always opens the "Karte" tab — also when it's
+  // the card already shown there.
+  const [seenSelectSeq, setSeenSelectSeq] = useState(selectSeq);
+  if (selectSeq !== seenSelectSeq) {
+    setSeenSelectSeq(selectSeq);
+    if (!isLandscape && !readOnly) setTab('preview');
   }
 
   const status = saveStatus || exportStatus;
@@ -314,11 +323,14 @@ export default function MtgDeckBuilderMobile({
             active={tab === 'deck'} onClick={() => setTab('deck')}
             badge={deckCount > 0 ? deckCount : null}
           />
-          <TabBtn
-            id="preview" label="Karte" icon="◧"
-            active={tab === 'preview'} onClick={() => setTab('preview')}
-            badge={pinnedCard ? '●' : null}
-          />
+          {/* Shared decks: the viewer already shows cards full-screen. */}
+          {!readOnly && (
+            <TabBtn
+              id="preview" label="Karte" icon="◧"
+              active={tab === 'preview'} onClick={() => setTab('preview')}
+              badge={pinnedCard ? '●' : null}
+            />
+          )}
           <TabBtn
             id="view" label="Ansehen" icon="◉"
             active={viewing} onClick={() => setTab('view')}

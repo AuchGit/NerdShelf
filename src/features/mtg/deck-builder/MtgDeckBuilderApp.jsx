@@ -653,6 +653,15 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
   }, []);
   const handleUnpin = useCallback(() => setPinned(null), []);
 
+  // Phones: tapping a search result shows it in the "Karte" tab. The
+  // counter tells the mobile shell to switch tabs even for the same card.
+  const [selectSeq, setSelectSeq] = useState(0);
+  const selectCard = useCallback((card) => {
+    if (!card) return;
+    setPinned({ card, faceIndex: 0 });
+    setSelectSeq(n => n + 1);
+  }, []);
+
   // Tag chip in the preview → add / remove it as search filter.
   const toggleSearchTag = useCallback((tag) => {
     setSearchTagFilter(prev => (
@@ -904,6 +913,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
       error={error}
       hasMore={hasMore}
       onLoadMore={loadMore}
+      onSelectCard={selectCard}
       onAddCard={addToMain}
       onAddSideCard={addToSide}
       onAddIdeasCard={addToIdeas}
@@ -961,6 +971,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
           pinnedCard={pinnedCard}
           onUnpin={handleUnpin}
           readOnly={readOnly}
+          selectSeq={selectSeq}
           ownerName={ownerName}
           onCopy={handleCopy}
           copying={copying}

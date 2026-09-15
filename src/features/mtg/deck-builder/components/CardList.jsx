@@ -23,6 +23,7 @@ export default function CardList({
   viewMode, setViewMode,
   isFavorite, onToggleFavorite,
   getOwnedQty, onIncOwned, onDecOwned,
+  onSelectCard,
 }) {
   const { settings, updateSetting } = useSettings();
 
@@ -86,6 +87,7 @@ export default function CardList({
             ownedQty={getOwnedQty ? getOwnedQty(card.id) : 0}
             onIncOwned={onIncOwned}
             onDecOwned={onDecOwned}
+            onSelect={onSelectCard}
           />
         ))}
       </div>
