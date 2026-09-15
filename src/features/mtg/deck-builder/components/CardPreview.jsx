@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { parseManaCost, getCardLayout, getCardFaces } from '../services/scryfall';
+import { printingLabel } from '../services/deckPrintings';
 import ManaSymbol from './ManaSymbol';
 import './CardPreview.css';
 
@@ -29,6 +30,55 @@ function OracleText({ text }) {
   );
 }
 
+const TAGS_COLLAPSED = 10;
+
+function TagList({ tags, status, activeSlugs, onToggle, expanded, onExpand }) {
+  const active = new Set(activeSlugs);
+  const visible = expanded ? tags : tags.slice(0, TAGS_COLLAPSED);
+  const hidden = tags.length - visible.length;
+
+  let body;
+  if (tags.length > 0) {
+    body = (
+      <div className="cp-tag-list">
+        {visible.map(t => {
+          const on = active.has(t.slug);
+          return (
+            <button
+              key={t.slug}
+              type="button"
+              className={`cp-tag ${on ? 'is-active' : ''}`}
+              onClick={() => onToggle(t)}
+              aria-pressed={on}
+              title={on
+                ? 'Aus der Suche entfernen'
+                : `${t.description ? `${t.description}\n\n` : ''}Nach „${t.label}" suchen (${t.count.toLocaleString()} Karten)`}
+            >{t.label}</button>
+          );
+        })}
+        {hidden > 0 && (
+          <button type="button" className="cp-tag cp-tag-more" onClick={onExpand}>
+            +{hidden} mehr
+          </button>
+        )}
+      </div>
+    );
+  } else if (status === 'loading' || status === 'idle') {
+    body = <div className="cp-tags-note">Tags werden geladen…</div>;
+  } else if (status === 'error') {
+    body = <div className="cp-tags-note">Tags gerade nicht verfügbar.</div>;
+  } else {
+    body = <div className="cp-tags-note">Keine Tags für diese Karte.</div>;
+  }
+
+  return (
+    <div className="cp-tags">
+      <div className="cp-tags-head">Tags</div>
+      {body}
+    </div>
+  );
+}
+
 /** Shown when no card has ever been hovered */
 function EmptyPreview() {
   return (
@@ -53,8 +103,21 @@ function EmptyPreview() {
 export default function CardPreview({
   card, isStale, pinned, onPin, onUnpin,
   pinnedFaceIndex = null,
+  // Artwork choice for this deck (optional): the chosen printing summary
+  // or null, plus the handlers to open the picker / reset to standard.
+  printing = null, onChooseArtwork, onResetArtwork,
+  // Scryfall oracle tags (optional): the card's tags, the index status,
+  // which tags are active search filters, and the toggle / load handlers.
+  tags = [], tagStatus = 'idle', activeTagSlugs = [], onToggleTag, onLoadTags,
 }) {
   const [currentFace, setCurrentFace] = useState(0);
+  // Card id whose full tag list is expanded (collapses again on the next card).
+  const [tagsExpandedFor, setTagsExpandedFor] = useState(null);
+
+  // First card on screen → fetch the tag data (cached after the first time).
+  useEffect(() => {
+    if (card && onToggleTag && tagStatus === 'idle') onLoadTags?.();
+  }, [card, onToggleTag, tagStatus, onLoadTags]);
 
   // Reset / sync currentFace when the card changes or a face is explicitly pinned
   useEffect(() => {
@@ -119,6 +182,31 @@ export default function CardPreview({
         )}
       </div>
 
+      {/* Artwork choice for this deck */}
+      {onChooseArtwork && (
+        <div className="cp-art-row">
+          <span
+            className={`cp-art-label ${printing ? 'is-custom' : ''}`}
+            title={printing ? 'Feste Edition in diesem Deck' : 'Keine feste Edition gewählt'}
+          >
+            {printing ? printingLabel(printing) : 'Standard-Artwork'}
+          </span>
+          {printing && onResetArtwork && (
+            <button
+              type="button"
+              className="cp-art-btn"
+              onClick={onResetArtwork}
+              title="Feste Edition entfernen"
+            >Standard</button>
+          )}
+          <button
+            type="button"
+            className="cp-art-btn is-primary"
+            onClick={onChooseArtwork}
+          >Artwork wählen</button>
+        </div>
+      )}
+
       {/* Card details */}
       <div className="cp-info">
         <div className="cp-name-row">
@@ -149,6 +237,18 @@ export default function CardPreview({
 
         {flavor && (
           <div className="cp-flavor">"{flavor}"</div>
+        )}
+
+        {/* Scryfall Tagger tags — click toggles the tag as search filter */}
+        {onToggleTag && (
+          <TagList
+            tags={tags}
+            status={tagStatus}
+            activeSlugs={activeTagSlugs}
+            onToggle={onToggleTag}
+            expanded={tagsExpandedFor === card.id}
+            onExpand={() => setTagsExpandedFor(card.id)}
+          />
         )}
 
         {/* Stats row */}

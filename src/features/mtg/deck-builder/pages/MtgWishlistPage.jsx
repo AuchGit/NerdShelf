@@ -18,6 +18,14 @@ import MtgSubNav from '../components/MtgSubNav';
 import CardmarketExportModal from '../components/CardmarketExportModal';
 import { getCardPriceEur, formatEur } from '../services/scryfall';
 
+// EUR for the copies still missing. Rows from decks carry `missingEur`
+// (priced per chosen artwork); manual rows fall back to the card price.
+function missingEurOf(row) {
+  if (row.missingEur !== undefined) return row.missingEur;
+  const p = getCardPriceEur(row.card);
+  return p != null ? p * row.missing : null;
+}
+
 export default function MtgWishlistPage() {
   const w = useMtgWishlist();
   const inv = useMtgInventory();
@@ -60,8 +68,8 @@ export default function MtgWishlistPage() {
   const totalEur = useMemo(() => {
     let sum = 0;
     for (const row of w.wishlist) {
-      const p = getCardPriceEur(row.card);
-      if (p != null) sum += p * row.missing;
+      const p = missingEurOf(row);
+      if (p != null) sum += p;
     }
     return sum;
   }, [w.wishlist]);
@@ -167,8 +175,7 @@ function WishlistRow({ row, isFavorite, isSelected, onToggleSelect, onAcquire, o
   const img = row.card?.image_uris?.small
     || row.card?.card_faces?.[0]?.image_uris?.small
     || null;
-  const eur = getCardPriceEur(row.card);
-  const lineEur = eur != null ? eur * row.missing : null;
+  const lineEur = missingEurOf(row);
   return (
     <Panel padding="sm" style={{
       ...rowStyle,
@@ -207,6 +214,11 @@ function WishlistRow({ row, isFavorite, isSelected, onToggleSelect, onAcquire, o
         {row.sources.length > 0 && (
           <div style={{ marginTop: 2, fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)' }}>
             Aus: {row.sources.join(', ')}
+          </div>
+        )}
+        {row.printings?.length > 0 && (
+          <div style={{ marginTop: 2, fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)' }}>
+            Artwork: {row.printings.map(p => `${p.count}× ${p.printing.set_name}`).join(', ')}
           </div>
         )}
       </div>

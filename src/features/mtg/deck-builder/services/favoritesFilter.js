@@ -31,6 +31,9 @@ export function filterFavorites(cards, params) {
     priceMin, priceMax,
     sortOrder = 'name', sortDir = 'asc',
     commanderPick = false, commanderIdentity = null,
+    // Optional (card) => boolean for Scryfall oracle tags — the tag index
+    // lives in the caller, this module stays data-free.
+    tagFilter = null,
   } = params;
   const pMin = priceMin !== '' && priceMin != null ? Number(priceMin) : null;
   const pMax = priceMax !== '' && priceMax != null ? Number(priceMax) : null;
@@ -69,7 +72,7 @@ export function filterFavorites(cards, params) {
     } else {
       // exclude lands ONLY when other filters are set (mirror Scryfall behavior).
       // Here we have to make a simpler rule: if any filter is set, exclude lands.
-      const anyFilter = q || colors.length || ct || rarity || sub || min !== null || max !== null || format || sc;
+      const anyFilter = q || colors.length || ct || rarity || sub || min !== null || max !== null || format || sc || tagFilter;
       if (anyFilter && isLand) return false;
     }
 
@@ -114,6 +117,9 @@ export function filterFavorites(cards, params) {
 
     // Set
     if (sc && (card.set || '').toLowerCase() !== sc) return false;
+
+    // Oracle tags
+    if (tagFilter && !tagFilter(card)) return false;
 
     return true;
   });

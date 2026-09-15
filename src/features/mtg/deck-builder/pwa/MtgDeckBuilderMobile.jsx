@@ -29,6 +29,7 @@ import { useState } from 'react';
 import { ActionSheet } from '../../../../shared/ui';
 import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
 import { useSettings } from '../context/SettingsContext';
+import MtgDeckViewerMobile from './MtgDeckViewerMobile';
 import './MtgDeckBuilderMobile.css';
 
 export default function MtgDeckBuilderMobile({
@@ -48,12 +49,14 @@ export default function MtgDeckBuilderMobile({
   deckPanelEl,        // DeckPanel (mainboard / sideboard manager)
   previewPanel,       // CardPreview
   // View state -------------------------------------------------------
-  viewMode, setViewMode,
+  viewMode,
   mainCount, sideCount,
-  pinnedCard,
+  pinnedCard, onUnpin,
+  viewDeck,           // { mainboard, sideboard, ideas, commander } with artwork applied
 }) {
   const { isLandscape } = usePwaMobile();
-  const [tab, setTab] = useState('search'); // 'search' | 'deck' | 'preview'
+  const [tab, setTab] = useState('search'); // 'search' | 'deck' | 'preview' | 'view'
+  const viewing = tab === 'view';
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Auto-switch to the preview tab when the user pins a card from any
@@ -102,6 +105,16 @@ export default function MtgDeckBuilderMobile({
       >
         {saving ? '…' : dirty ? 'Speichern' : '✓'}
       </button>
+      {/* Landscape has no tab bar — the viewer toggle sits up here. */}
+      {isLandscape && (
+        <button
+          type="button"
+          onClick={() => setTab(viewing ? 'search' : 'view')}
+          className={`mtg-mob-menu-btn mtg-mob-view-btn ${viewing ? 'is-active' : ''}`}
+          aria-label={viewing ? 'Zurück zum Bearbeiten' : 'Deck ansehen'}
+          title={viewing ? 'Zurück zum Bearbeiten' : 'Deck ansehen'}
+        >{viewing ? '✎' : '◉'}</button>
+      )}
       <button
         type="button"
         onClick={() => setMenuOpen(true)}
@@ -170,9 +183,9 @@ export default function MtgDeckBuilderMobile({
   const menuItems = [
     {
       id: 'view',
-      label: viewMode === 'edit' ? 'Deck-Übersicht zeigen' : 'Zurück zur Suche',
-      icon: '⇆',
-      onSelect: () => setViewMode(viewMode === 'edit' ? 'view' : 'edit'),
+      label: viewing ? 'Zurück zum Bearbeiten' : 'Deck ansehen',
+      icon: viewing ? '✎' : '◉',
+      onSelect: () => setTab(viewing ? 'deck' : 'view'),
     },
     { id: 'cover', label: 'Cover-Karte wählen', icon: '✦', onSelect: onOpenCoverPicker },
     { id: 'import', label: 'Decklist importieren', icon: '↓', onSelect: onImport },
@@ -187,12 +200,24 @@ export default function MtgDeckBuilderMobile({
   // identical to desktop — same chip styling, same accent colour for
   // active states, same border tone for inactive ones — so the user
   // recognises it's the same app on both screens.
+  const viewerEl = (
+    <MtgDeckViewerMobile
+      mainboard={viewDeck?.mainboard}
+      sideboard={viewDeck?.sideboard}
+      ideas={viewDeck?.ideas}
+      commander={viewDeck?.commander}
+    />
+  );
+
   return (
     <div className="mtg-mob-screen mtg-deck-builder">
       {header}
-      {toolbar}
+      {/* Format / cover / commander are editing controls — hidden while viewing. */}
+      {!viewing && toolbar}
 
-      {isLandscape ? (
+      {isLandscape && viewing ? (
+        <div className="mtg-mob-view-full">{viewerEl}</div>
+      ) : isLandscape ? (
         // ── Landscape: side-by-side ────────────────────────────
         // Search column scrolls independently. The right column shows
         // the deck panel by default, swaps to the card preview when
@@ -209,7 +234,7 @@ export default function MtgDeckBuilderMobile({
                   <button
                     type="button"
                     className="mtg-mob-preview-close"
-                    onClick={() => setLastPinnedId(null /* let parent unpin */)}
+                    onClick={() => { setLastPinnedId(null); onUnpin?.(); }}
                   >Zurück zum Deck →</button>
                 </div>
                 {previewPanel}
@@ -233,6 +258,13 @@ export default function MtgDeckBuilderMobile({
           <div className="mtg-mob-pane" style={{ display: tab === 'preview' ? 'flex' : 'none' }}>
             {previewBody}
           </div>
+          {/* Viewer only mounts while open — nothing to preserve, and it
+              keeps the lazy-loaded card images off the network otherwise. */}
+          {viewing && (
+            <div className="mtg-mob-pane" style={{ display: 'flex' }}>
+              {viewerEl}
+            </div>
+          )}
         </main>
       )}
 
@@ -252,15 +284,19 @@ export default function MtgDeckBuilderMobile({
             active={tab === 'preview'} onClick={() => setTab('preview')}
             badge={pinnedCard ? '●' : null}
           />
+          <TabBtn
+            id="view" label="Ansehen" icon="◉"
+            active={viewing} onClick={() => setTab('view')}
+          />
         </nav>
       )}
 
       {/* Floating grid-settings button. Lives outside .mtg-mob-main so it
           stays anchored to the viewport while the pane scrolls.
           Visible in landscape (search column is always on screen) and
-          on the Suche tab in portrait. */}
+          on the Suche tab in portrait. The viewer brings its own controls. */}
       <CardGridSettingsButton
-        visible={isLandscape || tab === 'search'}
+        visible={isLandscape ? !viewing : tab === 'search'}
       />
 
       <ActionSheet

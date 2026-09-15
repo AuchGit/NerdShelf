@@ -636,6 +636,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <div class="card"><span class="cap">Navigation</span><h4>Tab-Leiste unten</h4><p>Statt Seitenleiste: <b>DnD</b>, <b>MTG</b>, <b>WH40k</b> und <b>Mehr</b>. Hinter <b>Mehr</b> liegen Kalender, Handbuch, Einstellungen, Fehler melden und Abmelden.</p></div>
     <div class="card"><span class="cap">Listen</span><h4>Lange drücken</h4><p>Auf Deck- und Charakterkacheln öffnet langes Drücken das Aktionsmenü von unten statt der kleinen Symbole.</p></div>
     <div class="card"><span class="cap">Reiter</span><h4>Wischbare Reiter-Zeile</h4><p>Die Reiter oben werden zu einer horizontal scrollenden Leiste mit Einrastpunkten.</p></div>
+    <div class="card"><span class="cap">MTG</span><h4>Deck ansehen</h4><p>Im Deck-Builder zeigt der Reiter <b>Ansehen</b> das Deck ohne Bearbeiten-Knöpfe: sortierbar, als Raster oder Liste, Karten bildschirmfüllend zum Durchwischen. Mehr unter <a href="#mtg-builder">Deck-Builder</a>.</p></div>
     <div class="card"><span class="cap">Spielansichten</span><h4>Bildschirm bleibt an</h4><p>Match HUD und Combat HUD halten die Anzeige wach, gehen ins Vollbild und drehen — soweit dein Gerät das zulässt — ins Querformat.</p></div>
   </div>
 
@@ -1189,7 +1190,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 
   <h3>Der Aufbau</h3>
   <ol class="steps">
-    <li><b>Links die Vorschau</b> — die zuletzt überfahrene Karte groß, mit Regeltext, Manakosten, Seltenheit und Preis. Die Leiste lässt sich einklappen.</li>
+    <li><b>Links die Vorschau</b> — die zuletzt überfahrene Karte groß, mit Regeltext, Manakosten, Seltenheit und Preis, dazu das <a href="#mtg-builder">Artwork</a> für dieses Deck und die <a href="#mtg-suche">Tags</a> der Karte. Die Leiste lässt sich einklappen.</li>
     <li><b>In der Mitte die Suche</b> mit den Treffern als Kachelraster.</li>
     <li><b>Rechts das Deck</b> mit den Reitern <b>Mainboard</b>, <b>Sideboard</b> und <b>Ideen</b>.</li>
   </ol>
@@ -1208,6 +1209,22 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   </table></div>
   <p><b>Rechtsklick</b> auf eine Karte pinnt sie in die Vorschau — bei doppelseitigen Karten genau die Seite, über der du stehst.</p>
 
+  <h3>Artwork wählen</h3>
+  <p>Fast jede Karte gibt es in mehreren Editionen mit unterschiedlichem Artwork. In der Vorschau steht unter dem Kartenbild, welches Artwork die Karte in diesem Deck hat — oder <span class="ui">Standard-Artwork</span>, solange du keins festgelegt hast.</p>
+  <ol class="steps">
+    <li>Karte in die Vorschau holen — überfahren oder per Rechtsklick pinnen.</li>
+    <li><span class="ui">Artwork wählen</span> zeigt alle Druckausgaben mit Bild, Edition, Nummer, Jahr und Preis. Sortieren kannst du nach <span class="ui">Neueste</span>, <span class="ui">Älteste</span> oder <span class="ui">Günstigste</span>; das Suchfeld filtert nach Edition, Set-Code oder Jahr.</li>
+    <li>Ein Klick auf eine Ausgabe legt sie für dieses Deck fest. <span class="ui">Standard</span> nimmt die feste Wahl wieder zurück.</li>
+  </ol>
+  <ul>
+    <li>Die Wahl gilt für die Karte im ganzen Deck — Mainboard, Sideboard, Ideen und Commander — und bleibt beim Verschieben zwischen den Reitern erhalten.</li>
+    <li>Deck-Panel, Decklist-Ansicht, Cover-Auswahl und Dashboard zeigen das gewählte Artwork. Kartenpreis und Deckwert richten sich nach der gewählten Ausgabe.</li>
+    <li>Das gewählte Artwork ändert nichts am Abgleich mit deiner Sammlung: Was vorher als vorhanden galt, gilt weiter als vorhanden.</li>
+    <li>Beim <a href="#mtg-wunschliste">Cardmarket-Export</a> wird die gewählte Edition mitgeschickt.</li>
+  </ul>
+  <div class="note"><span class="lbl">Hinweis</span>
+    <p>Die Liste zeigt nur Papier-Ausgaben — reine Arena- oder MTGO-Karten gibt es bei Cardmarket nicht. Wie jede Deck-Änderung wird die Wahl erst mit <span class="ui">Speichern</span> übernommen.</p></div>
+
   <h3>Kopfzeile</h3>
   <ul>
     <li><b>Deck-Format</b> — filtert die Kartensuche automatisch auf legale Karten.</li>
@@ -1223,6 +1240,17 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <li>Rechts daneben zwei Modi: <span class="ui">✎</span> Suchen und Hinzufügen · <span class="ui">◉</span> die Decklist als reine Liste ansehen.</li>
     <li>Im Deck-Panel sortierst du die Liste nach verschiedenen Kriterien; ein Fortschrittsbalken zeigt, wie voll Main- und Sideboard sind.</li>
     <li>Der Preis oben im Deck-Panel ist der Gesamtwert; überschreitet er deine Grenze, erscheint <span class="ui">⚠ Limit überschritten</span>.</li>
+  </ul>
+
+  <h3>Am Handy: Deck ansehen</h3>
+  <p class="path"><b>Deck-Builder</b> <i>›</i> Tab-Leiste unten <i>›</i> <b>◉ Ansehen</b> &nbsp;·&nbsp; im Querformat: <b>◉</b> oben rechts &nbsp;·&nbsp; oder <b>⋯</b> <i>›</i> <b>Deck ansehen</b></p>
+  <p>Eine reine Ansicht ohne Bearbeiten-Knöpfe — zum Durchblättern, Sortieren und Herzeigen.</p>
+  <ul>
+    <li>Oben wechselst du zwischen <span class="ui">Mainboard</span>, <span class="ui">Sideboard</span> und <span class="ui">Ideen</span>. Darunter stehen die Kartenzahl und der Wert des gewählten Reiters.</li>
+    <li>Sortieren nach <span class="ui">Typ</span>, <span class="ui">Name</span>, <span class="ui">Manakosten</span>, <span class="ui">Farbe</span>, <span class="ui">Seltenheit</span> oder <span class="ui">Preis</span>. Ein Tipp auf eine Gruppenüberschrift klappt die Gruppe zu und wieder auf.</li>
+    <li><span class="ui">Raster</span> zeigt große Kartenbilder in 2, 3 oder 4 Spalten, <span class="ui">Liste</span> eine kompakte Zeile pro Karte mit Anzahl, Manakosten und Preis.</li>
+    <li>Tippe eine Karte an, um sie bildschirmfüllend zu sehen. Wische nach links oder rechts zur nächsten Karte — in derselben Reihenfolge wie die Sortierung. <span class="ui">↻</span> dreht doppelseitige Karten um.</li>
+    <li>Sortierung und Darstellung merkt sich das Gerät. Zurück zum Bearbeiten geht es über <span class="ui">Suche</span> oder <span class="ui">Deck</span> in der Tab-Leiste, im Querformat über <span class="ui">✎</span>.</li>
   </ul>
 
   <h3>Import &amp; Export</h3>
@@ -1267,12 +1295,18 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
       <tr><td class="k"><b>★</b></td><td>Nur Favoriten.</td></tr>
       <tr><td class="k"><b>◉</b></td><td>Nur Karten aus deiner Sammlung.</td></tr>
       <tr><td class="k"><b>Typ</b></td><td>Kreatur, Spontanzauber, Hexerei, Verzauberung, Artefakt, Planeswalker, Battle.</td></tr>
+      <tr><td class="k"><b>Tags</b></td><td><span class="term">Tags</span> beschreiben, was eine Karte tut — z.&nbsp;B. <em>ramp</em>, <em>removal</em> oder <em>draw engine</em>. Beim Tippen erscheinen passende Tags mit der Zahl der Karten; <kbd>Enter</kbd> oder ein Klick fügt einen hinzu. Mehrere Tags müssen alle zutreffen. Ein Klick auf einen gewählten Tag entfernt ihn, ebenso <kbd>Backspace</kbd> im leeren Feld.</td></tr>
       <tr><td class="k"><b>Sortierung</b></td><td>Name, Farbe, Manawert, Typ, Seltenheit, Set, Erscheinungsdatum oder Preis — auf- oder absteigend.</td></tr>
     </tbody>
   </table></div>
 
   <h4>Erweiterte Filter</h4>
   <p>Hinter <span class="ui">Erweiterte Filter</span> stecken Seltenheit, Manawert von–bis, Untertyp (z.&nbsp;B. <em>Goblin</em>), Formatlegalität als Übersteuerung, Set-Code und eine Preisspanne in Euro. Sind erweiterte Filter aktiv, zeigt der Knopf einen Punkt. <span class="ui">Reset</span> räumt alles auf.</p>
+
+  <h4>Tags aus der Vorschau</h4>
+  <p>Unter dem Regeltext zeigt die Vorschau die Tags der Karte. Ein Klick auf einen Tag sucht nach allen Karten mit diesem Tag, ein zweiter Klick nimmt ihn wieder heraus; Tags, die gerade filtern, sind hervorgehoben. Hat eine Karte viele Tags, blendet <span class="ui">+N mehr</span> den Rest ein. Übergeordnete Tags schließen ihre Unter-Tags ein — <em>ramp</em> findet also auch <em>mana rock</em>. Das gilt auch zusammen mit <span class="ui">★</span> und <span class="ui">◉</span>.</p>
+  <div class="note"><span class="lbl">Hinweis</span>
+    <p>Die Tags stammen aus dem Scryfall Tagger und werden von der Community gepflegt. Manche sind eher Kuriositäten (etwa <em>alliteration</em>), und neue Karten bekommen ihre Tags oft erst nach ein paar Tagen. Die Tag-Daten (rund 6&nbsp;MB) lädt das Programm beim ersten Mal und speichert sie auf dem Gerät; erneuert werden sie höchstens einmal pro Woche.</p></div>
 
   <div class="note tip"><span class="lbl">Praktisch</span>
     <p>Setzt du im Deck ein Format, brauchst du den Formatfilter der Suche nicht — er wird automatisch übernommen. Der Filter in der Suche ist nur zum bewussten Abweichen da.</p></div>
@@ -1321,8 +1355,9 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <p class="path"><b>MTG</b> <i>›</i> <b>Wunschliste</b></p>
   <p>Die Wunschliste pflegst du nicht — sie ergibt sich. Für jede Karte gilt: <em>gebraucht in allen Decks</em> minus <em>in der Sammlung vorhanden</em>. Was übrig bleibt, steht hier, samt Angabe, aus welchen Decks der Bedarf kommt.</p>
   <ul>
-    <li><span class="ui">⊕</span> in einer Zeile schiebt die Karte in der benötigten Menge direkt in die Sammlung — der typische Ablauf nach einem Einkauf.</li>
+    <li><span class="ui">+N Sammlung</span> in einer Zeile schiebt die Karte in der benötigten Menge direkt in die Sammlung — der typische Ablauf nach einem Einkauf.</li>
     <li>Die Liste aktualisiert sich automatisch, sobald du ein Deck oder deine Sammlung änderst.</li>
+    <li>Hast du im Deck-Builder ein <a href="#mtg-builder">Artwork gewählt</a>, steht es unter der Zeile — z.&nbsp;B. <em>Artwork: 2× Modern Masters 2015</em>. Der Preis richtet sich dann nach dieser Ausgabe.</li>
   </ul>
 
   <h3>Export für Cardmarket</h3>
@@ -1330,14 +1365,17 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <div class="tablewrap"><table>
     <thead><tr><th>Einstellung</th><th>Bedeutung</th></tr></thead>
     <tbody>
-      <tr><td class="k"><b>Aktuelles Deck</b></td><td>Nur das, was diesem einen Deck fehlt.</td></tr>
-      <tr><td class="k"><b>Alles</b></td><td>Die komplette Wunschliste über alle Decks.</td></tr>
-      <tr><td class="k"><b>Auswahl</b></td><td>Nur die Zeilen, die du vorher angehakt hast.</td></tr>
-      <tr><td class="k"><b>Duplikate</b> aus</td><td>Standard: Besitzt du die Karte schon woanders, kaufst du sie nicht nochmal — du tauschst zwischen den Decks.</td></tr>
-      <tr><td class="k"><b>Duplikate</b> an</td><td>Für Leute, die jedes Deck spielfertig halten wollen: Zweitexemplare werden mitbestellt.</td></tr>
+      <tr><td class="k"><span class="ui">Fehlend für ein Deck</span></td><td>Nur das, was einem ausgewählten Deck fehlt.</td></tr>
+      <tr><td class="k"><span class="ui">Alle Wünsche</span></td><td>Die komplette Wunschliste über alle Decks.</td></tr>
+      <tr><td class="k"><span class="ui">Nur ausgewählte</span></td><td>Nur die Zeilen, die du vorher angehakt hast.</td></tr>
+      <tr><td class="k"><b>Duplikate kaufen</b> aus</td><td>Standard: Besitzt du die Karte schon woanders, kaufst du sie nicht nochmal — du tauschst zwischen den Decks.</td></tr>
+      <tr><td class="k"><b>Duplikate kaufen</b> an</td><td>Für Leute, die jedes Deck spielfertig halten wollen: Zweitexemplare werden mitbestellt.</td></tr>
+      <tr><td class="k"><b>Gewählte Artworks übernehmen</b></td><td>Standard an: Karten mit fest gewähltem Artwork bekommen die Edition in Klammern, z.&nbsp;B. <code>4 Lightning Bolt (Modern Masters 2015)</code> — Cardmarket sucht dann genau diese Ausgabe. Wollen zwei Decks dieselbe Karte in verschiedenen Artworks, entstehen zwei Zeilen. Aus: nur Anzahl und Name, jede Edition ist recht.</td></tr>
     </tbody>
   </table></div>
-  <p>Vor dem Kopieren kannst du in der Vorschau noch einzelne Mengen ändern oder Zeilen abwählen.</p>
+  <p>Vor dem Kopieren kannst du in der Vorschau noch einzelne Mengen ändern oder Zeilen abwählen. Auch die fertige Liste lässt sich im Textfeld noch von Hand anpassen.</p>
+  <div class="note warn"><span class="lbl">Achtung</span>
+    <p>Die Editionsnamen kommen von Scryfall. Bei Sonderausgaben (Promos, Extras mit Showcase- oder randlosem Artwork, Secret Lair) heißt die Edition bei Cardmarket manchmal anders oder die Ausgabe ist dort eine Variante (V.1, V.2). Cardmarket meldet nach dem Import, welche Zeilen es nicht zuordnen konnte — die kannst du dort von Hand nachtragen.</p></div>
 </section>
 
 <section id="mtg-match" data-c="mtg">
@@ -1583,6 +1621,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
       <tr><td class="k"><b>Homebrew</b></td><td>Selbst erstellte Regelinhalte, die im Programm genauso funktionieren wie die mitgelieferten.</td></tr>
       <tr><td class="k"><b>Kompendium</b></td><td>Das Nachschlage-Panel im Spieltisch: Monster als Token setzen, Gegenstände und Zauber an Charaktere geben.</td></tr>
       <tr><td class="k"><b>Ideen-Pool</b></td><td>MTG: Sammelbecken ohne Obergrenze für „vielleicht später". Zählt nicht zum Deck, fließt aber in die Wunschliste.</td></tr>
+      <tr><td class="k"><b>Tags</b></td><td>MTG: Stichworte aus dem Scryfall Tagger, die beschreiben, was eine Karte tut (z.&nbsp;B. <em>ramp</em>, <em>removal</em>). In der Kartensuche und per Klick in der Vorschau als Filter nutzbar.</td></tr>
       <tr><td class="k"><b>Farbidentität</b></td><td>MTG: alle Farbsymbole einer Karte inklusive Regeltext. Im Commander-Format begrenzt der Commander damit, was ins Deck darf.</td></tr>
       <tr><td class="k"><b>Manabasis</b></td><td>MTG: die Länder eines Decks. Der Vorschlag im Programm richtet sich nach Farbbedarf, Kurve und Budget.</td></tr>
       <tr><td class="k"><b>Keep-Rate</b></td><td>MTG: Anteil der Starthände, die man ohne Mulligan behalten würde.</td></tr>

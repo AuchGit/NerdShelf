@@ -1,5 +1,5 @@
 // src/features/mtg/deck-builder/MtgDeckBuilderApp.jsx
-import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -16,15 +16,21 @@ import CollapsibleRail from './components/CollapsibleRail';
 const ImportDeckModal   = lazy(() => import('./components/ImportDeckModal'));
 const CoverPickerModal  = lazy(() => import('./components/CoverPickerModal'));
 const DeckAnalyzerModal = lazy(() => import('./components/DeckAnalyzerModal'));
+const PrintingPickerModal = lazy(() => import('./components/PrintingPickerModal'));
 import useWindowWidth from '../../../shared/hooks/useWindowWidth';
 import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 import MtgDeckBuilderMobile from './pwa/MtgDeckBuilderMobile';
 import { useScryfall } from './hooks/useScryfall';
 import { useFavorites } from './hooks/useFavorites';
 import { useMtgInventory } from './hooks/useMtgInventory';
+import { useOracleTags } from './hooks/useOracleTags';
+import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
+import {
+  applyPrinting, applyPrintingsToZone, prunePrintings,
+} from './services/deckPrintings';
 import './MtgDeckBuilder.css';
 import './App.css';
 
@@ -71,6 +77,11 @@ export default function MtgDeckBuilderApp() {
   const [shareToken, setShareToken] = useState(null);
   const [showCoverPicker, setShowCoverPicker] = useState(false);
   const [commander, setCommander] = useState(null);   // full Scryfall card object | null
+  // Chosen artwork per card: { [entryCardId]: printing summary }. Kept
+  // apart from the zones so entry keys (and everything matching on them)
+  // stay untouched — see services/deckPrintings.js.
+  const [printings, setPrintings] = useState({});
+  const [artPickerCard, setArtPickerCard] = useState(null);
 
   const isCommanderFormat = deckFormat === 'commander';
   // While in commander format with no commander chosen yet, the search
@@ -106,6 +117,9 @@ export default function MtgDeckBuilderApp() {
   const [setCode, setSetCode] = useState('');
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
+  // Scryfall oracle tags as search filter: [{ slug, label }]
+  const [searchTagFilter, setSearchTagFilter] = useState([]);
+  const oracleTags = useOracleTags();
 
   // ── Preview state ────────────────────────────────────
   const [hoveredCard,  setHoveredCard]  = useState(null);
@@ -172,6 +186,7 @@ export default function MtgDeckBuilderApp() {
     priceMin, priceMax,
     commanderIdentity,
     commanderPick: commanderPickMode,
+    tags: searchTagFilter,
   });
 
   // When "favorites only" / "owned only" is active, replace Scryfall
@@ -185,6 +200,12 @@ export default function MtgDeckBuilderApp() {
   const showingOwned = showOwnedOnly;
   const favCardsBase = favs.favoriteCards || [];
   const ownCardsBase = inv.ownedCards     || [];
+
+  // Tag filter for the client-side lists. Tags are picked from the loaded
+  // index, so it is available whenever a tag is selected.
+  const tagFilter = searchTagFilter.length > 0 && oracleTags.index
+    ? (card) => searchTagFilter.every(t => cardHasTag(oracleTags.index, card, t.slug))
+    : null;
 
   let clientSource = null;
   if (showingFavs && showingOwned) {
@@ -203,6 +224,7 @@ export default function MtgDeckBuilderApp() {
         sortOrder, sortDir,
         commanderPick: commanderPickMode,
         commanderIdentity,
+        tagFilter,
       })
     : null;
 
@@ -255,6 +277,7 @@ export default function MtgDeckBuilderApp() {
       setIdeas(data.data?.ideas || {});
       setCoverCardId(data.data?.coverCardId || null);
       setCommander(data.data?.commander || null);
+      setPrintings(data.data?.printings || {});
       setShareToken(data.share_token || null);
       setLoadingDeck(false);
       // allow dirty tracking to resume after next tick
@@ -267,7 +290,7 @@ export default function MtgDeckBuilderApp() {
   useEffect(() => {
     if (skipDirtyRef.current) return;
     setDirty(true);
-  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander]);
+  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander, printings]);
 
   // ── Singleton helper ─────────────────────────────────
   // In Commander, every non-basic-land card is capped at 1 copy.
@@ -568,6 +591,27 @@ export default function MtgDeckBuilderApp() {
     }
   }
 
+  // ── Artwork choice ───────────────────────────────────
+  // Display copies of the zones with the chosen artwork overlaid. Only
+  // for rendering — mutations and the analyzer keep using the stored zones.
+  const viewMainboard = useMemo(() => applyPrintingsToZone(mainboard, printings), [mainboard, printings]);
+  const viewSideboard = useMemo(() => applyPrintingsToZone(sideboard, printings), [sideboard, printings]);
+  const viewIdeas     = useMemo(() => applyPrintingsToZone(ideas, printings), [ideas, printings]);
+  const viewCommander = useMemo(
+    () => (commander ? applyPrinting(commander, printings[commander.id]) : null),
+    [commander, printings]
+  );
+  const setCardPrinting = useCallback((cardId, printing) => {
+    if (!cardId) return;
+    setPrintings(prev => {
+      if (printing) return { ...prev, [cardId]: printing };
+      if (!prev[cardId]) return prev;
+      const rest = { ...prev };
+      delete rest[cardId];
+      return rest;
+    });
+  }, []);
+
   // ── Preview handlers ─────────────────────────────────
   // Pin semantics:
   //   - no card pinned     → pin this card+face
@@ -585,6 +629,15 @@ export default function MtgDeckBuilderApp() {
   }, []);
   const handleUnpin = useCallback(() => setPinned(null), []);
 
+  // Tag chip in the preview → add / remove it as search filter.
+  const toggleSearchTag = useCallback((tag) => {
+    setSearchTagFilter(prev => (
+      prev.some(t => t.slug === tag.slug)
+        ? prev.filter(t => t.slug !== tag.slug)
+        : [...prev, { slug: tag.slug, label: tag.label }]
+    ));
+  }, []);
+
   // ── Save ─────────────────────────────────────────────
   async function handleSave() {
     if (!user) return;
@@ -599,7 +652,10 @@ export default function MtgDeckBuilderApp() {
       user_id: user.id,
       name: deckName.trim() || 'Unbenanntes Deck',
       format: deckFormat || null,
-      data: { mainboard, sideboard, ideas, coverCardId, commander },
+      data: {
+        mainboard, sideboard, ideas, coverCardId, commander,
+        printings: prunePrintings(printings, { mainboard, sideboard, ideas, commander }),
+      },
       share_token: tokenForSave,
       updated_at: new Date().toISOString(),
     };
@@ -658,23 +714,42 @@ export default function MtgDeckBuilderApp() {
   const deckAsRail    = mtgMode === 'both-rails';
   const { isPwaMobile } = usePwaMobile();
 
+  // The preview shows the stored card with this deck's artwork on top.
+  // Cards hovered/pinned from the deck panel arrive already overlaid, so
+  // start from the stored copy — otherwise "Standard" would keep the old art.
+  const storedDisplayCard = displayCard
+    ? (mainboard[displayCard.id]?.card || sideboard[displayCard.id]?.card
+      || ideas[displayCard.id]?.card
+      || (commander?.id === displayCard.id ? commander : null)
+      || displayCard)
+    : null;
+  const displayPrinting = displayCard ? (printings[displayCard.id] || null) : null;
+
   const previewPanel = (
     <CardPreview
-      card={displayCard}
+      card={applyPrinting(storedDisplayCard, displayPrinting)}
       isStale={isStale}
       pinned={!!pinned}
       pinnedFaceIndex={pinned?.faceIndex ?? null}
       onPin={() => handlePin(hoveredCard || pinned?.card, 0)}
       onUnpin={handleUnpin}
+      printing={displayPrinting}
+      onChooseArtwork={() => setArtPickerCard(storedDisplayCard)}
+      onResetArtwork={() => setCardPrinting(displayCard?.id, null)}
+      tags={storedDisplayCard ? tagsForCard(oracleTags.index, storedDisplayCard) : []}
+      tagStatus={oracleTags.status}
+      activeTagSlugs={searchTagFilter.map(t => t.slug)}
+      onToggleTag={toggleSearchTag}
+      onLoadTags={oracleTags.load}
     />
   );
 
   const deckPanelEl = (
     <DeckPanel
-      mainboard={mainboard}
-      sideboard={sideboard}
-      ideas={ideas}
-      commander={commander}
+      mainboard={viewMainboard}
+      sideboard={viewSideboard}
+      ideas={viewIdeas}
+      commander={viewCommander}
       onUpdateMainCount={updateMainCount}
       onRemoveMain={removeMain}
       onClearDeck={clearDeck}
@@ -746,6 +821,8 @@ export default function MtgDeckBuilderApp() {
       setCode={setCode}       setSetCode={setSetCode}
       priceMin={priceMin}     setPriceMin={setPriceMin}
       priceMax={priceMax}     setPriceMax={setPriceMax}
+      tags={searchTagFilter}  setTags={setSearchTagFilter}
+      tagIndex={oracleTags}
       totalCards={totalCards}
       loading={loading}
     />
@@ -775,8 +852,8 @@ export default function MtgDeckBuilderApp() {
   );
   const deckListViewEl = (
     <DeckListView
-      mainboard={mainboard}
-      sideboard={sideboard}
+      mainboard={viewMainboard}
+      sideboard={viewSideboard}
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
       viewMode={viewMode}
@@ -812,6 +889,13 @@ export default function MtgDeckBuilderApp() {
           viewMode={viewMode} setViewMode={setViewMode}
           mainCount={mainCount} sideCount={sideCount}
           pinnedCard={pinnedCard}
+          onUnpin={handleUnpin}
+          viewDeck={{
+            mainboard: viewMainboard,
+            sideboard: viewSideboard,
+            ideas: viewIdeas,
+            commander: viewCommander,
+          }}
         />
         <Suspense fallback={null}>
           {showImport && (
@@ -825,8 +909,8 @@ export default function MtgDeckBuilderApp() {
             <CoverPickerModal
               open
               onClose={() => setShowCoverPicker(false)}
-              mainboard={mainboard}
-              sideboard={sideboard}
+              mainboard={viewMainboard}
+              sideboard={viewSideboard}
               currentCoverId={coverCardId}
               onPick={(id) => setCoverCardId(id)}
             />
@@ -839,6 +923,15 @@ export default function MtgDeckBuilderApp() {
               commander={commander}
               deckFormat={deckFormat}
               onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
+            />
+          )}
+          {artPickerCard && (
+            <PrintingPickerModal
+              open
+              onClose={() => setArtPickerCard(null)}
+              card={artPickerCard}
+              currentPrintingId={printings[artPickerCard.id]?.id || null}
+              onPick={(p) => setCardPrinting(artPickerCard.id, p)}
             />
           )}
         </Suspense>
@@ -1005,6 +1098,8 @@ export default function MtgDeckBuilderApp() {
                 setCode={setCode}       setSetCode={setSetCode}
                 priceMin={priceMin}     setPriceMin={setPriceMin}
                 priceMax={priceMax}     setPriceMax={setPriceMax}
+                tags={searchTagFilter}  setTags={setSearchTagFilter}
+                tagIndex={oracleTags}
                 totalCards={totalCards}
                 loading={loading}
               />
@@ -1032,8 +1127,8 @@ export default function MtgDeckBuilderApp() {
                 />
               ) : (
                 <DeckListView
-                  mainboard={mainboard}
-                  sideboard={sideboard}
+                  mainboard={viewMainboard}
+                  sideboard={viewSideboard}
                   onHoverCard={setHoveredCard}
                   onPinCard={handlePin}
                   viewMode={viewMode}
@@ -1070,8 +1165,8 @@ export default function MtgDeckBuilderApp() {
             <CoverPickerModal
               open
               onClose={() => setShowCoverPicker(false)}
-              mainboard={mainboard}
-              sideboard={sideboard}
+              mainboard={viewMainboard}
+              sideboard={viewSideboard}
               currentCoverId={coverCardId}
               onPick={(id) => setCoverCardId(id)}
             />
@@ -1084,6 +1179,15 @@ export default function MtgDeckBuilderApp() {
               commander={commander}
               deckFormat={deckFormat}
               onApplyLands={(nextMainboard) => setMainboard(nextMainboard)}
+            />
+          )}
+          {artPickerCard && (
+            <PrintingPickerModal
+              open
+              onClose={() => setArtPickerCard(null)}
+              card={artPickerCard}
+              currentPrintingId={printings[artPickerCard.id]?.id || null}
+              onPick={(p) => setCardPrinting(artPickerCard.id, p)}
             />
           )}
         </Suspense>

@@ -10,6 +10,7 @@ export async function searchCards({
   rarity, cmcMin, cmcMax, subtype, format, setCode,
   priceMin, priceMax,
   commanderIdentity, commanderPick,
+  tags,               // [{ slug, label }] — Scryfall oracle tags (otag:)
   nextPageUrl,
 }) {
   let url;
@@ -72,6 +73,11 @@ export async function searchCards({
     const st = subtype?.trim();
     if (st) {
       parts.push(`t:${st.toLowerCase()}`);
+    }
+
+    // ── Oracle tags (Scryfall Tagger) — all must match ────
+    for (const t of tags || []) {
+      if (t?.slug) parts.push(`otag:${t.slug}`);
     }
 
     // ── Rarity ────────────────────────────────────────────

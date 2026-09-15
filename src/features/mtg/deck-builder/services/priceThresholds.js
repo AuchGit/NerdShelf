@@ -6,6 +6,7 @@
 // `useMtgPriceSettings` hook so updates propagate within the same window.
 
 import { useSyncExternalStore } from 'react';
+import { applyPrinting } from './deckPrintings';
 
 const STORAGE_KEY = 'mtg-price-thresholds';
 const EVENT_NAME = 'mtg-price-thresholds-change';
@@ -76,11 +77,14 @@ export function _resetMtgPriceCache() {
 }
 
 /** Compute the EUR price total for a deck object stored in supabase
- *  (i.e. with `data.mainboard`, `data.sideboard`, `data.commander`). */
+ *  (i.e. with `data.mainboard`, `data.sideboard`, `data.commander`).
+ *  Cards with a chosen artwork (`data.printings`) use that printing's price. */
 export function computeDeckEur(deckRow) {
   const data = deckRow?.data || {};
+  const printings = data.printings || {};
   const eurOf = (card) => {
-    const raw = card?.prices?.eur ?? card?.prices?.eur_foil;
+    const priced = applyPrinting(card, card?.id ? printings[card.id] : null);
+    const raw = priced?.prices?.eur ?? priced?.prices?.eur_foil;
     const n = raw == null ? null : Number(raw);
     return Number.isFinite(n) ? n : null;
   };

@@ -6,6 +6,7 @@ import { useAuth } from '../../../core/auth/AuthContext';
 import { Panel, ActionSheet } from '../../../shared/ui';
 import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
+import { applyPrinting } from './services/deckPrintings';
 import MtgSubNav from './components/MtgSubNav';
 import { ShareTokenBadge } from '../../../shared/tokens';
 import { ImportedSection, useImports } from '../../../shared/imports';
@@ -216,8 +217,11 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
   const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
-  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side
-  const eurOf = (card) => {
+  // Total deck price (Cardmarket EUR via Scryfall): commander + main + side.
+  // Cards with a chosen artwork use that printing's price.
+  const printings = data.printings || {};
+  const eurOf = (rawCard) => {
+    const card = applyPrinting(rawCard, rawCard?.id ? printings[rawCard.id] : null);
     const raw = card?.prices?.eur ?? card?.prices?.eur_foil;
     const n = raw == null ? null : Number(raw);
     return Number.isFinite(n) ? n : null;
@@ -256,7 +260,7 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
   if (coverId) {
     const cmd = data.commander && data.commander.id === coverId ? data.commander : null;
     const entry = data.mainboard?.[coverId] || data.sideboard?.[coverId];
-    const cardObj = cmd || entry?.card;
+    const cardObj = applyPrinting(cmd || entry?.card, printings[coverId]);
     if (cardObj) {
       coverArt =
         cardObj.image_uris?.art_crop ||

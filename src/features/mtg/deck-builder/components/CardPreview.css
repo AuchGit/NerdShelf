@@ -192,6 +192,53 @@
   box-shadow: 0 0 14px var(--accent-glow);
 }
 
+/* ── Artwork choice ── */
+.cp-art-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0 0.75rem 0.45rem;
+  flex-shrink: 0;
+}
+
+.cp-art-label {
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 0.7rem;
+  color: var(--text-lo);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-art-label.is-custom {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.cp-art-btn {
+  font-size: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  color: var(--text-mid);
+  border-radius: 12px;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.cp-art-btn:hover,
+.cp-art-btn.is-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cp-art-btn.is-primary:hover {
+  background: var(--accent-glow);
+}
+
 .cp-face-indicator {
   font-size: 0.7rem;
   color: var(--text-lo);
@@ -299,6 +346,65 @@
   color: var(--text-lo);
   line-height: 1.45;
   padding-top: 0.2rem;
+}
+
+/* ── Tags (Scryfall Tagger) ── */
+.cp-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-top: 0.2rem;
+}
+
+.cp-tags-head {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-lo);
+}
+
+.cp-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.cp-tag {
+  font-size: 0.7rem;
+  line-height: 1.2;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-mid);
+  background: var(--bg-card);
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cp-tag:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.cp-tag.is-active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent-hi);
+}
+.cp-tag-more {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-lo);
+}
+
+.cp-tags-note {
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--text-lo);
+}
+
+body[data-pwa-mobile='true'] .cp-tag {
+  font-size: 0.82rem;
+  padding: 0.4rem 0.75rem;
 }
 
 /* ── Stats row ── */

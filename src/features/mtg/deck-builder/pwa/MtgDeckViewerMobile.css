@@ -1,0 +1,392 @@
+/* src/features/mtg/deck-builder/pwa/MtgDeckViewerMobile.css
+ *
+ * Read-only deck viewer on phones ("Ansehen" tab). All classes are
+ * `mdv-*` prefixed.
+ */
+
+/* The pane's generic ":first-child { flex: 1; min-height: 0 }" rule would
+   clamp the viewer to the pane height and break the sticky controls. */
+.mtg-mob-screen .mtg-mob-pane > .mdv,
+.mtg-mob-screen .mtg-mob-view-full > .mdv {
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+
+.mdv {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Controls (sticky) ─────────────────────────────────────────── */
+.mdv-controls {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mdv-zones {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-sunken);
+}
+.mdv-zone {
+  flex: 1;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-zone.is-active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.mdv-zone-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+}
+
+.mdv-sorts {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.mdv-sorts::-webkit-scrollbar { display: none; }
+.mdv-pill {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-pill.is-active {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  color: var(--color-accent);
+}
+
+.mdv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mdv-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdv-seg {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.mdv-seg button {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-seg button + button { border-left: 1px solid var(--color-border); }
+.mdv-seg button.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-weight: var(--fw-semibold);
+}
+
+/* ─── Body ─────────────────────────────────────────────────────── */
+.mdv-body {
+  padding: 4px 10px 24px;
+}
+.mdv-empty {
+  padding: var(--space-6, 40px) var(--space-4, 16px);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.mdv-group-hdr {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 2px 6px;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-group-caret { width: 12px; }
+.mdv-group-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-dim);
+}
+
+.mdv-grid {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+}
+.mdv-tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 4.5% / 3.2%;
+  overflow: hidden;
+  aspect-ratio: 63 / 88;
+  background: var(--color-bg-sunken);
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mdv-tile:active { transform: scale(0.97); }
+.mdv-tile-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.mdv-count {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  min-width: 26px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 12px;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.mdv-list {
+  display: flex;
+  flex-direction: column;
+}
+.mdv-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 6px 2px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-line:active { background: var(--color-surface-hover); }
+.mdv-line-count {
+  width: 22px;
+  flex-shrink: 0;
+  text-align: right;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+}
+.mdv-line-thumb {
+  width: 30px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background-color: var(--color-bg-sunken);
+  background-size: cover;
+  background-position: center;
+}
+.mdv-line-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mdv-line-name {
+  font-size: 14px;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdv-line-type {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdv-line-mana {
+  display: flex;
+  flex-shrink: 0;
+  gap: 1px;
+}
+.mdv-line-price {
+  min-width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Full-screen card ─────────────────────────────────────────── */
+.mdv-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  padding:
+    calc(8px + env(safe-area-inset-top, 0))
+    calc(12px + env(safe-area-inset-right, 0))
+    calc(12px + env(safe-area-inset-bottom, 0))
+    calc(12px + env(safe-area-inset-left, 0));
+  background: rgba(0, 0, 0, 0.92);
+  color: #fff;
+  animation: mdv-lb-in 140ms ease-out;
+}
+@keyframes mdv-lb-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.mdv-lb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.mdv-lb-pos {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.mdv-lb-btn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+  font-size: 20px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mdv-lb-btn:disabled { opacity: 0.3; }
+.mdv-lb-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  touch-action: pan-y;
+}
+.mdv-lb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 4.5% / 3.2%;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+.mdv-lb-fallback {
+  width: min(80vw, 320px);
+  aspect-ratio: 63 / 88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  text-align: center;
+  padding: 16px;
+}
+.mdv-lb-flip {
+  position: absolute;
+  top: 16px;
+  right: 8px;
+}
+.mdv-lb-info {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 4px 0 8px;
+}
+.mdv-lb-name {
+  font-size: 16px;
+  font-weight: var(--fw-semibold);
+}
+.mdv-lb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+.mdv-lb-nav {
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+}

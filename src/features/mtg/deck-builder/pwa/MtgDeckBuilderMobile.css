@@ -135,6 +135,22 @@ body[data-pwa-mobile='true'] main:has(.mtg-mob-screen) {
   -webkit-tap-highlight-color: transparent;
 }
 .mtg-mob-menu-btn:active { background: var(--color-surface-hover); }
+.mtg-mob-view-btn { font-size: 16px; }
+.mtg-mob-view-btn.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: var(--color-accent);
+}
+
+/* Landscape viewer: full width below the header. */
+.mtg-mob-view-full {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ─── Toolbar: format select + chips ──────────────────────────────── */
 .mtg-mob-toolbar {

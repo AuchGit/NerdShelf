@@ -29,6 +29,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../../core/supabase/client';
 import { useAuth } from '../../../../core/auth/AuthContext';
 import { useMtgInventory } from './useMtgInventory';
+import { applyPrinting, allocateOwned } from '../services/deckPrintings';
+import { getCardPriceEur } from '../services/scryfall';
 
 const TABLE = 'mtg_inventory';
 const MANUAL_KIND = 'wishlist-manual';
@@ -87,34 +89,40 @@ export function useMtgWishlist(opts = {}) {
   /* ─── compute the wishlist ─── */
   const wishlist = useMemo(() => {
     // 1. Aggregate required quantities per scryfall id across all decks.
-    const need = new Map();              // cardId → { card, count, sources: [deckName] }
-    const bump = (cardId, card, n, src) => {
+    //    `parts` splits the count by the artwork each deck chose for the
+    //    card (printing null = no fixed artwork).
+    const need = new Map();              // cardId → { card, count, sources: [deckName], parts }
+    const bump = (cardId, card, n, src, printing) => {
       if (!cardId || n <= 0) return;
-      const row = need.get(cardId) || { card, count: 0, sources: [] };
+      const row = need.get(cardId) || { card, count: 0, sources: [], parts: [] };
       row.count += n;
       if (!row.card) row.card = card;
       if (src && !row.sources.includes(src)) row.sources.push(src);
+      const part = row.parts.find(p => (p.printing?.id || null) === (printing?.id || null));
+      if (part) part.count += n;
+      else row.parts.push({ printing: printing || null, count: n });
       need.set(cardId, row);
     };
     for (const d of decks) {
       const data = d.data || {};
       const src = d.name || 'Unbenanntes Deck';
+      const printings = data.printings || {};
       for (const [id, entry] of Object.entries(data.mainboard || {})) {
-        bump(id, entry?.card, entry?.count || 0, src);
+        bump(id, entry?.card, entry?.count || 0, src, printings[id]);
       }
       if (includeSideboard) {
         for (const [id, entry] of Object.entries(data.sideboard || {})) {
-          bump(id, entry?.card, entry?.count || 0, src);
+          bump(id, entry?.card, entry?.count || 0, src, printings[id]);
         }
       }
       // Ideas are an unbounded "would like to test" pool — they DO
       // contribute to the wishlist (the user wants to buy them) and
       // their source is tagged so the user sees which deck wanted it.
       for (const [id, entry] of Object.entries(data.ideas || {})) {
-        bump(id, entry?.card, entry?.count || 0, `${src} (Ideen)`);
+        bump(id, entry?.card, entry?.count || 0, `${src} (Ideen)`, printings[id]);
       }
       if (includeCommander && data.commander?.id) {
-        bump(data.commander.id, data.commander, 1, src);
+        bump(data.commander.id, data.commander, 1, src, printings[data.commander.id]);
       }
     }
 
@@ -124,12 +132,24 @@ export function useMtgWishlist(opts = {}) {
       const owned = inv.getQuantity(cardId);
       const missing = row.count - owned;
       if (missing > 0) {
+        // Owned copies aren't tracked per artwork — they cover demand
+        // without a fixed artwork first (see allocateOwned).
+        const remaining = allocateOwned(row.parts, owned);
+        const chosen = remaining.filter(p => p.printing);
+        const single = remaining.length === 1 && chosen.length === 1 ? chosen[0].printing : null;
+        let missingEur = null;
+        for (const p of remaining) {
+          const eur = getCardPriceEur(applyPrinting(row.card, p.printing));
+          if (eur != null) missingEur = (missingEur ?? 0) + eur * p.count;
+        }
         auto.push({
           cardId,
-          card: row.card,
+          card: single ? applyPrinting(row.card, single) : row.card,
           neededTotal: row.count,
           owned,
           missing,
+          missingEur,
+          printings: chosen,
           sources: row.sources,
           kind: 'auto',
         });

@@ -12,6 +12,7 @@ import { supabase } from '../../../../core/supabase/client';
 import { Panel } from '../../../../shared/ui';
 import { ShareTokenBadge } from '../../../../shared/tokens';
 import { getCardPriceEur, formatEur } from '../services/scryfall';
+import { applyPrinting, applyPrintingsToZone } from '../services/deckPrintings';
 
 export default function DeckViewPage() {
   const { token } = useParams();
@@ -45,6 +46,11 @@ export default function DeckViewPage() {
   const stats = useMemo(() => {
     if (!row) return null;
     const d = row.data || {};
+    // Show the owner's chosen artwork (and its price).
+    const printings = d.printings || {};
+    const mainboard = applyPrintingsToZone(d.mainboard, printings);
+    const sideboard = applyPrintingsToZone(d.sideboard, printings);
+    const commander = d.commander ? applyPrinting(d.commander, printings[d.commander.id]) : null;
     const sumEntry = (entries) =>
       Object.values(entries || {}).reduce((acc, e) => {
         const p = getCardPriceEur(e.card) ?? 0;
@@ -53,15 +59,15 @@ export default function DeckViewPage() {
           price: acc.price + p * (e.count || 0),
         };
       }, { count: 0, price: 0 });
-    const main = sumEntry(d.mainboard);
-    const side = sumEntry(d.sideboard);
-    const cmdPrice = d.commander ? (getCardPriceEur(d.commander) ?? 0) : 0;
+    const main = sumEntry(mainboard);
+    const side = sumEntry(sideboard);
+    const cmdPrice = commander ? (getCardPriceEur(commander) ?? 0) : 0;
     return {
       main,
       side,
-      commander: d.commander,
-      mainEntries: Object.values(d.mainboard || {}),
-      sideEntries: Object.values(d.sideboard || {}),
+      commander,
+      mainEntries: Object.values(mainboard),
+      sideEntries: Object.values(sideboard),
       totalEur: main.price + side.price + cmdPrice,
     };
   }, [row]);

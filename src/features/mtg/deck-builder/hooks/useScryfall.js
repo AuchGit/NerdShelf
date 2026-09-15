@@ -11,6 +11,8 @@ export function useScryfall({
   // When true, restrict the search to cards eligible to be a Commander
   // (Scryfall's `is:commander`).
   commanderPick = false,
+  // Scryfall oracle tags ([{ slug, label }]) — each adds an `otag:` term.
+  tags = [],
 }) {
   const [cards,       setCards]       = useState([]);
   const [loading,     setLoading]     = useState(false);
@@ -32,6 +34,7 @@ export function useScryfall({
   const colorsKey = colors.join(',');
   const ciKey     = commanderIdentity ? commanderIdentity.join(',') : '';
   const cpKey     = commanderPick ? '1' : '0';
+  const tagsKey   = tags.map(t => t.slug).join(',');
 
   const fetchCards = useCallback(async (params, append = false) => {
     const myId = ++reqIdRef.current;
@@ -77,7 +80,7 @@ export function useScryfall({
     const hasInput =
       query || colors.length > 0 || cardType || showLands ||
       rarity || cmcMin || cmcMax || subtype || format || setCode ||
-      priceMin || priceMax ||
+      priceMin || priceMax || tags.length > 0 ||
       commanderIdentity || commanderPick;
 
     if (!hasInput) {
@@ -102,13 +105,14 @@ export function useScryfall({
         rarity, cmcMin, cmcMax, subtype, format, setCode,
         priceMin, priceMax,
         commanderIdentity, commanderPick,
+        tags,
       });
     }, 420);
 
     return () => clearTimeout(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, searchMode, colorsKey, colorMode, cardType, sortOrder, sortDir, showLands,
-      rarity, cmcMin, cmcMax, subtype, format, setCode, priceMin, priceMax, ciKey, cpKey]);
+      rarity, cmcMin, cmcMax, subtype, format, setCode, priceMin, priceMax, ciKey, cpKey, tagsKey]);
 
   const loadMore = useCallback(() => {
     if (nextPageUrl && !loading) {

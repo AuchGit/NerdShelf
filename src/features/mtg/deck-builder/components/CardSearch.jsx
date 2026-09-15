@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { searchTags } from '../services/scryfallTags';
 import './CardSearch.css';
 
 const COLORS = [
@@ -75,6 +76,9 @@ export default function CardSearch({
   deckFormatLabel,
   showFavoritesOnly = false, setShowFavoritesOnly,
   showOwnedOnly = false, setShowOwnedOnly,
+  // Scryfall oracle tags: selected [{ slug, label }] + the shared tag index
+  // ({ status, index, error, load } from useOracleTags). Optional.
+  tags = [], setTags, tagIndex,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -84,7 +88,7 @@ export default function CardSearch({
   const toggleRarity = (id) =>
     setRarity(prev => prev === id ? '' : id);
 
-  const hasBasicFilters    = query || colors.length > 0 || cardType || showLands;
+  const hasBasicFilters    = query || colors.length > 0 || cardType || showLands || tags.length > 0;
   const hasAdvancedFilters = rarity || cmcMin || cmcMax || subtype || format || setCode || priceMin || priceMax;
   const hasFilters         = hasBasicFilters || hasAdvancedFilters;
 
@@ -93,6 +97,7 @@ export default function CardSearch({
     setRarity(''); setCmcMin(''); setCmcMax('');
     setSubtype(''); setFormat(''); setSetCode('');
     setPriceMin?.(''); setPriceMax?.('');
+    setTags?.([]);
   };
 
   return (
@@ -221,6 +226,11 @@ export default function CardSearch({
           </button>
         )}
       </div>
+
+      {/* ── Row 3: Scryfall oracle tags ── */}
+      {setTags && (
+        <TagFilter tags={tags} setTags={setTags} tagIndex={tagIndex} />
+      )}
 
       {/* ── Advanced toggle ── */}
       <button
@@ -354,6 +364,110 @@ export default function CardSearch({
         {!loading && !totalCards && hasFilters && (
           <span className="status-empty">Keine Ergebnisse</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tag filter row: selected tags as removable chips plus an input with
+ * autocomplete over the Scryfall Tagger tags. The tag data loads on first
+ * focus (or earlier, when the preview asked for it).
+ */
+function TagFilter({ tags, setTags, tagIndex }) {
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+
+  const status = tagIndex?.status;
+  const index = tagIndex?.index;
+  const suggestions = open && index
+    ? searchTags(index, text, { limit: 8, exclude: tags.map(t => t.slug) })
+    : [];
+
+  const add = (t) => {
+    setTags(prev => (prev.some(x => x.slug === t.slug) ? prev : [...prev, { slug: t.slug, label: t.label }]));
+    setText('');
+    setActive(0);
+  };
+  const remove = (slug) => setTags(prev => prev.filter(t => t.slug !== slug));
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActive(a => Math.min(a + 1, Math.max(suggestions.length - 1, 0)));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive(a => Math.max(a - 1, 0));
+    } else if (e.key === 'Enter' && suggestions[active]) {
+      e.preventDefault();
+      add(suggestions[active]);
+    } else if (e.key === 'Backspace' && !text && tags.length > 0) {
+      remove(tags[tags.length - 1].slug);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      e.currentTarget.blur();
+    }
+  };
+
+  let dropdown = null;
+  if (open && !index && status === 'loading') {
+    dropdown = <div className="tag-suggest-note">Tags werden geladen…</div>;
+  } else if (open && !index && status === 'error') {
+    dropdown = <div className="tag-suggest-note">Tags nicht verfügbar: {tagIndex.error}</div>;
+  } else if (suggestions.length > 0) {
+    dropdown = suggestions.map((t, i) => (
+      <button
+        key={t.slug}
+        type="button"
+        role="option"
+        aria-selected={i === active}
+        className={`tag-suggest-item ${i === active ? 'is-active' : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseEnter={() => setActive(i)}
+        onClick={() => add(t)}
+        title={t.description || undefined}
+      >
+        <span className="tag-suggest-label">{t.label}</span>
+        <span className="tag-suggest-count">{t.count.toLocaleString()}</span>
+      </button>
+    ));
+  } else if (open && index && text.trim()) {
+    dropdown = <div className="tag-suggest-note">Kein Tag gefunden.</div>;
+  }
+
+  return (
+    <div className="tag-row">
+      <span className="tag-row-label" title="Tags aus dem Scryfall Tagger — was eine Karte tut, z. B. ramp oder removal">
+        Tags
+      </span>
+      {tags.map(t => (
+        <button
+          key={t.slug}
+          type="button"
+          className="tag-chip"
+          onClick={() => remove(t.slug)}
+          title="Tag-Filter entfernen"
+        >
+          {t.label}<span className="tag-chip-x" aria-hidden="true">✕</span>
+        </button>
+      ))}
+      <div className="tag-input-wrap">
+        <input
+          type="text"
+          className="tag-input"
+          value={text}
+          placeholder={tags.length ? '+ Tag' : 'Tag suchen, z. B. ramp, removal…'}
+          onChange={(e) => { setText(e.target.value); setActive(0); setOpen(true); }}
+          onFocus={() => { setOpen(true); if (status === 'idle' || status === 'error') tagIndex?.load?.(); }}
+          onBlur={() => setOpen(false)}
+          onKeyDown={onKeyDown}
+          spellCheck={false}
+          autoComplete="off"
+          aria-autocomplete="list"
+          aria-expanded={!!dropdown}
+        />
+        {dropdown && <div className="tag-suggest" role="listbox">{dropdown}</div>}
       </div>
     </div>
   );
