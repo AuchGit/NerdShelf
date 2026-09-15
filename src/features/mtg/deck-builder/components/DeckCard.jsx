@@ -17,6 +17,7 @@ export default function DeckCard({
   moveRightTitle,
   onHover,          // optional: (card) => void
   onPin,            // optional: (card) => void — right-click pins to preview
+  name,             // optional: shown instead of card.name (e.g. a two-sided token product)
   note,             // optional: small muted line under the card (e.g. token sources)
   removeTitle,      // optional: tooltip of the ✕ button
   readOnly = false, // shared decks: show the count only, no controls
@@ -74,7 +75,7 @@ export default function DeckCard({
       </div>
 
       <div className="dc-info">
-        <div className="dc-name">{card.name}</div>
+        <div className="dc-name" title={name || card.name}>{name || card.name}</div>
         <div className="dc-sub">
           <span className="dc-type">{card.type_line?.split('—')[0].trim()}</span>
           <span className="dc-mana">

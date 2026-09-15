@@ -305,20 +305,26 @@ export default function DeckPanel({
                   <span className="dp-group-count">{group.groupCount}</span>
                 </div>
               )}
-              {group.entries.map(({ card, count, key: tokenKey }) => {
+              {group.entries.map(({ card, count, key: tokenKey, productName, partnerCard }) => {
                 if (tab === 'tokens') {
                   const sources = tokenSources[tokenKey] || [];
+                  // Two tokens printed back to back are one card, so they
+                  // are one entry — named after the card you actually buy.
+                  const notes = [];
+                  if (partnerCard) notes.push('beide Seiten auf einer Karte');
+                  if (sources.length > 0) notes.push(`aus: ${sources.join(', ')}`);
                   return (
                     <DeckCard
                       key={tokenKey}
                       card={card}
+                      name={productName || undefined}
                       count={count}
                       onIncrease={() => onSetTokenCount?.(tokenKey, count + 1)}
                       onDecrease={() => onSetTokenCount?.(tokenKey, count - 1)}
                       onRemove={() => onSetTokenCount?.(tokenKey, 0)}
                       removeTitle="Nicht kaufen (0)"
                       readOnly={readOnly}
-                      note={sources.length > 0 ? `aus: ${sources.join(', ')}` : null}
+                      note={notes.length > 0 ? notes.join(' · ') : null}
                       onHover={onHoverCard}
                       onPin={onPinCard}
                     />

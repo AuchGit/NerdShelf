@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { collectTokenRefs, groupDeckTokens } from '../deckTokens';
+import { collectTokenRefs, groupDeckTokens, mergeTokenPairs } from '../deckTokens';
 import {
   tokenCardmarketName, cardmarketTokenTarget, cardmarketTokenPairs,
 } from '../cardmarketMap';
@@ -90,6 +90,38 @@ describe('helper cards a deck also needs', () => {
   });
 });
 
+describe('two tokens on one card', () => {
+  const wolfB = { id: 'wb', name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['B'], power: '1', toughness: '1', set: 'tinr' };
+  const wolfG = { id: 'wg', name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['G'], power: '2', toughness: '2', set: 'tinr' };
+  const product = 'Wolf Token (B 1/1) // Wolf Token (G 2/2)';
+  const rows = [
+    { key: 'ob', card: wolfB, sources: ['Garruk Relentless'], count: 1 },
+    { key: 'og', card: wolfG, sources: ['Garruk Relentless', 'Master of the Wild Hunt'], count: 3 },
+  ];
+  const pairs = new Map([
+    ['ob', { name: product, expansion: 'Innistrad Remastered: Tokens', qty: 3, primary: true, partnerKey: 'og' }],
+    ['og', { name: product, expansion: 'Innistrad Remastered: Tokens', qty: 3, primary: false, partnerKey: 'ob' }],
+  ]);
+
+  it('shows one entry for the card, counting the higher of the two', () => {
+    const merged = mergeTokenPairs(rows, pairs);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].keys).toEqual(['ob', 'og']);
+    expect(merged[0].productName).toBe(product);
+    expect(merged[0].partnerCard).toBe(wolfG);
+    expect(merged[0].count).toBe(3);
+    // The creating cards of both halves end up on the one row.
+    expect(merged[0].sources).toEqual(['Garruk Relentless', 'Master of the Wild Hunt']);
+  });
+
+  it('leaves everything else untouched', () => {
+    expect(mergeTokenPairs(rows, null)).toBe(rows);
+    expect(mergeTokenPairs(rows, new Map())).toBe(rows);
+    const loner = { key: 'ot', card: { name: 'Treasure' }, sources: [], count: 1 };
+    expect(mergeTokenPairs([...rows, loner], pairs)).toHaveLength(2);
+  });
+});
+
 describe('Cardmarket token names', () => {
   it('builds the usual Cardmarket spelling', () => {
     expect(tokenCardmarketName(goblinA)).toBe('Goblin Token (Red 1/1)');
@@ -159,7 +191,7 @@ describe('Cardmarket token names', () => {
     expect(pairs.get('token:wb')).toEqual({
       name: 'Wolf Token (B 1/1) // Wolf Token (G 2/2)',
       expansion: 'Innistrad Remastered: Tokens',
-      qty: 3, primary: true,
+      qty: 3, primary: true, partnerKey: 'token:wg',
     });
     expect(pairs.get('token:wg').primary).toBe(false);
     expect(pairs.get('token:wg').qty).toBe(3);

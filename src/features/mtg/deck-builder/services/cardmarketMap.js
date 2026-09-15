@@ -217,8 +217,8 @@ export function cardmarketTokenPairs(map, wanted) {
         taken.add(a.row.key);
         taken.add(b.row.key);
         const qty = Math.max(a.row.qty || 1, b.row.qty || 1);
-        out.set(a.row.key, { name: productName, expansion, qty, primary: true });
-        out.set(b.row.key, { name: productName, expansion, qty, primary: false });
+        out.set(a.row.key, { name: productName, expansion, qty, primary: true, partnerKey: b.row.key });
+        out.set(b.row.key, { name: productName, expansion, qty, primary: false, partnerKey: a.row.key });
       }
     }
   }

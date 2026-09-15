@@ -636,8 +636,15 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
   // ── Tokens the deck's cards create ───────────────────
   const deckTokens = useDeckTokens(mainboard, sideboard, commander, tokenCounts);
   const setTokenCount = useCallback((key, count) => {
-    setTokenCounts(prev => ({ ...prev, [key]: Math.max(0, count) }));
-  }, []);
+    // A row can stand for both halves of one token card — then the count
+    // belongs to both of them.
+    const keys = deckTokens.zone[key]?.keys || [key];
+    setTokenCounts(prev => {
+      const next = { ...prev };
+      for (const k of keys) next[k] = Math.max(0, count);
+      return next;
+    });
+  }, [deckTokens.zone]);
 
   // ── Preview handlers ─────────────────────────────────
   // Pin semantics:

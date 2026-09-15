@@ -90,6 +90,47 @@ export function tokenKeyOf(card, fallbackId) {
  * Merge refs into one row per token.
  * @returns {{ key, card, sources: string[], count }[]} sorted by name
  */
+/**
+ * Fold the two halves of one physical token card into a single row.
+ *
+ * Most tokens since Innistrad are printed back to back — one card, two
+ * different tokens. Scryfall lists them as two separate token cards, so
+ * which two share a card is only known from Cardmarket's product names
+ * (see cardmarketTokenPairs). A deck that needs both should see one entry,
+ * because that is one card to buy.
+ *
+ * @param {object[]} rows   from groupDeckTokens
+ * @param {Map|null} pairs  from cardmarketTokenPairs
+ */
+export function mergeTokenPairs(rows, pairs) {
+  if (!pairs || pairs.size === 0) return rows;
+  const byKey = new Map(rows.map(r => [r.key, r]));
+  const out = [];
+  for (const row of rows) {
+    const pair = pairs.get(row.key);
+    if (!pair) { out.push(row); continue; }
+    // The other half is folded into its partner's row.
+    if (!pair.primary) continue;
+    const partner = byKey.get(pair.partnerKey);
+    if (!partner) { out.push(row); continue; }
+    out.push({
+      ...row,
+      // Both counts move together — one card brings both sides.
+      keys: [row.key, partner.key],
+      partnerCard: partner.card,
+      productName: pair.name,
+      expansion: pair.expansion,
+      sources: [...new Set([...row.sources, ...partner.sources])].sort(),
+      count: Math.max(row.count, partner.count),
+    });
+  }
+  return out;
+}
+
+/**
+ * Merge refs into one row per token.
+ * @returns {{ key, card, sources: string[], count }[]} sorted by name
+ */
 export function groupDeckTokens(refs, tokenCards, counts = {}) {
   const byKey = new Map();
   for (const [id, ref] of refs) {
