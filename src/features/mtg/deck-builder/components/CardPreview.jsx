@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { parseManaCost, getCardLayout, getCardFaces } from '../services/scryfall';
+import useLocalizedCard from '../hooks/useLocalizedCard';
 import { printingLabel } from '../services/deckPrintings';
 import ManaSymbol from './ManaSymbol';
 import './CardPreview.css';
@@ -101,7 +102,7 @@ function EmptyPreview() {
 }
 
 export default function CardPreview({
-  card, isStale, pinned, onPin, onUnpin,
+  card: cardProp, isStale, pinned, onPin, onUnpin,
   pinnedFaceIndex = null,
   // Artwork choice for this deck (optional): the chosen printing summary
   // or null, plus the handlers to open the picker / reset to standard.
@@ -110,6 +111,9 @@ export default function CardPreview({
   // which tags are active search filters, and the toggle / load handlers.
   tags = [], tagStatus = 'idle', activeTagSlugs = [], onToggleTag, onLoadTags,
 }) {
+  // Shown in the card language from the MTG settings when that printing
+  // exists in it; identical to the passed card for English (the default).
+  const card = useLocalizedCard(cardProp);
   // Face shown for double-faced cards. A pick only counts for the card /
   // pinned face it was made on — a new card starts at its pinned face or 0.
   const faceKey = `${card?.id}|${pinned ? 1 : 0}|${pinnedFaceIndex}`;
@@ -212,7 +216,7 @@ export default function CardPreview({
       <div className="cp-info">
         <div className="cp-name-row">
           <span className="cp-name">
-            {isDouble ? face?.name : card.name}
+            {isDouble ? face?.name : (card.printed_name || card.name)}
           </span>
           <span className="cp-cost">
             {manaSyms.map((s, i) => <ManaSymbol key={i} symbol={s} size="sm" />)}

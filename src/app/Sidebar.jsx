@@ -60,7 +60,15 @@ export default function Sidebar({ onOpenSettings, onOpenBugReport, onOpenCalenda
         justifyContent: compact ? 'center' : 'space-between',
         gap: 6,
       }}>
-        <span>{compact ? 'NS' : 'NerdShelf'}</span>
+        {/* The app icon alone — no wordmark. BASE_URL keeps it working
+            both in the desktop app ('/') and the PWA ('/NerdShelf/'). */}
+        <img
+          src={`${import.meta.env.BASE_URL}icons/icon-192.png`}
+          alt="NerdShelf"
+          width={28}
+          height={28}
+          style={{ width: 28, height: 28, borderRadius: 7, display: 'block', flexShrink: 0 }}
+        />
         {onToggle && (
           // Chevron-Toggle. Beim Full-Modus zeigt's "‹" (collapse), beim
           // Compact-Modus "›" (expand). Persistiert per useSidebarMode.

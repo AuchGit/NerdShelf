@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { parseDecklistText, buildDeckFromParsed } from '../deckImport';
+import { parseDecklistText, buildDeckFromParsed, lookupName } from '../deckImport';
+
+describe('lookupName', () => {
+  it('asks Scryfall for the front face — the only name its collection knows', () => {
+    expect(lookupName('Fire // Ice')).toBe('fire');
+    expect(lookupName('Fire//Ice')).toBe('fire');
+    expect(lookupName('Delver of Secrets // Insectile Aberration')).toBe('delver of secrets');
+    expect(lookupName('Lightning Bolt')).toBe('lightning bolt');
+  });
+});
 
 describe('parseDecklistText', () => {
   it('reads editions and collector numbers', () => {
@@ -48,5 +57,15 @@ describe('buildDeckFromParsed', () => {
     expect(deck.printings.opt).toBeUndefined();
     expect(deck.fallbacks).toEqual(['Opt (ZZZ 1)']);
     expect(deck.notFound).toEqual(['Unknown Card']);
+  });
+
+  it('matches split cards written with the full name, either spacing', () => {
+    const fire = { id: 'fire-mh2', name: 'Fire // Ice', set: 'mh2', collector_number: '290' };
+    const parsed = parseDecklistText('2 Fire // Ice\n1 Fire//Ice\n3 Fire');
+    const resolved = { found: [{ name: 'fire // ice', card: fire }], notFound: [], prints: new Map() };
+    const deck = buildDeckFromParsed(parsed, resolved);
+    expect(Object.keys(deck.mainboard)).toEqual(['fire-mh2']);
+    expect(deck.mainboard['fire-mh2'].count).toBe(6);
+    expect(deck.notFound).toEqual([]);
   });
 });

@@ -108,11 +108,20 @@ export default defineConfig(async ({ mode }) => {
           // Chrome) instead of the browser, reusing an open window.
           launch_handler: { client_mode: ['navigate-existing', 'auto'] },
           handle_links: 'preferred',
+          // Android installs need a 192 and a 512 PNG — without them Chrome
+          // draws a generated letter tile instead of the app icon. The
+          // maskable pair carries the safe-area padding Android crops to.
+          // All of them are the desktop app's icon, so the app looks the
+          // same on every device.
           icons: [
-            { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+            { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: 'icons/icon-192-maskable.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+            { src: 'icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
             { src: 'icons/icon-128.png', sizes: '128x128', type: 'image/png' },
             { src: 'icons/icon-256.png', sizes: '256x256', type: 'image/png' },
             { src: 'icons/icon-310.png', sizes: '310x310', type: 'image/png' },
+            { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
           ],
         },
       })

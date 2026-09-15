@@ -11,8 +11,7 @@
   Die section-ids sind Sprungziele von dort: nicht umbenennen.
 
   Pflegehinweise (Sprache, Bausteine, was wann mitzuziehen ist):
-  docs/handbuch-pflege.md. Screenshots: public/handbuch-img/ (README dort
-  erklärt die Dateinamen).
+  docs/handbuch-pflege.md.
 -->
 <html lang="de">
 <head>
@@ -99,9 +98,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{
 }
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:800;letter-spacing:-.02em;font-size:17px;white-space:nowrap;text-decoration:none;color:var(--text)}
 .brand .logo{
-  width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
-  background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:800;
-  font-family:var(--font-display);flex-shrink:0;
+  width:26px;height:26px;border-radius:7px;display:block;
+  object-fit:cover;flex-shrink:0;
 }
 .brand small{font-family:var(--font-mono);font-size:10.5px;font-weight:400;color:var(--dim);letter-spacing:0}
 .top-spacer{flex:1}
@@ -269,36 +267,6 @@ body.altdown .term{border-bottom-color:var(--accent);color:var(--accent)}
 #tip.on{opacity:1;transform:none}
 #tip .t{font-family:var(--font-display);font-weight:700;font-size:13.5px;margin-bottom:3px;display:block}
 
-/* Screenshot-Slots */
-figure.shot{margin:20px 0 24px;max-width:100%}
-.shot-frame{
-  position:relative;border:1px solid var(--border-strong);border-radius:var(--r-lg);
-  overflow:hidden;background:var(--bg-sunk);aspect-ratio:16/10;
-}
-.shot-frame img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
-.shot-empty{
-  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  text-align:center;padding:20px;
-  background-image:repeating-linear-gradient(135deg,transparent 0 11px,color-mix(in srgb,var(--border) 55%,transparent) 11px 12px);
-}
-.shot-frame.has-img .shot-empty{display:none}
-.shot-empty .n{font-family:var(--font-mono);font-size:12px;color:var(--text);background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--r-md);padding:5px 10px}
-.shot-empty .h{font-size:12.5px;color:var(--muted);max-width:46ch}
-.mark{
-  position:absolute;width:23px;height:23px;border-radius:50%;display:none;place-items:center;
-  background:var(--accent);color:var(--accent-ink);font-family:var(--font-mono);font-size:11.5px;font-weight:600;
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--bg-elev) 70%, transparent),var(--shadow-md);transform:translate(-50%,-50%);
-}
-.shot-frame.has-img .mark{display:grid}
-figcaption{margin-top:9px;font-size:13px;color:var(--muted)}
-ol.legend{list-style:none;counter-reset:l;padding:0;margin:8px 0 0;display:grid;gap:5px}
-ol.legend li{counter-increment:l;position:relative;padding-left:28px;font-size:13px;margin:0;max-width:66ch}
-ol.legend li::before{
-  content:counter(l);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
-  display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);
-  font-family:var(--font-mono);font-size:10.5px;font-weight:600;
-}
-
 details{border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface);margin:14px 0}
 details summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;gap:9px}
 details summary::-webkit-details-marker{display:none}
@@ -353,7 +321,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 <body>
 <header class="top">
   <button class="iconbtn" id="navtoggle" aria-label="Navigation öffnen">☰</button>
-  <a class="brand" href="#top"><span class="logo">NS</span><span class="full">NerdShelf</span> <small id="verpill">Handbuch</small></a>
+  <a class="brand" href="#top"><img class="logo" src="icons/icon-192.png" alt="NerdShelf"> <small id="verpill">Handbuch</small></a>
   <div class="top-spacer"></div>
   <div class="searchwrap">
     <input id="q" type="search" placeholder="Handbuch durchsuchen …" autocomplete="off" spellcheck="false" aria-label="Handbuch durchsuchen">
@@ -559,7 +527,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <h3>Etwas übernehmen</h3>
   <ul>
     <li><b>Per Link:</b> anklicken — der Eintrag wird importiert und gleich geöffnet. Ist NerdShelf auf einem Android-Handy installiert, öffnet sich der Link direkt in der App. Auf dem iPhone öffnet ein Link immer Safari statt der installierten App; dort anmelden oder den Token aus der Nachricht in der App eintragen.</li>
-    <li><b>Am PC:</b> Öffnet sich ein Link im Browser, fragt NerdShelf unten <span class="ui">In der NerdShelf-App öffnen?</span> — mit installierter Desktop-App geht es dort weiter (beim ersten Mal fragt der Browser noch, ob er die App öffnen darf). Mit <span class="ui">Links auf diesem Computer immer in der App öffnen</span> passiert das künftig ohne Nachfrage.</li>
+    <li><b>Am PC:</b> Öffnet sich ein geteilter Link im Browser, reicht NerdShelf ihn <strong>von selbst an die Desktop-App weiter</strong> (beim ersten Mal fragt der Browser noch, ob er die App öffnen darf). Danach meldet der Tab <span class="ui">In der NerdShelf-App geöffnet</span> und schließt sich, soweit der Browser das zulässt — sonst steht dort <span class="ui">Tab schließen</span>. Ist die App auf dem Rechner nicht installiert, merkt NerdShelf das nach einem Moment und macht einfach im Browser weiter, ohne künftig wieder zu fragen. Wer lieber im Browser bleibt, wählt einmal <span class="ui">Immer im Browser bleiben</span>.</li>
     <li><b>Per Token:</b> oben auf dem Dashboard des Bereichs <span class="ui">⌗ Import per Token</span> antippen, den Token eintragen, <span class="ui">Prüfen</span> und dann <span class="ui">+ In Dashboard</span>. Bindestriche sind egal.</li>
   </ul>
   <p>Übernommene Sachen landen unter <b>Importierte Charaktere / Decks / Armeen</b> ganz unten auf dem Dashboard, gruppiert nach Besitzer und darunter nach Edition, Format bzw. Fraktion. Sie sind <strong>nur lesbar</strong> und lassen sich jederzeit wieder entfernen — beim Besitzer passiert dabei nichts.</p>
@@ -568,7 +536,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <thead><tr><th>Was</th><th>Token-Art</th><th>Ergebnis beim Empfänger</th></tr></thead>
     <tbody>
       <tr><td class="k">D&amp;D-Charakter</td><td>Share-Token</td><td>Nur-Lese-Übersicht des Charakters</td></tr>
-      <tr><td class="k">MTG-Deck</td><td>Share-Token</td><td>Öffnet sich wie ein eigenes Deck im Deck-Builder — Vorschau, Decklist, Deck-Panel mit Tokens, am Handy <b>Ansehen</b> —, nur ohne Bearbeiten. <span class="ui">Kopieren</span> legt eine eigene, bearbeitbare Kopie mit neuem Token an.</td></tr>
+      <tr><td class="k">MTG-Deck</td><td>Share-Token</td><td>Öffnet sich wie ein eigenes Deck im Deck-Builder — Vorschau, Decklist, Deck-Panel mit Tokens —, nur ohne Bearbeiten. Am Handy landet es direkt in der Ansehen-Ansicht, ganz ohne Reiter-Leiste. <span class="ui">Kopieren</span> legt eine eigene, bearbeitbare Kopie mit neuem Token an.</td></tr>
       <tr><td class="k">WH40K-Armee</td><td>Share-Token</td><td>Armeeliste mit Ausrüstung und Punkten</td></tr>
       <tr><td class="k">D&amp;D-Kampagne</td><td>Join-Token <span class="muted">(kurz, z.&nbsp;B. K7QM2F)</span></td><td>Beitritt als Mitspieler samt Charakterwahl</td></tr>
       <tr><td class="k">Homebrew-Eintrag</td><td>eigener Token</td><td>Kopie in der eigenen Homebrew-Sammlung</td></tr>
@@ -591,7 +559,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
       <tr><td class="k"><b>Account</b></td><td>E-Mail (nur Anzeige), Player-Name ändern, Passwort-Reset anfordern.</td></tr>
       <tr><td class="k"><b>Theme</b></td><td><b>System</b>, <b>Hell</b>, <b>Dunkel</b> oder <b>Benutzerdefiniert</b> mit eigenen Farben — pro Gerät gespeichert, mit <span class="ui">Zurücksetzen</span>.</td></tr>
       <tr><td class="k"><b>DnD</b></td><td>Zielordner für den Foundry-Export (nur Desktop-App) · Standardwerte der <b>Spielleiter</b>-Session-Karten · Farben der Pills (Schadensarten, Rettungswürfe, Aktionen, Zauber) · Marker für Einträge aus der jeweils anderen Edition ein-/ausblenden.</td></tr>
-      <tr><td class="k"><b>MTG</b></td><td>Preis-Warnschwellen: ab welchem Betrag eine <b>einzelne Karte</b> und ab welchem Betrag ein <b>ganzes Deck</b> markiert wird (in EUR).</td></tr>
+      <tr><td class="k"><b>MTG</b></td><td><b>Sprache der Karten</b> — in welcher Sprache Kartenbilder in Vorschau und Vollbild gezeigt werden · Preis-Warnschwellen: ab welchem Betrag eine <b>einzelne Karte</b> und ab welchem Betrag ein <b>ganzes Deck</b> markiert wird (in EUR).</td></tr>
     </tbody>
   </table></div>
 
@@ -639,6 +607,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <div class="card"><span class="cap">Reiter</span><h4>Wischbare Reiter-Zeile</h4><p>Die Reiter oben werden zu einer horizontal scrollenden Leiste mit Einrastpunkten.</p></div>
     <div class="card"><span class="cap">Updates</span><h4>Immer die neueste Version</h4><p>Beim Öffnen und beim Zurückholen aus dem Hintergrund sucht die App nach einer neuen Version. Hast du seitdem noch nichts angetippt, lädt sie die neue Version sofort. Sonst erscheint unten <b>Neue Version verfügbar</b> mit <b>Jetzt aktualisieren</b> — oder die App aktualisiert sich, wenn du sie das nächste Mal zurückholst. Mit ungespeicherten Änderungen im Deck- oder Armee-Builder lädt sie nie von selbst neu.</p></div>
     <div class="card"><span class="cap">MTG</span><h4>Deck ansehen</h4><p>Im Deck-Builder zeigt der Reiter <b>Ansehen</b> das Deck ohne Bearbeiten-Knöpfe: sortierbar, als Raster oder Liste, Karten bildschirmfüllend zum Durchwischen. Geteilte Decks öffnen am Handy in derselben Ansicht. Mehr unter <a href="#mtg-builder">Deck-Builder</a>.</p></div>
+    <div class="card"><span class="cap">Zurück-Knopf</span><h4>Immer einen Schritt</h4><p>Der Zurück-Knopf des Handys schließt erst, was obendrauf liegt — eine bildschirmfüllende Karte, ein Menü von unten, ein Dialogfenster — und geht erst danach eine Seite zurück. Auf der Startseite verlässt er die App.</p></div>
     <div class="card"><span class="cap">Spielansichten</span><h4>Bildschirm bleibt an</h4><p>Match HUD und Combat HUD halten die Anzeige wach, gehen ins Vollbild und drehen — soweit dein Gerät das zulässt — ins Querformat.</p></div>
   </div>
 
@@ -661,24 +630,6 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <h3>Editionen</h3>
   <p>Jeder Charakter gehört zu einer Edition: <b>5e</b> (2014) oder <b>5.5e</b> (2024). Sie bestimmt, aus welchen Daten Klassen, Zauber, Items und Monster gezogen werden — auch im VTT. Einträge, die du aus der jeweils anderen Edition importierst, bekommen einen kleinen Marker; ausblenden lässt der sich unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>DnD</b>.</p>
 
-  <figure class="shot">
-    <div class="shot-frame">
-      <img src="handbuch-img/dnd-dashboard.png" alt="Die Charakterübersicht im D&amp;D-Bereich" loading="lazy">
-      <div class="shot-empty"><span class="n">handbuch-img/dnd-dashboard.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
-      <b class="mark" style="left:8%;top:11%">1</b>
-      <b class="mark" style="left:50%;top:11%">2</b>
-      <b class="mark" style="left:88%;top:22%">3</b>
-      <b class="mark" style="left:20%;top:55%">4</b>
-    </div>
-    <figcaption>Die Charakterübersicht
-      <ol class="legend">
-        <li>Reiter-Zeile des Bereichs</li>
-        <li>Gruppen nach Edition — Kopfzeilen lassen sich zuklappen</li>
-        <li><span class="ui">+ Neuer Charakter</span></li>
-        <li>Charakterkachel: Klick öffnet den Bogen, der Token-Chip kopiert den Share-Token</li>
-      </ol>
-    </figcaption>
-  </figure>
 </section>
 
 <section id="dnd-erstellen" data-c="dnd">
@@ -762,28 +713,6 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <h3>Popout-Fenster</h3>
   <p><span class="ui">Popout</span> öffnet ein rahmenloses Fenster, das über anderen Programmen bleibt — praktisch neben einer Battlemap oder einem Videochat. Oben sitzt eine sehr kompakte Leiste mit HP, Rüstungsklasse, Initiative, Bewegungsrate, passiver Wahrnehmung, Attributen, Gold, Ressourcen, Zuständen und Aktionsökonomie. Unten wechselst du zwischen <b>Standard</b>, <b>Zaubern</b>, <b>Favoriten</b> und <b>Meisterschaft</b>. Die Leiste selbst ist der Ziehgriff des Fensters; das Layout passt sich der Fenstergröße an.</p>
 
-  <figure class="shot">
-    <div class="shot-frame">
-      <img src="handbuch-img/dnd-sheet.png" alt="Charakterbogen, Reiter Overview" loading="lazy">
-      <div class="shot-empty"><span class="n">handbuch-img/dnd-sheet.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
-      <b class="mark" style="left:50%;top:6%">1</b>
-      <b class="mark" style="left:14%;top:24%">2</b>
-      <b class="mark" style="left:40%;top:24%">3</b>
-      <b class="mark" style="left:16%;top:62%">4</b>
-      <b class="mark" style="left:62%;top:62%">5</b>
-      <b class="mark" style="left:90%;top:40%">6</b>
-    </div>
-    <figcaption>Charakterbogen, Reiter <b>Overview</b>
-      <ol class="legend">
-        <li>Eingeklappte Kopfzeile — Pfeil zum Ausklappen</li>
-        <li>HP-Block mit Schaden-/Heilungsfeld</li>
-        <li>Kampfkacheln und Zustände</li>
-        <li>Aktionen mit Reitern für Aktion / Bonusaktion / Reaktion</li>
-        <li>Zauber-Spalte mit Vorbereitungs-Punkten</li>
-        <li>Ressourcen und Inventar-Schnellzugriff</li>
-      </ol>
-    </figcaption>
-  </figure>
 </section>
 
 <section id="dnd-levelup" data-c="dnd">
@@ -904,28 +833,6 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <div class="note"><span class="lbl">Pause</span>
     <p><span class="ui">⏸ Pause</span> friert den Tisch ein: Spieler können nichts mehr bewegen oder auslösen, die Spielleitung schon. Ein Band oben sagt allen Bescheid.</p></div>
 
-  <figure class="shot">
-    <div class="shot-frame">
-      <img src="handbuch-img/vtt-overview.png" alt="Der virtuelle Spieltisch" loading="lazy">
-      <div class="shot-empty"><span class="n">handbuch-img/vtt-overview.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
-      <b class="mark" style="left:50%;top:4%">1</b>
-      <b class="mark" style="left:20%;top:12%">2</b>
-      <b class="mark" style="left:3%;top:45%">3</b>
-      <b class="mark" style="left:16%;top:45%">4</b>
-      <b class="mark" style="left:50%;top:22%">5</b>
-      <b class="mark" style="left:50%;top:92%">6</b>
-    </div>
-    <figcaption>Der Spieltisch mit geöffneten Panels
-      <ol class="legend">
-        <li>Kopfzeile: Session, Pause, Einstellungen</li>
-        <li>Werkzeugleiste mit Zonen und Wandtypen</li>
-        <li>Symbolleiste — ein Knopf je Panel</li>
-        <li>Geöffnetes Panel, Breite an der Kante ziehbar</li>
-        <li>Initiative-Leiste über der Karte</li>
-        <li>Untere Leiste: Spielfläche bzw. Party-Übersicht</li>
-      </ol>
-    </figcaption>
-  </figure>
 </section>
 
 <section id="dnd-vtt-dm" data-c="dnd">
@@ -1192,7 +1099,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 
   <h3>Der Aufbau</h3>
   <ol class="steps">
-    <li><b>Links die Vorschau</b> — die zuletzt überfahrene Karte groß, mit Regeltext, Manakosten, Seltenheit und Preis, dazu das <a href="#mtg-builder">Artwork</a> für dieses Deck und die <a href="#mtg-suche">Tags</a> der Karte. Die Leiste lässt sich einklappen.</li>
+    <li><b>Links die Vorschau</b> — die zuletzt überfahrene Karte groß, mit Regeltext, Manakosten, Seltenheit und Preis, dazu das <a href="#mtg-builder">Artwork</a> für dieses Deck und die <a href="#mtg-suche">Tags</a> der Karte. Die Leiste lässt sich einklappen. Unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>MTG</b> stellst du die <b>Sprache der Karten</b> ein — Vorschau und Vollbild-Ansicht zeigen die Karte dann in dieser Sprache, sofern es die Ausgabe darin gibt. Namen im Deck, in der Sammlung und in der Cardmarket-Liste bleiben englisch, weil daran die Zuordnungen hängen.</li>
     <li><b>In der Mitte die Suche</b> mit den Treffern als Kachelraster.</li>
     <li><b>Rechts das Deck</b> mit den Reitern <b>Mainboard</b>, <b>Sideboard</b> und <b>Ideen</b> — sobald Karten im Deck Tokens erzeugen, kommt <b>Tokens</b> dazu.</li>
   </ol>
@@ -1210,7 +1117,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     </tbody>
   </table></div>
   <p><b>Rechtsklick</b> auf eine Karte pinnt sie in die Vorschau — bei doppelseitigen Karten genau die Seite, über der du stehst.</p>
-  <p><b>Am Handy:</b> Antippen einer Karte zeigt sie groß im Reiter <span class="ui">Karte</span>. Ins Deck kommt sie nur über die Knöpfe unter dem Bild — <span class="ui">+ Hinzufügen</span>, <span class="ui">+ Sideboard</span>, <span class="ui">+ Ideen</span>. Bei geteilten Decks gibt es den Reiter <span class="ui">Karte</span> nicht; dort zeigt <span class="ui">Ansehen</span> jede Karte bildschirmfüllend.</p>
+  <p><b>Am Handy:</b> Antippen einer Karte zeigt sie groß im Reiter <span class="ui">Karte</span>. Ins Deck kommt sie nur über die Knöpfe unter dem Bild — <span class="ui">+ Hinzufügen</span>, <span class="ui">+ Sideboard</span>, <span class="ui">+ Ideen</span>. Bei geteilten Decks gibt es gar keine Reiter-Leiste — sie öffnen direkt in der Ansehen-Ansicht, in der du ohnehin jede Karte bildschirmfüllend siehst.</p>
 
   <h3>Artwork wählen</h3>
   <p>Fast jede Karte gibt es in mehreren Editionen mit unterschiedlichem Artwork. In der Vorschau steht unter dem Kartenbild, welches Artwork die Karte in diesem Deck hat — oder <span class="ui">Standard-Artwork</span>, solange du keins festgelegt hast.</p>
@@ -1233,6 +1140,8 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <ul>
     <li>Mit <span class="ui">+</span> und <span class="ui">−</span> legst du fest, wie viele du davon brauchst (Standard: 1). <span class="ui">✕</span> setzt die Anzahl auf 0 — der Token wird dann nicht mitbestellt.</li>
     <li>Die Anzahl wird mit dem Deck gespeichert und im <a href="#mtg-wunschliste">Cardmarket-Export</a> verwendet. Auch „Ansehen" am Handy und geteilte Decks zeigen die Tokens.</li>
+    <li>Nicht nur Tokens: Auch die Hilfskarten, die ein Deck braucht, stehen hier — die <b>Tag- und Nacht-Karte</b> bei Werwölfen, <b>Energy Reserve</b> bei Energie-Decks, Dungeon-Karten. Sie werden genauso mitbestellt.</li>
+    <li>Ein <b>doppelseitiger Token</b> — etwa der 2/2-grüne Wolf mit dem 1/1-schwarzen Wolf auf der Rückseite — ist eine Karte und zählt einmal.</li>
     <li>Welche Tokens eine Karte erzeugt, kommt aus den Kartendaten von Scryfall. Ist eine Karte dort nicht mit ihrem Token verknüpft, fehlt er in der Liste.</li>
   </ul>
 
@@ -1240,7 +1149,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <ul>
     <li><b>Deck-Format</b> — filtert die Kartensuche automatisch auf legale Karten.</li>
     <li><b>Commander</b> — im Commander-Format wählst du zuerst deinen Commander; danach beschränkt die Suche sich automatisch auf seine Farbidentität, und Nicht-Standardländer sind auf ein Exemplar begrenzt.</li>
-    <li><b>Cover-Karte</b> für die Anzeige auf dem Dashboard.</li>
+    <li><b>Cover-Karte</b> für die Anzeige auf dem Dashboard. Doppelseitige Karten stehen mit beiden Seiten einzeln in der Auswahl — jede Kachel ist mit <span class="ui">Vorderseite</span> bzw. <span class="ui">Rückseite</span> beschriftet, du kannst also auch die Rückseite als Cover nehmen.</li>
     <li><span class="ui">Importieren</span> — Decklist als Text einfügen.</li>
     <li><span class="ui">Speichern</span> — der Knopf zeigt an, ob es ungespeicherte Änderungen gibt.</li>
   </ul>
@@ -1260,37 +1169,17 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <li>Oben wechselst du zwischen <span class="ui">Mainboard</span>, <span class="ui">Sideboard</span>, <span class="ui">Ideen</span> und <span class="ui">Tokens</span>. Darunter stehen die Kartenzahl und der Wert des gewählten Reiters.</li>
     <li><span class="ui">Sortieren</span> nach <span class="ui">Typ</span>, <span class="ui">Name</span>, <span class="ui">Manakosten</span>, <span class="ui">Farbe</span>, <span class="ui">Seltenheit</span> oder <span class="ui">Preis</span>, dazu <span class="ui">dann nach</span> als zweite Stufe — mit Untergruppen oder als Reihenfolge innerhalb der Gruppen, wie bei der Decklist-Ansicht am Desktop. Ein Tipp auf eine Gruppenüberschrift klappt die Gruppe zu und wieder auf.</li>
     <li><span class="ui">Raster</span> zeigt große Kartenbilder in 1, 2, 3 oder 4 Spalten (Standard: 2), <span class="ui">Liste</span> eine kompakte Zeile pro Karte mit Anzahl, Manakosten und Preis. Enthält das Deck Karten mehrfach, steht die Anzahl unten rechts auf dem Bild.</li>
-    <li>Tippe eine Karte an, um sie bildschirmfüllend zu sehen — darunter stehen Anzahl, Name, Manakosten, Typ, Edition und Preis. Wische nach links oder rechts zur nächsten Karte; die Karte folgt dabei dem Finger, die Reihenfolge ist dieselbe wie in der Sortierung. <span class="ui">↻</span> dreht doppelseitige Karten um, <span class="ui">✕</span> oder ein Tipp neben die Karte schließt.</li>
+    <li>Tippe eine Karte an, um sie bildschirmfüllend zu sehen — darunter stehen Anzahl, Name, Manakosten, Typ, Edition und Preis. Wische nach links oder rechts zur nächsten Karte; die Karte folgt dabei dem Finger, die Reihenfolge ist dieselbe wie in der Sortierung. <span class="ui">↻</span> dreht doppelseitige Karten um, <span class="ui">✕</span> oder ein Tipp neben die Karte schließt — genau wie der Zurück-Knopf des Handys, der dabei nur die Karte schließt und nicht das Deck verlässt.</li>
     <li>Sortierung und Darstellung merkt sich das Gerät. Zurück zum Bearbeiten geht es über <span class="ui">Suche</span> oder <span class="ui">Deck</span> in der Tab-Leiste, im Querformat über <span class="ui">✎</span>.</li>
   </ul>
 
   <h3>Import &amp; Export</h3>
   <ul>
-    <li><b>Import:</b> Standard-Decklisten wie <code>4 Lightning Bolt</code>, <code>4x Lightning Bolt</code> oder <code>1 Lightning Bolt (LEA) 161</code>. Zeilen wie <code>Sideboard</code> oder <code>SB:</code> trennen die Bereiche; Zeilen mit <code>#</code> werden ignoriert, Markierungen wie <code>*F*</code> ebenfalls.</li>
+    <li><b>Import:</b> Standard-Decklisten wie <code>4 Lightning Bolt</code>, <code>4x Lightning Bolt</code> oder <code>1 Lightning Bolt (LEA) 161</code>. Zeilen wie <code>Sideboard</code> oder <code>SB:</code> trennen die Bereiche; Zeilen, die mit <code>#</code> oder <code>//</code> beginnen, werden als Kommentar ignoriert, Markierungen wie <code>*F*</code> ebenfalls. Karten mit zwei Namen — <code>Fire // Ice</code>, <code>Delver of Secrets // Insectile Aberration</code> — werden erkannt, egal ob die Liste den vollen Namen, nur die Vorderseite oder die Schreibweise ohne Leerzeichen (<code>Fire//Ice</code>) verwendet.</li>
     <li><b>Editionen im Import:</b> Steht eine Edition in der Zeile — <code>(LEA) 161</code> oder <code>[M10]</code> —, wird genau diese Ausgabe als Artwork der Karte festgelegt. Findet Scryfall die Ausgabe nicht, kommt die Karte mit ihrem Standard-Artwork ins Deck; der Import listet diese Zeilen unter <span class="ui">Editionen nicht gefunden</span>.</li>
     <li><b>Export:</b> <span class="ui">Export</span> im Deck-Panel legt die Decklist als Text in die Zwischenablage — passend für Arena, MTGO, Cockatrice oder Moxfield. Karten mit gewähltem Artwork bekommen Edition und Sammlernummer dahinter, z.&nbsp;B. <code>4 Lightning Bolt (2XM) 129</code>, damit beim erneuten Import dieselbe Ausgabe ankommt.</li>
   </ul>
 
-  <figure class="shot">
-    <div class="shot-frame">
-      <img src="handbuch-img/mtg-builder.png" alt="Der MTG-Deck-Builder" loading="lazy">
-      <div class="shot-empty"><span class="n">handbuch-img/mtg-builder.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
-      <b class="mark" style="left:11%;top:40%">1</b>
-      <b class="mark" style="left:50%;top:13%">2</b>
-      <b class="mark" style="left:50%;top:52%">3</b>
-      <b class="mark" style="left:88%;top:20%">4</b>
-      <b class="mark" style="left:88%;top:62%">5</b>
-    </div>
-    <figcaption>Deck-Builder
-      <ol class="legend">
-        <li>Kartenvorschau — Hover zeigt, Rechtsklick pinnt</li>
-        <li>Suche und Filter</li>
-        <li>Treffer mit den Hinzufügen-Knöpfen beim Überfahren</li>
-        <li>Deck-Reiter Mainboard / Sideboard / Ideen</li>
-        <li>Decklist mit Stückzahlen</li>
-      </ol>
-    </figcaption>
-  </figure>
 </section>
 
 <section id="mtg-suche" data-c="mtg">
@@ -1355,7 +1244,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <p>Was du wirklich besitzt, mit Stückzahlen. Die Kartendetails (Bild, Manakosten, Set) werden bei Bedarf nachgeladen.</p>
   <ul>
     <li><b>Direkt im Builder pflegen:</b> die Knöpfe <span class="ui">+ Sammlung</span> / <span class="ui">− Sammlung</span> auf jeder Karte.</li>
-    <li><b>Massenimport:</b> Eine Textliste einfügen — <code>4 Lightning Bolt</code>, <code>2x Counterspell</code>, <code>1 Sol Ring (CMR)</code>. Fehlt die Zahl, wird 1 angenommen; Zeilen mit <code>#</code> oder <code>//</code> werden übersprungen.</li>
+    <li><b>Massenimport:</b> Eine Textliste einfügen — <code>4 Lightning Bolt</code>, <code>2x Counterspell</code>, <code>1 Sol Ring (CMR)</code>. Fehlt die Zahl, wird 1 angenommen; Zeilen, die mit <code>#</code> oder <code>//</code> <em>beginnen</em>, gelten als Kommentar und werden übersprungen — Kartennamen wie <code>Fire // Ice</code> sind davon nicht betroffen.</li>
     <li><b>Hinzufügen statt Überschreiben:</b> Karten, die schon drin sind, bekommen die importierte Menge <em>dazu</em>. Für „ich habe alles neu gezählt" gibt es ein Häkchen zum Ersetzen.</li>
     <li>Im Builder blendet <span class="ui">◉</span> die Suche auf deine Sammlung ein.</li>
   </ul>
@@ -1385,7 +1274,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
       <tr><td class="k"><b>Duplikate kaufen</b> an</td><td>Für Leute, die jedes Deck spielfertig halten wollen: Zweitexemplare werden mitbestellt.</td></tr>
       <tr><td class="k"><b>Gewählte Artworks übernehmen</b></td><td>Standard an: Karten mit fest gewähltem Artwork werden als genau dieses Cardmarket-Produkt bestellt — mit Edition und, wenn es die Karte in der Edition mehrfach gibt, der Version, z.&nbsp;B. <code>4 Forest (V.2) (Core 2021)</code> oder <code>1 Beluna Grandsquall // Seek Thrills (Wilds of Eldraine: Extras)</code>. Wollen zwei Decks dieselbe Karte in verschiedenen Artworks, entstehen zwei Zeilen. Aus: nur Anzahl und Name, jede Edition ist recht.</td></tr>
       <tr><td class="k"><b>Ideen einbeziehen</b></td><td>Karten aus dem Ideen-Pool der Decks mit einkaufen.</td></tr>
-      <tr><td class="k"><b>Tokens einbeziehen</b></td><td>Standard an: alle Tokens, die Karten der gewählten Decks erzeugen, in der Anzahl aus dem Reiter <span class="ui">Tokens</span>. Wo Cardmarket den Token eines Sets führt, steht das genaue Produkt in der Zeile, z.&nbsp;B. <code>1 Beast Token (Green 3/3) (Wilds of Eldraine: Extras)</code>. Neuere Sets führen ihre Tokens in einer eigenen Edition wie <em>Bloomburrow: Tokens</em>; die schreibt der Export dann dazu. Unter der fertigen Liste steht jeder Token mit einem Link, der ihn direkt in der Cardmarket-Suche öffnet — für den Fall, dass der Massenimport ihn nicht findet.</td></tr>
+      <tr><td class="k"><b>Tokens einbeziehen</b></td><td>Standard an: alle Tokens, die Karten der gewählten Decks erzeugen, in der Anzahl aus dem Reiter <span class="ui">Tokens</span>. Wo Cardmarket den Token eines Sets führt, steht das genaue Produkt in der Zeile, z.&nbsp;B. <code>1 Beast Token (Green 3/3) (Wilds of Eldraine: Extras)</code>. Neuere Sets führen ihre Tokens in einer eigenen Edition wie <em>Bloomburrow: Tokens</em>; die schreibt der Export dann dazu. Doppelseitige Tokens sucht der Export als das eine zweiseitige Produkt, das beide Hälften nennt. Hilfskarten wie <b>Energy Reserve</b> oder die Tag-und-Nacht-Karte stehen mit ihrem Klarnamen in der Liste — als Token-Produkt führt Cardmarket sie nicht. Unter der fertigen Liste steht jeder Token mit einem Link, der ihn direkt in der Cardmarket-Suche öffnet — für den Fall, dass der Massenimport ihn nicht findet.</td></tr>
     </tbody>
   </table></div>
   <p>Vor dem Kopieren kannst du in der Vorschau noch einzelne Mengen ändern oder Zeilen abwählen. Auch die fertige Liste lässt sich im Textfeld noch von Hand anpassen.</p>
@@ -1532,24 +1421,6 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <div class="note tip"><span class="lbl">Speicherung</span>
     <p>Combat-Sitzungen liegen <strong>lokal auf diesem Gerät</strong> und werden laufend gesichert — ein versehentliches Schließen kostet dich nichts. Sie wandern aber nicht auf dein anderes Gerät.</p></div>
 
-  <figure class="shot">
-    <div class="shot-frame">
-      <img src="handbuch-img/w40k-combat.png" alt="Combat Helper während einer Partie" loading="lazy">
-      <div class="shot-empty"><span class="n">handbuch-img/w40k-combat.png</span><span class="h">Screenshot mit diesem Dateinamen ablegen — er ersetzt den Platzhalter automatisch.</span></div>
-      <b class="mark" style="left:50%;top:8%">1</b>
-      <b class="mark" style="left:50%;top:22%">2</b>
-      <b class="mark" style="left:26%;top:52%">3</b>
-      <b class="mark" style="left:78%;top:52%">4</b>
-    </div>
-    <figcaption>Combat Helper
-      <ol class="legend">
-        <li>Kopfzeile mit Runde, Kommando- und Siegpunkten</li>
-        <li>Phasenleiste</li>
-        <li>Erinnerungen, Stratageme und Fähigkeiten zur Phase</li>
-        <li>Einheiten mit Modellen, Wunden und Status</li>
-      </ol>
-    </figcaption>
-  </figure>
 </section>
 <section id="ref-kuerzel">
   <div class="eyebrow">Referenz</div>
@@ -1699,8 +1570,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 </section>
 
 <footer style="border-top:1px solid var(--border);padding-top:20px;color:var(--muted);font-size:13px">
-  <p style="max-width:70ch">NerdShelf-Handbuch — beschreibt den Stand der App-Version <span class="mono" id="ver2">1.1.20</span>.
-  Screenshots landen als PNG im Ordner <span class="mono">handbuch-img/</span> neben dieser Datei und ersetzen die Platzhalter automatisch.</p>
+  <p style="max-width:70ch">NerdShelf-Handbuch — beschreibt den Stand der App-Version <span class="mono" id="ver2">1.1.20</span>.</p>
 </footer>
 
 </main>
@@ -1736,20 +1606,6 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     theme = MODES[(MODES.indexOf(theme) + 1) % MODES.length];
     store.set('nerdshelf-handbuch-theme', theme);
     applyTheme(theme);
-  });
-
-  /* ── Screenshot-Slots: Bild da → Platzhalter weg ────────── */
-  Array.prototype.forEach.call(document.querySelectorAll('.shot-frame img'), function (img) {
-    function ok() {
-      var f = img.closest('.shot-frame');
-      f.classList.add('has-img');
-      // Rahmen an das echte Seitenverhältnis anpassen, damit die Markierungen
-      // (in Prozent gesetzt) genau auf der Stelle im Bild sitzen.
-      if (img.naturalWidth && img.naturalHeight) f.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
-    }
-    function fail() { var f = img.closest('.shot-frame'); if (f) f.classList.remove('has-img'); img.style.display = 'none'; }
-    if (img.complete) { (img.naturalWidth > 0 ? ok : fail)(); }
-    else { img.addEventListener('load', ok); img.addEventListener('error', fail); }
   });
 
   /* ── Glossar → Erklärungen für Begriffe ohne eigenen Text ─ */

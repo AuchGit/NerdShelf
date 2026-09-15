@@ -59,7 +59,8 @@ export default function MtgDeckBuilderMobile({
 }) {
   const { isLandscape } = usePwaMobile();
   const [tab, setTab] = useState(readOnly ? 'view' : 'search'); // 'search' | 'deck' | 'preview' | 'view'
-  const viewing = tab === 'view';
+  // Shared decks only ever show the viewer — no tabs, no deck panel.
+  const viewing = readOnly || tab === 'view';
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Auto-switch to the preview tab when the user pins a card from any
@@ -214,12 +215,6 @@ export default function MtgDeckBuilderMobile({
   // ─── Action sheet items ─────────────────────────────────────
   const menuItems = readOnly ? [
     { id: 'copy', label: 'Als eigenes Deck kopieren', icon: '⧉', onSelect: onCopy },
-    {
-      id: 'view',
-      label: viewing ? 'Deck-Panel zeigen' : 'Deck ansehen',
-      icon: viewing ? '◇' : '◉',
-      onSelect: () => setTab(viewing ? 'deck' : 'view'),
-    },
     { id: 'export', label: 'Decklist kopieren', icon: '↑', onSelect: onExport },
   ] : [
     {
@@ -257,7 +252,7 @@ export default function MtgDeckBuilderMobile({
       {/* Format / cover / commander are editing controls — hidden while viewing. */}
       {!viewing && !readOnly && toolbar}
 
-      {isLandscape && (viewing || readOnly) ? (
+      {readOnly || (isLandscape && viewing) ? (
         <div className="mtg-mob-view-full">{viewerEl}</div>
       ) : isLandscape ? (
         // ── Landscape: side-by-side ────────────────────────────
@@ -310,27 +305,24 @@ export default function MtgDeckBuilderMobile({
         </main>
       )}
 
-      {!isLandscape && (
+      {/* Shared decks have a single view (the viewer brings its own grid /
+          list controls), so the tab bar would only ever show one tab. */}
+      {!isLandscape && !readOnly && (
         <nav className="mtg-mob-tabs" aria-label="Deck-Builder-Ansicht">
-          {!readOnly && (
-            <TabBtn
-              id="search" label="Suche" icon="⌕"
-              active={tab === 'search'} onClick={() => setTab('search')}
-            />
-          )}
+          <TabBtn
+            id="search" label="Suche" icon="⌕"
+            active={tab === 'search'} onClick={() => setTab('search')}
+          />
           <TabBtn
             id="deck" label="Deck" icon="◇"
             active={tab === 'deck'} onClick={() => setTab('deck')}
             badge={deckCount > 0 ? deckCount : null}
           />
-          {/* Shared decks: the viewer already shows cards full-screen. */}
-          {!readOnly && (
-            <TabBtn
-              id="preview" label="Karte" icon="◧"
-              active={tab === 'preview'} onClick={() => setTab('preview')}
-              badge={pinnedCard ? '●' : null}
-            />
-          )}
+          <TabBtn
+            id="preview" label="Karte" icon="◧"
+            active={tab === 'preview'} onClick={() => setTab('preview')}
+            badge={pinnedCard ? '●' : null}
+          />
           <TabBtn
             id="view" label="Ansehen" icon="◉"
             active={viewing} onClick={() => setTab('view')}

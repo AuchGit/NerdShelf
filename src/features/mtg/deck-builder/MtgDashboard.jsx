@@ -279,13 +279,18 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
 
   // Cover artwork: look up the chosen card in commander / main / side, prefer art_crop image
   const coverId = data.coverCardId;
+  // Double-faced cards can be covered by their back side too.
+  const coverFace = data.coverFaceIndex || 0;
   let coverArt = null;
   if (coverId) {
     const cmd = data.commander && data.commander.id === coverId ? data.commander : null;
     const entry = data.mainboard?.[coverId] || data.sideboard?.[coverId];
     const cardObj = applyPrinting(cmd || entry?.card, printings[coverId]);
     if (cardObj) {
+      const face = cardObj.card_faces?.[coverFace]?.image_uris;
       coverArt =
+        face?.art_crop ||
+        face?.normal ||
         cardObj.image_uris?.art_crop ||
         cardObj.card_faces?.[0]?.image_uris?.art_crop ||
         cardObj.image_uris?.normal ||

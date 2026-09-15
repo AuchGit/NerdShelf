@@ -8,6 +8,9 @@ import {
   setMtgPriceSettings,
   useMtgPriceSettings,
 } from '../../features/mtg/deck-builder/services/priceThresholds';
+import {
+  CARD_LANGUAGES, useCardLanguage, setCardLanguage,
+} from '../../features/mtg/deck-builder/services/cardLanguage';
 import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
 import {
   DEFAULT_PILL_COLORS, PILL_COLOR_GROUPS,
@@ -785,6 +788,7 @@ function PillColorEditor() {
 
 function MtgSettings() {
   const settings = useMtgPriceSettings();
+  const cardLanguage = useCardLanguage();
 
   function update(patch) {
     setMtgPriceSettings(patch);
@@ -792,6 +796,33 @@ function MtgSettings() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      <Field label="Sprache der Karten">
+        <select
+          value={cardLanguage}
+          onChange={e => setCardLanguage(e.target.value)}
+          style={{
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            padding: '6px 10px',
+            fontSize: 'var(--fs-sm)',
+            fontFamily: 'inherit',
+            minWidth: 220,
+          }}
+        >
+          {CARD_LANGUAGES.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Kartenbilder in der Vorschau und in der Vollbild-Ansicht werden in
+          dieser Sprache gezeigt, sofern es die Ausgabe darin gibt. Deck,
+          Sammlung und Cardmarket-Liste bleiben bei den englischen Namen —
+          daran hängen die Zuordnungen. Gilt nur auf diesem Gerät.
+        </div>
+      </Field>
+
       <Field label="Warnung bei einzelnen Karten">
         <label style={{
           display: 'flex', alignItems: 'center', gap: 'var(--space-2)',

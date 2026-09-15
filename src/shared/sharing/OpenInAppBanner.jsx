@@ -1,17 +1,48 @@
 // src/shared/sharing/OpenInAppBanner.jsx
 //
-// A share link opened in a desktop browser: offer to continue in the
-// installed desktop app instead (via the nerdshelf:// scheme). Browsers
-// can't tell whether the app is installed, so this is an offer — with an
-// option to always do it for future links on this computer.
+// A share link opened in a desktop browser belongs in the installed
+// desktop app. Handing it over is the DEFAULT: the page immediately opens
+// the matching nerdshelf:// link and then gets out of the way.
+//
+// Browsers can't ask whether the app is installed, so we watch for the
+// hand-over instead: launching the app takes the focus away from this tab.
+// If the focus never leaves within a moment, the app isn't there — we
+// remember that for this computer and stay in the browser silently.
+//
+// Once the app has taken over, this tab has nothing left to show. A tab
+// the page opened itself can be closed outright; a tab the user opened
+// from a link cannot (browsers refuse), so we say so and offer the button.
 //
 // Not shown in the desktop app itself, in the installed web app, or on
-// phones (there the installed web app catches links on its own).
+// phones — there the installed web app catches links on its own.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { appLinkForRoute } from './appLink';
 
-const ALWAYS_KEY = 'nerdshelf:open-links-in-app';
+const PREF_KEY    = 'nerdshelf:open-links-in-app'; // '0' → always stay in the browser
+const MISSING_KEY = 'nerdshelf:app-missing';       // app didn't answer on this computer
+const HANDOVER_MS = 1500;
+
+function readFlag(key, value) {
+  try { return localStorage.getItem(key) === value; } catch { return false; }
+}
+
+function writeFlag(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+
+/** The route of a shared link on this page, or null if this isn't one. */
+function sharedRoute() {
+  const { pathname, search } = window.location;
+  const base = import.meta.env.BASE_URL || '/';
+  const path = pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+  const params = new URLSearchParams(search);
+  // Import / join links carry their token as a query parameter…
+  if (params.has('import') || params.has('join')) return `${path}${search}`;
+  // …a shared deck is a route of its own, with no parameter to look for.
+  if (/^\/?mtg\/deck\/view\/[^/]+/.test(path)) return `${path}${search}`;
+  return null;
+}
 
 function initialLink() {
   if (typeof window === 'undefined') return null;
@@ -20,60 +51,117 @@ function initialLink() {
     if (window.matchMedia('(display-mode: standalone)').matches) return null;
     if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return null;
   } catch { /* ignore */ }
-  const { pathname, search } = window.location;
-  const params = new URLSearchParams(search);
-  if (!params.has('import') && !params.has('join')) return null;
-  const base = import.meta.env.BASE_URL || '/';
-  const path = pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
-  return appLinkForRoute(`${path}${search}`);
-}
-
-function readAlways() {
-  try { return localStorage.getItem(ALWAYS_KEY) === '1'; } catch { return false; }
+  const route = sharedRoute();
+  return route ? appLinkForRoute(route) : null;
 }
 
 export default function OpenInAppBanner() {
   // Read once on first render — the dashboards strip ?import= right after.
   const [link] = useState(initialLink);
-  const [always, setAlways] = useState(readAlways);
-  const [closed, setClosed] = useState(false);
-  // "Always" chosen earlier → the page hands over right away (effect below).
-  const [opened, setOpened] = useState(() => !!link && readAlways());
+  // 'idle' → user opted out of the automatic hand-over and can still click
+  // 'trying' → link fired, waiting to see whether the app takes focus
+  // 'handed' → the app answered; this tab is done
+  // 'off'    → nothing to show (no app on this computer, or dismissed)
+  const [phase, setPhase] = useState(() => {
+    if (!link) return 'off';
+    if (readFlag(PREF_KEY, '0')) return 'idle';
+    if (readFlag(MISSING_KEY, '1')) return 'off';
+    return 'trying';
+  });
+  const [closeFailed, setCloseFailed] = useState(false);
+  const firedRef = useRef(false);
 
-  useEffect(() => {
-    if (link && readAlways()) window.location.href = link;
+  const handOver = useCallback(() => {
+    if (!link) return;
+    setPhase('trying');
+    setCloseFailed(false);
+    try { window.location.href = link; } catch { /* ignore */ }
   }, [link]);
 
-  if (!link || closed) return null;
+  // Fire the hand-over once, on the first render that wants it.
+  useEffect(() => {
+    if (phase !== 'trying' || firedRef.current) return;
+    firedRef.current = true;
+    try { window.location.href = link; } catch { /* ignore */ }
+  }, [phase, link]);
 
-  const openInApp = () => {
-    try { localStorage.setItem(ALWAYS_KEY, always ? '1' : '0'); } catch { /* ignore */ }
-    window.location.href = link;
-    setOpened(true);
+  // The app taking over pulls the focus off this tab — that's our only
+  // signal that it exists. Silence means it isn't installed.
+  useEffect(() => {
+    if (phase !== 'trying') return undefined;
+    let done = false;
+    const answered = () => {
+      if (done) return;
+      done = true;
+      writeFlag(MISSING_KEY, '0');
+      setPhase('handed');
+    };
+    const onVisibility = () => { if (document.hidden) answered(); };
+    window.addEventListener('blur', answered);
+    document.addEventListener('visibilitychange', onVisibility);
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      // No app on this computer — remember it and stop interrupting.
+      writeFlag(MISSING_KEY, '1');
+      setPhase('off');
+    }, HANDOVER_MS);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('blur', answered);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [phase]);
+
+  // The app has it — this tab is redundant. Closing only works for a
+  // window the page opened; otherwise the user gets the note below.
+  useEffect(() => {
+    if (phase !== 'handed') return undefined;
+    const timer = setTimeout(() => {
+      try { window.close(); } catch { /* ignore */ }
+      setTimeout(() => setCloseFailed(true), 300);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  if (!link || phase === 'off') return null;
+
+  const stayHere = () => {
+    writeFlag(PREF_KEY, '0');
+    setPhase('off');
   };
 
   return (
     <div role="dialog" aria-label="In der App öffnen" style={S.banner}>
       <div style={S.title}>
-        {opened ? 'Wird in der NerdShelf-App geöffnet …' : 'In der NerdShelf-App öffnen?'}
+        {phase === 'handed' ? 'In der NerdShelf-App geöffnet' : 'Wird in der NerdShelf-App geöffnet …'}
       </div>
       <div style={S.text}>
-        {opened
-          ? 'Falls sich nichts tut, ist die Desktop-App hier nicht installiert — dann geht es einfach im Browser weiter.'
-          : 'Du hast einen geteilten Link geöffnet. Mit installierter Desktop-App geht es dort weiter.'}
+        {phase === 'handed'
+          ? (closeFailed
+            ? 'Der Link läuft jetzt in der App. Diesen Tab kannst du schließen.'
+            : 'Der Link läuft jetzt in der App.')
+          : 'Geteilte Links öffnen in der Desktop-App. Ohne installierte App geht es hier im Browser weiter.'}
       </div>
-      {!opened && (
-        <label style={S.check}>
-          <input type="checkbox" checked={always} onChange={(e) => setAlways(e.target.checked)} />
-          Links auf diesem Computer immer in der App öffnen
-        </label>
-      )}
       <div style={S.actions}>
-        <button type="button" style={S.btnLater} onClick={() => setClosed(true)}>
-          {opened ? 'Schließen' : 'Im Browser bleiben'}
-        </button>
-        {!opened && (
-          <button type="button" style={S.btnNow} onClick={openInApp}>In der App öffnen</button>
+        {phase === 'handed' ? (
+          <>
+            <button type="button" style={S.btnLater} onClick={() => setPhase('off')}>
+              Hier weitermachen
+            </button>
+            <button type="button" style={S.btnNow} onClick={() => { try { window.close(); } catch { /* ignore */ } }}>
+              Tab schließen
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" style={S.btnLater} onClick={stayHere}>
+              Immer im Browser bleiben
+            </button>
+            <button type="button" style={S.btnNow} onClick={handOver}>
+              Erneut versuchen
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -99,10 +187,6 @@ const S = {
   },
   title: { fontSize: 'var(--fs-md)', fontWeight: 'var(--fw-semibold)', color: 'var(--color-text)' },
   text: { fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)', lineHeight: 1.4 },
-  check: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 'var(--fs-sm)', color: 'var(--color-text)',
-  },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' },
   btnLater: {
     padding: '6px 12px', background: 'transparent', color: 'var(--color-text-muted)',

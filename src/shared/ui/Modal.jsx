@@ -1,6 +1,7 @@
 // src/shared/ui/Modal.jsx
 import { useEffect } from 'react';
 import IconButton from './IconButton';
+import useBackGuard from '../hooks/useBackGuard';
 
 export default function Modal({ open, onClose, title, children, width = 520, footer }) {
   useEffect(() => {
@@ -9,6 +10,10 @@ export default function Modal({ open, onClose, title, children, width = 520, foo
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // Phone back gesture / browser Back closes the dialog instead of leaving
+  // the page behind it.
+  useBackGuard(open, onClose);
 
   if (!open) return null;
 

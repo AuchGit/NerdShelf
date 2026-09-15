@@ -12,6 +12,12 @@
 // An edition in the line picks exactly that printing as the card's artwork
 // in the deck (see deckPrintings.js). If Scryfall doesn't know the printing,
 // the card comes in with its default printing instead.
+//
+// Split and double-faced cards ("Fire // Ice", "Delver of Secrets //
+// Insectile Aberration"): Scryfall's collection endpoint matches only the
+// FRONT face name — the full name comes back as not_found. Every name is
+// therefore looked up by its front face, and both spellings (plus the
+// unspaced "Fire//Ice" some exports write) map back to the same card.
 
 import { printingSummary } from './deckPrintings';
 
@@ -107,25 +113,39 @@ async function fetchCollection(identifiers) {
  * Returns { found: [{name, card}], notFound: [name] }.
  */
 export async function resolveCardNames(names) {
-  const uniq = [...new Set(names.map(n => n.toLowerCase()))];
+  const uniq = [...new Set(names.map(lookupName).filter(Boolean))];
   const { data, notFound } = await fetchCollection(uniq.map(name => ({ name })));
   return {
-    found: data.map(card => ({ name: card.name.toLowerCase(), card })),
+    found: data.map(card => ({ name: nameKey(card.name), card })),
     notFound: notFound.map(x => x.name).filter(Boolean),
   };
 }
 
-/** Full and front-face name, lowercased ("delver of secrets // …" → both). */
+/** Lookup key for a card name: lowercase, "//" always spaced the same. */
+function nameKey(name) {
+  return String(name || '').replace(/\s*\/\/\s*/g, ' // ').trim().toLowerCase();
+}
+
+/**
+ * The name to ASK Scryfall for. Its collection endpoint knows split and
+ * double-faced cards by their front face only, so "Fire // Ice" (and
+ * "Fire//Ice") have to go over the wire as "Fire".
+ */
+export function lookupName(name) {
+  return nameKey(name).split(' // ')[0].trim();
+}
+
+/** Full and front-face name of a card — both map back to it. */
 function namesOf(card) {
-  const full = (card.name || '').toLowerCase();
-  const front = full.split(' // ')[0];
+  const full = nameKey(card.name);
+  const front = lookupName(card.name);
   return front === full ? [full] : [full, front];
 }
 
 function printKey({ name, set, collector }) {
   return collector
     ? `${set}#${String(collector).toLowerCase()}`
-    : `${set}|${name.toLowerCase()}`;
+    : `${set}|${nameKey(name)}`;
 }
 
 /**
@@ -142,7 +162,7 @@ export async function resolveDecklist(parsed) {
     if (!e.set || identifiers.has(printKey(e))) continue;
     identifiers.set(printKey(e), e.collector
       ? { set: e.set, collector_number: e.collector }
-      : { name: e.name, set: e.set });
+      : { name: lookupName(e.name), set: e.set });
   }
   const prints = new Map();
   if (identifiers.size > 0) {
@@ -176,7 +196,7 @@ export function buildDeckFromParsed(parsed, resolved) {
     const out = {};
     for (const e of entries) {
       const exact = e.set ? prints.get(printKey(e)) : null;
-      const card = byName.get(e.name.toLowerCase()) || exact;
+      const card = byName.get(nameKey(e.name)) || byName.get(lookupName(e.name)) || exact;
       if (!card) { missing.add(e.name); continue; }
       if (e.set && !exact) {
         fallbacks.add(`${e.name} (${e.set.toUpperCase()}${e.collector ? ` ${e.collector}` : ''})`);

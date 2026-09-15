@@ -43,6 +43,36 @@ describe('deck tokens', () => {
   });
 });
 
+describe('helper cards a deck also needs', () => {
+  // Scryfall files these as combo_piece, not token — recognisable by the
+  // bare "Card" type line the real combo pieces never have.
+  const marvel = {
+    id: 'marvel', name: 'Aetherworks Marvel',
+    all_parts: [
+      { component: 'combo_piece', id: 'marvel-kld', name: 'Aetherworks Marvel', type_line: 'Legendary Artifact' },
+      { component: 'combo_piece', id: 'energy', name: 'Energy Reserve', type_line: 'Card' },
+    ],
+  };
+  const tovolar = {
+    id: 'tovolar', name: "Tovolar's Huntmaster // Tovolar's Packleader",
+    all_parts: [
+      { component: 'combo_piece', id: 'tovolar-mid', name: "Tovolar's Huntmaster // Tovolar's Packleader", type_line: 'Creature — Human Werewolf // Creature — Werewolf' },
+      { component: 'combo_piece', id: 'daynight', name: 'Day // Night', type_line: 'Card // Card' },
+      { component: 'token', id: 'wolf', name: 'Wolf', type_line: 'Token Creature — Wolf' },
+    ],
+  };
+
+  it('picks up energy and the day/night indicator, not the card itself', () => {
+    const refs = collectTokenRefs([{ marvel: { card: marvel, count: 1 }, tovolar: { card: tovolar, count: 1 } }], null);
+    expect([...refs.keys()]).toEqual(['energy', 'daynight', 'wolf']);
+  });
+
+  it('keeps helper cards under their plain name — there is no "… Token" product', () => {
+    expect(tokenCardmarketName({ name: 'Energy Reserve', type_line: 'Card' })).toBe('Energy Reserve');
+    expect(tokenCardmarketName({ name: 'Day // Night', type_line: 'Card // Card' })).toBe('Day // Night');
+  });
+});
+
 describe('Cardmarket token names', () => {
   it('builds the usual Cardmarket spelling', () => {
     expect(tokenCardmarketName(goblinA)).toBe('Goblin Token (Red 1/1)');
@@ -63,6 +93,36 @@ describe('Cardmarket token names', () => {
     expect(cardmarketTokenTarget(map, treasure)).toEqual({ name: 'Treasure Token', expansion: 'Wilds of Eldraine: Extras' });
     expect(cardmarketTokenTarget(map, { ...goblinA, power: '2', toughness: '2' })).toBeNull();
     expect(cardmarketTokenTarget(map, { ...goblinA, set: 'tfdn' })).toBeNull();
+  });
+
+  it('names both halves of a double-faced token', () => {
+    const wolves = {
+      name: 'Wolf // Wolf', set: 'tmid',
+      card_faces: [
+        { name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['G'], power: '2', toughness: '2' },
+        { name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['B'], power: '1', toughness: '1' },
+      ],
+    };
+    expect(tokenCardmarketName(wolves)).toBe('Wolf Token (Green 2/2) // Wolf Token (Black 1/1)');
+  });
+
+  it('finds the one two-sided product over a same-named single-faced one', () => {
+    const map = {
+      e: { 4711: 'Innistrad: Midnight Hunt: Extras' },
+      ts: { tmid: [4711] },
+      tk: { 4711: ['Wolf Token (Green 2/2)', 'Wolf (G 2/2) //Wolf (B 1/1 Deathtouch) Token'] },
+    };
+    const wolves = {
+      name: 'Wolf // Wolf', set: 'tmid',
+      card_faces: [
+        { name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['G'], power: '2', toughness: '2' },
+        { name: 'Wolf', type_line: 'Token Creature — Wolf', colors: ['B'], power: '1', toughness: '1' },
+      ],
+    };
+    expect(cardmarketTokenTarget(map, wolves)).toEqual({
+      name: 'Wolf (G 2/2) //Wolf (B 1/1 Deathtouch) Token',
+      expansion: 'Innistrad: Midnight Hunt: Extras',
+    });
   });
 
   it('names the separate token expansion of newer sets', () => {

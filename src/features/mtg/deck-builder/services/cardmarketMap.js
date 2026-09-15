@@ -49,27 +49,34 @@ const WUBRG = ['W', 'U', 'B', 'R', 'G'];
 const COLOR_WORDS = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
 const WORD_COLORS = Object.fromEntries(Object.entries(COLOR_WORDS).map(([k, v]) => [v.toLowerCase(), k]));
 
-function describeToken(card) {
-  const face = card?.card_faces?.[0];
-  const name = (face?.name || card?.name || '').split(' // ')[0].trim();
-  const power = card?.power ?? face?.power;
-  const toughness = card?.toughness ?? face?.toughness;
-  const colors = (card?.colors ?? face?.colors ?? [])
+function describeFace(source, card) {
+  const name = (source?.name || card?.name || '').split(' // ')[0].trim();
+  const power = source?.power ?? card?.power;
+  const toughness = source?.toughness ?? card?.toughness;
+  const colors = (source?.colors ?? card?.colors ?? [])
     .filter(c => WUBRG.includes(c))
     .sort((a, b) => WUBRG.indexOf(a) - WUBRG.indexOf(b));
   return {
     name,
     pt: power != null && toughness != null ? `${power}/${toughness}` : null,
     colors,
-    artifact: /artifact/i.test(card?.type_line || face?.type_line || ''),
+    artifact: /artifact/i.test(source?.type_line || card?.type_line || ''),
   };
 }
 
-/** Cardmarket-style token name: "Goblin Token (Red 1/1)", "Treasure Token". */
-export function tokenCardmarketName(card) {
-  const t = describeToken(card);
+/**
+ * One entry per printed half. Double-faced tokens carry two different
+ * creatures on one card (a 2/2 green Wolf on the front, a 1/1 black one on
+ * the back) and Cardmarket sells them as a single two-sided product.
+ */
+function describeTokenFaces(card) {
+  const faces = Array.isArray(card?.card_faces) ? card.card_faces : [];
+  if (faces.length > 1) return faces.map(f => describeFace(f, card));
+  return [describeFace(faces[0], card)];
+}
+
+function faceProductName(t) {
   if (!t.name) return '';
-  if (/emblem/i.test(card?.type_line || '')) return card.name;
   if (!t.pt) return `${t.name} Token`;
   const words = t.colors.map(c => COLOR_WORDS[c]);
   let color;
@@ -78,6 +85,17 @@ export function tokenCardmarketName(card) {
   else if (words.length === 2) color = `${words[0]} and ${words[1]}`;
   else color = `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}`;
   return `${t.name} Token (${color} ${t.pt})`;
+}
+
+/** Cardmarket-style token name: "Goblin Token (Red 1/1)", "Treasure Token". */
+export function tokenCardmarketName(card) {
+  const type = card?.type_line || card?.card_faces?.[0]?.type_line || '';
+  if (/emblem/i.test(type)) return card.name;
+  // Helper cards a deck needs alongside its tokens — the "Day // Night"
+  // indicator, "Energy Reserve", dungeons — are sold under their plain
+  // name; there is no "<name> Token" product for them.
+  if (type && !/token/i.test(type)) return card.name;
+  return describeTokenFaces(card).map(faceProductName).filter(Boolean).join(' // ');
 }
 
 /** "Beast Token (Green 3/3 Trample)" → { base, pt, colors, knownColors, extra } */
@@ -108,6 +126,21 @@ function parseTokenProduct(productName) {
 }
 
 /**
+ * A double-faced token is ONE Cardmarket product naming both halves, and
+ * the catalog spells those inconsistently — "Zombie (B 2/2 Decayed)
+ * //Spider (G 1/2) Token", "Treasure Token// Spider Token (G 1/2)",
+ * "Angel Token (W 4/4) / Knight Token (W 2/2)". Match on the parts that
+ * don't vary: each half's name and its power/toughness.
+ */
+function matchesBothFaces(productName, faces) {
+  const hay = productName.toLowerCase();
+  return faces.every(f =>
+    f.name
+    && hay.includes(f.name.toLowerCase())
+    && (!f.pt || hay.includes(f.pt)));
+}
+
+/**
  * Exact Cardmarket token product for a Scryfall token card, searched in the
  * expansions of its parent set. Prefers the plainest name when several
  * match (e.g. without a keyword suffix).
@@ -115,12 +148,18 @@ function parseTokenProduct(productName) {
  */
 export function cardmarketTokenTarget(map, card) {
   if (!map?.ts || !map?.tk || !card?.set) return null;
-  const want = describeToken(card);
+  const faces = describeTokenFaces(card);
+  const want = faces[0];
   if (!want.name) return null;
   const wantColors = want.colors.join('');
+  const expansions = map.ts[String(card.set).toLowerCase()] || [];
   let best = null;
-  for (const exp of map.ts[String(card.set).toLowerCase()] || []) {
+  let bothFaces = null;
+  for (const exp of expansions) {
     for (const productName of map.tk[exp] || []) {
+      if (faces.length > 1 && !bothFaces && matchesBothFaces(productName, faces)) {
+        bothFaces = { name: productName, expansion: map.e?.[exp] };
+      }
       const p = parseTokenProduct(productName);
       if (!p || p.base.toLowerCase() !== want.name.toLowerCase()) continue;
       if (p.pt !== want.pt) continue;
@@ -130,12 +169,14 @@ export function cardmarketTokenTarget(map, card) {
       }
     }
   }
+  // The two-sided product wins over a single-faced one that merely shares
+  // the front face's name — they are different cards.
+  if (bothFaces?.expansion) return bothFaces;
   if (best?.expansion) return { name: best.name, expansion: best.expansion };
   // Newer sets keep their tokens in a separate "<Set>: Tokens" expansion
   // that the catalog data doesn't name. Only when the set's own expansions
   // hold no tokens at all is that the likely home — named after the main
   // expansion (first entry).
-  const expansions = map.ts[String(card.set).toLowerCase()] || [];
   const setHasTokens = expansions.some(exp => (map.tk[exp] || []).length > 0);
   const parent = map.e?.[expansions[0]];
   if (parent && !setHasTokens) {

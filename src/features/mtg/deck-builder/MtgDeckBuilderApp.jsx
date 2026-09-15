@@ -76,6 +76,8 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
   // user can buy them alongside their actual playable list.
   const [ideas, setIdeas] = useState({});
   const [coverCardId, setCoverCardId] = useState(null);
+  // Which side of a double-faced cover card is shown (0 = front).
+  const [coverFace, setCoverFace] = useState(0);
   // Per-deck share token (see src/shared/tokens). Persists across saves;
   // we mint one only when the deck is created (or migrated from a row
   // that pre-dates the share_token column).
@@ -293,6 +295,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
       setSideboard(data.data?.sideboard || {});
       setIdeas(data.data?.ideas || {});
       setCoverCardId(data.data?.coverCardId || null);
+      setCoverFace(data.data?.coverFaceIndex || 0);
       setCommander(data.data?.commander || null);
       setPrintings(data.data?.printings || {});
       setTokenCounts(data.data?.tokens || {});
@@ -308,7 +311,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
   useEffect(() => {
     if (skipDirtyRef.current) return;
     setDirty(true);
-  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, commander, printings, tokenCounts]);
+  }, [mainboard, sideboard, ideas, deckName, deckFormat, coverCardId, coverFace, commander, printings, tokenCounts]);
 
   // ── Singleton helper ─────────────────────────────────
   // In Commander, every non-basic-land card is capped at 1 copy.
@@ -686,7 +689,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
       name: deckName.trim() || 'Unbenanntes Deck',
       format: deckFormat || null,
       data: {
-        mainboard, sideboard, ideas, coverCardId, commander,
+        mainboard, sideboard, ideas, coverCardId, coverFaceIndex: coverFace, commander,
         printings: prunePrintings(printings, { mainboard, sideboard, ideas, commander }),
         tokens: tokenCounts,
       },
@@ -738,7 +741,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
         name: `${deckName.trim() || 'Unbenanntes Deck'} (Kopie)`,
         format: deckFormat || null,
         data: {
-          mainboard, sideboard, ideas, coverCardId, commander,
+          mainboard, sideboard, ideas, coverCardId, coverFaceIndex: coverFace, commander,
           printings: prunePrintings(printings, { mainboard, sideboard, ideas, commander }),
           tokens: tokenCounts,
         },
@@ -998,7 +1001,8 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
               mainboard={viewMainboard}
               sideboard={viewSideboard}
               currentCoverId={coverCardId}
-              onPick={(id) => setCoverCardId(id)}
+              currentFace={coverFace}
+              onPick={(id, face) => { setCoverCardId(id); setCoverFace(face || 0); }}
             />
           )}
           {showAnalyzer && (
@@ -1287,7 +1291,8 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
               mainboard={viewMainboard}
               sideboard={viewSideboard}
               currentCoverId={coverCardId}
-              onPick={(id) => setCoverCardId(id)}
+              currentFace={coverFace}
+              onPick={(id, face) => { setCoverCardId(id); setCoverFace(face || 0); }}
             />
           )}
           {showAnalyzer && (

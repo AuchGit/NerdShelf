@@ -13,6 +13,8 @@
 // live in localStorage.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import useBackGuard from '../../../../shared/hooks/useBackGuard';
+import useLocalizedCard from '../hooks/useLocalizedCard';
 import ManaSymbol from '../components/ManaSymbol';
 import {
   getCardImage, getCardFaces, getCardLayout, getManaCost, parseManaCost,
@@ -55,6 +57,10 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
   const [zoneId, setZoneId] = useState('main');
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [openIndex, setOpenIndex] = useState(null);
+
+  // Back gesture while a card is full-screen: close the card, stay in the
+  // deck. Only from the deck itself does Back leave the deck.
+  useBackGuard(openIndex != null, useCallback(() => setOpenIndex(null), []));
 
   // Only explicit choices are stored, so a changed default still applies.
   const setPref = (key, value) => {
@@ -441,7 +447,10 @@ function CardLightbox({ entries, index, onIndex, onClose }) {
 }
 
 function LightboxSlide({ entry, offset, face, onFlip, onClose }) {
-  const { card, count } = entry;
+  const { count } = entry;
+  // Full-screen is where the card is actually read — show it in the
+  // language chosen in the MTG settings when that printing exists.
+  const card = useLocalizedCard(entry.card);
   const faces = getCardFaces(card);
   const isDouble = getCardLayout(card) === 'double_faced';
   const shown = faces[face] || faces[0];

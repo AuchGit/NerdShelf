@@ -7,10 +7,32 @@
 //
 // A deck stores only the wanted count per token (`data.tokens`, keyed by
 // the token's oracle id); tokens without a stored count default to 1.
+//
+// Besides real tokens a deck often needs helper cards: the "Day // Night"
+// indicator for werewolves, "Energy Reserve" for energy counters, dungeon
+// cards. Scryfall files those as `combo_piece`, not `token` — but unlike
+// the other combo pieces (the card itself, meld partners) they carry a
+// bare "Card" / "Emblem" / "Dungeon" type line, which is what we match on.
 
 import { fetchCardsByIds } from './scryfallCollection';
 
 const cache = new Map(); // token printing id → full Scryfall card
+
+// "Card", "Card // Card", "Emblem — Jace Beleren", "Dungeon" — never a
+// real card's type line ("Legendary Artifact", "Creature — Human …").
+const HELPER_TYPE = /^(card|emblem|dungeon)\b/i;
+
+/** Does this `all_parts` entry describe something the deck needs alongside? */
+function isNeededPart(part, card) {
+  if (!part?.id || part.id === card?.id) return false;
+  if (part.component === 'token') return true;
+  if (part.component !== 'combo_piece') return false;
+  // The card's own entry — same name, different printing id.
+  if (part.name && card?.name && part.name === card.name) return false;
+  const type = part.type_line || '';
+  if (!type) return false;
+  return type.split('//').every(t => HELPER_TYPE.test(t.trim()));
+}
 
 /**
  * @param {object[]} zones      deck zones ({ [id]: { card, count } })
@@ -22,7 +44,7 @@ export function collectTokenRefs(zones, commander, include = null) {
   const refs = new Map();
   const add = (card) => {
     for (const part of card?.all_parts || []) {
-      if (part?.component !== 'token' || !part.id || part.id === card.id) continue;
+      if (!isNeededPart(part, card)) continue;
       let ref = refs.get(part.id);
       if (!ref) refs.set(part.id, (ref = { name: part.name, type_line: part.type_line, sources: new Set() }));
       if (card.name) ref.sources.add(card.name);

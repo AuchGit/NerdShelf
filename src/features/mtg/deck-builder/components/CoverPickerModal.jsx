@@ -1,12 +1,39 @@
 // src/features/mtg/deck-builder/components/CoverPickerModal.jsx
 import { useEffect, useMemo, useState } from 'react';
+import useBackGuard from '../../../../shared/hooks/useBackGuard';
+
+/** Faces of a card that carry their own artwork (1 for a normal card). */
+function artFaces(card) {
+  const faces = Array.isArray(card?.card_faces)
+    ? card.card_faces.filter(f => f?.image_uris)
+    : [];
+  return faces.length > 1 ? faces : [null];
+}
+
+function artOf(card, faceIndex) {
+  const face = card?.card_faces?.[faceIndex]?.image_uris;
+  const base = card?.image_uris;
+  return (
+    face?.art_crop || face?.normal || face?.small
+    || base?.art_crop || base?.small
+    || card?.card_faces?.[0]?.image_uris?.art_crop
+    || card?.card_faces?.[0]?.image_uris?.small
+    || null
+  );
+}
+
+function faceName(card, faceIndex) {
+  return card?.card_faces?.[faceIndex]?.name || card?.name || '';
+}
 
 /**
- * Pick (or clear) a deck's cover artwork. Lists every unique card in mainboard
- * + sideboard as a small thumbnail grid. Clicking sets it; "Kein Cover" clears.
+ * Pick (or clear) a deck's cover artwork. Lists every unique card in
+ * mainboard + sideboard as a small thumbnail grid; a double-faced card
+ * offers both of its sides separately. Clicking sets it; "Kein Cover"
+ * clears.
  */
 export default function CoverPickerModal({
-  open, onClose, mainboard, sideboard, currentCoverId, onPick,
+  open, onClose, mainboard, sideboard, currentCoverId, currentFace = 0, onPick,
 }) {
   const [filter, setFilter] = useState('');
 
@@ -17,7 +44,10 @@ export default function CoverPickerModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const cards = useMemo(() => {
+  useBackGuard(!!open, onClose);
+
+  // One tile per artwork — a transform card contributes both of its sides.
+  const tiles = useMemo(() => {
     if (!open) return [];
     const map = new Map();
     for (const e of Object.values(mainboard || {})) {
@@ -26,25 +56,22 @@ export default function CoverPickerModal({
     for (const e of Object.values(sideboard || {})) {
       if (e?.card?.id && !map.has(e.card.id)) map.set(e.card.id, e.card);
     }
-    return Array.from(map.values());
+    const out = [];
+    for (const card of map.values()) {
+      artFaces(card).forEach((_, i, all) => {
+        out.push({ card, face: all.length > 1 ? i : 0, multi: all.length > 1 });
+      });
+    }
+    return out;
   }, [open, mainboard, sideboard]);
 
   if (!open) return null;
 
   const q = filter.trim().toLowerCase();
   const filtered = q
-    ? cards.filter(c => (c.name || '').toLowerCase().includes(q))
-    : cards;
-
-  function artFor(card) {
-    return (
-      card.image_uris?.art_crop ||
-      card.card_faces?.[0]?.image_uris?.art_crop ||
-      card.image_uris?.small ||
-      card.card_faces?.[0]?.image_uris?.small ||
-      null
-    );
-  }
+    ? tiles.filter(t => faceName(t.card, t.face).toLowerCase().includes(q)
+      || (t.card.name || '').toLowerCase().includes(q))
+    : tiles;
 
   return (
     <div onClick={onClose} style={S.overlay}>
@@ -63,7 +90,7 @@ export default function CoverPickerModal({
             autoFocus
           />
           <button
-            onClick={() => { onPick(null); onClose?.(); }}
+            onClick={() => { onPick(null, 0); onClose?.(); }}
             style={{
               ...S.clearBtn,
               ...(currentCoverId ? {} : { opacity: 0.5, cursor: 'default' }),
@@ -76,31 +103,35 @@ export default function CoverPickerModal({
 
         {filtered.length === 0 ? (
           <div style={S.empty}>
-            {cards.length === 0
+            {tiles.length === 0
               ? 'Füge erst Karten hinzu, dann kannst du eine als Cover wählen.'
               : 'Keine Treffer.'}
           </div>
         ) : (
           <div style={S.grid}>
-            {filtered.map(card => {
-              const art = artFor(card);
-              const isCurrent = card.id === currentCoverId;
+            {filtered.map(({ card, face, multi }) => {
+              const art = artOf(card, face);
+              const label = faceName(card, face);
+              const isCurrent = card.id === currentCoverId && face === (currentFace || 0);
               return (
                 <button
-                  key={card.id}
-                  onClick={() => { onPick(card.id); onClose?.(); }}
-                  title={card.name}
+                  key={`${card.id}#${face}`}
+                  onClick={() => { onPick(card.id, face); onClose?.(); }}
+                  title={multi ? `${card.name} — ${label}` : card.name}
                   style={{
                     ...S.tile,
                     ...(isCurrent ? S.tileSel : {}),
                   }}
                 >
                   {art ? (
-                    <img src={art} alt={card.name} style={S.tileImg} loading="lazy" />
+                    <img src={art} alt={label} style={S.tileImg} loading="lazy" />
                   ) : (
-                    <div style={S.tileFallback}>{card.name}</div>
+                    <div style={S.tileFallback}>{label}</div>
                   )}
-                  <div style={S.tileLabel}>{card.name}</div>
+                  <div style={S.tileLabel}>
+                    {label}
+                    {multi && <span style={S.faceTag}>{face === 0 ? 'Vorderseite' : 'Rückseite'}</span>}
+                  </div>
                 </button>
               );
             })}
@@ -193,5 +224,11 @@ const S = {
     fontSize: 11, padding: '4px 6px',
     color: 'var(--color-text, var(--text-hi))',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    display: 'flex', alignItems: 'center', gap: 4,
+  },
+  faceTag: {
+    marginLeft: 'auto', flexShrink: 0,
+    fontSize: 9, letterSpacing: 0.3, textTransform: 'uppercase',
+    color: 'var(--color-text-muted, var(--text-mid))',
   },
 };

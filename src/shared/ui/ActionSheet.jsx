@@ -13,6 +13,7 @@
 // component renders the structure + dismiss logic only.
 
 import { useEffect } from 'react';
+import useBackGuard from '../hooks/useBackGuard';
 
 export default function ActionSheet({ open, onClose, title, items = [] }) {
   // ESC closes (useful in dev on desktop, also keyboards on iPad).
@@ -22,6 +23,10 @@ export default function ActionSheet({ open, onClose, title, items = [] }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // The phone's back gesture dismisses the sheet — it should never take
+  // the user out of the page underneath it.
+  useBackGuard(open, onClose);
 
   if (!open) return null;
 

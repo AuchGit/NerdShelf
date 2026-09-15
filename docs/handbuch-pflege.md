@@ -40,8 +40,10 @@ Performance, Tests, Datenbank) brauchen keine Handbuch-Änderung.
   von dort geholt.
 - **Neue Tastenkürzel** zusätzlich in `#ref-kuerzel` eintragen; VTT-Kürzel
   parallel in `src/features/dnd/vtt/components/ShortcutOverlay.jsx`.
-- **Screenshots** liegen in `public/handbuch-img/` (siehe README dort). Fehlt
-  eine Datei, zeigt das Handbuch einen Platzhalter — das ist in Ordnung.
+- **Keine Screenshots.** Das Handbuch beschreibt die Bedienung in Worten und
+  kommt ohne Bilder aus — so veraltet nichts still, wenn sich die Oberfläche
+  ändert. Statt auf ein Bild zu verweisen, den Weg mit `.path` und `ol.steps`
+  beschreiben und die Beschriftungen wörtlich zitieren.
 - **Keine Emojis** als Schmuck; Emojis nur, wenn sie Teil einer echten
   Beschriftung in der App sind (z. B. „🗺 Karten" im VTT).
 - Nach dem Bearbeiten gegenprüfen, dass jeder `.nav`-Link ein Ziel hat und die
