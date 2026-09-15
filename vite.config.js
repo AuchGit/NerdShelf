@@ -103,6 +103,11 @@ export default defineConfig(async ({ mode }) => {
           display: 'standalone',
           start_url: PWA_BASE,
           scope: PWA_BASE,
+          id: PWA_BASE,
+          // Installed app catches links to its pages (Android, desktop
+          // Chrome) instead of the browser, reusing an open window.
+          launch_handler: { client_mode: ['navigate-existing', 'auto'] },
+          handle_links: 'preferred',
           icons: [
             { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
             { src: 'icons/icon-128.png', sizes: '128x128', type: 'image/png' },

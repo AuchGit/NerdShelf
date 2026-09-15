@@ -30,7 +30,10 @@ export default function ShareButton({ kind, token, name = '', compact = false, s
     e.stopPropagation(); e.preventDefault()
 
     const label = shareLabel(kind, name)
-    const message = `Schau dir an: ${label}\nToken: ${formatToken(token)}\n${url}`
+    // The link travels as `url`; share targets append it to the text, so
+    // it isn't repeated in the message itself. The token stays in the text
+    // for recipients whose link opens outside the app (e.g. iPhone → Safari).
+    const message = `Schau dir an: ${label}\nToken: ${formatToken(token)}`
 
     // Mobile / touch: open the native share sheet with the message body.
     if (canNativeShare()) {

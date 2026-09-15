@@ -79,6 +79,12 @@ body[data-pwa-mobile='true'] main:has(.mtg-mob-screen) {
   font-family: inherit;
   border-radius: var(--radius-md);
 }
+.mtg-mob-deck-name--static {
+  line-height: 36px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .mtg-mob-deck-name:focus {
   border-color: var(--color-border);
   background: var(--color-surface);

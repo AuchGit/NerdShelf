@@ -34,8 +34,10 @@ export default function Wh40kDashboard() {
     param: 'import',
     onToken: async (token) => {
       try {
-        const r = await imports.add(token);
+        const r = await imports.add(token, { allowExisting: true });
         setImportStatus({ ok: true, msg: `„${r.entityName}" hinzugefügt.` });
+        // Opened from a share link → show the army right away.
+        navigate(`/wh40k/army/view/${r.token}`);
       } catch (e) {
         setImportStatus({ ok: false, msg: e.message || String(e) });
       }
@@ -164,6 +166,9 @@ export default function Wh40kDashboard() {
         title="Meine Armeen"
         newButtonLabel="+ Neue Armee"
         onNew={() => navigate('/wh40k/army/new')}
+        importDomain="wh40k_army"
+        onImportToken={imports.add}
+        importBusy={imports.loading}
         items={armies}
         loading={loading}
         getCategory={factionLabel}
@@ -193,6 +198,7 @@ export default function Wh40kDashboard() {
         tableMissing={imports.tableMissing}
         domain="wh40k_army"
         onImport={imports.add}
+        showImportInput={false}
         onRemove={imports.remove}
         getSubCategory={(army) => data?.factionsById[army.faction]?.name || 'Unbekannte Fraktion'}
         subCategoryOrder={factionOrder}

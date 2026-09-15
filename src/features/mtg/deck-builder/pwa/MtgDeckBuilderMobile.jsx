@@ -53,9 +53,11 @@ export default function MtgDeckBuilderMobile({
   mainCount, sideCount,
   pinnedCard, onUnpin,
   viewDeck,           // { mainboard, sideboard, ideas, commander } with artwork applied
+  // Shared decks: nothing editable, "Kopieren" instead of saving.
+  readOnly = false, ownerName = '', onCopy, copying = false,
 }) {
   const { isLandscape } = usePwaMobile();
-  const [tab, setTab] = useState('search'); // 'search' | 'deck' | 'preview' | 'view'
+  const [tab, setTab] = useState(readOnly ? 'view' : 'search'); // 'search' | 'deck' | 'preview' | 'view'
   const viewing = tab === 'view';
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -82,12 +84,21 @@ export default function MtgDeckBuilderMobile({
         onClick={() => navigate('/mtg')}
         title="Zurück zum Dashboard"
       >←</button>
-      <input
-        value={deckName}
-        onChange={(e) => setDeckName(e.target.value)}
-        className="mtg-mob-deck-name"
-        placeholder="Deck-Name…"
-      />
+      {readOnly ? (
+        <div className="mtg-mob-deck-name mtg-mob-deck-name--static">{deckName}</div>
+      ) : (
+        <input
+          value={deckName}
+          onChange={(e) => setDeckName(e.target.value)}
+          className="mtg-mob-deck-name"
+          placeholder="Deck-Name…"
+        />
+      )}
+      {readOnly && !status && (
+        <span className="mtg-mob-status" style={{ color: 'var(--color-text-muted)' }}>
+          {ownerName ? `von ${ownerName}` : 'Nur lesen'}
+        </span>
+      )}
       {status && (
         <span
           className="mtg-mob-status"
@@ -96,17 +107,29 @@ export default function MtgDeckBuilderMobile({
           {status.text}
         </span>
       )}
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={saving}
-        className={`mtg-mob-save-btn ${dirty ? 'is-dirty' : ''}`}
-        title={dirty ? 'Speichern' : 'Gespeichert'}
-      >
-        {saving ? '…' : dirty ? 'Speichern' : '✓'}
-      </button>
+      {readOnly ? (
+        <button
+          type="button"
+          onClick={onCopy}
+          disabled={copying}
+          className="mtg-mob-save-btn is-dirty"
+          title="Als eigenes Deck mit neuem Token anlegen und bearbeiten"
+        >
+          {copying ? '…' : 'Kopieren'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className={`mtg-mob-save-btn ${dirty ? 'is-dirty' : ''}`}
+          title={dirty ? 'Speichern' : 'Gespeichert'}
+        >
+          {saving ? '…' : dirty ? 'Speichern' : '✓'}
+        </button>
+      )}
       {/* Landscape has no tab bar — the viewer toggle sits up here. */}
-      {isLandscape && (
+      {isLandscape && !readOnly && (
         <button
           type="button"
           onClick={() => setTab(viewing ? 'search' : 'view')}
@@ -180,7 +203,16 @@ export default function MtgDeckBuilderMobile({
   );
 
   // ─── Action sheet items ─────────────────────────────────────
-  const menuItems = [
+  const menuItems = readOnly ? [
+    { id: 'copy', label: 'Als eigenes Deck kopieren', icon: '⧉', onSelect: onCopy },
+    {
+      id: 'view',
+      label: viewing ? 'Deck-Panel zeigen' : 'Deck ansehen',
+      icon: viewing ? '◇' : '◉',
+      onSelect: () => setTab(viewing ? 'deck' : 'view'),
+    },
+    { id: 'export', label: 'Decklist kopieren', icon: '↑', onSelect: onExport },
+  ] : [
     {
       id: 'view',
       label: viewing ? 'Zurück zum Bearbeiten' : 'Deck ansehen',
@@ -214,9 +246,9 @@ export default function MtgDeckBuilderMobile({
     <div className="mtg-mob-screen mtg-deck-builder">
       {header}
       {/* Format / cover / commander are editing controls — hidden while viewing. */}
-      {!viewing && toolbar}
+      {!viewing && !readOnly && toolbar}
 
-      {isLandscape && viewing ? (
+      {isLandscape && (viewing || readOnly) ? (
         <div className="mtg-mob-view-full">{viewerEl}</div>
       ) : isLandscape ? (
         // ── Landscape: side-by-side ────────────────────────────
@@ -271,10 +303,12 @@ export default function MtgDeckBuilderMobile({
 
       {!isLandscape && (
         <nav className="mtg-mob-tabs" aria-label="Deck-Builder-Ansicht">
-          <TabBtn
-            id="search" label="Suche" icon="⌕"
-            active={tab === 'search'} onClick={() => setTab('search')}
-          />
+          {!readOnly && (
+            <TabBtn
+              id="search" label="Suche" icon="⌕"
+              active={tab === 'search'} onClick={() => setTab('search')}
+            />
+          )}
           <TabBtn
             id="deck" label="Deck" icon="◇"
             active={tab === 'deck'} onClick={() => setTab('deck')}
@@ -297,7 +331,7 @@ export default function MtgDeckBuilderMobile({
           Visible in landscape (search column is always on screen) and
           on the Suche tab in portrait. The viewer brings its own controls. */}
       <CardGridSettingsButton
-        visible={isLandscape ? !viewing : tab === 'search'}
+        visible={!readOnly && (isLandscape ? !viewing : tab === 'search')}
       />
 
       <ActionSheet

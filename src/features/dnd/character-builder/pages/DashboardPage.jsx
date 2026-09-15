@@ -31,8 +31,10 @@ export default function DashboardPage({ session }) {
     param: 'import',
     onToken: async (token) => {
       try {
-        const r = await imports.add(token)
+        const r = await imports.add(token, { allowExisting: true })
         setImportStatus({ ok: true, msg: `„${r.entityName}" hinzugefügt.` })
+        // Opened from a share link → show the character right away.
+        navigate(`/character/view/${r.token}`)
       } catch (e) {
         setImportStatus({ ok: false, msg: e.message || String(e) })
       }
@@ -133,6 +135,9 @@ export default function DashboardPage({ session }) {
         title="Meine Charaktere"
         newButtonLabel="+ Neuer Charakter"
         onNew={() => navigate('/character/new')}
+        importDomain="dnd_character"
+        onImportToken={imports.add}
+        importBusy={imports.loading}
         items={characters}
         loading={loading}
         getCategory={(char) => EDITION_LABEL[char.data?.meta?.edition] || char.data?.meta?.edition || 'Unbekannte Edition'}
@@ -159,6 +164,7 @@ export default function DashboardPage({ session }) {
         tableMissing={imports.tableMissing}
         domain="dnd_character"
         onImport={imports.add}
+        showImportInput={false}
         onRemove={imports.remove}
         getSubCategory={(char) => EDITION_LABEL[char.data?.meta?.edition] || char.data?.meta?.edition || 'Unbekannte Edition'}
         subCategoryOrder={EDITION_ORDER.map(e => EDITION_LABEL[e])}

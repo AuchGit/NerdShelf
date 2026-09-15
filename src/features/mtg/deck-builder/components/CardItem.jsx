@@ -161,7 +161,7 @@ export default function CardItem({
   return (
     <div
       className={`card-item ${isFavorite ? 'is-favorite' : ''} ${isWide ? 'card-tile-wide' : ''} card-layout-${layout}`}
-      onClick={() => onAdd(card)}
+      onClick={() => onAdd?.(card)}
       onMouseEnter={() => onHover?.(card)}
       onMouseLeave={() => onHoverEnd?.()}
       onContextMenu={handleContextMenu}
@@ -195,7 +195,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {hoverOverlay}
+          {onAdd && hoverOverlay}
         </div>
       )}
 
@@ -227,7 +227,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {hoverOverlay}
+          {onAdd && hoverOverlay}
         </div>
       )}
 
@@ -255,7 +255,7 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {hoverOverlay}
+          {onAdd && hoverOverlay}
         </div>
       )}
 

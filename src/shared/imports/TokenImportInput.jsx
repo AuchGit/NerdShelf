@@ -17,7 +17,7 @@ const DOMAIN_LABEL = {
   dnd_character: 'DnD-Charaktere',
 };
 
-export default function TokenImportInput({ domain, onImport, busy = false }) {
+export default function TokenImportInput({ domain, onImport, busy = false, autoFocus = false }) {
   const [raw, setRaw] = useState('');
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
@@ -89,6 +89,7 @@ export default function TokenImportInput({ domain, onImport, busy = false }) {
           onChange={(e) => { setRaw(e.target.value); setPreview(null); setError(null); }}
           onBlur={() => { if (valid && !preview && !previewing) handleLookup(); }}
           placeholder="X3Q9-F4MV-7K2H"
+          autoFocus={autoFocus}
           spellCheck={false}
           autoCapitalize="characters"
           autoCorrect="off"

@@ -156,14 +156,17 @@ export default function CardmarketExportModal({
 
     let fallbacks = 0;
     let tokenFallbacks = 0;
+    const tokenLinks = [];
     const text = chosen.map(r => {
       const qty = qtyOf(r);
       if (r.card?._isToken) {
         const target = cardmarketTokenTarget(map, r.card);
-        if (!target) tokenFallbacks++;
+        if (!target || target.guessed) tokenFallbacks++;
+        const productName = target?.name || tokenCardmarketName(r.card);
+        tokenLinks.push({ qty, name: productName, url: cardmarketSearchUrl(productName) });
         return target
-          ? `${qty} ${target.name} (${target.expansion})`
-          : `${qty} ${tokenCardmarketName(r.card)}`;
+          ? `${qty} ${productName} (${target.expansion})`
+          : `${qty} ${productName}`;
       }
       const printing = r.printing ? printings.get(r.printing.id) : null;
       const target = printing ? cardmarketTarget(map, printing.cardmarket_id) : null;
@@ -171,7 +174,7 @@ export default function CardmarketExportModal({
       return cardmarketLine(qty, r.card?.name || r.cardId, printing, target);
     }).join('\n');
 
-    setOutput({ key: settingsKey, text, fallbacks, tokenFallbacks });
+    setOutput({ key: settingsKey, text, fallbacks, tokenFallbacks, tokenLinks });
     copyText(text);
   };
 
@@ -382,8 +385,8 @@ export default function CardmarketExportModal({
             )}
             {generated.tokenFallbacks > 0 && (
               <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
-                {generated.tokenFallbacks === 1 ? '1 Token' : `${generated.tokenFallbacks} Tokens`} ohne genaue
-                Zuordnung — dort stehen Name, Farbe und Stärke, die Ausgabe wählt Cardmarket.
+                {generated.tokenFallbacks === 1 ? '1 Token' : `${generated.tokenFallbacks} Tokens`} ohne sichere
+                Zuordnung — findet der Massenimport sie nicht, öffne sie unten direkt auf Cardmarket.
               </div>
             )}
             <textarea
@@ -411,11 +414,53 @@ export default function CardmarketExportModal({
                 Gesamt: <strong style={{ color: 'var(--color-accent)' }}>≈ {formatEur(totalEur)}</strong>
               </span>
             </div>
+            {generated.tokenLinks?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1, 4px)' }}>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)' }}>
+                  Tokens direkt auf Cardmarket öffnen:
+                </div>
+                <div style={tokenLinkListStyle}>
+                  {generated.tokenLinks.map(t => (
+                    <a
+                      key={t.url}
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => openExternal(e, t.url)}
+                      style={tokenLinkStyle}
+                    >
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t.qty}× {t.name}
+                      </span>
+                      <span style={{ flexShrink: 0, color: 'var(--color-accent)', fontWeight: 'var(--fw-semibold)' }}>
+                        Cardmarket ↗
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
     </Modal>
   );
+}
+
+// Cardmarket product search for one name — the reliable manual way to add
+// a token the wants import doesn't recognise.
+function cardmarketSearchUrl(name) {
+  return `https://www.cardmarket.com/de/Magic/Products/Search?searchString=${encodeURIComponent(name)}`;
+}
+
+// In the desktop app a plain link would open inside the app window — hand
+// it to the system browser instead.
+function openExternal(event, url) {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) return;
+  event.preventDefault();
+  import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl(url))
+    .catch(() => { try { window.open(url, '_blank'); } catch { /* ignore */ } });
 }
 
 function SourceControls({
@@ -721,6 +766,26 @@ const playsetBtnStyle = {
   fontFamily: 'inherit',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
+};
+const tokenLinkListStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  maxHeight: 220,
+  overflowY: 'auto',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+};
+const tokenLinkStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 'var(--space-2)',
+  minHeight: 40,
+  padding: '6px 10px',
+  borderBottom: '1px solid var(--color-border)',
+  color: 'var(--color-text)',
+  fontSize: 'var(--fs-sm)',
+  textDecoration: 'none',
 };
 const miniBtnStyle = {
   padding: '3px 8px',

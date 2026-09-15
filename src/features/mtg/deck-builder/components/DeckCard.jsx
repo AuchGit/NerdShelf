@@ -19,6 +19,7 @@ export default function DeckCard({
   onPin,            // optional: (card) => void — right-click pins to preview
   note,             // optional: small muted line under the card (e.g. token sources)
   removeTitle,      // optional: tooltip of the ✕ button
+  readOnly = false, // shared decks: show the count only, no controls
 }) {
   const manaCost = getManaCost(card);
   const manaSyms = parseManaCost(manaCost);
@@ -58,7 +59,7 @@ export default function DeckCard({
           as "move this card LEFT (out of this zone)". Hidden when the
           handler isn't supplied (e.g. for cards that have no logical
           left-target like a CommanderRow). */}
-      {onMoveLeft && (
+      {onMoveLeft && !readOnly && (
         <button
           type="button"
           className="dc-btn dc-move-arrow dc-move-arrow--left"
@@ -113,6 +114,11 @@ export default function DeckCard({
         )}
       </div>
 
+      {readOnly ? (
+        <div className="dc-controls">
+          <span className="dc-count">{count}×</span>
+        </div>
+      ) : (
       <div className="dc-controls">
         <button className="dc-btn" onClick={onDecrease} title="Eins weniger">−</button>
         <span className="dc-count">{count}</span>
@@ -126,6 +132,7 @@ export default function DeckCard({
         )}
         <button className="dc-btn dc-remove" onClick={onRemove} title={removeTitle || 'Alle entfernen'}>✕</button>
       </div>
+      )}
     </div>
   );
 }

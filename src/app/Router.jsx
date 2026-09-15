@@ -1,5 +1,6 @@
 // src/app/Router.jsx
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { routeFromAppLink } from '../shared/sharing/appLink';
 import { useEffect } from 'react';
 import Layout from './Layout';
 import lazyWithReload from '../shared/lazyWithReload';
@@ -10,7 +11,6 @@ import lazyWithReload from '../shared/lazyWithReload';
 const DndCharacterApp       = lazyWithReload(() => import('../features/dnd/character-builder/DndCharacterApp'));
 const MtgDashboard          = lazyWithReload(() => import('../features/mtg/deck-builder/MtgDashboard'));
 const MtgDeckBuilderApp     = lazyWithReload(() => import('../features/mtg/deck-builder/MtgDeckBuilderApp'));
-const DeckViewPage          = lazyWithReload(() => import('../features/mtg/deck-builder/pages/DeckViewPage'));
 const MtgInventoryPage      = lazyWithReload(() => import('../features/mtg/deck-builder/pages/MtgInventoryPage'));
 const MtgWishlistPage       = lazyWithReload(() => import('../features/mtg/deck-builder/pages/MtgWishlistPage'));
 const MatchHudDashboardPage = lazyWithReload(() => import('../features/mtg/match-hud/pages/MatchHudDashboardPage'));
@@ -33,6 +33,18 @@ function isEphemeralRoute(pathname) {
   return false;
 }
 
+// Share links carry ?import= / ?join=. Resuming such a route on the next
+// launch would run the import again ("schon importiert") — never store them.
+const DEEP_LINK_PARAMS = ['import', 'join'];
+function withoutDeepLinkParams(route) {
+  const q = route.indexOf('?');
+  if (q < 0) return route;
+  const params = new URLSearchParams(route.slice(q + 1));
+  for (const p of DEEP_LINK_PARAMS) params.delete(p);
+  const rest = params.toString();
+  return route.slice(0, q) + (rest ? `?${rest}` : '');
+}
+
 function readLastRoute() {
   try {
     const v = localStorage.getItem(LAST_ROUTE_KEY);
@@ -43,7 +55,7 @@ function readLastRoute() {
       try { localStorage.removeItem(LAST_ROUTE_KEY); } catch { /* ignore */ }
       return null;
     }
-    return v;
+    return withoutDeepLinkParams(v);
   } catch { return null; }
 }
 
@@ -58,9 +70,34 @@ function RouteTracker() {
     // Sheet" ohne zu wissen warum.
     if (/[?&]popout=1\b/.test(location.search || '')) return;
     try {
-      localStorage.setItem(LAST_ROUTE_KEY, location.pathname + location.search);
+      localStorage.setItem(LAST_ROUTE_KEY, withoutDeepLinkParams(location.pathname + location.search));
     } catch { /* ignore */ }
   }, [location.pathname, location.search]);
+  return null;
+}
+
+// Desktop app: nerdshelf:// links (from "In der App öffnen" in the browser)
+// start or focus the app — open the route they point at.
+function DeepLinkListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return undefined;
+    let cancelled = false;
+    let unlisten = null;
+    const open = (urls) => {
+      const route = routeFromAppLink(Array.isArray(urls) ? urls[0] : null);
+      if (route && !cancelled) navigate(route);
+    };
+    import('@tauri-apps/plugin-deep-link')
+      .then(async ({ getCurrent, onOpenUrl }) => {
+        if (cancelled) return;
+        open(await getCurrent().catch(() => null)); // link that launched the app
+        const stop = await onOpenUrl(open);          // links while it runs
+        if (cancelled) stop(); else unlisten = stop;
+      })
+      .catch(() => { /* plugin unavailable — nothing to listen to */ });
+    return () => { cancelled = true; unlisten?.(); };
+  }, [navigate]);
   return null;
 }
 
@@ -73,6 +110,7 @@ export default function Router() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <RouteTracker />
+      <DeepLinkListener />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<RootRedirect />} />
@@ -86,7 +124,10 @@ export default function Router() {
           <Route path="/mtg/match/local" element={<LocalMatchPage />} />
           <Route path="/mtg/match/:joinCode" element={<MatchHudSessionPage />} />
           <Route path="/mtg/deck/new" element={<MtgDeckBuilderApp />} />
-          <Route path="/mtg/deck/view/:token" element={<DeckViewPage />} />
+          {/* Shared deck: the builder in read-only mode. The key keeps it a
+              separate instance from the own-deck routes (a copy navigates
+              from here to /mtg/deck/:id). */}
+          <Route path="/mtg/deck/view/:token" element={<MtgDeckBuilderApp key="shared" readOnly />} />
           <Route path="/mtg/deck/:deckId" element={<MtgDeckBuilderApp />} />
           <Route path="/wh40k/*" element={<Wh40kApp />} />
         </Route>

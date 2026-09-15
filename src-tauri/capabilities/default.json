@@ -19,6 +19,7 @@
     "dialog:allow-save",
     "dialog:allow-open",
     "opener:default",
+    "deep-link:default",
     {
       "identifier": "http:default",
       "allow": [

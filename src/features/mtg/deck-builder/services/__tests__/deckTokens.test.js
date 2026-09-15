@@ -64,4 +64,12 @@ describe('Cardmarket token names', () => {
     expect(cardmarketTokenTarget(map, { ...goblinA, power: '2', toughness: '2' })).toBeNull();
     expect(cardmarketTokenTarget(map, { ...goblinA, set: 'tfdn' })).toBeNull();
   });
+
+  it('names the separate token expansion of newer sets', () => {
+    const map = { e: { 5658: 'Bloomburrow' }, ts: { tblb: [5658, 5659] }, tk: {} };
+    const otter = { name: 'Otter', type_line: 'Token Creature — Otter', colors: ['U', 'R'], power: '1', toughness: '1', set: 'tblb' };
+    expect(cardmarketTokenTarget(map, otter)).toEqual({
+      name: 'Otter Token (Blue and Red 1/1)', expansion: 'Bloomburrow: Tokens', guessed: true,
+    });
+  });
 });

@@ -144,7 +144,9 @@ export function useImports({ domain, select = '*' }) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  const add = useCallback(async (token) => {
+  // allowExisting: an already imported token counts as success (share links
+  // opened twice, or in browser and app).
+  const add = useCallback(async (token, { allowExisting = false } = {}) => {
     if (!user) throw new Error('Nicht eingeloggt.');
     if (!cfg)  throw new Error(`Unbekannte Import-Domäne: ${domain}`);
     const cleaned = (token || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
@@ -168,6 +170,7 @@ export function useImports({ domain, select = '*' }) {
       });
     if (err) {
       if (/duplicate key/i.test(err.message)) {
+        if (allowExisting) return lookup;
         throw new Error('Dieser Token wurde schon importiert.');
       }
       throw err;

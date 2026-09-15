@@ -31,6 +31,9 @@ export default function ImportedSection({
   renderItem,               // (entity, { token, ownerName }) => JSX
   storageKey,               // for collapse-state persistence
   emptyIfEmpty = true,      // if true, hide the whole section when there are no imports
+  // false when the dashboard offers the token input at the top instead
+  // (DashboardLayout importDomain) — the section then only shows imports.
+  showImportInput = true,
 }) {
   // Group by ownerId → subCategory → [entities]
   const grouped = useMemo(() => {
@@ -68,6 +71,8 @@ export default function ImportedSection({
   }, []);
 
   const totalImports = (entities || []).length;
+  // Without its own input there's nothing to show until something is imported.
+  if (!showImportInput && !loading && !tableMissing && totalImports === 0) return null;
   if (emptyIfEmpty && totalImports === 0 && tableMissing) {
     // If the table isn't there at all, surface a single subtle hint
     // alongside the import input rather than the full empty-state block.
@@ -108,7 +113,7 @@ export default function ImportedSection({
         )}
       </header>
 
-      <TokenImportInput domain={domain} onImport={onImport} busy={loading} />
+      {showImportInput && <TokenImportInput domain={domain} onImport={onImport} busy={loading} />}
 
       {tableMissing && (
         <div

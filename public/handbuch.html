@@ -558,8 +558,9 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 
   <h3>Etwas übernehmen</h3>
   <ul>
-    <li><b>Per Link:</b> anklicken — die App öffnet den passenden Bereich und importiert automatisch.</li>
-    <li><b>Per Token:</b> auf dem Dashboard des Bereichs im Feld <span class="ui">Import via Token</span> eintragen. Bindestriche sind egal.</li>
+    <li><b>Per Link:</b> anklicken — der Eintrag wird importiert und gleich geöffnet. Ist NerdShelf auf einem Android-Handy installiert, öffnet sich der Link direkt in der App. Auf dem iPhone öffnet ein Link immer Safari statt der installierten App; dort anmelden oder den Token aus der Nachricht in der App eintragen.</li>
+    <li><b>Am PC:</b> Öffnet sich ein Link im Browser, fragt NerdShelf unten <span class="ui">In der NerdShelf-App öffnen?</span> — mit installierter Desktop-App geht es dort weiter (beim ersten Mal fragt der Browser noch, ob er die App öffnen darf). Mit <span class="ui">Links auf diesem Computer immer in der App öffnen</span> passiert das künftig ohne Nachfrage.</li>
+    <li><b>Per Token:</b> oben auf dem Dashboard des Bereichs <span class="ui">⌗ Import per Token</span> antippen, den Token eintragen, <span class="ui">Prüfen</span> und dann <span class="ui">+ In Dashboard</span>. Bindestriche sind egal.</li>
   </ul>
   <p>Übernommene Sachen landen unter <b>Importierte Charaktere / Decks / Armeen</b> ganz unten auf dem Dashboard, gruppiert nach Besitzer und darunter nach Edition, Format bzw. Fraktion. Sie sind <strong>nur lesbar</strong> und lassen sich jederzeit wieder entfernen — beim Besitzer passiert dabei nichts.</p>
 
@@ -567,7 +568,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <thead><tr><th>Was</th><th>Token-Art</th><th>Ergebnis beim Empfänger</th></tr></thead>
     <tbody>
       <tr><td class="k">D&amp;D-Charakter</td><td>Share-Token</td><td>Nur-Lese-Übersicht des Charakters</td></tr>
-      <tr><td class="k">MTG-Deck</td><td>Share-Token</td><td>Decklist mit Preisen, ohne Bearbeiten; am Handy in derselben Ansicht wie <b>Ansehen</b> im Deck-Builder</td></tr>
+      <tr><td class="k">MTG-Deck</td><td>Share-Token</td><td>Öffnet sich wie ein eigenes Deck im Deck-Builder — Vorschau, Decklist, Deck-Panel mit Tokens, am Handy <b>Ansehen</b> —, nur ohne Bearbeiten. <span class="ui">Kopieren</span> legt eine eigene, bearbeitbare Kopie mit neuem Token an.</td></tr>
       <tr><td class="k">WH40K-Armee</td><td>Share-Token</td><td>Armeeliste mit Ausrüstung und Punkten</td></tr>
       <tr><td class="k">D&amp;D-Kampagne</td><td>Join-Token <span class="muted">(kurz, z.&nbsp;B. K7QM2F)</span></td><td>Beitritt als Mitspieler samt Charakterwahl</td></tr>
       <tr><td class="k">Homebrew-Eintrag</td><td>eigener Token</td><td>Kopie in der eigenen Homebrew-Sammlung</td></tr>
@@ -1180,7 +1181,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
     <li><b>Duplizieren</b> und <b>Löschen</b> sitzen als kleine Symbole oben rechts auf der Kachel — am Handy stattdessen langes Drücken.</li>
     <li><b>Roter Rahmen</b> heißt: Das Deck liegt über deiner Preisgrenze. Die Schwellen stellst du unter <span class="ui">⚙ Einstellungen</span> <span class="mono">›</span> <b>MTG</b> ein — je eine für einzelne Karten und für ganze Decks.</li>
     <li><b>Cover:</b> Welche Karte das Artwork liefert, wählst du im Builder mit dem Cover-Knopf.</li>
-    <li>Ganz unten stehen die <b>importierten Decks</b> anderer Spieler, gruppiert nach Besitzer.</li>
+    <li>Ganz unten stehen die <b>importierten Decks</b> anderer Spieler, gruppiert nach Besitzer. Ein Klick öffnet sie wie ein eigenes Deck, nur ohne Bearbeiten; <span class="ui">Kopieren</span> macht daraus ein eigenes Deck mit neuem Token. Neue holst du über <span class="ui">⌗ Import per Token</span> oben neben <span class="ui">+ Neues Deck</span> dazu.</li>
   </ul>
 </section>
 
@@ -1383,7 +1384,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
       <tr><td class="k"><b>Duplikate kaufen</b> an</td><td>Für Leute, die jedes Deck spielfertig halten wollen: Zweitexemplare werden mitbestellt.</td></tr>
       <tr><td class="k"><b>Gewählte Artworks übernehmen</b></td><td>Standard an: Karten mit fest gewähltem Artwork werden als genau dieses Cardmarket-Produkt bestellt — mit Edition und, wenn es die Karte in der Edition mehrfach gibt, der Version, z.&nbsp;B. <code>4 Forest (V.2) (Core 2021)</code> oder <code>1 Beluna Grandsquall // Seek Thrills (Wilds of Eldraine: Extras)</code>. Wollen zwei Decks dieselbe Karte in verschiedenen Artworks, entstehen zwei Zeilen. Aus: nur Anzahl und Name, jede Edition ist recht.</td></tr>
       <tr><td class="k"><b>Ideen einbeziehen</b></td><td>Karten aus dem Ideen-Pool der Decks mit einkaufen.</td></tr>
-      <tr><td class="k"><b>Tokens einbeziehen</b></td><td>Standard an: alle Tokens, die Karten der gewählten Decks erzeugen, in der Anzahl aus dem Reiter <span class="ui">Tokens</span>. Wo Cardmarket den Token eines Sets führt, steht das genaue Produkt in der Zeile, z.&nbsp;B. <code>1 Beast Token (Green 3/3) (Wilds of Eldraine: Extras)</code>. Sonst stehen Name, Farbe und Stärke da, z.&nbsp;B. <code>1 Goblin Token (Red 1/1)</code> — die Ausgabe wählt dann Cardmarket.</td></tr>
+      <tr><td class="k"><b>Tokens einbeziehen</b></td><td>Standard an: alle Tokens, die Karten der gewählten Decks erzeugen, in der Anzahl aus dem Reiter <span class="ui">Tokens</span>. Wo Cardmarket den Token eines Sets führt, steht das genaue Produkt in der Zeile, z.&nbsp;B. <code>1 Beast Token (Green 3/3) (Wilds of Eldraine: Extras)</code>. Neuere Sets führen ihre Tokens in einer eigenen Edition wie <em>Bloomburrow: Tokens</em>; die schreibt der Export dann dazu. Unter der fertigen Liste steht jeder Token mit einem Link, der ihn direkt in der Cardmarket-Suche öffnet — für den Fall, dass der Massenimport ihn nicht findet.</td></tr>
     </tbody>
   </table></div>
   <p>Vor dem Kopieren kannst du in der Vorschau noch einzelne Mengen ändern oder Zeilen abwählen. Auch die fertige Liste lässt sich im Textfeld noch von Hand anpassen.</p>

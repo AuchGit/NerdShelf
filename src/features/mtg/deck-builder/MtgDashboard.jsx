@@ -49,8 +49,10 @@ export default function MtgDashboard() {
     param: 'import',
     onToken: async (token) => {
       try {
-        const r = await imports.add(token);
+        const r = await imports.add(token, { allowExisting: true });
         setImportStatus({ ok: true, msg: `„${r.entityName}" hinzugefügt.` });
+        // Opened from a share link → show the deck right away.
+        navigate(`/mtg/deck/view/${r.token}`);
       } catch (e) {
         setImportStatus({ ok: false, msg: e.message || String(e) });
       }
@@ -170,6 +172,9 @@ export default function MtgDashboard() {
         title="Meine Decks"
         newButtonLabel="+ Neues Deck"
         onNew={() => navigate('/mtg/deck/new')}
+        importDomain="mtg_deck"
+        onImportToken={imports.add}
+        importBusy={imports.loading}
         items={decks}
         loading={loading}
         getCategory={(deck) => deck.format || 'Kein Format'}
@@ -197,6 +202,7 @@ export default function MtgDashboard() {
         tableMissing={imports.tableMissing}
         domain="mtg_deck"
         onImport={imports.add}
+        showImportInput={false}
         onRemove={imports.remove}
         getSubCategory={(deck) => deck.format || 'Kein Format'}
         subCategoryOrder={FORMAT_ORDER}

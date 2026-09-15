@@ -88,7 +88,9 @@ export default function LoginPage() {
     if (!trimmed) { setError('Bitte erst deine Email oben eingeben.'); return; }
     setLoading(true); setError(null); setSuccess(null);
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, {
-      redirectTo: window.location.origin,
+      // Include the base path — the web app lives under /NerdShelf/ on
+      // GitHub Pages, the bare origin would land outside the app.
+      redirectTo: window.location.origin + (import.meta.env.BASE_URL || '/'),
     });
     setLoading(false);
     if (resetErr) {

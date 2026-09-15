@@ -28,6 +28,7 @@ import { useDeckTokens } from './hooks/useDeckTokens';
 import { useUnsavedChanges } from '../../../shared/pwa/unsavedChanges';
 import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
+import { invalidate } from '../../../shared/cache/listCache';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
 import {
@@ -57,8 +58,10 @@ const MTG_FORMATS = [
 // Formats that should NOT trigger a Scryfall legal:<x> filter.
 const FORMATS_WITHOUT_FILTER = new Set(['', 'limited']);
 
-export default function MtgDeckBuilderApp() {
-  const { deckId } = useParams();             // undefined for /mtg/deck/new
+// readOnly: a deck shared with the user (/mtg/deck/view/:token). Same
+// builder look, nothing editable; "Kopieren" creates an own, editable copy.
+export default function MtgDeckBuilderApp({ readOnly = false }) {
+  const { deckId, token: sharedToken } = useParams(); // deckId undefined for /mtg/deck/new
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -86,13 +89,17 @@ export default function MtgDeckBuilderApp() {
   const [artPickerCard, setArtPickerCard] = useState(null);
   // Wanted count per token (key: token oracle id); unset tokens count 1.
   const [tokenCounts, setTokenCounts] = useState({});
+  // Shared (read-only) deck: whose it is, and the copy action.
+  const [ownerName, setOwnerName] = useState('');
+  const [copying, setCopying] = useState(false);
 
   const isCommanderFormat = deckFormat === 'commander';
   // While in commander format with no commander chosen yet, the search
   // results are restricted to commander-eligible cards and the next added
   // card becomes the commander instead of going to the mainboard.
   const commanderPickMode = isCommanderFormat && !commander;
-  const [loadingDeck, setLoadingDeck] = useState(!!deckId);
+  const loadByToken = readOnly && !!sharedToken;
+  const [loadingDeck, setLoadingDeck] = useState(!!deckId || loadByToken);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -104,7 +111,7 @@ export default function MtgDeckBuilderApp() {
   const [dirty, setDirty] = useState(false);
   const skipDirtyRef = useRef(false);   // prevents initial-load marking dirty
   // Keeps the web app from reloading itself for an update while unsaved.
-  useUnsavedChanges('mtg-deck-builder', dirty);
+  useUnsavedChanges('mtg-deck-builder', dirty && !readOnly);
 
   // ── Search state ─────────────────────────────────────
   const [query,      setQuery]      = useState('');
@@ -256,21 +263,25 @@ export default function MtgDeckBuilderApp() {
 
   // ── Load existing deck ───────────────────────────────
   useEffect(() => {
-    if (!deckId || !user) return;
+    if ((!deckId && !loadByToken) || !user) return;
     let cancelled = false;
     (async () => {
       setLoadingDeck(true);
-      const { data, error: err } = await supabase
-        .from('mtg_decks')
-        .select('*')
-        .eq('id', deckId)
-        .eq('user_id', user.id)
-        .single();
+      // Shared decks are read by share token (allowed for tokens the user
+      // imported); own decks by id + owner.
+      const query = supabase.from('mtg_decks').select('*');
+      const { data, error: err } = loadByToken
+        ? await query.eq('share_token', sharedToken).maybeSingle()
+        : await query.eq('id', deckId).eq('user_id', user.id).single();
       if (cancelled) return;
-      if (err) {
-        setLoadError(err.message);
+      if (err || !data) {
+        setLoadError(err?.message || 'Deck nicht gefunden — der Import wurde eventuell entfernt.');
         setLoadingDeck(false);
         return;
+      }
+      if (loadByToken && data.user_id) {
+        supabase.from('profiles').select('player_name').eq('id', data.user_id).maybeSingle()
+          .then(({ data: prof }) => { if (!cancelled) setOwnerName(prof?.player_name || ''); });
       }
       skipDirtyRef.current = true;
       setDeckName(data.name || 'Unbenanntes Deck');
@@ -291,7 +302,7 @@ export default function MtgDeckBuilderApp() {
       setTimeout(() => { skipDirtyRef.current = false; }, 0);
     })();
     return () => { cancelled = true; };
-  }, [deckId, user]);
+  }, [deckId, user, loadByToken, sharedToken]);
 
   // mark dirty whenever deck content changes (but not on initial load)
   useEffect(() => {
@@ -705,6 +716,37 @@ export default function MtgDeckBuilderApp() {
     }
   }
 
+  // ── Copy a shared deck into the own decks ────────────
+  // New row with a fresh share token; the copy opens in the normal,
+  // editable builder.
+  async function handleCopy() {
+    if (!user || copying) return;
+    setCopying(true);
+    const { data: created, error: err } = await supabase
+      .from('mtg_decks')
+      .insert({
+        user_id: user.id,
+        name: `${deckName.trim() || 'Unbenanntes Deck'} (Kopie)`,
+        format: deckFormat || null,
+        data: {
+          mainboard, sideboard, ideas, coverCardId, commander,
+          printings: prunePrintings(printings, { mainboard, sideboard, ideas, commander }),
+          tokens: tokenCounts,
+        },
+        share_token: newShareToken(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+    setCopying(false);
+    if (err) {
+      setSaveStatus({ type: 'error', text: err.message });
+      return;
+    }
+    invalidate(`mtg_decks:${user.id}`);
+    navigate(`/mtg/deck/${created.id}`);
+  }
+
   // ── Import / Export ──────────────────────────────────
   function handleImport({ mainboard: importedMain, sideboard: importedSide, printings: importedPrintings }) {
     setMainboard(importedMain);
@@ -756,14 +798,14 @@ export default function MtgDeckBuilderApp() {
       onUnpin={handleUnpin}
       printing={displayPrinting}
       // Tokens aren't deck entries — no artwork choice for them.
-      onChooseArtwork={/token/.test(storedDisplayCard?.layout || '')
+      onChooseArtwork={readOnly || /token/.test(storedDisplayCard?.layout || '')
         ? undefined
         : () => setArtPickerCard(storedDisplayCard)}
-      onResetArtwork={() => setCardPrinting(displayCard?.id, null)}
+      onResetArtwork={readOnly ? undefined : () => setCardPrinting(displayCard?.id, null)}
       tags={storedDisplayCard ? tagsForCard(oracleTags.index, storedDisplayCard) : []}
       tagStatus={oracleTags.status}
       activeTagSlugs={searchTagFilter.map(t => t.slug)}
-      onToggleTag={toggleSearchTag}
+      onToggleTag={readOnly ? undefined : toggleSearchTag}
       onLoadTags={oracleTags.load}
     />
   );
@@ -777,6 +819,7 @@ export default function MtgDeckBuilderApp() {
       tokens={deckTokens.zone}
       tokenSources={deckTokens.sources}
       onSetTokenCount={setTokenCount}
+      readOnly={readOnly}
       onUpdateMainCount={updateMainCount}
       onRemoveMain={removeMain}
       onClearDeck={clearDeck}
@@ -884,7 +927,7 @@ export default function MtgDeckBuilderApp() {
       onHoverCard={setHoveredCard}
       onPinCard={handlePin}
       viewMode={viewMode}
-      setViewMode={setViewMode}
+      setViewMode={readOnly ? undefined : setViewMode}
       isFavorite={favs.isFavorite}
       onToggleFavorite={favs.toggleFavorite}
     />
@@ -917,6 +960,10 @@ export default function MtgDeckBuilderApp() {
           mainCount={mainCount} sideCount={sideCount}
           pinnedCard={pinnedCard}
           onUnpin={handleUnpin}
+          readOnly={readOnly}
+          ownerName={ownerName}
+          onCopy={handleCopy}
+          copying={copying}
           viewDeck={{
             mainboard: viewMainboard,
             sideboard: viewSideboard,
@@ -982,7 +1029,12 @@ export default function MtgDeckBuilderApp() {
                 }}
                 title="Zurück zum Dashboard"
               >← Decks</button>
-              <input
+              {readOnly && (
+                <span style={{ padding: '4px 8px', fontSize: 16, fontWeight: 600, color: 'var(--text-hi)' }}>
+                  {deckName}
+                </span>
+              )}
+              {!readOnly && <input
                 value={deckName}
                 onChange={(e) => setDeckName(e.target.value)}
                 placeholder="Deck-Name…"
@@ -999,8 +1051,13 @@ export default function MtgDeckBuilderApp() {
                 }}
                 onFocus={(e) => e.target.style.borderColor = 'var(--border-hi)'}
                 onBlur={(e) => e.target.style.borderColor = 'transparent'}
-              />
-              <select
+              />}
+              {readOnly && deckFormat && (
+                <span style={{ fontSize: 12, color: 'var(--text-mid)', padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6 }}>
+                  {MTG_FORMATS.find(f => f.value === deckFormat)?.label || deckFormat}
+                </span>
+              )}
+              {!readOnly && <select
                 value={deckFormat}
                 onChange={(e) => setDeckFormat(e.target.value)}
                 title="Deck-Format — filtert die Kartensuche auf legale Karten"
@@ -1019,8 +1076,8 @@ export default function MtgDeckBuilderApp() {
                 {MTG_FORMATS.map(({ value, label }) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
-              </select>
-              <button
+              </select>}
+              {!readOnly && <button
                 onClick={() => setShowCoverPicker(true)}
                 title="Cover-Karte für die Dashboard-Anzeige wählen"
                 style={{
@@ -1032,8 +1089,8 @@ export default function MtgDeckBuilderApp() {
                 }}
               >
                 {coverCardId ? '✦ Cover' : 'Cover…'}
-              </button>
-              {isCommanderFormat && commander && (
+              </button>}
+              {!readOnly && isCommanderFormat && commander && (
                 <button
                   onClick={() => {
                     if (window.confirm(`Commander "${commander.name}" entfernen? Du kannst dann einen neuen aus der Suche wählen.`)) {
@@ -1065,7 +1122,29 @@ export default function MtgDeckBuilderApp() {
                   {(saveStatus || exportStatus).text}
                 </span>
               )}
-              <button
+              {readOnly && (
+                <>
+                  <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>
+                    Nur lesen{ownerName ? ` · von ${ownerName}` : ''}
+                  </span>
+                  <button
+                    onClick={handleCopy}
+                    disabled={copying}
+                    title="Als eigenes Deck mit neuem Token anlegen und bearbeiten"
+                    style={{
+                      background: 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      color: 'var(--bg-deep, #000)',
+                      padding: '6px 14px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: copying ? 'wait' : 'pointer',
+                    }}
+                  >{copying ? 'Kopiere…' : 'Kopieren'}</button>
+                </>
+              )}
+              {!readOnly && <button
                 onClick={() => setShowImport(true)}
                 style={{
                   background: 'transparent',
@@ -1076,8 +1155,8 @@ export default function MtgDeckBuilderApp() {
                   fontSize: 12,
                   cursor: 'pointer',
                 }}
-              >Importieren</button>
-              <button
+              >Importieren</button>}
+              {!readOnly && <button
                 onClick={handleSave}
                 disabled={saving}
                 style={{
@@ -1090,7 +1169,7 @@ export default function MtgDeckBuilderApp() {
                   fontWeight: 600,
                   cursor: saving ? 'wait' : 'pointer',
                 }}
-              >{saving ? 'Speichere…' : dirty ? 'Speichern' : '✓ Gespeichert'}</button>
+              >{saving ? 'Speichere…' : dirty ? 'Speichern' : '✓ Gespeichert'}</button>}
             </div>
           </header>
 
@@ -1104,7 +1183,8 @@ export default function MtgDeckBuilderApp() {
             )}
 
             <section className="search-section">
-              <CardSearch
+              {/* Shared decks: no search — the center shows the decklist. */}
+              {!readOnly && <CardSearch
                 deckFormatLabel={MTG_FORMATS.find(f => f.value === deckFormat)?.label || ''}
                 showFavoritesOnly={showFavoritesOnly}
                 setShowFavoritesOnly={setShowFavoritesOnly}
@@ -1130,8 +1210,8 @@ export default function MtgDeckBuilderApp() {
                 tagIndex={oracleTags}
                 totalCards={totalCards}
                 loading={loading}
-              />
-              {viewMode === 'edit' ? (
+              />}
+              {!readOnly && viewMode === 'edit' ? (
                 <CardList
                   cards={cards || []}
                   loading={loading}
@@ -1160,7 +1240,7 @@ export default function MtgDeckBuilderApp() {
                   onHoverCard={setHoveredCard}
                   onPinCard={handlePin}
                   viewMode={viewMode}
-                  setViewMode={setViewMode}
+                  setViewMode={readOnly ? undefined : setViewMode}
                   isFavorite={favs.isFavorite}
                   onToggleFavorite={favs.toggleFavorite}
                 />

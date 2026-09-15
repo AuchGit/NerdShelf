@@ -15,9 +15,13 @@
 //   - emptyIcon, emptyTitle, emptyDescription: empty state copy
 //   - loading:         boolean
 //   - storageKey:      localStorage key used to remember collapsed categories
+//   - importDomain, onImportToken, importBusy:
+//                      optional — adds "⌗ Import per Token" next to the
+//                      new-button, opening the token input right below
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Button, Panel } from '../ui';
+import TokenImportInput from '../imports/TokenImportInput';
 import './DashboardLayout.css';
 
 const FALLBACK_CATEGORY = 'Sonstige';
@@ -35,7 +39,13 @@ export default function DashboardLayout({
   emptyDescription,
   loading = false,
   storageKey,
+  importDomain,
+  onImportToken,
+  importBusy = false,
 }) {
+  const canImport = !!(importDomain && onImportToken);
+  const [importOpen, setImportOpen] = useState(false);
+
   // Group items by category
   const grouped = useMemo(() => {
     const map = new Map();
@@ -92,8 +102,23 @@ export default function DashboardLayout({
     <div className="nshelf-dashboard" style={S.container}>
       <div className="nshelf-dashboard-toolbar" style={S.toolbar}>
         <h1 style={S.title}>{title}</h1>
-        {onNew && <Button onClick={onNew}>{newButtonLabel}</Button>}
+        {(onNew || canImport) && (
+          <div className="nshelf-dashboard-actions" style={S.actions}>
+            {canImport && (
+              <Button variant="secondary" onClick={() => setImportOpen(open => !open)}>
+                ⌗ Import per Token
+              </Button>
+            )}
+            {onNew && <Button onClick={onNew}>{newButtonLabel}</Button>}
+          </div>
+        )}
       </div>
+
+      {canImport && importOpen && (
+        <div style={S.importPanel}>
+          <TokenImportInput domain={importDomain} onImport={onImportToken} busy={importBusy} autoFocus />
+        </div>
+      )}
 
       {loading ? (
         <div style={S.loading}>Lade…</div>
@@ -152,6 +177,15 @@ const S = {
     margin: 0,
     fontSize: 'var(--fs-2xl)',
     fontWeight: 'var(--fw-semibold)',
+  },
+  actions: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
+  },
+  importPanel: {
+    marginTop: 'calc(-1 * var(--space-2))',
+    marginBottom: 'var(--space-5)',
   },
   loading: {
     textAlign: 'center',

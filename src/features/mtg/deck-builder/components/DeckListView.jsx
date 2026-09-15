@@ -23,7 +23,6 @@ function CardGrid({ entries, gridStyle, onHoverCard, onPinCard, isFavorite, onTo
         <CardItem
           key={card.id}
           card={card}
-          onAdd={() => {}}
           deckCount={c}
           onHover={onHoverCard}
           onHoverEnd={() => onHoverCard?.(null)}

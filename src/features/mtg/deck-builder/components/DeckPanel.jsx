@@ -66,6 +66,7 @@ export default function DeckPanel({
   tokens = null,
   tokenSources = {},
   onSetTokenCount,
+  readOnly = false,    // shared decks: no editing controls
 }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [tab, setTab] = useState('main');
@@ -155,7 +156,7 @@ export default function DeckPanel({
           )}
         </div>
         <div className="dp-header-right">
-          {onAnalyzeDeck && (mainTotal > 0) && (
+          {!readOnly && onAnalyzeDeck && (mainTotal > 0) && (
             <button
               className="dp-clear-btn dp-export-btn"
               onClick={onAnalyzeDeck}
@@ -169,7 +170,7 @@ export default function DeckPanel({
               title="Decklist als Text in die Zwischenablage"
             >Export</button>
           )}
-          {(mainTotal > 0 || sideTotal > 0) && (
+          {!readOnly && (mainTotal > 0 || sideTotal > 0) && (
             <button
               className={`dp-clear-btn ${confirmClear ? 'confirm' : ''}`}
               onClick={handleClear}
@@ -316,6 +317,7 @@ export default function DeckPanel({
                       onDecrease={() => onSetTokenCount?.(tokenKey, count - 1)}
                       onRemove={() => onSetTokenCount?.(tokenKey, 0)}
                       removeTitle="Nicht kaufen (0)"
+                      readOnly={readOnly}
                       note={sources.length > 0 ? `aus: ${sources.join(', ')}` : null}
                       onHover={onHoverCard}
                       onPin={onPinCard}
@@ -365,6 +367,7 @@ export default function DeckPanel({
                     onMoveRight={onRight}
                     moveLeftTitle={leftLabel}
                     moveRightTitle={rightLabel}
+                    readOnly={readOnly}
                     onHover={onHoverCard}
                     onPin={onPinCard}
                   />

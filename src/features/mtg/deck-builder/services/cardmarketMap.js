@@ -130,5 +130,16 @@ export function cardmarketTokenTarget(map, card) {
       }
     }
   }
-  return best?.expansion ? { name: best.name, expansion: best.expansion } : null;
+  if (best?.expansion) return { name: best.name, expansion: best.expansion };
+  // Newer sets keep their tokens in a separate "<Set>: Tokens" expansion
+  // that the catalog data doesn't name. Only when the set's own expansions
+  // hold no tokens at all is that the likely home — named after the main
+  // expansion (first entry).
+  const expansions = map.ts[String(card.set).toLowerCase()] || [];
+  const setHasTokens = expansions.some(exp => (map.tk[exp] || []).length > 0);
+  const parent = map.e?.[expansions[0]];
+  if (parent && !setHasTokens) {
+    return { name: tokenCardmarketName(card), expansion: `${parent}: Tokens`, guessed: true };
+  }
+  return null;
 }

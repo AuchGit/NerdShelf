@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "1.1.24"
+version = "1.1.25"
 description = "A Tauri App"
 authors = ["you"]
 license = ""
@@ -29,6 +29,8 @@ tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-opener = "2"
+# nerdshelf:// links ("In der App öffnen" from a shared link in the browser).
+tauri-plugin-deep-link = "2"
 # CORS-free image fetch (5e.tools token art lacks ACAO headers, so the webview
 # can't use it as a WebGL texture directly — we fetch the bytes via Rust).
 tauri-plugin-http = "2"
@@ -41,3 +43,8 @@ tower-http = { version = "0.5", features = ["cors"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "fs", "io-util"] }
 futures-util = "0.3"
 if-addrs = "0.13"  # enumerate local network interfaces (DM picks which IPs to share over)
+
+# One app instance: a nerdshelf:// link opened while the app runs goes to the
+# running window instead of starting a second copy.
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
