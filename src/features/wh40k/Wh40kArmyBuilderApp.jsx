@@ -32,6 +32,7 @@ import SquadListPanel from './components/SquadListPanel';
 const SquadBuilderModal = lazy(() => import('./components/SquadBuilderModal'));
 import { newShareToken } from '../../shared/tokens';
 import usePwaMobile from '../../shared/hooks/usePwaMobile';
+import { useUnsavedChanges } from '../../shared/pwa/unsavedChanges';
 import Wh40kArmyBuilderMobile from './pwa/Wh40kArmyBuilderMobile';
 
 const EMPTY_ARMY = {
@@ -70,6 +71,8 @@ export default function Wh40kArmyBuilderApp() {
 
   const [dirty, setDirty] = useState(false);
   const skipDirtyRef = useRef(false);
+  // Keeps the web app from reloading itself for an update while unsaved.
+  useUnsavedChanges('wh40k-army-builder', dirty);
 
   // ── Load existing army ───────────────────────────────
   useEffect(() => {

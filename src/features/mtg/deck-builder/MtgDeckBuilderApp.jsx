@@ -25,6 +25,7 @@ import { useFavorites } from './hooks/useFavorites';
 import { useMtgInventory } from './hooks/useMtgInventory';
 import { useOracleTags } from './hooks/useOracleTags';
 import { useDeckTokens } from './hooks/useDeckTokens';
+import { useUnsavedChanges } from '../../../shared/pwa/unsavedChanges';
 import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
 import { filterFavorites } from './services/favoritesFilter';
@@ -102,6 +103,8 @@ export default function MtgDeckBuilderApp() {
   // track if deck has been dirty since last save
   const [dirty, setDirty] = useState(false);
   const skipDirtyRef = useRef(false);   // prevents initial-load marking dirty
+  // Keeps the web app from reloading itself for an update while unsaved.
+  useUnsavedChanges('mtg-deck-builder', dirty);
 
   // ── Search state ─────────────────────────────────────
   const [query,      setQuery]      = useState('');

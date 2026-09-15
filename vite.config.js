@@ -1,5 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+// App version (bumped by the release script) — scopes the PWA data cache so
+// a new version never shows the previous version's datasets.
+const APP_VERSION = JSON.parse(
+  readFileSync(new URL('./src-tauri/tauri.conf.json', import.meta.url), 'utf8')
+).version
 
 // Custom port to avoid clashing with other Tauri/Vite projects also running on
 // the default 5173. Keep in sync with `src-tauri/tauri.conf.json` → devUrl.
@@ -22,8 +30,11 @@ export default defineConfig(async ({ mode }) => {
     const { VitePWA } = await import('vite-plugin-pwa')
     plugins.push(
       VitePWA({
-        registerType: 'autoUpdate',
-        injectRegister: 'auto',
+        // The app decides when to switch to a new version (see
+        // src/core/updater/PwaUpdater.jsx): right away when it's safe,
+        // otherwise via a banner. It also registers the service worker.
+        registerType: 'prompt',
+        injectRegister: false,
         includeAssets: ['favicon.svg', 'icons/*.png'],
         workbox: {
           // Der Haupt-Chunk ist mit dem VTT >2 MiB (Workbox-Default-Limit)
@@ -32,7 +43,15 @@ export default defineConfig(async ({ mode }) => {
           globPatterns: ['**/*.{js,css,html,svg,png,ico,json,woff2}'],
           // Don't precache the bulky JSON datasets in /public/data — let them
           // be runtime-cached on first access instead.
-          globIgnores: ['**/data/**'],
+          // Heavy, rarely used libraries (3D dice, static markup rendering)
+          // aren't precached either — fetched and cached when first used —
+          // so an update downloads less before it can switch over.
+          globIgnores: [
+            '**/data/**',
+            '**/three.module-*.js',
+            '**/cannon-es-*.js',
+            '**/server.browser-*.js',
+          ],
           // SPA fallback so deep links resolve to index.html offline.
           navigateFallback: `${PWA_BASE}index.html`,
           // …aber NICHT für das Handbuch: das ist eine eigenständige Seite in
@@ -43,26 +62,33 @@ export default defineConfig(async ({ mode }) => {
             {
               urlPattern: ({ url }) => url.pathname.includes('/data/'),
               handler: 'StaleWhileRevalidate',
-              options: { cacheName: 'nerdshelf-data' },
+              // Per app version; the updater deletes older data caches.
+              options: { cacheName: `nerdshelf-data-${APP_VERSION}` },
             },
             {
-              // Supabase REST GETs use StaleWhileRevalidate so the UI gets
-              // an instant response from cache and the network update lands
-              // silently in the background. Writes (POST/PATCH/DELETE) +
-              // realtime always bypass the cache (workbox SWR only matches
-              // GETs by default).
-              //
-              // Trade-off: on first paint after data has changed on the
-              // server, the user sees the previous response for one
-              // request-cycle before the background fetch updates the
-              // cache. Acceptable for dashboards / lists; realtime
-              // subscriptions catch HP / conditions / notes updates
-              // separately and react in-app.
+              // Code chunks left out of the precache (see globIgnores).
+              // Hashed file names never change content → cache first.
+              urlPattern: ({ url, sameOrigin }) =>
+                sameOrigin && /\/static\/[^/]+\.(js|css)$/.test(url.pathname),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'nerdshelf-static',
+                expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              },
+            },
+            {
+              // Supabase REST GETs go network-first: the app always gets
+              // current data when online. The cache only answers when the
+              // network is gone or slower than a few seconds (offline use).
+              // Stale-while-revalidate used to hand the app the PREVIOUS
+              // response, so changes only showed after reopening the app.
+              // Writes (POST/PATCH/DELETE) + realtime bypass the cache.
               urlPattern: ({ url, request }) =>
                 url.hostname.endsWith('.supabase.co') && request.method === 'GET',
-              handler: 'StaleWhileRevalidate',
+              handler: 'NetworkFirst',
               options: {
                 cacheName: 'supabase-api',
+                networkTimeoutSeconds: 4,
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
               },
             },
@@ -99,6 +125,16 @@ export default defineConfig(async ({ mode }) => {
     // index.html → "MIME text/html" module-load failure → white screen. A distinct
     // dir avoids the clash.
     build: { assetsDir: 'static' },
+    define: {
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
+    },
+    // Only the PWA build has the service-worker plugin; the desktop build
+    // and the dev server get a no-op stand-in for its register module.
+    resolve: isPwa ? undefined : {
+      alias: {
+        'virtual:pwa-register': fileURLToPath(new URL('./src/shared/pwa/registerSWStub.js', import.meta.url)),
+      },
+    },
     plugins,
     server: {
       port: DEV_PORT,

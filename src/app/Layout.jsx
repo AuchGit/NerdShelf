@@ -14,6 +14,22 @@ const SettingsModal  = lazy(() => import('./settings/SettingsModal'));
 const BugReportModal = lazy(() => import('../core/bug-report/BugReportModal'));
 const CalendarModal  = lazy(() => import('./calendar/CalendarModal'));
 
+// Shown while a section's code loads (its first visit after start or an
+// update). Appears only after a short delay so quick loads don't flash.
+function RouteLoading() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 250);
+    return () => clearTimeout(t);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div style={{ padding: 60, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--fs-sm)' }}>
+      Lade…
+    </div>
+  );
+}
+
 export default function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
@@ -51,7 +67,7 @@ export default function Layout() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--color-bg)' }}>
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
-          <Outlet />
+          <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
         </main>
       </div>
     );
@@ -65,7 +81,7 @@ export default function Layout() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--color-bg)' }}>
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
-          <Outlet />
+          <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
         </main>
         <BottomNav {...sidebarProps} />
         <Suspense fallback={null}>
@@ -127,7 +143,7 @@ export default function Layout() {
         overflow: 'auto',
         minWidth: 0,
       }}>
-        <Outlet />
+        <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
       </main>
       <Suspense fallback={null}>
         {settingsOpen && <SettingsModal open onClose={() => setSettingsOpen(false)} />}

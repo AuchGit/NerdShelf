@@ -4,6 +4,7 @@ import AuthGate from '../core/auth/AuthGate';
 import { ThemeProvider } from '../core/theme/ThemeProvider';
 import { setupErrorCollector } from '../core/bug-report/collector';
 import UpdateChecker from '../core/updater/UpdateChecker';
+import PwaUpdater from '../core/updater/PwaUpdater';
 import Router from './Router';
 import usePwaMobile from '../shared/hooks/usePwaMobile';
 import { PinnedTooltipsProvider } from '../features/dnd/character-builder/components/ui/PinnedTooltipsContext';
@@ -51,6 +52,8 @@ export default function App() {
           </PinnedTooltipsProvider>
         </AuthGate>
       </AuthProvider>
+      {/* Outside the auth gate: the web app also updates on the login screen. */}
+      {!isPopout && <PwaUpdater />}
     </ThemeProvider>
   );
 }

@@ -1,20 +1,32 @@
 // src/features/dnd/character-builder/DndCharacterApp.jsx
-import { useEffect, useState, Component } from 'react'
+import { useEffect, useState, Component, Suspense } from 'react'
 import { useAuth } from '../../../core/auth/AuthContext'
 import { LanguageProvider } from './lib/i18n'
 import { ThemeProvider } from './lib/theme'
 import { setupErrorCollector } from './components/ui/BugReportModal'
-import DashboardPage from './pages/DashboardPage'
-import CharacterCreatePage from './pages/CharacterCreatePage'
-import CharacterSheetPage from './pages/CharacterSheetPage'
-import LevelUpPage from './pages/LevelUpPage'
-import CharacterEditPage from './pages/CharacterEditPage'
-import CharacterViewPage from './pages/CharacterViewPage'
-import CampaignsPage from './pages/CampaignsPage'
-import CampaignDetailPage from './pages/CampaignDetailPage'
-import SessionPage from './pages/SessionPage'
-import VttPage from './pages/VttPage'
-import HomebrewPage from '../homebrew/pages/HomebrewPage'
+import lazyWithReload from '../../../shared/lazyWithReload'
+
+// Pages load on first visit — the tabletop and the character sheet are by
+// far the biggest parts of the app and most sessions only need one of them.
+const DashboardPage       = lazyWithReload(() => import('./pages/DashboardPage'))
+const CharacterCreatePage = lazyWithReload(() => import('./pages/CharacterCreatePage'))
+const CharacterSheetPage  = lazyWithReload(() => import('./pages/CharacterSheetPage'))
+const LevelUpPage         = lazyWithReload(() => import('./pages/LevelUpPage'))
+const CharacterEditPage   = lazyWithReload(() => import('./pages/CharacterEditPage'))
+const CharacterViewPage   = lazyWithReload(() => import('./pages/CharacterViewPage'))
+const CampaignsPage       = lazyWithReload(() => import('./pages/CampaignsPage'))
+const CampaignDetailPage  = lazyWithReload(() => import('./pages/CampaignDetailPage'))
+const SessionPage         = lazyWithReload(() => import('./pages/SessionPage'))
+const VttPage             = lazyWithReload(() => import('./pages/VttPage'))
+const HomebrewPage        = lazyWithReload(() => import('../homebrew/pages/HomebrewPage'))
+
+function PageLoading() {
+  return (
+    <div style={{ color: 'var(--accent)', textAlign: 'center', padding: 80, fontSize: 16 }}>
+      Laden...
+    </div>
+  )
+}
 
 setupErrorCollector()
 
@@ -169,7 +181,9 @@ export default function DndCharacterApp() {
     <ThemeProvider>
       <LanguageProvider>
         <ErrorBoundary>
-          <DndRoutes session={session} />
+          <Suspense fallback={<PageLoading />}>
+            <DndRoutes session={session} />
+          </Suspense>
         </ErrorBoundary>
       </LanguageProvider>
     </ThemeProvider>

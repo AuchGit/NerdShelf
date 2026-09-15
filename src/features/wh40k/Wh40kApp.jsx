@@ -6,14 +6,17 @@
 // inventory pages are all sub-routes; each renders the shared sub-nav.
 
 import { Routes, Route } from 'react-router-dom';
-import Wh40kDashboard from './Wh40kDashboard';
-import Wh40kArmyBuilderApp from './Wh40kArmyBuilderApp';
-import UnitBrowserPage from './pages/UnitBrowserPage';
-import InventoryPage from './pages/InventoryPage';
-import CombatDashboardPage from './pages/CombatDashboardPage';
-import CombatSessionPage from './pages/CombatSessionPage';
-import ArmyViewPage from './pages/ArmyViewPage';
+import lazyWithReload from '../../shared/lazyWithReload';
 import Wh40kSubNav from './components/Wh40kSubNav';
+
+// Pages load on first visit (Suspense boundary in the app Layout).
+const Wh40kDashboard      = lazyWithReload(() => import('./Wh40kDashboard'));
+const Wh40kArmyBuilderApp = lazyWithReload(() => import('./Wh40kArmyBuilderApp'));
+const UnitBrowserPage     = lazyWithReload(() => import('./pages/UnitBrowserPage'));
+const InventoryPage       = lazyWithReload(() => import('./pages/InventoryPage'));
+const CombatDashboardPage = lazyWithReload(() => import('./pages/CombatDashboardPage'));
+const CombatSessionPage   = lazyWithReload(() => import('./pages/CombatSessionPage'));
+const ArmyViewPage        = lazyWithReload(() => import('./pages/ArmyViewPage'));
 
 function withSubNav(node) {
   return (

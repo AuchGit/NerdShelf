@@ -2,16 +2,21 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import Layout from './Layout';
-import DndCharacterApp from '../features/dnd/character-builder/DndCharacterApp';
-import MtgDashboard from '../features/mtg/deck-builder/MtgDashboard';
-import MtgDeckBuilderApp from '../features/mtg/deck-builder/MtgDeckBuilderApp';
-import DeckViewPage from '../features/mtg/deck-builder/pages/DeckViewPage';
-import MtgInventoryPage from '../features/mtg/deck-builder/pages/MtgInventoryPage';
-import MtgWishlistPage from '../features/mtg/deck-builder/pages/MtgWishlistPage';
-import MatchHudDashboardPage from '../features/mtg/match-hud/pages/MatchHudDashboardPage';
-import MatchHudSessionPage from '../features/mtg/match-hud/pages/MatchHudSessionPage';
-import LocalMatchPage from '../features/mtg/match-hud/pages/LocalMatchPage';
-import Wh40kApp from '../features/wh40k/Wh40kApp';
+import lazyWithReload from '../shared/lazyWithReload';
+
+// Every section loads its code when first opened (Suspense in Layout), so
+// the app starts with a small bundle and an update only re-downloads the
+// parts that changed.
+const DndCharacterApp       = lazyWithReload(() => import('../features/dnd/character-builder/DndCharacterApp'));
+const MtgDashboard          = lazyWithReload(() => import('../features/mtg/deck-builder/MtgDashboard'));
+const MtgDeckBuilderApp     = lazyWithReload(() => import('../features/mtg/deck-builder/MtgDeckBuilderApp'));
+const DeckViewPage          = lazyWithReload(() => import('../features/mtg/deck-builder/pages/DeckViewPage'));
+const MtgInventoryPage      = lazyWithReload(() => import('../features/mtg/deck-builder/pages/MtgInventoryPage'));
+const MtgWishlistPage       = lazyWithReload(() => import('../features/mtg/deck-builder/pages/MtgWishlistPage'));
+const MatchHudDashboardPage = lazyWithReload(() => import('../features/mtg/match-hud/pages/MatchHudDashboardPage'));
+const MatchHudSessionPage   = lazyWithReload(() => import('../features/mtg/match-hud/pages/MatchHudSessionPage'));
+const LocalMatchPage        = lazyWithReload(() => import('../features/mtg/match-hud/pages/LocalMatchPage'));
+const Wh40kApp              = lazyWithReload(() => import('../features/wh40k/Wh40kApp'));
 
 const LAST_ROUTE_KEY = 'nerdshelf:lastRoute';
 
