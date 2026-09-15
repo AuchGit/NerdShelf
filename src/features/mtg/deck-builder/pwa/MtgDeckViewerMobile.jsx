@@ -34,6 +34,32 @@ const SORTS = [
 ];
 const COLS = [1, 2, 3, 4];
 
+// Same palette and wording as the deck tiles on the MTG dashboard, so the
+// colour split reads the same wherever it shows up.
+const COLOR_STYLE = {
+  W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
+  R: '#e06a5a', G: '#6ab06a', C: '#808080',
+};
+const COLOR_LABEL = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C: 'Colorless' };
+
+/** Colour split of the deck proper (mainboard + commander), like the tile. */
+function colorSplit(mainboard, commander) {
+  const counts = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+  const add = (card, count) => {
+    if (!card || count <= 0) return;
+    const colors = card.colors || card.card_faces?.[0]?.colors || [];
+    if (colors.length === 0) counts.C += count;
+    else for (const c of colors) if (counts[c] !== undefined) counts[c] += count;
+  };
+  for (const entry of Object.values(mainboard || {})) add(entry?.card, entry?.count || 0);
+  if (commander) add(commander, 1);
+  const entries = Object.entries(counts)
+    .filter(([c, v]) => v > 0 && c !== 'C')
+    .sort((a, b) => b[1] - a[1]);
+  if (counts.C > 0) entries.push(['C', counts.C]);
+  return { entries, total: entries.reduce((s, [, v]) => s + v, 0) };
+}
+
 const PREFS_KEY = 'mtg-mobile-viewer:v2';
 const DEFAULT_PREFS = { sort: 'type', sort2: '', layout: 'grid', cols: 2 };
 
@@ -52,7 +78,12 @@ const eurOf = (deck) => Object.values(deck).reduce((s, e) => {
   return p != null ? s + p * (e.count || 0) : s;
 }, 0);
 
-export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, commander, tokens }) {
+export default function MtgDeckViewerMobile({
+  mainboard, sideboard, ideas, commander, tokens,
+  // Shared decks have no tab bar at the bottom — the colour split of the
+  // deck goes there instead.
+  showColors = false,
+}) {
   const [prefs, setPrefs] = useState(readPrefs);
   const [zoneId, setZoneId] = useState('main');
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -76,6 +107,11 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
     // Tokens set to 0 ("don't buy") aren't shown.
     { id: 'tokens', label: 'Tokens',   deck: Object.fromEntries(Object.entries(tokens || {}).filter(([, e]) => e.count > 0)) },
   ].map(z => ({ ...z, count: countOf(z.deck), eur: eurOf(z.deck) })), [mainboard, sideboard, ideas, tokens]);
+
+  const colors = useMemo(
+    () => (showColors ? colorSplit(mainboard, commander) : null),
+    [showColors, mainboard, commander]
+  );
 
   const zone = zones.find(z => z.id === zoneId) || zones[0];
   const withCommander = zone.id === 'main' && !!commander;
@@ -249,6 +285,33 @@ export default function MtgDeckViewerMobile({ mainboard, sideboard, ideas, comma
               </section>
             );
           })}
+        </div>
+      )}
+
+      {colors && colors.total > 0 && (
+        <div className="mdv-colors">
+          <div
+            className="mdv-colors-bar"
+            role="img"
+            aria-label={colors.entries.map(([c, n]) => `${COLOR_LABEL[c]} ${n}`).join(', ')}
+          >
+            {colors.entries.map(([c, n]) => (
+              <span
+                key={c}
+                className="mdv-colors-seg"
+                style={{ flex: n, background: COLOR_STYLE[c] }}
+                title={`${COLOR_LABEL[c]}: ${n} (${Math.round((n / colors.total) * 100)}%)`}
+              />
+            ))}
+          </div>
+          <div className="mdv-colors-legend">
+            {colors.entries.map(([c, n]) => (
+              <span key={c} className="mdv-colors-item" title={COLOR_LABEL[c]}>
+                <i style={{ background: COLOR_STYLE[c] }} aria-hidden="true" />
+                {n}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

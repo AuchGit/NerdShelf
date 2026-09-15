@@ -33,6 +33,7 @@ import { applyPrinting, cardmarketLine, printingLabel } from '../services/deckPr
 import { ownedCopiesOf, allocateOwnedCopies } from '../services/ownedCopies';
 import {
   loadCardmarketMap, cardmarketTarget, cardmarketTokenTarget, tokenCardmarketName,
+  cardmarketTokenPairs,
 } from '../services/cardmarketMap';
 import { collectTokenRefs, loadTokenCards, tokenKeyOf } from '../services/deckTokens';
 import { fetchCardsByIds } from '../services/scryfallCollection';
@@ -154,12 +155,26 @@ export default function CardmarketExportModal({
       }
     }
 
+    // Tokens printed back to back: if the deck needs both halves of one
+    // physical card, it buys that card once instead of two products.
+    const pairs = cardmarketTokenPairs(
+      map,
+      chosen.filter(r => r.card?._isToken).map(r => ({ key: r.key, card: r.card, qty: qtyOf(r) })),
+    );
+
     let fallbacks = 0;
     let tokenFallbacks = 0;
     const tokenLinks = [];
     const text = chosen.map(r => {
       const qty = qtyOf(r);
       if (r.card?._isToken) {
+        const pair = pairs.get(r.key);
+        if (pair) {
+          // The other half prints the shared line.
+          if (!pair.primary) return null;
+          tokenLinks.push({ qty: pair.qty, name: pair.name, url: cardmarketSearchUrl(pair.name) });
+          return `${pair.qty} ${pair.name} (${pair.expansion})`;
+        }
         const target = cardmarketTokenTarget(map, r.card);
         if (!target || target.guessed) tokenFallbacks++;
         const productName = target?.name || tokenCardmarketName(r.card);
@@ -172,7 +187,7 @@ export default function CardmarketExportModal({
       const target = printing ? cardmarketTarget(map, printing.cardmarket_id) : null;
       if (printing && !target) fallbacks++;
       return cardmarketLine(qty, r.card?.name || r.cardId, printing, target);
-    }).join('\n');
+    }).filter(Boolean).join('\n');
 
     setOutput({ key: settingsKey, text, fallbacks, tokenFallbacks, tokenLinks });
     copyText(text);

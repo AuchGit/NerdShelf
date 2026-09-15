@@ -22,9 +22,15 @@ const cache = new Map(); // token printing id → full Scryfall card
 // real card's type line ("Legendary Artifact", "Creature — Human …").
 const HELPER_TYPE = /^(card|emblem|dungeon)\b/i;
 
+// Same type line, but nothing anybody buys for a deck: every double-faced
+// card of the Innistrad era links its set's checklist card, and the World
+// Championship sets ship bio / decklist / ad filler.
+const FILLER_NAME = /\b(checklist|decklist|bio)\b|^(blank card|.* ad)$/i;
+
 /** Does this `all_parts` entry describe something the deck needs alongside? */
 function isNeededPart(part, card) {
   if (!part?.id || part.id === card?.id) return false;
+  if (FILLER_NAME.test(part.name || '')) return false;
   if (part.component === 'token') return true;
   if (part.component !== 'combo_piece') return false;
   // The card's own entry — same name, different printing id.

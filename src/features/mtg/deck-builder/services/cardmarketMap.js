@@ -140,6 +140,91 @@ function matchesBothFaces(productName, faces) {
     && (!f.pt || hay.includes(f.pt)));
 }
 
+// ── Two tokens on one card ────────────────────────────────────────────
+// Most tokens since Innistrad are printed back to back: one physical card
+// carries two different tokens, and Cardmarket sells it as one product
+// naming both. A deck that needs both halves should buy that card once,
+// not two separate products.
+
+/** Split a product name into its printed halves. */
+function splitProductFaces(productName) {
+  const parts = String(productName).split(/\s*\/\/\s*|\s+\/\s+/).map(s => s.trim()).filter(Boolean);
+  return parts.length === 2 ? parts : null;
+}
+
+/** "Wolf Token (B 1/1)", "Zombie (B 2/2 Decayed)", "Treasure Token" → parts. */
+function parseTokenFace(text) {
+  const m = text.match(/^(.+?)(?:\s+Token)?(?:\s+\((.+)\))?$/);
+  if (!m) return null;
+  return parseTokenProduct(`${m[1]} Token${m[2] ? ` (${m[2]})` : ''}`);
+}
+
+function faceMatchesWant(face, want) {
+  if (!face || !want?.name) return false;
+  if (face.base.toLowerCase() !== want.name.toLowerCase()) return false;
+  if (face.pt !== want.pt) return false;
+  if (face.knownColors && WUBRG.filter(c => face.colors.has(c)).join('') !== want.colors.join('')) return false;
+  return true;
+}
+
+/**
+ * Find the Cardmarket products that cover TWO of the deck's tokens at once.
+ *
+ * @param {object} map
+ * @param {{key: string, card: object, qty: number}[]} wanted
+ * @returns {Map<string, {name, expansion, qty, primary: boolean}>}
+ *   keyed by the token's row key. `primary` marks the one row that prints
+ *   the line; the other half resolves to the same product and prints
+ *   nothing. `qty` is the higher of the two — one card brings both sides.
+ */
+export function cardmarketTokenPairs(map, wanted) {
+  const out = new Map();
+  if (!map?.ts || !map?.tk || !Array.isArray(wanted)) return out;
+
+  // Only halves of the same set can share a card.
+  const bySet = new Map();
+  for (const row of wanted) {
+    const set = String(row?.card?.set || '').toLowerCase();
+    if (!set) continue;
+    const list = bySet.get(set) || bySet.set(set, []).get(set);
+    list.push(row);
+  }
+
+  for (const [set, rows] of bySet) {
+    if (rows.length < 2) continue;
+    const wants = rows.map(r => ({ row: r, want: describeTokenFaces(r.card)[0] }));
+    const taken = new Set();
+    for (const exp of map.ts[set] || []) {
+      const expansion = map.e?.[exp];
+      if (!expansion) continue;
+      for (const productName of map.tk[exp] || []) {
+        const halves = splitProductFaces(productName);
+        if (!halves) continue;
+        const faces = halves.map(parseTokenFace);
+        if (!faces[0] || !faces[1]) continue;
+
+        // Both halves have to be tokens this deck actually wants, and each
+        // token may only be covered once.
+        let a = null;
+        let b = null;
+        for (const entry of wants) {
+          if (taken.has(entry.row.key)) continue;
+          if (!a && faceMatchesWant(faces[0], entry.want)) { a = entry; continue; }
+          if (!b && faceMatchesWant(faces[1], entry.want)) b = entry;
+        }
+        if (!a || !b || a === b) continue;
+
+        taken.add(a.row.key);
+        taken.add(b.row.key);
+        const qty = Math.max(a.row.qty || 1, b.row.qty || 1);
+        out.set(a.row.key, { name: productName, expansion, qty, primary: true });
+        out.set(b.row.key, { name: productName, expansion, qty, primary: false });
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * Exact Cardmarket token product for a Scryfall token card, searched in the
  * expansions of its parent set. Prefers the plainest name when several
@@ -153,26 +238,42 @@ export function cardmarketTokenTarget(map, card) {
   if (!want.name) return null;
   const wantColors = want.colors.join('');
   const expansions = map.ts[String(card.set).toLowerCase()] || [];
-  let best = null;
-  let bothFaces = null;
+  let best = null;        // product printed with this token alone
+  let bothFaces = null;   // product printing both halves of a two-sided token
+  let onOneCard = null;   // product whose other half is something else
   for (const exp of expansions) {
+    const expansion = map.e?.[exp];
+    if (!expansion) continue;
     for (const productName of map.tk[exp] || []) {
-      if (faces.length > 1 && !bothFaces && matchesBothFaces(productName, faces)) {
-        bothFaces = { name: productName, expansion: map.e?.[exp] };
+      const halves = splitProductFaces(productName);
+      if (halves) {
+        // Two tokens on one card. Parse the halves — running the
+        // single-product parser over the whole name would match the first
+        // half by accident and miss the second.
+        if (faces.length > 1 && !bothFaces && matchesBothFaces(productName, faces)) {
+          bothFaces = { name: productName, expansion };
+        }
+        if (!onOneCard && halves.map(parseTokenFace).some(f => faceMatchesWant(f, want))) {
+          onOneCard = { name: productName, expansion };
+        }
+        continue;
       }
       const p = parseTokenProduct(productName);
       if (!p || p.base.toLowerCase() !== want.name.toLowerCase()) continue;
       if (p.pt !== want.pt) continue;
       if (p.knownColors && WUBRG.filter(c => p.colors.has(c)).join('') !== wantColors) continue;
       if (!best || p.extra.length < best.score) {
-        best = { name: productName, expansion: map.e?.[exp], score: p.extra.length };
+        best = { name: productName, expansion, score: p.extra.length };
       }
     }
   }
   // The two-sided product wins over a single-faced one that merely shares
   // the front face's name — they are different cards.
-  if (bothFaces?.expansion) return bothFaces;
-  if (best?.expansion) return { name: best.name, expansion: best.expansion };
+  if (bothFaces) return bothFaces;
+  if (best) return { name: best.name, expansion: best.expansion };
+  // Sold only as the card it shares with another token — that is what you
+  // have to buy to get it.
+  if (onOneCard) return onOneCard;
   // Newer sets keep their tokens in a separate "<Set>: Tokens" expansion
   // that the catalog data doesn't name. Only when the set's own expansions
   // hold no tokens at all is that the likely home — named after the main

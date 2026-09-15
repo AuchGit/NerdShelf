@@ -243,6 +243,7 @@ export default function MtgDeckBuilderMobile({
       ideas={viewDeck?.ideas}
       commander={viewDeck?.commander}
       tokens={viewDeck?.tokens}
+      showColors={readOnly}
     />
   );
 
