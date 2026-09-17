@@ -300,14 +300,20 @@ body[data-pwa-layouts='true'] [data-pwa-target='inventory-tabs'] > button {
 body[data-pwa-layouts='true'] .card-hover-overlay {
   opacity: 1 !important;
   position: static !important;
+  inset: auto !important;
   background: var(--color-bg-sunken) !important;
+  backdrop-filter: none !important;
   padding: 4px !important;
   margin-top: 4px !important;
   border-radius: 6px !important;
+  gap: 4px !important;
 }
 body[data-pwa-layouts='true'] .card-hover-overlay .card-hover-btn {
+  width: 100%;
+  min-width: 0 !important;
   min-height: 36px;
   font-size: 12px !important;
+  padding: 0.3rem 0.4rem !important;
 }
 
 /* ─────────────────────────────────────────────────────────────────────

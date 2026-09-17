@@ -219,6 +219,12 @@
   pointer-events: none;
 }
 
+/* Wraps the card image(s) together with the action bar, so the bar can
+   overlay them on hover without living inside a clipping box. */
+.card-visual {
+  position: relative;
+}
+
 .card-hover-overlay {
   position: absolute;
   inset: 0;

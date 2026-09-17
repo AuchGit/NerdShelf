@@ -169,6 +169,11 @@ export default function CardItem({
       onMouseLeave={() => onHoverEnd?.()}
       onContextMenu={handleContextMenu}
     >
+      {/* Image(s) and the action bar share one positioned box. On a
+          desktop the bar is an overlay that fades in on hover; on a
+          phone it sits underneath the image as a normal row, which the
+          aspect-ratio boxes around the images would otherwise clip. */}
+      <div className="card-visual">
       {layout === 'normal' && (
         <div className="card-img-wrap">
           {!imgLoaded && <div className="card-img-skeleton" />}
@@ -198,7 +203,6 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {onAdd && hoverOverlay}
         </div>
       )}
 
@@ -230,7 +234,6 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {onAdd && hoverOverlay}
         </div>
       )}
 
@@ -258,9 +261,11 @@ export default function CardItem({
               {isFavorite ? '★' : '☆'}
             </button>
           )}
-          {onAdd && hoverOverlay}
         </div>
       )}
+
+      {onAdd && hoverOverlay}
+      </div>
 
       <div className="card-meta">
         <div className="card-meta-top">
