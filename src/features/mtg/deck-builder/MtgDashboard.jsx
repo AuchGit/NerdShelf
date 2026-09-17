@@ -121,19 +121,22 @@ export default function MtgDashboard() {
     if (!user) return;
     const baseName = deck.name || 'Unbenanntes Deck';
     const newName = `${baseName} (Kopie)`;
-    // Strip share_token so the DB trigger mints a fresh one — the
-    // unique index would otherwise reject the insert. id / timestamps
-    // are stripped too so the row gets defaults rather than overwriting
-    // them with the source row's values.
+    // A copy is its own deck and needs its own share token: the source
+    // deck's token stays with the source, and the unique index would
+    // reject the insert anyway. Minting here rather than leaving the
+    // column empty for the database trigger keeps duplicating working
+    // even where that trigger was never installed.
+    // id / timestamps are dropped so the row gets fresh ones instead of
+    // the source row's.
     const rest = { ...deck };
     delete rest.id;
     delete rest.created_at;
     delete rest.updated_at;
-    delete rest.share_token;
     const payload = {
       ...rest,
       user_id: user.id,
       name: newName,
+      share_token: newShareToken(),
       updated_at: new Date().toISOString(),
     };
     const { error: err } = await supabase
