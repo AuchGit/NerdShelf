@@ -10,11 +10,12 @@
 // too. A printing that doesn't exist in the chosen language simply keeps
 // its English images, which is also what Cardmarket would ship.
 //
-// The setting is per device (localStorage), like the other display
-// preferences, and lives outside the deck-builder's SettingsContext so the
-// app-wide settings dialog can reach it too.
+// The setting belongs to the account and follows the user from device to
+// device (see shared/settings/syncedSettings). It lives outside the deck
+// builder's SettingsContext so the app-wide settings dialog can reach it.
 
 import { useSyncExternalStore } from 'react';
+import { markSettingsDirty, onRemoteSettings } from '../../../../shared/settings/syncedSettings';
 
 const BASE = 'https://api.scryfall.com/cards';
 const STORAGE_KEY = 'mtg:card-language';
@@ -58,7 +59,14 @@ export function setCardLanguage(lang) {
   current = next;
   try { localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
   for (const l of listeners) l();
+  markSettingsDirty();
 }
+
+// Changed on another device — adopt it without a reload.
+onRemoteSettings(STORAGE_KEY, () => {
+  current = readStored();
+  for (const l of listeners) l();
+});
 
 function subscribe(listener) {
   listeners.add(listener);

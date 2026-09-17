@@ -7,6 +7,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { applyPrinting } from './deckPrintings';
+import { markSettingsDirty, onRemoteSettings } from '../../../../shared/settings/syncedSettings';
 
 const STORAGE_KEY = 'mtg-price-thresholds';
 const EVENT_NAME = 'mtg-price-thresholds-change';
@@ -43,6 +44,7 @@ export function setMtgPriceSettings(patch) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: next }));
+  markSettingsDirty();
   return next;
 }
 
@@ -70,6 +72,13 @@ function getSnapshot() {
 export function useMtgPriceSettings() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
+
+// The thresholds belong to the account, so another device can change
+// them — drop the cache and let subscribers re-read.
+onRemoteSettings(STORAGE_KEY, () => {
+  cached = null;
+  try { window.dispatchEvent(new CustomEvent(EVENT_NAME)); } catch { /* ignore */ }
+});
 
 /** Imperative invalidate (used by tests / hot-reload). */
 export function _resetMtgPriceCache() {

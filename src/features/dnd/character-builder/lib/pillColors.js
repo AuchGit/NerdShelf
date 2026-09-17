@@ -12,6 +12,8 @@
 //   setPillColor(key, hex) — speichert override
 //   resetPillColors()      — wischt alle overrides
 
+import { markSettingsDirty, onRemoteSettings } from '../../../../shared/settings/syncedSettings'
+
 const STORAGE_KEY = 'nerdshelf:pillColors'
 
 export const DEFAULT_PILL_COLORS = {
@@ -112,7 +114,14 @@ function writeOverrides(map) {
     // anderen Tabs, nicht im selben).
     window.dispatchEvent(new CustomEvent('nerdshelf:pillcolors-changed'))
   } catch { /* ignore */ }
+  markSettingsDirty()
 }
+
+// Changed on another device — the readers pull from localStorage on every
+// call, so re-announcing is enough.
+onRemoteSettings(STORAGE_KEY, () => {
+  try { window.dispatchEvent(new CustomEvent('nerdshelf:pillcolors-changed')) } catch { /* ignore */ }
+})
 
 export function getAllPillColors() {
   return { ...DEFAULT_PILL_COLORS, ...readOverrides() }

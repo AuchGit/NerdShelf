@@ -35,7 +35,7 @@ export default defineConfig(async ({ mode }) => {
         // otherwise via a banner. It also registers the service worker.
         registerType: 'prompt',
         injectRegister: false,
-        includeAssets: ['favicon.svg', 'icons/*.png'],
+        includeAssets: ['icons/*.png'],
         workbox: {
           // Der Haupt-Chunk ist mit dem VTT >2 MiB (Workbox-Default-Limit)
           // gewachsen — ohne höheres Limit bricht der PWA-Build ab.
@@ -121,7 +121,6 @@ export default defineConfig(async ({ mode }) => {
             { src: 'icons/icon-128.png', sizes: '128x128', type: 'image/png' },
             { src: 'icons/icon-256.png', sizes: '256x256', type: 'image/png' },
             { src: 'icons/icon-310.png', sizes: '310x310', type: 'image/png' },
-            { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
           ],
         },
       })

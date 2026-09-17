@@ -638,3 +638,27 @@ body[data-pwa-mobile='true'] .tag-suggest-item { padding: 0.65rem 0.6rem; font-s
   background: color-mix(in srgb, var(--color-success) 18%, transparent);
   box-shadow: 0 0 7px currentColor;
 }
+
+/* Phone only: fold the filter and sort rows away so the cards get the
+   screen. The search field and the colour / land / favourite / collection
+   pills stay put — those are the ones you reach for mid-search. */
+.filter-collapse {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  min-height: 32px;
+  background: transparent;
+  color: var(--text-mid, #888);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-collapse:hover {
+  border-color: var(--accent);
+  color: var(--text-hi, #eee);
+}

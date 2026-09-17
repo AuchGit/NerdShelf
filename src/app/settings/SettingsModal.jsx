@@ -12,6 +12,7 @@ import {
   CARD_LANGUAGES, useCardLanguage, setCardLanguage,
 } from '../../features/mtg/deck-builder/services/cardLanguage';
 import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
+import { setHideCrossEditionMarker } from '../../features/dnd/character-builder/lib/crossEditionMarker';
 import {
   DEFAULT_PILL_COLORS, PILL_COLOR_GROUPS,
   getAllPillColors, setPillColor, resetPillColors,
@@ -422,11 +423,7 @@ function CrossEditionToggle() {
   const onChange = (e) => {
     const next = e.target.checked;
     setHide(next);
-    try {
-      if (next) localStorage.setItem('nerdshelf:hideCrossEditionMarker', '1');
-      else localStorage.removeItem('nerdshelf:hideCrossEditionMarker');
-      window.dispatchEvent(new CustomEvent('nerdshelf:crossedition-changed'));
-    } catch { /* ignore */ }
+    setHideCrossEditionMarker(next);
   };
   return (
     <label style={{

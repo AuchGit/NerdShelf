@@ -6,6 +6,7 @@ import { setupErrorCollector } from '../core/bug-report/collector';
 import UpdateChecker from '../core/updater/UpdateChecker';
 import PwaUpdater from '../core/updater/PwaUpdater';
 import OpenInAppBanner from '../shared/sharing/OpenInAppBanner';
+import SettingsSync from '../shared/settings/SettingsSync';
 import Router from './Router';
 import usePwaMobile from '../shared/hooks/usePwaMobile';
 import { PinnedTooltipsProvider } from '../features/dnd/character-builder/components/ui/PinnedTooltipsContext';
@@ -50,6 +51,7 @@ export default function App() {
           <PinnedTooltipsProvider>
             <Router />
             {!isPopout && <UpdateChecker />}
+            {!isPopout && <SettingsSync />}
           </PinnedTooltipsProvider>
         </AuthGate>
       </AuthProvider>

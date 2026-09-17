@@ -10,6 +10,8 @@
 // custom-event so dass Renderer ohne explizites Storage-Hook re-
 // rendern können wenn der Toggle umgelegt wird.
 
+import { markSettingsDirty, onRemoteSettings } from '../../../../shared/settings/syncedSettings'
+
 const KEY = 'nerdshelf:hideCrossEditionMarker'
 const EVENT = 'nerdshelf:crossedition-changed'
 
@@ -23,7 +25,13 @@ export function setHideCrossEditionMarker(hide) {
     else localStorage.removeItem(KEY)
   } catch { /* ignore */ }
   try { window.dispatchEvent(new CustomEvent(EVENT)) } catch { /* ignore */ }
+  markSettingsDirty()
 }
+
+// Changed on another device.
+onRemoteSettings(KEY, () => {
+  try { window.dispatchEvent(new CustomEvent(EVENT)) } catch { /* ignore */ }
+})
 
 // React-Hook der den Toggle-State live mitliest.
 import { useState, useEffect } from 'react'

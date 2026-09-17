@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { searchTags } from '../services/scryfallTags';
 import './CardSearch.css';
+import usePwaMobile from '../../../../shared/hooks/usePwaMobile';
 
 const COLORS = [
   { id: 'W', label: 'W', title: 'Weiß'    },
@@ -55,6 +56,8 @@ const COLOR_MODES = [
   { id: 'exact', label: 'exact',  title: 'Genau diese Farben'         },
 ];
 
+const COLLAPSE_KEY = 'mtg:search-collapsed';
+
 export default function CardSearch({
   query,      setQuery,
   searchMode, setSearchMode,
@@ -81,6 +84,21 @@ export default function CardSearch({
   tags = [], setTags, tagIndex,
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // On a phone the filter rows eat the screen the cards need. Collapsing
+  // keeps what you actually reach for — the search field and the colour /
+  // land / favourite / collection pills — and folds the rest away. Per
+  // device, like the other display preferences.
+  const { isPwaMobile } = usePwaMobile();
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
+  });
+  const compact = isPwaMobile && collapsed;
+  const toggleCollapsed = () => setCollapsed(prev => {
+    const next = !prev;
+    try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
 
   const toggleColor = (id) =>
     setColors(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
@@ -119,7 +137,7 @@ export default function CardSearch({
           )}
         </div>
 
-        <div className="mode-toggle">
+        {!compact && <div className="mode-toggle">
           <button
             className={`mode-btn ${searchMode === 'name' ? 'active' : ''}`}
             onClick={() => setSearchMode('name')}
@@ -128,7 +146,7 @@ export default function CardSearch({
             className={`mode-btn ${searchMode === 'oracle' ? 'active' : ''}`}
             onClick={() => setSearchMode('oracle')}
           >Oracle</button>
-        </div>
+        </div>}
       </div>
 
       {/* ── Row 2: Colors + colorMode + Land + Type + Sort + Dir + Reset ── */}
@@ -175,7 +193,7 @@ export default function CardSearch({
         </div>
 
         {/* Color mode — only visible when colors are selected */}
-        {colors.length > 1 && (
+        {!compact && colors.length > 1 && (
           <div className="color-mode-group">
             {COLOR_MODES.map(({ id, label, title }) => (
               <button
@@ -189,7 +207,7 @@ export default function CardSearch({
         )}
 
         {/* Type dropdown */}
-        <select
+        {!compact && <select
           className="type-select"
           value={cardType}
           onChange={e => setCardType(e.target.value)}
@@ -197,10 +215,10 @@ export default function CardSearch({
           {TYPES.map(t => (
             <option key={t} value={t}>{t || 'Alle Typen'}</option>
           ))}
-        </select>
+        </select>}
 
         {/* Sort order + direction */}
-        <div className="sort-group">
+        {!compact && <div className="sort-group">
           <select
             className="sort-select"
             value={sortOrder}
@@ -218,32 +236,44 @@ export default function CardSearch({
           >
             {sortDir === 'asc' ? '↑' : '↓'}
           </button>
-        </div>
+        </div>}
 
         {hasFilters && (
           <button className="reset-btn" onClick={handleClear} title="Alle Filter zurücksetzen">
             Reset
           </button>
         )}
+
+        {isPwaMobile && (
+          <button
+            type="button"
+            className="filter-collapse"
+            onClick={toggleCollapsed}
+            aria-expanded={!compact}
+            title={compact ? 'Filter und Sortierung zeigen' : 'Filter und Sortierung ausblenden'}
+          >
+            Filter <span className="adv-arrow">{compact ? '▼' : '▲'}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Row 3: Scryfall oracle tags ── */}
-      {setTags && (
+      {!compact && setTags && (
         <TagFilter tags={tags} setTags={setTags} tagIndex={tagIndex} />
       )}
 
       {/* ── Advanced toggle ── */}
-      <button
+      {!compact && <button
         className={`advanced-toggle ${showAdvanced ? 'open' : ''} ${hasAdvancedFilters ? 'has-filters' : ''}`}
         onClick={() => setShowAdvanced(v => !v)}
       >
         <span>Erweiterte Filter</span>
         {hasAdvancedFilters && <span className="adv-dot" />}
         <span className="adv-arrow">{showAdvanced ? '▲' : '▼'}</span>
-      </button>
+      </button>}
 
       {/* ── Advanced filters ── */}
-      {showAdvanced && (
+      {!compact && showAdvanced && (
         <div className="advanced-filters">
           <div className="adv-row">
             <span className="adv-label">Rarität</span>
