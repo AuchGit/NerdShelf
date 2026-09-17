@@ -82,6 +82,15 @@ export function filterFavorites(cards, params) {
       if (colorMode === 'exact') {
         if (cardColors.length !== colors.length) return false;
         if (!colors.every(c => cardColors.includes(c))) return false;
+      } else if (colorMode === 'only') {
+        // Every colour the card has must be one of the chosen ones, and it
+        // has to have at least one — colourless isn't "one of them". The
+        // identity check mirrors the server query and catches off-colour
+        // mana hiding in an ability.
+        if (cardColors.length === 0) return false;
+        if (!cardColors.every(c => colors.includes(c))) return false;
+        const identity = card.color_identity || [];
+        if (identity.length > 0 && !identity.every(c => colors.includes(c))) return false;
       } else if (colorMode === 'all') {
         if (!colors.every(c => cardColors.includes(c))) return false;
       } else {

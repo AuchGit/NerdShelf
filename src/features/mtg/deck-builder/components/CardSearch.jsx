@@ -54,6 +54,7 @@ const COLOR_MODES = [
   { id: 'any',   label: 'any', title: 'Mindestens eine der Farben' },
   { id: 'all',   label: 'all',  title: 'Alle Farben enthalten'      },
   { id: 'exact', label: 'exact',  title: 'Genau diese Farben'         },
+  { id: 'only',  label: 'only',  title: 'Nur diese Farben — einzeln oder kombiniert, nichts Fremdes' },
 ];
 
 const COLLAPSE_KEY = 'mtg:search-collapsed';

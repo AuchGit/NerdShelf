@@ -51,6 +51,15 @@ export async function searchCards({
       if (colorMode === 'exact') {
         // Exactly these colors, no more
         parts.push(`c=${colorStr}`);
+      } else if (colorMode === 'only') {
+        // Any combination of the chosen colours and nothing else: white,
+        // blue or white-blue — but never a card that also brings green.
+        // `c>=1` keeps colourless cards out, which are a subset of every
+        // selection. The identity bound is not redundant: Scryfall tests
+        // colour per FACE, so a transform card with a colourless back slips
+        // through `c<=` no matter what its front costs — and a card whose
+        // ability needs off-colour mana has no place here either.
+        parts.push(`c<=${colorStr} c>=1 id<=${colorStr}`);
       } else if (colorMode === 'all') {
         // Must include all listed colors (may have others)
         parts.push(`c:${colorStr}`);
