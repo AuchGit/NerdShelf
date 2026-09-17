@@ -8,7 +8,7 @@ import DashboardLayout from '../../../shared/dashboard/DashboardLayout';
 import { useMtgPriceSettings } from './services/priceThresholds';
 import { applyPrinting } from './services/deckPrintings';
 import MtgSubNav from './components/MtgSubNav';
-import { ShareTokenBadge } from '../../../shared/tokens';
+import { ShareTokenBadge, newShareToken } from '../../../shared/tokens';
 import { ImportedSection, useImports } from '../../../shared/imports';
 import { ShareButton, useDeepLinkImport } from '../../../shared/sharing';
 import { readList, writeList, invalidate, subscribe } from '../../../shared/cache/listCache';
