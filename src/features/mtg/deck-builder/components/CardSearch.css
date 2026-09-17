@@ -2,6 +2,11 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-mid);
   background: var(--bg-panel);
+  /* The card tiles below are positioned, so without a stacking context of
+     its own the filter panel loses to them wherever the two overlap and
+     its controls stop taking taps. */
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Row 1: Search bar ── */
