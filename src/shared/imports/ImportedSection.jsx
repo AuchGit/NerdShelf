@@ -34,6 +34,8 @@ export default function ImportedSection({
   // false when the dashboard offers the token input at the top instead
   // (DashboardLayout importDomain) — the section then only shows imports.
   showImportInput = true,
+  // Shown while the section is empty; a domain can name its own ways in.
+  emptyText = 'Trage oben einen geteilten Token ein, um den entsprechenden Eintrag hier eingehängt zu sehen (nur lesbar).',
 }) {
   // Group by ownerId → subCategory → [entities]
   const grouped = useMemo(() => {
@@ -58,7 +60,7 @@ export default function ImportedSection({
   });
   useEffect(() => {
     if (!storageKey) return;
-    try { localStorage.setItem(storageKey, JSON.stringify([...collapsed])); } catch {}
+    try { localStorage.setItem(storageKey, JSON.stringify([...collapsed])); } catch { /* ignore */ }
   }, [collapsed, storageKey]);
 
   const toggle = useCallback((key) => {
@@ -147,7 +149,7 @@ export default function ImportedSection({
             textAlign: 'center',
           }}
         >
-          Trage oben einen geteilten Token ein, um den entsprechenden Eintrag hier eingehängt zu sehen (nur lesbar).
+          {emptyText}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>

@@ -28,6 +28,7 @@ import { useDeckTokens } from './hooks/useDeckTokens';
 import { useUnsavedChanges } from '../../../shared/pwa/unsavedChanges';
 import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
+import { newDeckVisibility } from './services/deckVisibility';
 import { invalidate } from '../../../shared/cache/listCache';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
@@ -282,8 +283,10 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
         return;
       }
       if (loadByToken && data.user_id) {
-        supabase.from('profiles').select('player_name').eq('id', data.user_id).maybeSingle()
-          .then(({ data: prof }) => { if (!cancelled) setOwnerName(prof?.player_name || ''); });
+        // Through get_player_names: it also answers for owners of public
+        // decks, where a direct profiles read only works after an import.
+        supabase.rpc('get_player_names', { p_user_ids: [data.user_id] })
+          .then(({ data: rows }) => { if (!cancelled) setOwnerName(rows?.[0]?.player_name || ''); });
       }
       skipDirtyRef.current = true;
       setDeckName(data.name || 'Unbenanntes Deck');
@@ -716,7 +719,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
     } else {
       result = await supabase
         .from('mtg_decks')
-        .insert(payload)
+        .insert({ ...payload, ...newDeckVisibility() })
         .select()
         .single();
     }
@@ -746,6 +749,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
       .insert({
         user_id: user.id,
         name: `${deckName.trim() || 'Unbenanntes Deck'} (Kopie)`,
+        ...newDeckVisibility(),
         format: deckFormat || null,
         data: {
           mainboard, sideboard, ideas, coverCardId, coverFaceIndex: coverFace, commander,

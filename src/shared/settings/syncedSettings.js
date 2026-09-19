@@ -31,6 +31,7 @@ export const SYNCED_KEYS = [
   'mtg:card-language',               // language of the card images
   'nerdshelf:pillColors',            // DnD pill colour overrides
   'nerdshelf:hideCrossEditionMarker',// DnD cross-edition marker
+  'mtg:decks-public-default',        // new decks shared with everybody
 ];
 
 // A store with an in-memory cache registers here so it can refresh itself

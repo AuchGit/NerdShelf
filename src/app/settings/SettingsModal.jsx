@@ -11,6 +11,9 @@ import {
 import {
   CARD_LANGUAGES, useCardLanguage, setCardLanguage,
 } from '../../features/mtg/deck-builder/services/cardLanguage';
+import {
+  usePublicByDefault, setPublicByDefault,
+} from '../../features/mtg/deck-builder/services/deckVisibility';
 import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
 import { setHideCrossEditionMarker } from '../../features/dnd/character-builder/lib/crossEditionMarker';
 import {
@@ -786,6 +789,7 @@ function PillColorEditor() {
 function MtgSettings() {
   const settings = useMtgPriceSettings();
   const cardLanguage = useCardLanguage();
+  const publicByDefault = usePublicByDefault();
 
   function update(patch) {
     setMtgPriceSettings(patch);
@@ -816,7 +820,26 @@ function MtgSettings() {
           Kartenbilder in der Vorschau und in der Vollbild-Ansicht werden in
           dieser Sprache gezeigt, sofern es die Ausgabe darin gibt. Deck,
           Sammlung und Cardmarket-Liste bleiben bei den englischen Namen —
-          daran hängen die Zuordnungen. Gilt nur auf diesem Gerät.
+          daran hängen die Zuordnungen. Gilt für dein Konto auf allen Geräten.
+        </div>
+      </Field>
+
+      <Field label="Neue Decks">
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          fontSize: 'var(--fs-sm)', color: 'var(--color-text-muted)',
+        }}>
+          <input
+            type="checkbox"
+            checked={publicByDefault}
+            onChange={e => setPublicByDefault(e.target.checked)}
+          />
+          Mit allen NerdShelf-Nutzern teilen
+        </label>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Neue Decks erscheinen dann bei allen anderen unter „Mit mir geteilt“. Jedes
+          Deck lässt sich auf seiner Kachel einzeln umstellen. Teilen per Link oder
+          Token funktioniert unabhängig davon immer.
         </div>
       </Field>
 

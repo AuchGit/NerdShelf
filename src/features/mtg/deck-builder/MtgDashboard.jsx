@@ -1,5 +1,5 @@
 // src/features/mtg/deck-builder/MtgDashboard.jsx
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../core/supabase/client';
 import { useAuth } from '../../../core/auth/AuthContext';
@@ -14,6 +14,9 @@ import { ShareButton, useDeepLinkImport } from '../../../shared/sharing';
 import { readList, writeList, invalidate, subscribe } from '../../../shared/cache/listCache';
 import useLongPress from '../../../shared/hooks/useLongPress';
 import usePwaMobile from '../../../shared/hooks/usePwaMobile';
+import usePublicDecks from './hooks/usePublicDecks';
+import { newDeckVisibility } from './services/deckVisibility';
+import { mergeSharedDecks } from './services/sharedDecks';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -24,6 +27,9 @@ const COLOR_LABEL = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', C
 // Subtle 1px ring around text — only applied when a cover image sits behind
 // the card, so the text stays readable across light and dark artworks.
 const TEXT_SHADOW = '0 0 2px var(--color-bg-elevated), 0 0 2px var(--color-bg-elevated)';
+
+// Phone: which of the two deck tabs is open. Per device.
+const TAB_KEY = 'mtg:dashboard-tab';
 
 // Default category order for known formats; rest sort alphabetically after these
 const FORMAT_ORDER = [
@@ -43,6 +49,36 @@ export default function MtgDashboard() {
   const [error, setError] = useState(null);
   const [importStatus, setImportStatus] = useState(null);   // shared-link feedback
   const imports = useImports({ domain: 'mtg_deck' });
+  const publicDecks = usePublicDecks();
+  const { isPwaMobile } = usePwaMobile();
+
+  // "Mit mir geteilt": what I imported by token or link, plus what other
+  // people shared with everybody.
+  const shared = useMemo(
+    () => mergeSharedDecks(imports.entities, publicDecks.decks),
+    [imports.entities, publicDecks.decks],
+  );
+  const sharedOwners = useMemo(
+    () => ({ ...publicDecks.owners, ...imports.owners }),
+    [publicDecks.owners, imports.owners],
+  );
+  // Only an import can be removed from the list. A public deck stays until
+  // its owner stops sharing it.
+  const importedTokens = useMemo(
+    () => new Set(imports.entities.map(e => e.share_token)),
+    [imports.entities],
+  );
+
+  // Phone: own and shared decks as two tabs instead of one long page.
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem(TAB_KEY) === 'shared' ? 'shared' : 'own'; } catch { return 'own'; }
+  });
+  const chooseTab = (next) => {
+    setTab(next);
+    try { localStorage.setItem(TAB_KEY, next); } catch { /* ignore */ }
+  };
+  const showOwn = !isPwaMobile || tab === 'own';
+  const showShared = !isPwaMobile || tab === 'shared';
 
   // Deep link: `<APP>/mtg/?import=<token>` → auto-add the shared deck.
   useDeepLinkImport({
@@ -128,12 +164,16 @@ export default function MtgDashboard() {
     // even where that trigger was never installed.
     // id / timestamps are dropped so the row gets fresh ones instead of
     // the source row's.
+    // A copy is a new deck, so it starts with the default visibility from
+    // the settings rather than inheriting the source's.
     const rest = { ...deck };
     delete rest.id;
     delete rest.created_at;
     delete rest.updated_at;
+    delete rest.is_public;
     const payload = {
       ...rest,
+      ...newDeckVisibility(),
       user_id: user.id,
       name: newName,
       share_token: newShareToken(),
@@ -148,6 +188,49 @@ export default function MtgDashboard() {
     if (cacheKey) invalidate(cacheKey);
     loadDecks();
   }
+
+  // "Mit allen teilen" on a tile. The tile flips at once; a failed save
+  // flips it back and says why.
+  async function handleTogglePublic(deckId, next) {
+    if (!user) return;
+    const setFlag = (value) => setDecks(prev =>
+      prev.map(d => (d.id === deckId ? { ...d, is_public: value } : d)));
+    setFlag(next);
+    const { error: err } = await supabase
+      .from('mtg_decks')
+      .update({ is_public: next })
+      .eq('id', deckId)
+      .eq('user_id', user.id);
+    if (err) {
+      setFlag(!next);
+      alert(/is_public/i.test(err.message)
+        ? 'Das Teilen mit allen ist in der Datenbank noch nicht eingerichtet — scripts/mtg-public-decks.sql in Supabase ausführen.'
+        : `Ändern fehlgeschlagen: ${err.message}`);
+      return;
+    }
+    if (cacheKey) invalidate(cacheKey);
+  }
+
+  const tabBar = isPwaMobile && (
+    <div role="tablist" aria-label="Decks" style={S_TABS}>
+      {[
+        { id: 'own', label: 'Eigene', count: decks.length },
+        { id: 'shared', label: 'Mit mir geteilt', count: shared.length },
+      ].map(t => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.id}
+          onClick={() => chooseTab(t.id)}
+          style={{ ...S_TAB, ...(tab === t.id ? S_TAB_ACTIVE : null) }}
+        >
+          {t.label}
+          <span style={S_TAB_COUNT}>{t.count}</span>
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <>
@@ -171,7 +254,9 @@ export default function MtgDashboard() {
           {importStatus.ok ? '✓ ' : '⚠ '}{importStatus.msg}
         </div>
       )}
-      <DashboardLayout
+      {tabBar}
+
+      {showOwn && <DashboardLayout
         title="Meine Decks"
         newButtonLabel="+ Neues Deck"
         onNew={() => navigate('/mtg/deck/new')}
@@ -193,19 +278,22 @@ export default function MtgDashboard() {
             onOpen={() => navigate(`/mtg/deck/${deck.id}`)}
             onDelete={() => handleDelete(deck.id, deck.name)}
             onDuplicate={() => handleDuplicate(deck)}
+            onTogglePublic={() => handleTogglePublic(deck.id, !deck.is_public)}
           />
         )}
-      />
+      />}
 
-      <ImportedSection
-        title="Importierte Decks"
-        entities={imports.entities}
-        owners={imports.owners}
-        loading={imports.loading}
+      {showShared && <ImportedSection
+        title="Mit mir geteilt"
+        entities={shared}
+        owners={sharedOwners}
+        loading={imports.loading || publicDecks.loading}
         tableMissing={imports.tableMissing}
         domain="mtg_deck"
         onImport={imports.add}
-        showImportInput={false}
+        // On the phone this tab is where you come to add one by token.
+        showImportInput={isPwaMobile}
+        emptyText="Noch nichts geteilt. Decks, die andere mit allen teilen, erscheinen hier von selbst — oder trag einen Token ein, den dir jemand geschickt hat."
         onRemove={imports.remove}
         getSubCategory={(deck) => deck.format || 'Kein Format'}
         subCategoryOrder={FORMAT_ORDER}
@@ -215,12 +303,12 @@ export default function MtgDashboard() {
             key={deck.id}
             deck={deck}
             onOpen={() => navigate(`/mtg/deck/view/${deck.share_token}`)}
-            onRemove={ctx.onRemove}
+            onRemove={importedTokens.has(deck.share_token) ? ctx.onRemove : undefined}
             readOnly
             ownerName={ctx.ownerName}
           />
         )}
-      />
+      />}
     </>
   );
 }
@@ -229,7 +317,7 @@ export default function MtgDashboard() {
 // and the parent Dashboard re-renders for many unrelated reasons (form
 // state, hover, etc.). Skipping render unless the deck reference actually
 // changes is a big win on dashboards with 10+ decks.
-const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, readOnly = false, ownerName, onRemove }) {
+const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, onTogglePublic, readOnly = false, ownerName, onRemove }) {
   const data = deck.data || {};
   const priceSettings = useMtgPriceSettings();
   const { isPwaMobile } = usePwaMobile();
@@ -369,9 +457,9 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {readOnly ? (
+          {readOnly ? (onRemove && (
             <button
-              onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+              onClick={(e) => { e.stopPropagation(); onRemove(); }}
               style={{
                 background: 'transparent', border: 'none',
                 color: 'var(--color-text-dim)', cursor: 'pointer',
@@ -381,7 +469,7 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
               onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
             >⊘</button>
-          ) : (
+          )) : (
             <>
               {onDuplicate && (
                 <button
@@ -472,8 +560,31 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
         borderTop: '1px solid var(--color-border)',
         paddingTop: 'var(--space-2)',
         textShadow: coverArt ? TEXT_SHADOW : undefined,
+        // Date, share toggle, token and share button don't fit one line on
+        // a narrow phone tile.
+        flexWrap: 'wrap',
+        rowGap: 4,
       }}>
         <span>Aktualisiert: {new Date(deck.updated_at).toLocaleDateString('de-DE')}</span>
+        {onTogglePublic && (
+          <label
+            onClick={(e) => e.stopPropagation()}
+            title="Alle NerdShelf-Nutzer finden das Deck dann unter „Mit mir geteilt“. Link und Token funktionieren weiterhin."
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              cursor: 'pointer', whiteSpace: 'nowrap',
+              color: deck.is_public ? 'var(--color-accent)' : undefined,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={!!deck.is_public}
+              onChange={() => onTogglePublic()}
+              style={{ margin: 0 }}
+            />
+            Mit allen teilen
+          </label>
+        )}
         <span style={{ flex: 1 }} />
         {deck.share_token && (
           <>
@@ -491,6 +602,12 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
         title={deck.name || 'Deck'}
         items={[
           { id: 'open',  label: 'Öffnen',     icon: '↗', onSelect: () => onOpen?.() },
+          ...(onTogglePublic ? [{
+            id: 'public',
+            label: deck.is_public ? 'Nicht mehr mit allen teilen' : 'Mit allen teilen',
+            icon: '⇄',
+            onSelect: () => onTogglePublic(),
+          }] : []),
           { id: 'dup',   label: 'Duplizieren', icon: '⎘', onSelect: () => onDuplicate?.() },
           { id: 'del',   label: 'Löschen',     icon: '🗑', danger: true,
             onSelect: () => onDelete?.() },
@@ -503,6 +620,30 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, r
   && a.readOnly === b.readOnly
   && a.ownerName === b.ownerName
 ));
+
+const S_TABS = {
+  display: 'flex', gap: 4, padding: 3,
+  margin: 'var(--space-3) var(--space-4) 0',
+  background: 'var(--color-bg-sunken)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+};
+const S_TAB = {
+  flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+  minHeight: 40, padding: '6px 10px',
+  background: 'transparent', border: 'none',
+  borderRadius: 'calc(var(--radius-md) - 2px)',
+  color: 'var(--color-text-muted)', fontFamily: 'inherit',
+  fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-medium)', cursor: 'pointer',
+};
+const S_TAB_ACTIVE = {
+  background: 'var(--color-bg-elevated)', color: 'var(--color-text)',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+};
+const S_TAB_COUNT = {
+  fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)',
+  fontVariantNumeric: 'tabular-nums',
+};
 
 function ColorBar({ entries, total }) {
   if (!entries.length || total === 0) {
