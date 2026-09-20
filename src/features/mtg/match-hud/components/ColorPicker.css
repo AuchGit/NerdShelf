@@ -1,0 +1,29 @@
+/* src/features/mtg/match-hud/components/ColorPicker.css
+ *
+ * Lives with the component rather than in MatchHud.css: the picker is also
+ * used in the app settings, which never load the HUD stylesheet.
+ */
+
+.mh-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.mh-color-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mh-color-chip.is-active {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 2px var(--color-bg);
+}
+.mh-color-chip-custom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

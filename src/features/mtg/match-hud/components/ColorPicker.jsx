@@ -11,6 +11,7 @@
 
 import { useRef } from 'react';
 import { PLAYER_COLORS, isCustomColor } from '../services/playerColors';
+import './ColorPicker.css';
 
 export default function ColorPicker({ value, onChange }) {
   const inputRef = useRef(null);

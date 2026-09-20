@@ -32,6 +32,7 @@ export const SYNCED_KEYS = [
   'nerdshelf:pillColors',            // DnD pill colour overrides
   'nerdshelf:hideCrossEditionMarker',// DnD cross-edition marker
   'mtg:decks-public-default',        // new decks shared with everybody
+  'mtg:match-color',                 // own colour in the Match HUD
 ];
 
 // A store with an in-memory cache registers here so it can refresh itself

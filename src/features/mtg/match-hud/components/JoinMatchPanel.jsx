@@ -14,6 +14,7 @@ import { Button, Panel } from '../../../../shared/ui';
 import { findMatchByCode } from '../services/matchApi';
 import { normaliseCode, formatCode } from '../services/matchCodes';
 import { pickAvailableColor } from '../services/playerColors';
+import { useMatchColor } from '../services/matchColor';
 import ColorPicker from './ColorPicker';
 
 export default function JoinMatchPanel({
@@ -26,7 +27,8 @@ export default function JoinMatchPanel({
 }) {
   const [code, setCode] = useState(presetCode ? normaliseCode(presetCode) : '');
   const [name, setName] = useState(defaultName);
-  const [color, setColor] = useState('blue');
+  const settingColor = useMatchColor();
+  const [color, setColor] = useState(settingColor);
   const [deck, setDeck] = useState(null);   // { id, name } | null
   const [decks, setDecks] = useState([]);
   const [match, setMatch] = useState(null);

@@ -75,6 +75,12 @@ export function getColor(value) {
   return RAW[0];
 }
 
+/** Is this a colour the HUD can show — a preset id or a hex value? */
+export function isValidPlayerColor(value) {
+  if (!value) return false;
+  return !!BY_ID[value] || isCustomColor(value);
+}
+
 /** Pick the next colour that isn't already taken. Used when a player joins
  *  without explicitly choosing — keeps each tile visually distinct. */
 export function pickAvailableColor(takenIds = []) {

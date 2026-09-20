@@ -7,20 +7,23 @@
 import { useState } from 'react';
 import { Button, Panel } from '../../../../shared/ui';
 import ColorPicker from './ColorPicker';
+import { useMatchColor } from '../services/matchColor';
 
 const PRESETS = [20, 30, 40];
 
 export default function CreateMatchPanel({
   busy = false,
   defaultName = '',
-  defaultColor = 'red',
+  defaultColor = null,
   onCreate,
   onCancel,
 }) {
   const [life, setLife] = useState(20);
   const [custom, setCustom] = useState('');
   const [name, setName] = useState(defaultName);
-  const [color, setColor] = useState(defaultColor);
+  // Falls back to the colour picked in the MTG settings.
+  const settingColor = useMatchColor();
+  const [color, setColor] = useState(defaultColor || settingColor);
 
   // Resolve the actual starting life: a preset chip *or* a non-empty custom
   // value (custom takes precedence so users can override after picking).

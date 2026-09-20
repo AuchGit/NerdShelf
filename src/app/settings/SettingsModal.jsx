@@ -14,6 +14,8 @@ import {
 import {
   usePublicByDefault, setPublicByDefault,
 } from '../../features/mtg/deck-builder/services/deckVisibility';
+import { useMatchColor, setMatchColor } from '../../features/mtg/match-hud/services/matchColor';
+import ColorPicker from '../../features/mtg/match-hud/components/ColorPicker';
 import GmSessionPrefsEditor from '../../features/dnd/character-builder/components/ui/GmSessionPrefsEditor';
 import { setHideCrossEditionMarker } from '../../features/dnd/character-builder/lib/crossEditionMarker';
 import {
@@ -790,6 +792,7 @@ function MtgSettings() {
   const settings = useMtgPriceSettings();
   const cardLanguage = useCardLanguage();
   const publicByDefault = usePublicByDefault();
+  const matchColor = useMatchColor();
 
   function update(patch) {
     setMtgPriceSettings(patch);
@@ -840,6 +843,14 @@ function MtgSettings() {
           Neue Decks erscheinen dann bei allen anderen unter „Mit mir geteilt“. Jedes
           Deck lässt sich auf seiner Kachel einzeln umstellen. Teilen per Link oder
           Token funktioniert unabhängig davon immer.
+        </div>
+      </Field>
+
+      <Field label="Deine Farbe im Match HUD">
+        <ColorPicker value={matchColor} onChange={setMatchColor} />
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Damit startest du, wenn du ein Match eröffnest oder einem beitrittst.
+          Im laufenden Match kannst du sie über deine eigene Kachel jederzeit ändern.
         </div>
       </Field>
 
