@@ -36,6 +36,20 @@ describe('parseDecklistText', () => {
     const { main } = parseDecklistText('1 B.F.M. (Big Furry Monster)');
     expect(main[0]).toEqual({ name: 'B.F.M.', count: 1, set: null, collector: null });
   });
+
+  it('reads a commander section and switches back on "Deck"', () => {
+    const { main, commander } = parseDecklistText([
+      'Commander',
+      "1 Atraxa, Praetors' Voice (CMR) 1",
+      '',
+      'Deck',
+      '1 Sol Ring',
+    ].join('\n'));
+    expect(commander).toEqual([
+      { name: "Atraxa, Praetors' Voice", count: 1, set: 'cmr', collector: '1' },
+    ]);
+    expect(main).toEqual([{ name: 'Sol Ring', count: 1, set: null, collector: null }]);
+  });
 });
 
 describe('buildDeckFromParsed', () => {
@@ -67,5 +81,24 @@ describe('buildDeckFromParsed', () => {
     expect(Object.keys(deck.mainboard)).toEqual(['fire-mh2']);
     expect(deck.mainboard['fire-mh2'].count).toBe(6);
     expect(deck.notFound).toEqual([]);
+  });
+
+  it('puts the commander in its own slot, not into the mainboard', () => {
+    const atraxa = { id: 'atx', name: "Atraxa, Praetors' Voice" };
+    const parsed = parseDecklistText("Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n2 Opt");
+    const resolved = {
+      found: [{ name: "atraxa, praetors' voice", card: atraxa }, { name: 'opt', card: opt }],
+      notFound: [],
+      prints: new Map(),
+    };
+    const deck = buildDeckFromParsed(parsed, resolved);
+    expect(deck.commander).toBe(atraxa);
+    expect(Object.keys(deck.mainboard)).toEqual(['opt']);
+  });
+
+  it('has no commander when the list names none', () => {
+    const parsed = parseDecklistText('2 Opt');
+    const resolved = { found: [{ name: 'opt', card: opt }], notFound: [], prints: new Map() };
+    expect(buildDeckFromParsed(parsed, resolved).commander).toBeNull();
   });
 });

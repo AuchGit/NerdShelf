@@ -1155,7 +1155,7 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
   <h3>Kopfzeile</h3>
   <ul>
     <li><b>Deck-Format</b> — filtert die Kartensuche automatisch auf legale Karten.</li>
-    <li><b>Commander</b> — im Commander-Format wählst du zuerst deinen Commander; danach beschränkt die Suche sich automatisch auf seine Farbidentität, und Nicht-Standardländer sind auf ein Exemplar begrenzt.</li>
+    <li><b>Commander</b> — im Commander-Format wählst du zuerst deinen Commander; danach beschränkt die Suche sich automatisch auf seine Farbidentität, und Nicht-Standardländer sind auf ein Exemplar begrenzt. Der Commander zählt zu den 100 Karten: das Deck-Panel zeigt <em>100</em> als Ziel statt 60 und lässt die Sideboard-Vorgabe weg.</li>
     <li><b>Cover-Karte</b> für die Anzeige auf dem Dashboard. Doppelseitige Karten stehen mit beiden Seiten einzeln in der Auswahl — jede Kachel ist mit <span class="ui">Vorderseite</span> bzw. <span class="ui">Rückseite</span> beschriftet, du kannst also auch die Rückseite als Cover nehmen.</li>
     <li><span class="ui">Importieren</span> — Decklist als Text einfügen.</li>
     <li><span class="ui">Speichern</span> — der Knopf zeigt an, ob es ungespeicherte Änderungen gibt.</li>
@@ -1182,9 +1182,9 @@ h2:hover .anchor,h3:hover .anchor{opacity:1}
 
   <h3>Import &amp; Export</h3>
   <ul>
-    <li><b>Import:</b> Standard-Decklisten wie <code>4 Lightning Bolt</code>, <code>4x Lightning Bolt</code> oder <code>1 Lightning Bolt (LEA) 161</code>. Zeilen wie <code>Sideboard</code> oder <code>SB:</code> trennen die Bereiche; Zeilen, die mit <code>#</code> oder <code>//</code> beginnen, werden als Kommentar ignoriert, Markierungen wie <code>*F*</code> ebenfalls. Karten mit zwei Namen — <code>Fire // Ice</code>, <code>Delver of Secrets // Insectile Aberration</code> — werden erkannt, egal ob die Liste den vollen Namen, nur die Vorderseite oder die Schreibweise ohne Leerzeichen (<code>Fire//Ice</code>) verwendet.</li>
+    <li><b>Import:</b> Standard-Decklisten wie <code>4 Lightning Bolt</code>, <code>4x Lightning Bolt</code> oder <code>1 Lightning Bolt (LEA) 161</code>. Zeilen wie <code>Commander</code>, <code>Deck</code>, <code>Sideboard</code> oder <code>SB:</code> trennen die Bereiche — was unter <code>Commander</code> steht, landet im Commander-Platz statt im Mainboard; Zeilen, die mit <code>#</code> oder <code>//</code> beginnen, werden als Kommentar ignoriert, Markierungen wie <code>*F*</code> ebenfalls. Karten mit zwei Namen — <code>Fire // Ice</code>, <code>Delver of Secrets // Insectile Aberration</code> — werden erkannt, egal ob die Liste den vollen Namen, nur die Vorderseite oder die Schreibweise ohne Leerzeichen (<code>Fire//Ice</code>) verwendet.</li>
     <li><b>Editionen im Import:</b> Steht eine Edition in der Zeile — <code>(LEA) 161</code> oder <code>[M10]</code> —, wird genau diese Ausgabe als Artwork der Karte festgelegt. Findet Scryfall die Ausgabe nicht, kommt die Karte mit ihrem Standard-Artwork ins Deck; der Import listet diese Zeilen unter <span class="ui">Editionen nicht gefunden</span>.</li>
-    <li><b>Export:</b> <span class="ui">Export</span> im Deck-Panel legt die Decklist als Text in die Zwischenablage — passend für Arena, MTGO, Cockatrice oder Moxfield. Karten mit gewähltem Artwork bekommen Edition und Sammlernummer dahinter, z.&nbsp;B. <code>4 Lightning Bolt (2XM) 129</code>, damit beim erneuten Import dieselbe Ausgabe ankommt.</li>
+    <li><b>Export:</b> <span class="ui">Export</span> im Deck-Panel legt die Decklist als Text in die Zwischenablage — passend für Arena, MTGO, Cockatrice oder Moxfield. Hat das Deck einen Commander, steht er als eigener Abschnitt <code>Commander</code> vor dem <code>Deck</code>-Teil und kommt beim erneuten Import wieder dort an. Karten mit gewähltem Artwork bekommen Edition und Sammlernummer dahinter, z.&nbsp;B. <code>4 Lightning Bolt (2XM) 129</code>, damit beim erneuten Import dieselbe Ausgabe ankommt.</li>
   </ul>
 
 </section>

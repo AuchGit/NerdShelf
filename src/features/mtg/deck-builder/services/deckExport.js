@@ -8,9 +8,10 @@
  * @param {Record<string, {card, count}>} mainboard
  * @param {Record<string, {card, count}>} sideboard
  * @param {Record<string, object>} [printings]  chosen artwork per entry id
+ * @param {object} [commander]  the deck's commander, if it has one
  * @returns {string}
  */
-export function formatDecklist(mainboard, sideboard, printings = {}) {
+export function formatDecklist(mainboard, sideboard, printings = {}, commander = null) {
   const byName = ([, a], [, b]) => a.card.name.localeCompare(b.card.name);
   const line = ([id, { card, count }]) => {
     const p = printings?.[id];
@@ -19,7 +20,17 @@ export function formatDecklist(mainboard, sideboard, printings = {}) {
       : `${count} ${card.name}`;
   };
 
-  const lines = Object.entries(mainboard || {}).sort(byName).map(line);
+  const lines = [];
+  // A commander goes in its own section, the way Moxfield and Archidekt
+  // write it. The "Deck" marker after it is what switches a reader back
+  // to the mainboard — without it everything below would be commanders.
+  if (commander?.id) {
+    lines.push('Commander');
+    lines.push(line([commander.id, { card: commander, count: 1 }]));
+    lines.push('');
+    lines.push('Deck');
+  }
+  lines.push(...Object.entries(mainboard || {}).sort(byName).map(line));
   const sideEntries = Object.entries(sideboard || {}).sort(byName);
   if (sideEntries.length > 0) {
     lines.push('');
@@ -33,8 +44,8 @@ export function formatDecklist(mainboard, sideboard, printings = {}) {
 /**
  * Copy a decklist to the system clipboard. Returns true on success.
  */
-export async function copyDecklistToClipboard(mainboard, sideboard, printings) {
-  const text = formatDecklist(mainboard, sideboard, printings);
+export async function copyDecklistToClipboard(mainboard, sideboard, printings, commander) {
+  const text = formatDecklist(mainboard, sideboard, printings, commander);
   if (!text) return false;
 
   // Modern API

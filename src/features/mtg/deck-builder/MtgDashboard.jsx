@@ -17,6 +17,7 @@ import usePwaMobile from '../../../shared/hooks/usePwaMobile';
 import usePublicDecks from './hooks/usePublicDecks';
 import { newDeckVisibility } from './services/deckVisibility';
 import { mergeSharedDecks } from './services/sharedDecks';
+import { formatLabel } from './services/deckFormats';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -265,7 +266,7 @@ export default function MtgDashboard() {
         importBusy={imports.loading}
         items={decks}
         loading={loading}
-        getCategory={(deck) => deck.format || 'Kein Format'}
+        getCategory={(deck) => formatLabel(deck.format) || 'Kein Format'}
         categoryOrder={FORMAT_ORDER}
         storageKey="mtg-dashboard-collapsed"
         emptyIcon="✦"
@@ -295,7 +296,7 @@ export default function MtgDashboard() {
         showImportInput={isPwaMobile}
         emptyText="Noch nichts geteilt. Decks, die andere mit allen teilen, erscheinen hier von selbst — oder trag einen Token ein, den dir jemand geschickt hat."
         onRemove={imports.remove}
-        getSubCategory={(deck) => deck.format || 'Kein Format'}
+        getSubCategory={(deck) => formatLabel(deck.format) || 'Kein Format'}
         subCategoryOrder={FORMAT_ORDER}
         storageKey="mtg-imports-collapsed"
         renderItem={(deck, ctx) => (
@@ -331,7 +332,8 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
   // Someone else's deck on a phone: strip the tile down so more fit on one
   // screen. Nothing is lost that the deck itself doesn't show.
   const compact = readOnly && isPwaMobile;
-  const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
+  const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0)
+    + (data.commander ? 1 : 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
   // Total deck price (Cardmarket EUR via Scryfall): commander + main + side.
@@ -457,7 +459,7 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
               letterSpacing: 0.5,
               textShadow: coverArt ? TEXT_SHADOW : undefined,
             }}>
-              {deck.format}
+              {formatLabel(deck.format)}
             </div>
           )}
         </div>

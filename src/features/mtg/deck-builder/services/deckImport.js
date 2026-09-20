@@ -24,6 +24,7 @@ import { printingSummary } from './deckPrintings';
 const SECTION_PATTERNS = {
   main: /^\s*(deck|mainboard|main\s*deck|maindeck)\s*:?\s*$/i,
   side: /^\s*(sideboard|side\s*deck|sb)\s*:?\s*$/i,
+  commander: /^\s*(commander|commanders|command\s*zone|commandzone)\s*:?\s*$/i,
 };
 
 const LINE_PATTERN = /^\s*(\d+)\s*x?\s+(.+?)\s*$/i;
@@ -42,6 +43,7 @@ const BATCH = 75;
 export function parseDecklistText(text) {
   const main = [];
   const side = [];
+  const commander = [];
   let current = main;
 
   for (const raw of (text || '').split(/\r?\n/)) {
@@ -50,6 +52,7 @@ export function parseDecklistText(text) {
     if (line.startsWith('//') || line.startsWith('#')) continue;
     if (SECTION_PATTERNS.main.test(line)) { current = main; continue; }
     if (SECTION_PATTERNS.side.test(line)) { current = side; continue; }
+    if (SECTION_PATTERNS.commander.test(line)) { current = commander; continue; }
     // "SB: 4 Lightning Bolt" shorthand (Magic Workstation)
     const sbShort = line.match(/^SB:\s*(.+)$/i);
     const workLine = sbShort ? sbShort[1].trim() : line;
@@ -63,7 +66,7 @@ export function parseDecklistText(text) {
     target.push({ ...entry, count });
   }
 
-  return { main, side };
+  return { main, side, commander };
 }
 
 function parseCardPart(raw) {
@@ -154,7 +157,7 @@ function printKey({ name, set, collector }) {
  * @returns {{ found, notFound, prints: Map<string, object> }}
  */
 export async function resolveDecklist(parsed) {
-  const entries = [...parsed.main, ...parsed.side];
+  const entries = [...parsed.main, ...parsed.side, ...(parsed.commander || [])];
   const named = await resolveCardNames(entries.map(e => e.name));
 
   const identifiers = new Map();
@@ -179,7 +182,7 @@ export async function resolveDecklist(parsed) {
  * Combine parsed list + resolved cards into deck entry objects.
  * Entries are keyed by the default printing (like cards added from the
  * search); a line's edition becomes the entry's artwork in `printings`.
- * @returns { mainboard, sideboard, printings, notFound, fallbacks }
+ * @returns { mainboard, sideboard, commander, printings, notFound, fallbacks }
  *   fallbacks: lines whose edition wasn't found (imported with default art)
  */
 export function buildDeckFromParsed(parsed, resolved) {
@@ -210,9 +213,15 @@ export function buildDeckFromParsed(parsed, resolved) {
     return out;
   }
 
+  // One card, even if the list names two partners — the deck holds a
+  // single commander and the second would be silently lost either way.
+  const commanderZone = build(parsed.commander || []);
+  const commanderId = Object.keys(commanderZone)[0] || null;
+
   return {
     mainboard: build(parsed.main),
     sideboard: build(parsed.side),
+    commander: commanderId ? commanderZone[commanderId].card : null,
     printings,
     notFound: [...missing],
     fallbacks: [...fallbacks],

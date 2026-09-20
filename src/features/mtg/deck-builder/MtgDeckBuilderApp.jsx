@@ -29,6 +29,7 @@ import { useUnsavedChanges } from '../../../shared/pwa/unsavedChanges';
 import { tagsForCard, cardHasTag } from './services/scryfallTags';
 import { newShareToken } from '../../../shared/tokens';
 import { newDeckVisibility } from './services/deckVisibility';
+import { MTG_FORMATS, FORMATS_WITHOUT_FILTER } from './services/deckFormats';
 import { invalidate } from '../../../shared/cache/listCache';
 import { filterFavorites } from './services/favoritesFilter';
 import { copyDecklistToClipboard } from './services/deckExport';
@@ -39,25 +40,6 @@ import './MtgDeckBuilder.css';
 import './App.css';
 
 // Standard MTG formats. value '' = no filter, value 'limited' is a label-only entry (no Scryfall filter).
-const MTG_FORMATS = [
-  { value: '',            label: '(Kein Format)' },
-  { value: 'standard',    label: 'Standard'      },
-  { value: 'pioneer',     label: 'Pioneer'       },
-  { value: 'modern',      label: 'Modern'        },
-  { value: 'legacy',      label: 'Legacy'        },
-  { value: 'vintage',     label: 'Vintage'       },
-  { value: 'pauper',      label: 'Pauper'        },
-  { value: 'commander',   label: 'Commander'     },
-  { value: 'brawl',       label: 'Brawl'         },
-  { value: 'historic',    label: 'Historic'      },
-  { value: 'alchemy',     label: 'Alchemy'       },
-  { value: 'penny',       label: 'Penny'         },
-  { value: 'oathbreaker', label: 'Oathbreaker'   },
-  { value: 'limited',     label: 'Limited'       },
-];
-
-// Formats that should NOT trigger a Scryfall legal:<x> filter.
-const FORMATS_WITHOUT_FILTER = new Set(['', 'limited']);
 
 // readOnly: a deck shared with the user (/mtg/deck/view/:token). Same
 // builder look, nothing editable; "Kopieren" creates an own, editable copy.
@@ -771,20 +753,28 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
   }
 
   // ── Import / Export ──────────────────────────────────
-  function handleImport({ mainboard: importedMain, sideboard: importedSide, printings: importedPrintings }) {
+  function handleImport({
+    mainboard: importedMain, sideboard: importedSide,
+    commander: importedCommander, printings: importedPrintings,
+  }) {
     setMainboard(importedMain);
     setSideboard(importedSide);
+    // Only when the list actually named one — an import without a
+    // commander section must not clear the one already set.
+    if (importedCommander) setCommanderCard(importedCommander);
     // The imported list decides the artwork of its cards: editions from the
     // text are set, earlier choices for those cards are dropped.
     setPrintings(prev => {
       const next = { ...prev };
-      for (const id of [...Object.keys(importedMain), ...Object.keys(importedSide)]) delete next[id];
+      const touched = [...Object.keys(importedMain), ...Object.keys(importedSide)];
+      if (importedCommander?.id) touched.push(importedCommander.id);
+      for (const id of touched) delete next[id];
       return { ...next, ...(importedPrintings || {}) };
     });
   }
 
   async function handleExport() {
-    const ok = await copyDecklistToClipboard(mainboard, sideboard, printings);
+    const ok = await copyDecklistToClipboard(mainboard, sideboard, printings, commander);
     setExportStatus(ok
       ? { type: 'success', text: 'In Zwischenablage kopiert' }
       : { type: 'error',   text: 'Kopieren fehlgeschlagen' }
@@ -839,6 +829,7 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
       sideboard={viewSideboard}
       ideas={viewIdeas}
       commander={viewCommander}
+      deckFormat={deckFormat}
       tokens={deckTokens.zone}
       tokenSources={deckTokens.sources}
       onSetTokenCount={setTokenCount}
@@ -867,7 +858,9 @@ export default function MtgDeckBuilderApp({ readOnly = false }) {
     />
   );
 
-  const mainCount = Object.values(mainboard).reduce((s, e) => s + (e.count || 0), 0);
+  // The commander sits outside the mainboard but counts toward the deck.
+  const mainCount = Object.values(mainboard).reduce((s, e) => s + (e.count || 0), 0)
+    + (commander ? 1 : 0);
   const sideCount = Object.values(sideboard).reduce((s, e) => s + (e.count || 0), 0);
 
   // ── Render ───────────────────────────────────────────

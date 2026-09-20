@@ -1,6 +1,7 @@
 // src/features/mtg/deck-builder/components/DeckPanel.jsx
 import { useState } from 'react';
 import DeckCard from './DeckCard';
+import { deckTargets } from '../services/deckFormats';
 import ManaSymbol from './ManaSymbol';
 import { getCardImage, getManaCost, parseManaCost, getCardPriceEur, formatEur } from '../services/scryfall';
 import { organizeDeck } from '../services/deckOrganize';
@@ -38,6 +39,7 @@ export default function DeckPanel({
   sideboard,
   ideas = {},
   commander,           // optional: full Scryfall card object | null
+  deckFormat = '',     // decides how big the deck is meant to be
   onUpdateMainCount,
   onRemoveMain,
   onClearDeck,
@@ -77,6 +79,10 @@ export default function DeckPanel({
   const sideEntries = Object.values(sideboard);
   const ideaEntries = Object.values(ideas);
   const mainTotal   = mainEntries.reduce((s, e) => s + e.count, 0);
+  // The commander is part of the 100, so it belongs in the number the
+  // user reads — but not in the "is this zone empty" checks below.
+  const targets     = deckTargets(deckFormat);
+  const mainShown   = mainTotal + (commander ? 1 : 0);
   const sideTotal   = sideEntries.reduce((s, e) => s + e.count, 0);
   const ideaTotal   = ideaEntries.reduce((s, e) => s + e.count, 0);
   const tokenEntries = Object.values(tokens || {});
@@ -187,13 +193,13 @@ export default function DeckPanel({
           className={`dp-tab ${tab === 'main' ? 'active' : ''}`}
           onClick={() => setTab('main')}
         >
-          Mainboard <span className="dp-tab-count">{mainTotal}/60</span>
+          Mainboard <span className="dp-tab-count">{mainShown}/{targets.main}</span>
         </button>
         <button
           className={`dp-tab ${tab === 'side' ? 'active' : ''}`}
           onClick={() => setTab('side')}
         >
-          Sideboard <span className="dp-tab-count">{sideTotal}/15</span>
+          Sideboard <span className="dp-tab-count">{sideTotal}{targets.side > 0 ? `/${targets.side}` : ''}</span>
         </button>
         <button
           className={`dp-tab ${tab === 'ideas' ? 'active' : ''}`}
@@ -234,9 +240,9 @@ export default function DeckPanel({
           className="dp-progress-bar"
           style={{
             width: tab === 'main'
-              ? `${Math.min((mainTotal / 60) * 100, 100)}%`
+              ? `${Math.min((mainShown / targets.main) * 100, 100)}%`
               : tab === 'side'
-                ? `${Math.min((sideTotal / 15) * 100, 100)}%`
+                ? `${Math.min((sideTotal / (targets.side || 15)) * 100, 100)}%`
                 : tab === 'ideas'
                   ? `${Math.min((ideaTotal / 30) * 100, 100)}%`
                   : '0%',
@@ -290,7 +296,7 @@ export default function DeckPanel({
             )}
             {tab === 'ideas' && (
               <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-lo)', marginTop: 6 }}>
-                Karten landen über das ↕ Symbol hier — fließen in die Wunschliste, zählen aber nicht zum 60/15-Limit.
+                Karten landen über das ↕ Symbol hier — fließen in die Wunschliste, zählen aber nicht zum Deck-Limit.
               </div>
             )}
           </div>
