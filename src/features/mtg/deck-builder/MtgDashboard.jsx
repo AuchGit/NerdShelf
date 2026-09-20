@@ -18,6 +18,11 @@ import usePublicDecks from './hooks/usePublicDecks';
 import { newDeckVisibility } from './services/deckVisibility';
 import { mergeSharedDecks } from './services/sharedDecks';
 import { formatLabel } from './services/deckFormats';
+import { useMtgInventory } from './hooks/useMtgInventory';
+import { buildOwnedIndex } from './services/ownedCopies';
+import {
+  totalDemandAcross, deckOwnershipCounts, missingForCollection,
+} from './services/deckOwnership';
 
 const COLOR_STYLE = {
   W: '#e0b352', U: '#4a8fd9', B: '#8a7fa8',
@@ -78,6 +83,22 @@ export default function MtgDashboard() {
     setTab(next);
     try { localStorage.setItem(TAB_KEY, next); } catch { /* ignore */ }
   };
+  // How much of each deck is already in the collection. One copy can serve
+  // several decks, so the tiles show both readings.
+  const inv = useMtgInventory();
+  const ownedIndex = useMemo(
+    () => buildOwnedIndex(inv.quantities, inv.labels),
+    [inv.quantities, inv.labels],
+  );
+  const demandTotals = useMemo(() => totalDemandAcross(decks), [decks]);
+  const ownershipByDeck = useMemo(() => {
+    const map = new Map();
+    for (const deck of decks) {
+      map.set(deck.id, deckOwnershipCounts(deck.data || {}, ownedIndex, demandTotals));
+    }
+    return map;
+  }, [decks, ownedIndex, demandTotals]);
+
   const showOwn = !isPwaMobile || tab === 'own';
   const showShared = !isPwaMobile || tab === 'shared';
 
@@ -190,6 +211,27 @@ export default function MtgDashboard() {
     loadDecks();
   }
 
+  // "Ich hab alle in der Sammlung": top the collection up so the whole
+  // deck is covered. Writes real rows, so the wishlist and the Cardmarket
+  // list see them too.
+  const [owningDeck, setOwningDeck] = useState(null);
+  async function handleOwnAll(deck) {
+    if (owningDeck) return;
+    const missing = missingForCollection(deck.data || {}, ownedIndex);
+    const copies = missing.reduce((s, m) => s + m.add, 0);
+    if (copies === 0) return;
+    const name = deck.name || 'Unbenanntes Deck';
+    if (!window.confirm(
+      `${copies} fehlende ${copies === 1 ? 'Karte' : 'Karten'} aus „${name}“ in deine Sammlung eintragen?`
+    )) return;
+    setOwningDeck(deck.id);
+    try {
+      for (const m of missing) await inv.adjustQuantity(m.id, m.add, m.name);
+    } finally {
+      setOwningDeck(null);
+    }
+  }
+
   // "Mit allen teilen" on a tile. The tile flips at once; a failed save
   // flips it back and says why.
   async function handleTogglePublic(deckId, next) {
@@ -280,6 +322,9 @@ export default function MtgDashboard() {
             onDelete={() => handleDelete(deck.id, deck.name)}
             onDuplicate={() => handleDuplicate(deck)}
             onTogglePublic={() => handleTogglePublic(deck.id, !deck.is_public)}
+            ownership={ownershipByDeck.get(deck.id)}
+            onOwnAll={() => handleOwnAll(deck)}
+            owningAll={owningDeck === deck.id}
           />
         )}
       />}
@@ -318,7 +363,11 @@ export default function MtgDashboard() {
 // and the parent Dashboard re-renders for many unrelated reasons (form
 // state, hover, etc.). Skipping render unless the deck reference actually
 // changes is a big win on dashboards with 10+ decks.
-const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, onTogglePublic, readOnly = false, ownerName, onRemove }) {
+const DeckCard = memo(function DeckCard({
+  deck, onOpen, onDelete, onDuplicate, onTogglePublic,
+  ownership = null, onOwnAll, owningAll = false,
+  readOnly = false, ownerName, onRemove,
+}) {
   const data = deck.data || {};
   const priceSettings = useMtgPriceSettings();
   const { isPwaMobile } = usePwaMobile();
@@ -478,6 +527,21 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
             >⊘</button>
           )) : (
             <>
+              {onOwnAll && ownership && ownership.shared < ownership.needed && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOwnAll(); }}
+                  disabled={owningAll}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: 'var(--color-text-dim)',
+                    cursor: owningAll ? 'default' : 'pointer',
+                    padding: 4, borderRadius: 4, fontSize: 14,
+                  }}
+                  title="Alle fehlenden Karten dieses Decks in die Sammlung eintragen"
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-dim)'}
+                >{owningAll ? '…' : '◉+'}</button>
+              )}
               {onDuplicate && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
@@ -559,6 +623,22 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
         )}
       </div>
 
+      {ownership && ownership.needed > 0 && (
+        <div
+          title={`${ownership.shared} von ${ownership.needed} Karten hast du, wenn eine Kopie für alle Decks reicht. ${ownership.exclusive}, wenn jedes Deck eigene Kopien braucht — die anderen Decks bedienen sich zuerst.`}
+          style={{
+            fontSize: 'var(--fs-xs)',
+            color: ownership.shared >= ownership.needed
+              ? 'var(--color-success, #2f9e44)'
+              : 'var(--color-text-muted)',
+            textShadow: coverArt ? TEXT_SHADOW : undefined,
+          }}
+        >
+          Sammlung {ownership.shared}/{ownership.needed}
+          {ownership.exclusive !== ownership.shared && <> · {ownership.exclusive} eigene</>}
+        </div>
+      )}
+
       <ColorBar entries={colorEntries} total={totalColored} />
 
       {!compact && (<div style={{
@@ -611,6 +691,12 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
         title={deck.name || 'Deck'}
         items={[
           { id: 'open',  label: 'Öffnen',     icon: '↗', onSelect: () => onOpen?.() },
+          ...(onOwnAll && ownership && ownership.shared < ownership.needed ? [{
+            id: 'own',
+            label: 'Alle in die Sammlung',
+            icon: '◉',
+            onSelect: () => onOwnAll(),
+          }] : []),
           ...(onTogglePublic ? [{
             id: 'public',
             label: deck.is_public ? 'Nicht mehr mit allen teilen' : 'Mit allen teilen',
@@ -628,7 +714,17 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
   a.deck === b.deck
   && a.readOnly === b.readOnly
   && a.ownerName === b.ownerName
+  && a.owningAll === b.owningAll
+  && sameOwnership(a.ownership, b.ownership)
 ));
+
+// The tile has to re-render when the collection changes, so the counts are
+// compared by value — they are a fresh object on every recount.
+function sameOwnership(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.needed === b.needed && a.shared === b.shared && a.exclusive === b.exclusive;
+}
 
 const S_TABS = {
   display: 'flex', gap: 4, padding: 3,
