@@ -328,6 +328,9 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
   // those buttons visible on desktop and rely on long-press on PWA mobile
   // (where the icons feel cramped and tap-prone).
   const longPress = useLongPress(() => setSheetOpen(true), { enabled: isPwaMobile });
+  // Someone else's deck on a phone: strip the tile down so more fit on one
+  // screen. Nothing is lost that the deck itself doesn't show.
+  const compact = readOnly && isPwaMobile;
   const mainCount = Object.values(data.mainboard || {}).reduce((s, e) => s + (e.count || 0), 0);
   const sideCount = Object.values(data.sideboard || {}).reduce((s, e) => s + (e.count || 0), 0);
 
@@ -394,7 +397,9 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
     <Panel
       {...longPress}
       style={{
-        display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
+        display: 'flex', flexDirection: 'column',
+        gap: compact ? 'var(--space-2)' : 'var(--space-3)',
+        ...(compact ? { padding: 'var(--space-3)' } : null),
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
@@ -554,7 +559,7 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
 
       <ColorBar entries={colorEntries} total={totalColored} />
 
-      <div style={{
+      {!compact && (<div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
         fontSize: 'var(--fs-xs)', color: 'var(--color-text-dim)',
         borderTop: '1px solid var(--color-border)',
@@ -586,13 +591,15 @@ const DeckCard = memo(function DeckCard({ deck, onOpen, onDelete, onDuplicate, o
           </label>
         )}
         <span style={{ flex: 1 }} />
-        {deck.share_token && (
+        {/* Your token, your link — not something to hand on from
+            somebody else's deck. */}
+        {!readOnly && deck.share_token && (
           <>
             <ShareTokenBadge token={deck.share_token} label="Deck-Token" compact />
             <ShareButton kind="mtg_deck" token={deck.share_token} name={deck.name} compact />
           </>
         )}
-      </div>
+      </div>)}
 
       {/* Long-press menu — PWA mobile only. Desktop keeps the existing
           inline icon buttons in the top-right of the card. */}
