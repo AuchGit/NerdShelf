@@ -1,6 +1,7 @@
 // src/core/auth/AuthContext.jsx
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabase/client';
+import { takeLauncherHandoff } from './launcherHandoff';
 
 const AuthContext = createContext(null);
 
@@ -25,7 +26,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: stored } }) => {
+      // Not signed in, but started from AuchLauncher while signed in there: take that account.
+      const session = stored ?? await takeLauncherHandoff();
       const u = session?.user ?? null;
       setUser(u);
       await loadProfile(u?.id);

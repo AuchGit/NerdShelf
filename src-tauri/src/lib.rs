@@ -1,5 +1,18 @@
 mod relay;
 
+/// Sign-in from AuchLauncher: started from there, the app gets a one-time code
+/// for the account signed in in the launcher (AUCH_HANDOFF). Handed out once;
+/// the frontend redeems it only when nobody is signed in yet.
+#[tauri::command]
+fn take_handoff() -> Option<String> {
+  use std::sync::atomic::{AtomicBool, Ordering};
+  static TAKEN: AtomicBool = AtomicBool::new(false);
+  if TAKEN.swap(true, Ordering::Relaxed) {
+    return None;
+  }
+  std::env::var("AUCH_HANDOFF").ok().filter(|c| !c.trim().is_empty() && c.len() < 200)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let mut builder = tauri::Builder::default();
@@ -24,7 +37,7 @@ pub fn run() {
     .plugin(tauri_plugin_deep_link::init())
     // Embedded VTT relay: hosted by the GM's app, auto-started on session start.
     .manage(relay::RelayState::default())
-    .invoke_handler(tauri::generate_handler![relay::start_relay, relay::stop_relay, relay::list_local_ips]);
+    .invoke_handler(tauri::generate_handler![relay::start_relay, relay::stop_relay, relay::list_local_ips, take_handoff]);
 
   // Setup (log plugin nur im Debug)
   builder = builder.setup(|app| {
