@@ -125,10 +125,11 @@ jobs:
           find "$OUT_DIR" -name "*.apk" -print
           STAGE_DIR="android-release"
           mkdir -p "$STAGE_DIR"
-          declare -A ABI_MAP=( ["arm64-v8a"]="aarch64" ["armeabi-v7a"]="armv7" )
+          # Gradle names them app-arm64-release.apk / app-arm-release.apk
+          declare -A ABI_MAP=( ["arm64"]="aarch64" ["arm"]="armv7" )
           for ABI in "${!ABI_MAP[@]}"; do
             ARCH="${ABI_MAP[$ABI]}"
-            SRC=$(find "$OUT_DIR" -path "*${ABI}*release*" -name "*.apk" 2>/dev/null | head -n1 || true)
+            SRC=$(find "$OUT_DIR" -name "app-${ABI}-release*.apk" 2>/dev/null | head -n1 || true)
             if [ -z "$SRC" ]; then echo "WARN: no APK for $ABI"; continue; fi
             DST="$STAGE_DIR/NerdShelf_${{ steps.tag.outputs.tag }}_android-${ARCH}.apk"
             cp "$SRC" "$DST"
